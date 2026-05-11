@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name         String?
+  email        String?   @unique
+  emailVerified DateTime?
+  image        String?
+  password     String?
+
+  accounts Account[]
+  sessions Session[]
+  games    GamePlayer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  name        String
+  status      GameStatus @default(PENDING)
+  maxPlayers  Int      @default(2)
+  mapWidth    Int      @default(36)
+  mapHeight   Int      @default(36)
+  turnNumber  Int      @default(1)
+  currentTurnPlayerId String?
+  winnerId    String?
+  mapData     Json
+  gameConfig  Json
+  mapState    Json    @default("{}")
+
+  players     GamePlayer[]
+  turns       Turn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("games")
+}
+
+model GamePlayer {
+  id       String @id @default(cuid())
+  gameId    String
+  userId    String
+  faction   String
+  color     String
+  gold      Int    @default(500)
+  wood      Int    @default(20)
+  ore       Int    @default(10)
+  mercury   Int    @default(5)
+  crystals  Int    @default(5)
+  sulfur    Int    @default(5)
+  isReady       Boolean @default(false)
+  isAlive       Boolean @default(true)
+  turnOrder     Int
+  exploredTiles Json    @default("[]")
+
+  game Game  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  heroes Hero[]
+  towns Town[]
+  turns Turn[]
+
+  @@unique([gameId, userId])
+  @@map("game_players")
+}
+
+model Hero {
+  id           String  @id @default(cuid())
+  gamePlayerId String
+  name         String
+  level        Int     @default(1)
+  experience   Int     @default(0)
+  attack       Int     @default(1)
+  defense      Int     @default(1)
+  spellPower   Int     @default(1)
+  knowledge    Int     @default(1)
+  movement     Int     @default(10)
+  maxMovement  Int     @default(10)
+  x            Int
+  y            Int
+  isMoving     Boolean @default(false)
+
+  gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+  armies     Army[]
+
+  @@map("heroes")
+}
+
+model Army {
+  id      String @id @default(cuid())
+  heroId  String
+  unitType String
+  count   Int
+  health  Int
+  maxHealth Int
+  position Int
+
+  hero Hero @relation(fields: [heroId], references: [id], onDelete: Cascade)
+
+  @@map("armies")
+}
+
+model Town {
+  id           String  @id @default(cuid())
+  gamePlayerId String
+  name         String
+  townType     String
+  x            Int
+  y            Int
+  level        Int     @default(1)
+  isFort       Boolean @default(false)
+  buildings    Json    @default("[]")
+  garrison     Json    @default("[]")
+
+  gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+
+  @@map("towns")
+}
+
+model Turn {
+  id          String @id @default(cuid())
+  gameId       String
+  gamePlayerId String
+  turnNumber  Int
+  actions     Json   @default("[]")
+  isCompleted Boolean @default(false)
+
+  game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+
+  @@map("turns")
+}
+
+enum GameStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  ABANDONED
+  @@map("game_status")
+}

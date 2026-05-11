@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# My Heroes
 
-## Getting Started
+Jeu vidéo de stratégie au tour par tour inspiré de **Heroes of Might and Magic III**.
 
-First, run the development server:
+## Description
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+My Heroes est un jeu de stratégie au tour par tour où les joueurs explorent une carte, collectent des ressources, recrutent des héros et des armées, et affrontent leurs adversaires dans des batailles tactiques. Le projet est construit avec Next.js, Prisma et PostgreSQL.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Prérequis
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Node.js 18+
+- PostgreSQL 16+
+- npm (ou yarn/pnpm)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Installation
 
-## Learn More
+1. Cloner le dépôt :
+   ```bash
+   git clone https://github.com/<votre-utilisateur>/my-heroes.git
+   cd my-heroes
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. Installer les dépendances :
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. Configurer les variables d'environnement :
+   ```bash
+   cp .env.example .env
+   ```
+   Modifier `.env` avec vos propres identifiants de base de données et votre secret NextAuth.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. Lancer la base de données avec Docker (optionnel) :
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d
+   ```
 
-## Deploy on Vercel
+5. Appliquer les migrations Prisma :
+   ```bash
+   npx prisma migrate dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+6. Lancer le serveur de développement :
+   ```bash
+   npm run dev
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+7. Ouvrir [http://localhost:3000](http://localhost:3000) dans votre navigateur.
+
+## Variables d'environnement
+
+Voir [`.env.example`](.env.example) pour la liste des variables requises :
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | URL de connexion PostgreSQL |
+| `AUTH_SECRET` | Secret pour NextAuth |
+| `NEXTAUTH_URL` | URL de l'application |
+
+## Stack technique
+
+- **Frontend** : Next.js, React, Tailwind CSS
+- **Backend** : Next.js API Routes, Prisma ORM
+- **Base de données** : PostgreSQL 16
+- **Authentification** : NextAuth.js
+- **Conteneurisation** : Docker / Docker Compose
+
+## Licence
+
+Projet personnel — tous droits réservés.

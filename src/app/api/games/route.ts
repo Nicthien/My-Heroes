@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeVisibleTiles } from "@/lib/game/engine";
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
   const { generateMap, placePlayerStart } = await import("@/lib/game/engine");
   const mapData = generateMap(mapWidth, mapHeight);
+  prefixMonsterIds(mapData, randomUUID());
   const startPos = placePlayerStart(mapData, 0);
 
   const initialExplored = computeVisibleTiles(mapData, [{ x: startPos.x, y: startPos.y }], 5);
@@ -98,5 +100,48 @@ export async function POST(request: Request) {
     },
   });
 
+  await createNeutralArmies(game.id, mapData);
+
   return NextResponse.json(game, { status: 201 });
+}
+
+async function createNeutralArmies(gameId: string, mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>) {
+  const monsterTiles = mapData.tiles.flatMap((row) =>
+    row.filter((tile) => tile.object?.type === "monster")
+  );
+
+  for (const tile of monsterTiles) {
+    const id = tile.object?.id;
+    if (!id) continue;
+    const count = 8 + ((tile.x + tile.y) % 12);
+    await prisma.neutralArmy.create({
+      data: {
+        id,
+        gameId,
+        x: tile.x,
+        y: tile.y,
+        stacks: {
+          create: [
+            {
+              unitType: "pikeman",
+              count,
+              health: count * 12,
+              maxHealth: 12,
+              position: 0,
+            },
+          ],
+        },
+      },
+    });
+  }
+}
+
+function prefixMonsterIds(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>, prefix: string) {
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "monster") {
+        tile.object.id = `${prefix}-${tile.object.id}`;
+      }
+    }
+  }
 }

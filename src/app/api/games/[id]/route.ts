@@ -23,7 +23,13 @@ export async function GET(
           user: { select: { name: true } },
         },
       },
-      turns: { orderBy: { turnNumber: "desc" }, take: 10 },
+      turns: { orderBy: { turnNumber: "desc" }, take: 100 },
+      combats: {
+        where: { status: "ACTIVE" },
+        orderBy: { createdAt: "desc" },
+        include: { participants: true },
+      },
+      neutralArmies: true,
     },
   });
 

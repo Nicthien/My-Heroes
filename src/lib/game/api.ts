@@ -1,7 +1,8 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
-  Hero, Town, Player, GameMap, MapTile,
+  Hero, Town, Player, GameMap, MapTile, PersistentCombat,
 } from "./types";
+import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 
 interface ApiPlayer {
   id: string;
@@ -20,6 +21,12 @@ interface ApiPlayer {
   exploredTiles: string[];
   heroes: ApiHero[];
   towns: ApiTown[];
+}
+
+interface ApiTurn {
+  gamePlayerId: string;
+  turnNumber: number;
+  isCompleted: boolean;
 }
 
 interface ApiHero {
@@ -55,9 +62,39 @@ interface ApiTown {
   level: number;
   buildings: string[];
   garrison: string[];
+  availableRecruits?: Record<string, number>;
+  lastBuiltTurn?: number | null;
+}
+
+interface ApiCombat {
+  id: string;
+  gameId: string;
+  mode: "AUTO" | "MANUAL";
+  status: "ACTIVE" | "RESOLVED";
+  attackerPlayerId: string;
+  defenderPlayerId?: string | null;
+  attackerHeroId: string;
+  defenderHeroId?: string | null;
+  neutralArmyId?: string | null;
+  currentPlayerId?: string | null;
+  currentUnitId?: string | null;
+  round: number;
+  x: number;
+  y: number;
+  boardState: PersistentCombat["boardState"];
+  turnQueue: string[];
+  actionLog: string[];
+  participants?: PersistentCombat["participants"];
+  result?: PersistentCombat["result"];
 }
 
 export function mapApiToGameState(data: Record<string, unknown>, currentUserId?: string): GameState {
+  const turnNumber = data.turnNumber as number;
+  const completedTurnPlayerIds = new Set(
+    ((data.turns as ApiTurn[] | undefined) ?? [])
+      .filter((turn) => turn.turnNumber === turnNumber && turn.isCompleted)
+      .map((turn) => turn.gamePlayerId)
+  );
   const currentPlayer = (data.players as ApiPlayer[]).find(
     (p) => p.userId === currentUserId
   );
@@ -108,18 +145,35 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
       level: t.level,
       buildings: (t.buildings || []) as BuildingType[],
       garrison: (t.garrison || []) as never[],
+      availableRecruits: (t.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
+      lastBuiltTurn: t.lastBuiltTurn ?? null,
     })),
     isAlive: p.isAlive,
     turnOrder: p.turnOrder,
     exploredTiles: p.exploredTiles ?? [],
+    hasEndedTurn: completedTurnPlayerIds.has(p.id),
   }));
 
-  const mapData = data.mapData as GameMap;
+  const mapData = normalizeMapMovement(data.mapData as GameMap);
   const mapState = (data.mapState as Record<string, unknown>) ?? {};
   const collected = new Set<string>((mapState.collected as string[]) ?? []);
   const killed = new Set<string>((mapState.killed as string[]) ?? []);
+  const defeatedNeutralArmies = new Set(
+    ((data.neutralArmies as Array<{ id: string; status: string }> | undefined) ?? [])
+      .filter((army) => army.status !== "ACTIVE")
+      .map((army) => army.id)
+  );
 
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
+  if (currentPlayer) {
+    const visionCenters = getPlayerVisionCenters({
+      heroes: currentPlayer.heroes.map((hero) => ({ position: { x: hero.x, y: hero.y } })),
+      towns: currentPlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+    });
+    for (const key of computeVisibleTiles(mapData, visionCenters, 5)) {
+      exploredSet.add(key);
+    }
+  }
   if (mapData?.tiles) {
     for (let y = 0; y < mapData.height; y++) {
       for (let x = 0; x < mapData.width; x++) {
@@ -129,7 +183,7 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
           const obj = tile.object;
           if (obj.type === "resource" && collected.has(obj.id)) {
             delete tile.object;
-          } else if (obj.type === "monster" && killed.has(obj.id)) {
+          } else if (obj.type === "monster" && (killed.has(obj.id) || defeatedNeutralArmies.has(obj.id))) {
             delete tile.object;
           } else if (!exploredSet.has(`${x},${y}`)) {
             delete tile.object;
@@ -150,8 +204,42 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
     status: data.status as GameState["status"],
     players,
     map: mapData,
-    turnNumber: data.turnNumber as number,
+    turnNumber,
+    calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
     winnerId: data.winnerId as string | undefined,
+    activeCombats: ((data.combats as ApiCombat[] | undefined) ?? []).map((combat) => ({
+      id: combat.id,
+      gameId: combat.gameId,
+      mode: combat.mode,
+      status: combat.status,
+      attackerPlayerId: combat.attackerPlayerId,
+      defenderPlayerId: combat.defenderPlayerId,
+      attackerHeroId: combat.attackerHeroId,
+      defenderHeroId: combat.defenderHeroId,
+      neutralArmyId: combat.neutralArmyId,
+      currentPlayerId: combat.currentPlayerId,
+      currentUnitId: combat.currentUnitId,
+      round: combat.round,
+      position: { x: combat.x, y: combat.y },
+      boardState: combat.boardState,
+      turnQueue: combat.turnQueue,
+      actionLog: combat.actionLog,
+      participants: combat.participants ?? [],
+      result: combat.result,
+    })),
+  };
+}
+
+function getGameCalendar(dayNumber: number) {
+  const zeroBasedDay = Math.max(0, dayNumber - 1);
+  return {
+    dayNumber,
+    dayOfWeek: (zeroBasedDay % 7) + 1,
+    weekNumber: Math.floor(zeroBasedDay / 7) + 1,
+    weekOfMonth: (Math.floor(zeroBasedDay / 7) % 4) + 1,
+    monthNumber: Math.floor(zeroBasedDay / 28) + 1,
+    monthOfYear: (Math.floor(zeroBasedDay / 28) % 12) + 1,
+    yearNumber: Math.floor(zeroBasedDay / 336) + 1,
   };
 }

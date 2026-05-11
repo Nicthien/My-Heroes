@@ -16,6 +16,7 @@ export interface UnitRule {
   cost: ResourceCost;
   health: number;
   dwelling: BuildingType;
+  growth: number;
 }
 
 export const BUILDING_RULES: BuildingRule[] = [
@@ -74,6 +75,7 @@ export const UNIT_RULES: UnitRule[] = [
     cost: { gold: 60 },
     health: 12,
     dwelling: BuildingType.DWELLING_1,
+    growth: 14,
   },
   {
     type: UnitType.ARCHER,
@@ -81,6 +83,7 @@ export const UNIT_RULES: UnitRule[] = [
     cost: { gold: 100 },
     health: 12,
     dwelling: BuildingType.DWELLING_2,
+    growth: 9,
   },
   {
     type: UnitType.GRIFFIN,
@@ -88,6 +91,7 @@ export const UNIT_RULES: UnitRule[] = [
     cost: { gold: 200 },
     health: 30,
     dwelling: BuildingType.DWELLING_3,
+    growth: 5,
   },
 ];
 

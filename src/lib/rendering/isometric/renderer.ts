@@ -77,7 +77,7 @@ function isoToCart(isoX: number, isoY: number): { x: number; y: number } {
 }
 
 export interface MapObjectData {
-  type: "hero" | "town";
+  type: "hero" | "town" | "combat";
   id: string;
   playerId: string;
   x: number;
@@ -85,6 +85,7 @@ export interface MapObjectData {
   faction: string;
   color: string;
   name: string;
+  onWater?: boolean;
 }
 
 export class IsometricRenderer {
@@ -284,9 +285,32 @@ export class IsometricRenderer {
       this.renderTown(container, obj);
     } else if (obj.type === "hero") {
       this.renderHero(container, obj);
+    } else if (obj.type === "combat") {
+      this.renderCombatMarker(container);
     }
 
     this.objectContainer.addChild(container);
+  }
+
+  private renderCombatMarker(container: Container) {
+    const shadow = new Graphics();
+    shadow.ellipse(0, 12, 24, 8);
+    shadow.fill({ color: 0x000000, alpha: 0.35 });
+    container.addChild(shadow);
+
+    const burst = new Graphics();
+    burst.star(0, -12, 8, 22, 9);
+    burst.fill(0xff6b00);
+    burst.stroke({ width: 2, color: 0xfff2a8 });
+    container.addChild(burst);
+
+    const label = new Text({
+      text: "COMBAT",
+      style: { fill: 0xffffff, fontSize: 9, fontWeight: "bold", stroke: { color: 0x000000, width: 3 } },
+    });
+    label.anchor.set(0.5);
+    label.y = -38;
+    container.addChild(label);
   }
 
   private renderTown(container: Container, obj: MapObjectData) {
@@ -434,6 +458,11 @@ export class IsometricRenderer {
 
   private renderHero(container: Container, obj: MapObjectData) {
     const factionColor = FACTION_COLORS[obj.faction] || 0x3b82f6;
+    if (obj.onWater) {
+      this.renderBoatHero(container, obj, factionColor);
+      return;
+    }
+
     const horseColor = 0x5d4037;
     const armorColor = 0xb0bec5;
 
@@ -552,6 +581,59 @@ export class IsometricRenderer {
     container.addChild(label);
   }
 
+  private renderBoatHero(container: Container, obj: MapObjectData, factionColor: number) {
+    const shadow = new Graphics();
+    shadow.ellipse(0, 12, 20, 6);
+    shadow.fill({ color: 0x000000, alpha: 0.25 });
+    container.addChild(shadow);
+
+    const hull = new Graphics();
+    hull.moveTo(-22, -2);
+    hull.lineTo(20, -2);
+    hull.lineTo(12, 10);
+    hull.lineTo(-14, 10);
+    hull.closePath();
+    hull.fill(0x7a4a22);
+    hull.stroke({ width: 1, color: 0x3e2723 });
+    container.addChild(hull);
+
+    const mast = new Graphics();
+    mast.moveTo(0, -28);
+    mast.lineTo(0, 8);
+    mast.stroke({ width: 2, color: 0x5d4037 });
+    container.addChild(mast);
+
+    const sail = new Graphics();
+    sail.moveTo(1, -27);
+    sail.lineTo(16, -8);
+    sail.lineTo(1, -4);
+    sail.closePath();
+    sail.fill(0xf5f0d8);
+    sail.stroke({ width: 1, color: factionColor });
+    container.addChild(sail);
+
+    const flag = new Graphics();
+    flag.moveTo(0, -29);
+    flag.lineTo(11, -25);
+    flag.lineTo(0, -21);
+    flag.closePath();
+    flag.fill(factionColor);
+    container.addChild(flag);
+
+    const label = new Text({
+      text: obj.name,
+      style: {
+        fill: 0xffd700,
+        fontSize: 10,
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 3 },
+      },
+    });
+    label.anchor.set(0.5);
+    label.y = 24;
+    container.addChild(label);
+  }
+
   private syncObjectPositions() {
     this.objectContainer.x = this.mapContainer.x;
     this.objectContainer.y = this.mapContainer.y;
@@ -646,7 +728,7 @@ export class IsometricRenderer {
     const tile = this.map.tiles[y]?.[x];
     if (!tile) return iso.y;
     const depth = tile.terrain === TerrainType.WATER
-      ? 0
+      ? 2
       : BASE_HEIGHT + Math.max(0, tile.elevation) * ELEVATION_SCALE;
     return iso.y - depth;
   }

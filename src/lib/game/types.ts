@@ -124,6 +124,18 @@ export interface Town {
   level: number;
   buildings: BuildingType[];
   garrison: UnitStack[];
+  availableRecruits: Partial<Record<UnitType, number>>;
+  lastBuiltTurn?: number | null;
+}
+
+export interface GameCalendar {
+  dayNumber: number;
+  dayOfWeek: number;
+  weekNumber: number;
+  weekOfMonth: number;
+  monthNumber: number;
+  monthOfYear: number;
+  yearNumber: number;
 }
 
 export interface MapTile {
@@ -137,9 +149,74 @@ export interface MapTile {
 }
 
 export interface MapObject {
-  type: "town" | "hero" | "resource" | "artifact" | "monster" | "building";
+  type: "town" | "hero" | "resource" | "artifact" | "monster" | "building" | "combat";
   id: string;
   subtype?: string;
+}
+
+export type CombatMode = "AUTO" | "MANUAL";
+export type PersistentCombatStatus = "ACTIVE" | "RESOLVED";
+export type CombatSide = "attacker" | "defender";
+
+export interface CombatBoardUnit extends UnitStack {
+  side: CombatSide;
+  ownerPlayerId: string | null;
+  heroId?: string | null;
+  participantId?: string | null;
+  joinsRound: number;
+  q: number;
+  r: number;
+  speed: number;
+  minDamage: number;
+  maxDamage: number;
+  ranged: boolean;
+  shots: number;
+  hasRetaliated: boolean;
+  defended: boolean;
+  waited: boolean;
+}
+
+export interface CombatParticipant {
+  id: string;
+  playerId: string;
+  heroId: string;
+  side: CombatSide;
+}
+
+export interface PersistentCombat {
+  id: string;
+  gameId: string;
+  mode: CombatMode;
+  status: PersistentCombatStatus;
+  attackerPlayerId: string;
+  defenderPlayerId?: string | null;
+  attackerHeroId: string;
+  defenderHeroId?: string | null;
+  neutralArmyId?: string | null;
+  currentPlayerId?: string | null;
+  currentUnitId?: string | null;
+  round: number;
+  position: Position;
+  boardState: { units: CombatBoardUnit[] };
+  turnQueue: string[];
+  actionLog: string[];
+  participants?: CombatParticipant[];
+  result?: CombatSummary | null;
+}
+
+export interface CombatLoss {
+  unitType: UnitType;
+  lost: number;
+}
+
+export interface CombatSummary {
+  winnerId: string;
+  winnerPlayerId?: string | null;
+  loserId?: string;
+  attackerLosses: CombatLoss[];
+  defenderLosses: CombatLoss[];
+  experienceGained: number;
+  log: string[];
 }
 
 export interface GameMap {
@@ -160,6 +237,7 @@ export interface Player {
   isAlive: boolean;
   turnOrder: number;
   exploredTiles: string[];
+  hasEndedTurn: boolean;
 }
 
 export type GameAction =
@@ -188,6 +266,8 @@ export interface GameState {
   players: Player[];
   map: GameMap;
   turnNumber: number;
+  calendar: GameCalendar;
   currentTurnPlayerId: string;
   winnerId?: string;
+  activeCombats?: PersistentCombat[];
 }

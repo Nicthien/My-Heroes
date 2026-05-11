@@ -6,6 +6,11 @@ import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
+import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
+import CombatResultModal from "@/components/game/combat/CombatResultModal";
+import CombatScreen from "@/components/game/combat/CombatScreen";
+import ActiveCombatsPanel from "@/components/game/combat/ActiveCombatsPanel";
+import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
 
 const GameMapComponent = dynamic(
@@ -18,7 +23,7 @@ export default function GamePage() {
   const gameId = params?.id as string;
   const { data: session } = useSession();
   const userId = session?.user?.id;
-  const { setGameState, isLoading, gameState } = useGameStore();
+  const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat } = useGameStore();
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -53,6 +58,17 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [gameId, setGameState, userId]);
 
+  useEffect(() => {
+    if (!gameState || activeCombat) return;
+    const myPlayer = gameState.players.find((player) => player.userId === userId);
+    if (!myPlayer) return;
+    const combat = gameState.activeCombats?.find((item) => {
+      if (minimizedCombatIds.includes(item.id)) return false;
+      return item.attackerPlayerId === myPlayer.id || item.defenderPlayerId === myPlayer.id || item.participants?.some((participant) => participant.playerId === myPlayer.id);
+    });
+    if (combat) setActiveCombat(combat);
+  }, [gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat]);
+
   if (error) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -73,6 +89,11 @@ export default function GamePage() {
     <div className="h-screen w-screen bg-gray-900 relative overflow-hidden">
       <GameMapComponent />
       <HUD />
+      <ActiveCombatsPanel />
+      <CombatChoiceModal />
+      <JoinCombatModal />
+      <CombatResultModal />
+      {activeCombat && <CombatScreen />}
     </div>
   );
 }

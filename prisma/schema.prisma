@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id            String    @id @default(cuid())
-  name         String?
+  name         String?   @unique
   email        String?   @unique
   emailVerified DateTime?
   image        String?
@@ -81,6 +81,8 @@ model Game {
 
   players     GamePlayer[]
   turns       Turn[]
+  combats     Combat[]
+  neutralArmies NeutralArmy[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,6 +112,7 @@ model GamePlayer {
   heroes Hero[]
   towns Town[]
   turns Turn[]
+  combatParticipants CombatParticipant[]
 
   @@unique([gameId, userId])
   @@map("game_players")
@@ -133,8 +136,86 @@ model Hero {
 
   gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
   armies     Army[]
+  attacks    Combat[] @relation("AttackerHero")
+  defends    Combat[] @relation("DefenderHero")
+  combatParticipants CombatParticipant[]
 
   @@map("heroes")
+}
+
+model NeutralArmy {
+  id      String @id @default(cuid())
+  gameId  String
+  x       Int
+  y       Int
+  status  String @default("ACTIVE")
+
+  game   Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  stacks NeutralArmyStack[]
+  combats Combat[]
+
+  @@map("neutral_armies")
+}
+
+model NeutralArmyStack {
+  id      String @id @default(cuid())
+  neutralArmyId String
+  unitType String
+  count   Int
+  health  Int
+  maxHealth Int
+  position Int
+
+  neutralArmy NeutralArmy @relation(fields: [neutralArmyId], references: [id], onDelete: Cascade)
+
+  @@map("neutral_army_stacks")
+}
+
+model Combat {
+  id      String @id @default(cuid())
+  gameId  String
+  mode    String
+  status  String @default("ACTIVE")
+  attackerPlayerId String
+  defenderPlayerId String?
+  attackerHeroId String
+  defenderHeroId String?
+  neutralArmyId String?
+  currentPlayerId String?
+  currentUnitId String?
+  round Int @default(1)
+  x Int
+  y Int
+  boardState Json
+  turnQueue Json @default("[]")
+  actionLog Json @default("[]")
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  attackerHero Hero @relation("AttackerHero", fields: [attackerHeroId], references: [id], onDelete: Cascade)
+  defenderHero Hero? @relation("DefenderHero", fields: [defenderHeroId], references: [id], onDelete: SetNull)
+  neutralArmy NeutralArmy? @relation(fields: [neutralArmyId], references: [id], onDelete: SetNull)
+  participants CombatParticipant[]
+
+  @@map("combats")
+}
+
+model CombatParticipant {
+  id        String @id @default(cuid())
+  combatId String
+  playerId String
+  heroId   String
+  side     String
+  joinedAt DateTime @default(now())
+
+  combat Combat @relation(fields: [combatId], references: [id], onDelete: Cascade)
+  player GamePlayer @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  hero Hero @relation(fields: [heroId], references: [id], onDelete: Cascade)
+
+  @@unique([combatId, heroId])
+  @@map("combat_participants")
 }
 
 model Army {
@@ -162,6 +243,8 @@ model Town {
   isFort       Boolean @default(false)
   buildings    Json    @default("[]")
   garrison     Json    @default("[]")
+  availableRecruits Json @default("{}")
+  lastBuiltTurn Int?
 
   gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
 
@@ -179,6 +262,7 @@ model Turn {
   game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
   gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
 
+  @@unique([gameId, gamePlayerId, turnNumber])
   @@map("turns")
 }
 

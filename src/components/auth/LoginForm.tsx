@@ -5,7 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export default function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,13 +17,13 @@ export default function LoginForm() {
     setError("");
 
     const result = await signIn("credentials", {
-      email,
+      email: identifier,
       password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Email ou mot de passe incorrect");
+      setError("Email, nom d'utilisateur ou mot de passe incorrect");
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -48,11 +48,13 @@ export default function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-gray-300 text-sm block mb-1">Email</label>
+            <label className="text-gray-300 text-sm block mb-1">
+              Email ou nom d&apos;utilisateur
+            </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full bg-gray-700 text-white p-3 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
               required
             />

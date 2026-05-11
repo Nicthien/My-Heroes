@@ -5,18 +5,24 @@ import bcrypt from "bcryptjs";
 export async function POST(request: Request) {
   const body = await request.json();
   const { name, email, password } = body;
+  const username = String(name || email?.split("@")[0] || "").trim();
+  const userEmail = String(email || "").trim();
 
-  if (!email || !password) {
+  if (!userEmail || !username || !password) {
     return NextResponse.json(
-      { error: "Email et mot de passe requis" },
+      { error: "Nom, email et mot de passe requis" },
       { status: 400 }
     );
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findFirst({
+    where: { OR: [{ email: userEmail }, { name: username }] },
+  });
   if (existing) {
+    const field = existing.email === userEmail ? "email" : "nom d'utilisateur";
+
     return NextResponse.json(
-      { error: "Cet email est déjà utilisé" },
+      { error: `Cet ${field} est déjà utilisé` },
       { status: 409 }
     );
   }
@@ -25,8 +31,8 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.create({
     data: {
-      name: name || email.split("@")[0],
-      email,
+      name: username,
+      email: userEmail,
       password: hashedPassword,
     },
   });

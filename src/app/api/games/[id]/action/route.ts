@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
 import { BuildingType, Resources, UnitType, GameMap } from "@/lib/game/types";
-import { computeVisibleTiles } from "@/lib/game/engine";
+import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
 import {
   applyLossesToWinnerArmies,
   autoResolveCombat,
@@ -40,8 +40,18 @@ export async function POST(
       return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
     }
 
-    if (game.currentTurnPlayerId !== gamePlayer.id) {
-      return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
+    const completedTurn = await prisma.turn.findUnique({
+      where: {
+        gameId_gamePlayerId_turnNumber: {
+          gameId: id,
+          gamePlayerId: gamePlayer.id,
+          turnNumber: game.turnNumber,
+        },
+      },
+    });
+
+    if (completedTurn?.isCompleted && action.type !== "END_TURN") {
+      return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
     }
 
     switch (action.type) {
@@ -53,25 +63,51 @@ export async function POST(
         return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       }
 
+      const activeCombat = await prisma.combat.findFirst({
+        where: {
+          status: "ACTIVE",
+          OR: [{ attackerHeroId: hero.id }, { defenderHeroId: hero.id }],
+        },
+      });
+      if (activeCombat) {
+        return NextResponse.json({ error: "Ce héros est engagé dans un combat" }, { status: 400 });
+      }
+
+      const mapDataForVisibility = normalizeMapMovement(game.mapData as unknown as GameMap);
+      const moveValidation = validateMovePath(
+        mapDataForVisibility,
+        { x: hero.x, y: hero.y },
+        action.path,
+        hero.movement
+      );
+      if (!moveValidation.ok) {
+        return NextResponse.json({ error: moveValidation.error }, { status: 400 });
+      }
+
       const lastPos = action.path[action.path.length - 1];
-      const usedMovement = action.path.length - 1;
 
       await prisma.hero.update({
         where: { id: hero.id },
         data: {
           x: lastPos.x,
           y: lastPos.y,
-          movement: Math.max(0, hero.movement - usedMovement),
+          movement: Math.max(0, hero.movement - moveValidation.usedMovement),
         },
       });
 
       // Update explored tiles for the player
-      const allPlayerHeroes = await prisma.hero.findMany({
-        where: { gamePlayerId: gamePlayer.id },
-      });
-      const mapDataForVisibility = game.mapData as unknown as GameMap;
-      const heroPositions = allPlayerHeroes.map((h) => ({ x: h.x, y: h.y }));
-      const newlyVisible = computeVisibleTiles(mapDataForVisibility, heroPositions, 5);
+      const [allPlayerHeroes, allPlayerTowns] = await Promise.all([
+        prisma.hero.findMany({ where: { gamePlayerId: gamePlayer.id } }),
+        prisma.town.findMany({ where: { gamePlayerId: gamePlayer.id } }),
+      ]);
+      const newlyVisible = computeVisibleTiles(
+        mapDataForVisibility,
+        getPlayerVisionCenters({
+          heroes: allPlayerHeroes.map((h) => ({ position: { x: h.x, y: h.y } })),
+          towns: allPlayerTowns.map((town) => ({ position: { x: town.x, y: town.y } })),
+        }),
+        5
+      );
       const existingExplored = new Set<string>(
         ((gamePlayer.exploredTiles as string[]) ?? [])
       );
@@ -300,6 +336,25 @@ export async function POST(
           },
         });
 
+        const [allPlayerHeroes, allPlayerTowns] = await Promise.all([
+          tx.hero.findMany({ where: { gamePlayerId: gamePlayer.id } }),
+          tx.town.findMany({ where: { gamePlayerId: gamePlayer.id } }),
+        ]);
+        const newlyVisible = computeVisibleTiles(
+          normalizeMapMovement(game.mapData as unknown as GameMap),
+          getPlayerVisionCenters({
+            heroes: allPlayerHeroes.map((h) => ({ position: { x: h.x, y: h.y } })),
+            towns: allPlayerTowns.map((item) => ({ position: { x: item.x, y: item.y } })),
+          }),
+          5
+        );
+        const exploredSet = new Set<string>((gamePlayer.exploredTiles as string[]) ?? []);
+        for (const key of newlyVisible) exploredSet.add(key);
+        await tx.gamePlayer.update({
+          where: { id: gamePlayer.id },
+          data: { exploredTiles: Array.from(exploredSet) },
+        });
+
         await refreshEliminationsAndGameStatus(tx, id, game.currentTurnPlayerId);
       });
 
@@ -315,6 +370,10 @@ export async function POST(
       const town = await prisma.town.findUnique({ where: { id: action.townId } });
       if (!town || town.gamePlayerId !== gamePlayer.id) {
         return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      }
+
+      if (town.lastBuiltTurn === game.turnNumber) {
+        return NextResponse.json({ error: "Une construction a déjà été réalisée aujourd'hui dans ce château" }, { status: 400 });
       }
 
       const buildings = (town.buildings as string[]) ?? [];
@@ -344,6 +403,11 @@ export async function POST(
 
       const nextResources = subtractCost(resources, rule.cost);
 
+      const availableRecruits = addImmediateDwellingGrowth(
+        normalizeRecruitStock(town.availableRecruits),
+        building
+      );
+
       await prisma.$transaction([
         prisma.gamePlayer.update({
           where: { id: gamePlayer.id },
@@ -351,7 +415,11 @@ export async function POST(
         }),
         prisma.town.update({
           where: { id: town.id },
-          data: { buildings: [...buildings, building] },
+          data: {
+            buildings: [...buildings, building],
+            availableRecruits,
+            lastBuiltTurn: game.turnNumber,
+          },
         }),
       ]);
       break;
@@ -372,6 +440,11 @@ export async function POST(
       const buildings = (town.buildings as string[]) ?? [];
       if (!buildings.includes(rule.dwelling)) {
         return NextResponse.json({ error: "Bâtiment de recrutement manquant" }, { status: 400 });
+      }
+
+      const availableRecruits = normalizeRecruitStock(town.availableRecruits);
+      if ((availableRecruits[unitType] ?? 0) < count) {
+        return NextResponse.json({ error: "Stock hebdomadaire insuffisant dans ce château" }, { status: 400 });
       }
 
       const resources: Resources = {
@@ -413,6 +486,16 @@ export async function POST(
           data: nextResources,
         });
 
+        await tx.town.update({
+          where: { id: town.id },
+          data: {
+            availableRecruits: {
+              ...availableRecruits,
+              [unitType]: (availableRecruits[unitType] ?? 0) - count,
+            },
+          },
+        });
+
         if (existingStack) {
           await tx.army.update({
             where: { id: existingStack.id },
@@ -438,58 +521,12 @@ export async function POST(
       break;
     }
     case "END_TURN": {
-      const players = await prisma.gamePlayer.findMany({
-        where: { gameId: id, isAlive: true },
-        orderBy: { turnOrder: "asc" },
-        include: { towns: true },
-      });
-
-      const currentIndex = players.findIndex(
-        (p: { id: string }) => p.id === game.currentTurnPlayerId
-      );
-      const nextIndex = (currentIndex + 1) % players.length;
-      const nextPlayerId = players[nextIndex].id;
-
-      let turnNumber = game.turnNumber;
-
-      if (nextIndex === 0) {
-        turnNumber += 1;
-
-        for (const p of players) {
-          let goldIncome = 500;
-          let woodIncome = 2;
-          let oreIncome = 1;
-          for (const town of p.towns) {
-            const buildings = town.buildings as string[];
-            goldIncome += 500;
-            if (buildings.includes("resource_silo")) goldIncome += 500;
-            woodIncome += 2;
-            oreIncome += 1;
-          }
-
-          await prisma.gamePlayer.update({
-            where: { id: p.id },
-            data: {
-              gold: { increment: goldIncome },
-              wood: { increment: woodIncome },
-              ore: { increment: oreIncome },
-            },
-          });
-
-          await prisma.hero.updateMany({
-            where: { gamePlayerId: p.id },
-            data: { movement: 10 },
-          });
-        }
+      const activeCombats = await prisma.combat.count({ where: { gameId: id, status: "ACTIVE" } });
+      if (activeCombats > 0) {
+        return NextResponse.json({ error: "Terminez les combats en cours avant de finir le tour" }, { status: 400 });
       }
-
-      await prisma.game.update({
-        where: { id },
-        data: {
-          currentTurnPlayerId: nextPlayerId,
-          turnNumber,
-        },
-      });
+      if (completedTurn?.isCompleted) break;
+      await completePlayerTurn(id, game.turnNumber, gamePlayer.id);
       break;
     }
   }
@@ -499,6 +536,162 @@ export async function POST(
     console.error("Action error:", err);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
+}
+
+type RecruitStock = Record<string, number>;
+
+function normalizeRecruitStock(value: unknown): RecruitStock {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([unitType, count]) => [
+      unitType,
+      Math.max(0, Math.floor(Number(count) || 0)),
+    ])
+  );
+}
+
+function addImmediateDwellingGrowth(stock: RecruitStock, building: BuildingType): RecruitStock {
+  const rule = UNIT_RULES.find((item) => item.dwelling === building);
+  if (!rule) return stock;
+  return {
+    ...stock,
+    [rule.type]: (stock[rule.type] ?? 0) + rule.growth,
+  };
+}
+
+function addWeeklyGrowth(stock: RecruitStock, buildings: string[]): RecruitStock {
+  const nextStock = { ...stock };
+  for (const rule of UNIT_RULES) {
+    if (!buildings.includes(rule.dwelling)) continue;
+    nextStock[rule.type] = (nextStock[rule.type] ?? 0) + rule.growth;
+  }
+  return nextStock;
+}
+
+async function completePlayerTurn(gameId: string, turnNumber: number, gamePlayerId: string) {
+  await prisma.$transaction(async (tx) => {
+    await tx.turn.upsert({
+      where: {
+        gameId_gamePlayerId_turnNumber: {
+          gameId,
+          gamePlayerId,
+          turnNumber,
+        },
+      },
+      create: {
+        gameId,
+        gamePlayerId,
+        turnNumber,
+        actions: [],
+        isCompleted: true,
+      },
+      update: { isCompleted: true },
+    });
+
+    const players = await tx.gamePlayer.findMany({
+      where: { gameId, isAlive: true },
+      orderBy: { turnOrder: "asc" },
+      include: { towns: true },
+    });
+    if (players.length === 0) return;
+
+    const completedTurns = await tx.turn.count({
+      where: {
+        gameId,
+        turnNumber,
+        isCompleted: true,
+        gamePlayerId: { in: players.map((player) => player.id) },
+      },
+    });
+    if (completedTurns < players.length) return;
+
+    const nextTurnNumber = turnNumber + 1;
+    const startsNewWeek = (nextTurnNumber - 1) % 7 === 0;
+
+    for (const player of players) {
+      let goldIncome = 500;
+      let woodIncome = 2;
+      let oreIncome = 1;
+      for (const town of player.towns) {
+        const buildings = town.buildings as string[];
+        goldIncome += 500;
+        if (buildings.includes("resource_silo")) goldIncome += 500;
+        woodIncome += 2;
+        oreIncome += 1;
+
+        if (startsNewWeek) {
+          await tx.town.update({
+            where: { id: town.id },
+            data: {
+              availableRecruits: addWeeklyGrowth(
+                normalizeRecruitStock(town.availableRecruits),
+                buildings
+              ),
+            },
+          });
+        }
+      }
+
+      await tx.gamePlayer.update({
+        where: { id: player.id },
+        data: {
+          gold: { increment: goldIncome },
+          wood: { increment: woodIncome },
+          ore: { increment: oreIncome },
+        },
+      });
+
+      await tx.hero.updateMany({
+        where: { gamePlayerId: player.id },
+        data: { movement: 10 },
+      });
+    }
+
+    await tx.game.update({
+      where: { id: gameId },
+      data: {
+        turnNumber: nextTurnNumber,
+        currentTurnPlayerId: players[0]?.id ?? null,
+      },
+    });
+  });
+}
+
+function validateMovePath(
+  map: GameMap,
+  start: { x: number; y: number },
+  path: Array<{ x: number; y: number }>,
+  movement: number
+): { ok: true; usedMovement: number } | { ok: false; error: string } {
+  if (!Array.isArray(path) || path.length < 2) {
+    return { ok: false, error: "Chemin invalide" };
+  }
+
+  if (path[0]?.x !== start.x || path[0]?.y !== start.y) {
+    return { ok: false, error: "Le chemin ne commence pas sur le héros" };
+  }
+
+  let usedMovement = 0;
+  for (let i = 1; i < path.length; i++) {
+    const previous = path[i - 1];
+    const current = path[i];
+    if (Math.abs(previous.x - current.x) + Math.abs(previous.y - current.y) !== 1) {
+      return { ok: false, error: "Chemin invalide" };
+    }
+
+    const tile = map.tiles[current.y]?.[current.x];
+    if (!tile || !tile.isPassable) {
+      return { ok: false, error: "Terrain infranchissable" };
+    }
+
+    usedMovement += tile.movementCost;
+  }
+
+  if (usedMovement > movement) {
+    return { ok: false, error: "Déplacement insuffisant" };
+  }
+
+  return { ok: true, usedMovement };
 }
 
 async function refreshEliminationsAndGameStatus(

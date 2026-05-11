@@ -13,7 +13,7 @@ import {
 } from "../types";
 
 function isPassable(terrain: TerrainType): boolean {
-  return terrain !== TerrainType.WATER && terrain !== TerrainType.LAVA;
+  return terrain !== TerrainType.LAVA;
 }
 
 function getMovementCost(terrain: TerrainType): number {
@@ -26,12 +26,24 @@ function getMovementCost(terrain: TerrainType): number {
       return 1.5;
     case TerrainType.SWAMP:
     case TerrainType.SNOW:
+    case TerrainType.WATER:
       return 2;
     case TerrainType.MOUNTAIN:
       return 2.5;
     default:
       return 999;
   }
+}
+
+export function normalizeMapMovement(map: GameMap): GameMap {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      tile.isPassable = isPassable(tile.terrain);
+      tile.movementCost = getMovementCost(tile.terrain);
+    }
+  }
+
+  return map;
 }
 
 export function generateMap(width: number, height: number): GameMap {
@@ -310,6 +322,13 @@ export function computeVisibleTiles(map: GameMap, centers: Position[], radius: n
   return visible;
 }
 
+export function getPlayerVisionCenters(player: { heroes: { position: Position }[]; towns: { position: Position }[] }): Position[] {
+  return [
+    ...player.heroes.map((h) => h.position),
+    ...player.towns.map((town) => town.position),
+  ];
+}
+
 export function processAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "END_TURN": {
@@ -373,8 +392,7 @@ export function processAction(state: GameState, action: GameAction): GameState {
 
       const currentPlayer = players.find((p: Player) => p.id === state.currentTurnPlayerId);
       if (currentPlayer) {
-        const heroPositions = currentPlayer.heroes.map((h: Hero) => h.position);
-        const newVisible = computeVisibleTiles(state.map, heroPositions, 5);
+        const newVisible = computeVisibleTiles(state.map, getPlayerVisionCenters(currentPlayer), 5);
         const exploredSet = new Set(currentPlayer.exploredTiles);
         for (const key of newVisible) {
           exploredSet.add(key);
@@ -401,6 +419,15 @@ export function initializeGameState(
     players,
     map,
     turnNumber: 1,
+    calendar: {
+      dayNumber: 1,
+      dayOfWeek: 1,
+      weekNumber: 1,
+      weekOfMonth: 1,
+      monthNumber: 1,
+      monthOfYear: 1,
+      yearNumber: 1,
+    },
     currentTurnPlayerId: players[0].id,
   };
 }

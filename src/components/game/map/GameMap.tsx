@@ -3,9 +3,9 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { IsometricRenderer, MapObjectData } from "@/lib/rendering/isometric/renderer";
-import { Position } from "@/lib/game/types";
+import { PersistentCombat, Position } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { findPath, computeVisibleTiles } from "@/lib/game/engine";
+import { findPath, computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
 import { refreshGameState } from "@/lib/game/refresh";
 
 export default function GameMapComponent() {
@@ -29,7 +29,7 @@ export default function GameMapComponent() {
   } | null>(null);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
-  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage } = useGameStore();
+  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat } = useGameStore();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -65,13 +65,7 @@ export default function GameMapComponent() {
     initPromiseRef.current?.then(() => {
       if (rendererRef.current !== renderer || !renderer.isReady()) return;
       
-      let objectCount = 0;
-      for (const row of gameState.map.tiles) {
-        for (const tile of row) {
-          if (tile.object) objectCount++;
-        }
-      }
-      const mapKey = `${gameState.id}:${gameState.map.width}x${gameState.map.height}:obj${objectCount}`;
+      const mapKey = getMapRenderKey(gameState.map);
       if (renderedMapKeyRef.current !== mapKey) {
         renderer.renderMap(gameState.map);
         renderedMapKeyRef.current = mapKey;
@@ -79,9 +73,16 @@ export default function GameMapComponent() {
       renderer.setObjects(buildObjects(gameState, currentPlayer));
 
       // Fog of war
-      if (currentPlayer) {
-        const heroPositions = currentPlayer.heroes.map((h) => h.position);
-        const visibleTiles = computeVisibleTiles(gameState.map, heroPositions, 5);
+      if (activeCombat) {
+        const allTiles = new Set<string>();
+        for (let y = 0; y < gameState.map.height; y++) {
+          for (let x = 0; x < gameState.map.width; x++) {
+            allTiles.add(`${x},${y}`);
+          }
+        }
+        renderer.setFog(allTiles, allTiles);
+      } else if (currentPlayer) {
+        const visibleTiles = computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5);
         const exploredSet = new Set<string>(currentPlayer.exploredTiles);
         for (const key of visibleTiles) {
           exploredSet.add(key);
@@ -107,7 +108,7 @@ export default function GameMapComponent() {
         didInitialCenter.current = true;
       }
     });
-  }, [gameState, session?.user?.id]);
+  }, [gameState, session?.user?.id, activeCombat]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState || !selectedHeroId) return;
@@ -153,12 +154,14 @@ export default function GameMapComponent() {
     const myPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
     );
-    const isMyTurn = myPlayer?.id === gameState.currentTurnPlayerId;
+    const canAct = Boolean(
+      myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
+    );
 
     const objects = rendererRef.current.getObjectsAtScreen(screenX, screenY);
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
 
-    if (objects.length > 0) {
+      if (objects.length > 0) {
       const selectedObject = selectObjectOnTile(
         objects,
         selectedHeroId,
@@ -168,6 +171,44 @@ export default function GameMapComponent() {
       if (!selectedObject) return;
 
       const obj = selectedObject;
+      if (obj.type === "combat") {
+        const combat = gameState.activeCombats?.find((item) => item.id === obj.id);
+        if (!combat) return;
+        if (selectedHeroId && myPlayer) {
+          const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+          if (!hero) return;
+          const destination = { x: obj.x, y: obj.y };
+          const path = findPath(gameState.map, hero.position, destination, hero.movement);
+          if (path.length <= 1) {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            return;
+          }
+          const pendingJoin = pendingAttackRef.current;
+          const isConfirmingJoin = pendingJoin?.heroId === selectedHeroId && pendingJoin.targetId === combat.id;
+          if (!isConfirmingJoin) {
+            pendingMoveRef.current = null;
+            pendingAttackRef.current = { heroId: selectedHeroId, targetId: combat.id, destination, path };
+            rendererRef.current.highlightPath(path);
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xffa500);
+            setCombatMessage("Cliquez à nouveau pour rejoindre ce combat.");
+            return;
+          }
+          if (!canAct) {
+            setCombatMessage("Vous avez déjà terminé votre tour.");
+            pendingAttackRef.current = null;
+            rendererRef.current.clearHighlights();
+            return;
+          }
+          const existingParticipant = combat.participants?.find((participant) => participant.playerId === myPlayer.id);
+          pendingAttackRef.current = null;
+          rendererRef.current.clearHighlights();
+          setPendingJoinCombat({ combatId: combat.id, heroId: selectedHeroId, side: existingParticipant?.side });
+          return;
+        }
+        setActiveCombat(combat);
+        return;
+      }
       const isEnemyHero =
         obj.type === "hero" && myPlayer && obj.playerId !== myPlayer.id;
       const isEnemyTown =
@@ -203,43 +244,16 @@ export default function GameMapComponent() {
           return;
         }
 
-        if (!isMyTurn) {
-          setCombatMessage("Ce n'est pas votre tour.");
+        if (!canAct) {
+          setCombatMessage("Vous avez déjà terminé votre tour.");
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
         }
 
-        fetch(`/api/games/${gameState.id}/action`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "ATTACK",
-            heroId: selectedHeroId,
-            targetId: obj.id,
-          }),
-        })
-          .then(async (response) => {
-            if (!response.ok) {
-              setCombatMessage(await getApiErrorMessage(response));
-              return null;
-            }
-            return response.json();
-          })
-          .then((data) => {
-            if (!data) return;
-            pendingAttackRef.current = null;
-            rendererRef.current?.clearHighlights();
-
-            // Recharger immédiatement le serveur pour avoir la vraie carte
-            refreshGameState(gameState.id, session?.user?.id).then((state) => {
-              if (state) useGameStore.getState().setGameState(state);
-            });
-
-            useGameStore
-              .getState()
-              .setCombatMessage(data.combat ? "Combat terminé." : "Attaque résolue.");
-          });
+        pendingAttackRef.current = null;
+        rendererRef.current.clearHighlights();
+        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero" });
         return;
       }
 
@@ -274,8 +288,8 @@ export default function GameMapComponent() {
           return;
         }
 
-        if (!isMyTurn) {
-          setCombatMessage("Ce n'est pas votre tour.");
+        if (!canAct) {
+          setCombatMessage("Vous avez déjà terminé votre tour.");
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -333,6 +347,19 @@ export default function GameMapComponent() {
 
       const path = findPath(gameState.map, hero.position, tile, hero.movement);
       if (path.length > 1) {
+        const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
+        if (targetTile?.object?.type === "monster") {
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current.highlightPath(path);
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          if (!canAct) {
+            setCombatMessage("Vous avez déjà terminé votre tour.");
+            return;
+          }
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster" });
+          return;
+        }
         pendingAttackRef.current = null;
         const pendingMove = pendingMoveRef.current;
         const isConfirmingMove =
@@ -350,8 +377,8 @@ export default function GameMapComponent() {
           return;
         }
 
-        if (!isMyTurn) {
-          setCombatMessage("Ce n'est pas votre tour.");
+        if (!canAct) {
+          setCombatMessage("Vous avez déjà terminé votre tour.");
           pendingMoveRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -403,7 +430,7 @@ export default function GameMapComponent() {
         setTimeout(() => rendererRef.current?.clearHighlights(), 500);
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, session?.user?.id]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, session?.user?.id]);
 
   return (
     <div
@@ -436,6 +463,9 @@ function selectObjectOnTile(
 ) {
   if (objects.length === 1) return objects[0];
 
+  const combat = objects.find((obj) => obj.type === "combat");
+  if (combat) return combat;
+
   const hero = objects.find((obj) => obj.type === "hero");
   const town = objects.find((obj) => obj.type === "town");
 
@@ -445,17 +475,36 @@ function selectObjectOnTile(
   return hero ?? town ?? objects[0];
 }
 
-function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>, currentPlayer: { id: string; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[] } | undefined): MapObjectData[] {
+function getMapRenderKey(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"]) {
+  const parts = [`${map.width}x${map.height}`];
+
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      parts.push(`${tile.terrain}:${tile.elevation}:${tile.object?.id ?? ""}`);
+    }
+  }
+
+  return parts.join("|");
+}
+
+function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>, currentPlayer: { id: string; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined): MapObjectData[] {
   const objects: MapObjectData[] = [];
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
   const visiblePositions = new Set<string>();
+  const heroCombatIds = new Map<string, string>();
+
+  for (const combat of gameState.activeCombats ?? []) {
+    for (const heroId of getCombatHeroIds(combat)) {
+      heroCombatIds.set(heroId, combat.id);
+    }
+  }
 
   if (currentPlayer) {
-    for (const hero of currentPlayer.heroes) {
+    for (const center of getPlayerVisionCenters(currentPlayer)) {
       for (let dy = -5; dy <= 5; dy++) {
         for (let dx = -5; dx <= 5; dx++) {
           if (Math.abs(dx) + Math.abs(dy) <= 5) {
-            visiblePositions.add(`${hero.position.x + dx},${hero.position.y + dy}`);
+            visiblePositions.add(`${center.x + dx},${center.y + dy}`);
           }
         }
       }
@@ -477,6 +526,7 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
         faction: player.faction as string,
         color: player.color,
         name: hero.name,
+        onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
       });
     }
     for (const town of player.towns) {
@@ -496,5 +546,51 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
     }
   }
 
+  for (const combat of gameState.activeCombats ?? []) {
+    const key = `${combat.position.x},${combat.position.y}`;
+    if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+    objects.push({
+      type: "combat",
+      id: combat.id,
+      playerId: combat.attackerPlayerId,
+      x: combat.position.x,
+      y: combat.position.y,
+      faction: "castle",
+      color: "#f97316",
+      name: "Combat en cours",
+    });
+  }
+
+  for (const player of gameState.players) {
+    const isCurrentPlayer = player.id === currentPlayer?.id;
+    for (const hero of player.heroes) {
+      const combatId = heroCombatIds.get(hero.id);
+      if (!combatId) continue;
+      const key = `${hero.position.x},${hero.position.y}`;
+      if (!isCurrentPlayer && !visiblePositions.has(key) && !exploredSet.has(key)) continue;
+      objects.push({
+        type: "combat",
+        id: combatId,
+        playerId: player.id,
+        x: hero.position.x,
+        y: hero.position.y,
+        faction: player.faction as string,
+        color: "#f97316",
+        name: "Héros en combat",
+      });
+    }
+  }
+
   return objects;
+}
+
+function getCombatHeroIds(combat: PersistentCombat) {
+  const heroIds = new Set<string>();
+  heroIds.add(combat.attackerHeroId);
+  if (combat.defenderHeroId) heroIds.add(combat.defenderHeroId);
+  for (const participant of combat.participants ?? []) {
+    heroIds.add(participant.heroId);
+  }
+
+  return heroIds;
 }

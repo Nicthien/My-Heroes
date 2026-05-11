@@ -100,23 +100,24 @@ function HUDContent() {
     selectedHeroId,
     selectedTownId,
     combatMessage,
-    dispatchAction,
     setCombatMessage,
     setGameState,
   } = useGameStore();
   const gameState = nullableGameState!;
 
-  const currentPlayer = gameState.players.find(
-    (p) => p.id === gameState.currentTurnPlayerId
-  );
-
   const myPlayer = gameState.players.find(
     (player) => player.userId === session?.user?.id
   );
   const isPending = gameState.status === "PENDING";
+  const hasActiveCombats = (gameState.activeCombats?.length ?? 0) > 0;
 
-  const isMyTurn = myPlayer?.id === gameState.currentTurnPlayerId;
-  const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${gameState.currentTurnPlayerId}`;
+  const canAct = Boolean(
+    myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
+  );
+  const isWaitingForPlayers = Boolean(
+    myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn
+  );
+  const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
   const selectedHero = gameState.players
     .flatMap((p) => p.heroes)
@@ -152,6 +153,7 @@ function HUDContent() {
   };
 
   const handleEndTurn = async () => {
+    if (!canAct) return;
     const response = await fetch(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -160,7 +162,6 @@ function HUDContent() {
 
     if (!response.ok) return;
 
-    dispatchAction({ type: "END_TURN" });
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
@@ -181,7 +182,7 @@ function HUDContent() {
   };
 
   const handleBuild = async (building: BuildingType) => {
-    if (!selectedTown || !myPlayer || !isMyTurn || !isMyTown) return;
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
     const rule = BUILDING_RULES.find((item) => item.type === building);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
@@ -204,7 +205,12 @@ function HUDContent() {
           resources: nextResources,
           towns: player.towns.map((town) =>
             town.id === selectedTown.id
-              ? { ...town, buildings: [...town.buildings, building] }
+              ? {
+                  ...town,
+                  buildings: [...town.buildings, building],
+                  availableRecruits: addImmediateDwellingGrowth(town.availableRecruits, building),
+                  lastBuiltTurn: gameState.turnNumber,
+                }
               : town
           ),
         };
@@ -213,7 +219,7 @@ function HUDContent() {
   };
 
   const handleRecruit = async (unitType: UnitType) => {
-    if (!selectedTown || !myPlayer || !isMyTurn || !isMyTown) return;
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
     const rule = UNIT_RULES.find((item) => item.type === unitType);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
@@ -241,6 +247,17 @@ function HUDContent() {
         return {
           ...player,
           resources: nextResources,
+          towns: player.towns.map((town) =>
+            town.id === selectedTown.id
+              ? {
+                  ...town,
+                  availableRecruits: {
+                    ...town.availableRecruits,
+                    [unitType]: Math.max(0, (town.availableRecruits[unitType] ?? 0) - 1),
+                  },
+                }
+              : town
+          ),
           heroes: player.heroes.map((hero) => {
             if (hero.id !== firstHero.id) return hero;
             const existingStack = hero.armies.find(
@@ -282,6 +299,18 @@ function HUDContent() {
     });
   };
 
+  const addImmediateDwellingGrowth = (
+    stock: Partial<Record<UnitType, number>>,
+    building: BuildingType
+  ) => {
+    const unitRule = UNIT_RULES.find((item) => item.dwelling === building);
+    if (!unitRule) return stock;
+    return {
+      ...stock,
+      [unitRule.type]: (stock[unitRule.type] ?? 0) + unitRule.growth,
+    };
+  };
+
   const requestNotifications = async () => {
     if (typeof Notification === "undefined") return;
     const permission = await Notification.requestPermission();
@@ -294,13 +323,13 @@ function HUDContent() {
       return;
     }
 
-    document.title = isMyTurn
+    document.title = canAct
       ? "À vous de jouer - My Heroes"
       : "My Heroes";
-  }, [isMyTurn, isPending]);
+  }, [canAct, isPending]);
 
   useEffect(() => {
-    if (!isMyTurn || isPending) return;
+    if (!canAct || isPending) return;
     if (lastNotifiedTurnRef.current === turnNotificationKey) return;
 
     lastNotifiedTurnRef.current = turnNotificationKey;
@@ -310,7 +339,7 @@ function HUDContent() {
         body: "C'est à vous de jouer.",
       });
     }
-  }, [isMyTurn, isPending, notificationPermission, turnNotificationKey]);
+  }, [canAct, isPending, notificationPermission, turnNotificationKey]);
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -319,21 +348,23 @@ function HUDContent() {
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <span className="text-white font-bold text-lg">My Heroes</span>
-            <span className="text-gray-300">Tour {gameState.turnNumber}</span>
+            <span className="text-gray-300">
+              Année {gameState.calendar.yearNumber}, Mois {gameState.calendar.monthOfYear}, Semaine {gameState.calendar.weekOfMonth}, Jour {gameState.calendar.dayOfWeek}
+            </span>
             {isPending && (
               <span className="px-2 py-0.5 rounded text-sm font-bold bg-yellow-800 text-yellow-200">
                 En attente de joueurs
               </span>
             )}
-            {!isPending && currentPlayer && (
+            {!isPending && (
               <span
                 className={`px-2 py-0.5 rounded text-sm font-bold ${
-                  isMyTurn
+                  canAct
                     ? "bg-green-700 text-green-200"
                     : "bg-red-900 text-red-300"
                 }`}
               >
-                {isMyTurn ? "Votre tour" : `Tour de ${currentPlayer.name}`}
+                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "En attente des autres joueurs" : "Observation"}
               </span>
             )}
           </div>
@@ -361,7 +392,7 @@ function HUDContent() {
               <div
                 key={p.id}
                 className={`flex items-center gap-2 px-2 py-1 rounded ${
-                  p.id === gameState.currentTurnPlayerId ? "bg-white/10" : ""
+                   p.id === myPlayer?.id ? "bg-white/10" : ""
                 }`}
               >
                 <div
@@ -375,7 +406,7 @@ function HUDContent() {
                   <span className="text-green-400 text-xs font-bold">(Vous)</span>
                 )}
                 <span className="text-gray-400 text-xs ml-auto">
-                  {p.heroes.length}H {p.towns.length}T
+                  {p.hasEndedTurn ? "Terminé" : "Actif"} | {p.heroes.length}H {p.towns.length}T
                 </span>
               </div>
             ))}
@@ -394,7 +425,7 @@ function HUDContent() {
         </div>
       )}
 
-      {isMyTurn && !isPending && notificationPermission === "default" && (
+      {canAct && !isPending && notificationPermission === "default" && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-lg border border-green-500/70 bg-green-950/90 px-6 py-3 text-center shadow-xl shadow-green-900/40">
           <button
             className="rounded bg-green-700 px-3 py-1 text-sm font-bold text-white hover:bg-green-600"
@@ -485,6 +516,11 @@ function HUDContent() {
               </div>
             </div>
           )}
+          {isMyTown && selectedTown.lastBuiltTurn === gameState.turnNumber && (
+            <div className="mt-2 rounded bg-yellow-950/70 px-2 py-1 text-sm text-yellow-200">
+              Construction déjà réalisée aujourd&apos;hui dans ce château.
+            </div>
+          )}
           <div className="mt-4 border-t border-gray-700 pt-3">
             <div className="text-yellow-200 font-bold mb-2">Construire</div>
             <div className="space-y-2">
@@ -495,10 +531,11 @@ function HUDContent() {
                 );
                 const disabled =
                   alreadyBuilt ||
+                  selectedTown.lastBuiltTurn === gameState.turnNumber ||
                   Boolean(missingRequirement) ||
                   !myPlayer ||
                   !canAfford(myPlayer.resources, rule.cost) ||
-                  !isMyTurn ||
+                  !canAct ||
                   !isMyTown ||
                   isPending;
 
@@ -540,11 +577,13 @@ function HUDContent() {
             <div className="space-y-2">
               {UNIT_RULES.map((rule) => {
                 const hasDwelling = selectedTown.buildings.includes(rule.dwelling);
+                const available = selectedTown.availableRecruits[rule.type] ?? 0;
                 const disabled =
                   !hasDwelling ||
+                  available <= 0 ||
                   !myPlayer ||
                   !canAfford(myPlayer.resources, rule.cost) ||
-                  !isMyTurn ||
+                  !canAct ||
                   !isMyTown ||
                   isPending;
 
@@ -556,6 +595,11 @@ function HUDContent() {
                         <div className="text-gray-400 text-xs">
                           PV {rule.health} | {formatCost(rule.cost)} / unité
                         </div>
+                        {hasDwelling && (
+                          <div className="text-green-300 text-xs mt-1">
+                            Disponible cette semaine : {available}
+                          </div>
+                        )}
                         {!hasDwelling && (
                           <div className="text-red-300 text-xs mt-1">
                             Prérequis manquant : {buildingTypeLabel(rule.dwelling)}
@@ -598,17 +642,24 @@ function HUDContent() {
             </button>
           </div>
         ) : (
+          <div className="text-center">
+          {hasActiveCombats && canAct && (
+            <div className="mb-2 rounded bg-yellow-950/90 px-3 py-1 text-sm font-bold text-yellow-200">
+              Terminez les combats en cours avant de finir le tour.
+            </div>
+          )}
           <button
             className={`px-8 py-3 rounded-lg font-bold text-lg transition ${
-              isMyTurn
+              canAct && !hasActiveCombats
                 ? "bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/50"
                 : "bg-gray-700 text-gray-400 cursor-not-allowed"
             }`}
-            disabled={!isMyTurn}
+            disabled={!canAct || hasActiveCombats}
             onClick={handleEndTurn}
           >
-            Fin du tour
+            {isWaitingForPlayers ? "Tour terminé" : "Fin du tour"}
           </button>
+          </div>
         )}
       </div>
     </div>

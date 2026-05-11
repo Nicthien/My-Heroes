@@ -1,57 +1,28 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireCurrentUser } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
+  const supabase = createAdminClient();
+  const game = await getGameWithRelations(supabase, id);
 
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: {
-      players: {
-        include: {
-          heroes: { include: { armies: true } },
-          towns: true,
-          resourceBuildings: true,
-          user: { select: { name: true } },
-        },
-      },
-      turns: { orderBy: { turnNumber: "desc" }, take: 100 },
-      combats: {
-        where: { status: "ACTIVE" },
-        orderBy: { createdAt: "desc" },
-        include: { participants: true },
-      },
-      neutralArmies: true,
-    },
-  });
+  if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
 
-  if (!game) {
-    return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
-  }
-
-  const playerId = session?.user?.id
-    ? (
-        await prisma.gamePlayer.findFirst({
-          where: { gameId: id, userId: session.user.id },
-          select: { id: true },
-        })
-      )?.id
-    : null;
-
+  const players = game.players as unknown as Array<{ id: string; userId: string; exploredTiles: string[] }>;
+  const player = players.find((item) => item.userId === user.id);
   const filteredGame = {
     ...game,
-    players: game.players.map((p) => ({
-      ...p,
-      exploredTiles: p.id === playerId ? p.exploredTiles : [],
+    players: players.map((item) => ({
+      ...item,
+      exploredTiles: item.id === player?.id ? item.exploredTiles : [],
     })),
   };
 
@@ -62,87 +33,70 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
   const body = await request.json();
+  const supabase = createAdminClient();
+  const gamePlayer = await getGamePlayer(supabase, id, user.id);
 
-  const gamePlayer = await prisma.gamePlayer.findFirst({
-    where: { gameId: id, userId: session.user.id },
-  });
+  if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
 
-  if (!gamePlayer) {
-    return NextResponse.json({ error: "Vous n'êtes pas dans cette partie" }, { status: 403 });
-  }
-
-  const currentGame = await prisma.game.findUnique({ where: { id } });
-  if (!currentGame) {
-    return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
-  }
-
-  if (currentGame.currentTurnPlayerId !== gamePlayer.id) {
+  const game = await getGameWithRelations(supabase, id);
+  if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
+  if (game.currentTurnPlayerId !== gamePlayer.id) {
     return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
   }
 
-  const players = await prisma.gamePlayer.findMany({
-    where: { gameId: id, isAlive: true },
-    orderBy: { turnOrder: "asc" },
-  });
-  const currentIndex = players.findIndex((player) => player.id === currentGame.currentTurnPlayerId);
+  const players = (game.players as unknown as Array<{ id: string; isAlive: boolean; turnOrder: number }>)
+    .filter((player: { isAlive: boolean }) => player.isAlive)
+    .sort((a: { turnOrder: number }, b: { turnOrder: number }) => a.turnOrder - b.turnOrder);
+  const currentIndex = players.findIndex((player: { id: string }) => player.id === game.currentTurnPlayerId);
   const nextPlayerId = players[(currentIndex + 1) % players.length]?.id;
 
   if (!nextPlayerId || body.nextPlayerId !== nextPlayerId) {
     return NextResponse.json({ error: "Prochain joueur invalide" }, { status: 400 });
   }
 
-  const game = await prisma.game.update({
-    where: { id },
-    data: { currentTurnPlayerId: nextPlayerId },
+  const { error: updateError } = await supabase
+    .from("games")
+    .update({ current_turn_player_id: nextPlayerId })
+    .eq("id", id)
+    .select("id")
+    .single();
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  await supabase.from("turns").insert({
+    game_id: id,
+    game_player_id: gamePlayer.id,
+    turn_number: game.turnNumber,
+    actions: body.actions || [],
+    is_completed: true,
   });
 
-  await prisma.turn.create({
-    data: {
-      gameId: id,
-      gamePlayerId: gamePlayer.id,
-      turnNumber: game.turnNumber,
-      actions: body.actions || [],
-      isCompleted: true,
-    },
-  });
-
-  return NextResponse.json(game);
+  const updatedGame = await getGameWithRelations(supabase, id);
+  return NextResponse.json(updatedGame);
 }
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
+  const supabase = createAdminClient();
+  const hostPlayer = await getGamePlayer(supabase, id, user.id);
 
-  const hostPlayer = await prisma.gamePlayer.findFirst({
-    where: {
-      gameId: id,
-      userId: session.user.id,
-      turnOrder: 0,
-    },
-  });
-
-  if (!hostPlayer) {
-    return NextResponse.json(
-      { error: "Seul le créateur peut supprimer cette partie" },
-      { status: 403 }
-    );
+  if (!hostPlayer || hostPlayer.turnOrder !== 0) {
+    return NextResponse.json({ error: "Seul le createur peut supprimer cette partie" }, { status: 403 });
   }
 
-  await prisma.game.delete({ where: { id } });
+  const { error } = await supabase.from("games").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });
 }

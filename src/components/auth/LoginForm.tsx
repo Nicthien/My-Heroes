@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 
 export default function LoginForm() {
   const [identifier, setIdentifier] = useState("");
@@ -10,23 +10,24 @@ export default function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: identifier,
       password,
-      redirect: false,
     });
 
-    if (result?.error) {
-      setError("Email, nom d'utilisateur ou mot de passe incorrect");
+    if (signInError) {
+      setError("Email ou mot de passe incorrect");
       setLoading(false);
     } else {
       router.push("/dashboard");
+      router.refresh();
     }
   };
 
@@ -49,7 +50,7 @@ export default function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-gray-300 text-sm block mb-1">
-              Email ou nom d&apos;utilisateur
+              Email
             </label>
             <input
               type="text"

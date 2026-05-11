@@ -1,447 +1,362 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { CombatMode, UnitStack, UnitType } from "@/lib/game/types";
+import { requireCurrentUser } from "@/lib/auth";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
-import { applyLossesToArmies } from "@/lib/game/combat/autoResolve";
+import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
+import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
+
   const { id } = await params;
+  const supabase = createAdminClient();
+  const gamePlayer = await getGamePlayer(supabase, id, user.id);
+  if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
 
-  const gamePlayer = await prisma.gamePlayer.findFirst({ where: { gameId: id, userId: session.user.id } });
-  if (!gamePlayer) return NextResponse.json({ error: "Vous n'êtes pas dans cette partie" }, { status: 403 });
+  const { data, error } = await supabase
+    .from("combats")
+    .select("*, combat_participants(*)")
+    .eq("game_id", id)
+    .eq("status", "ACTIVE")
+    .order("created_at", { ascending: false });
 
-  const combats = await prisma.combat.findMany({
-    where: { gameId: id, status: "ACTIVE" },
-    include: { participants: true },
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(combats);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json((data ?? []).map(toCombat));
 }
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
   const body = await request.json();
-  const mode = body.mode as CombatMode;
-  if (mode !== "AUTO" && mode !== "MANUAL") {
-    return NextResponse.json({ error: "Mode de combat invalide" }, { status: 400 });
+  const supabase = createAdminClient();
+  const game = await getGameWithRelations(supabase, id);
+  const players = (game?.players ?? []) as unknown as Array<{
+    id: string;
+    userId: string;
+    exploredTiles: string[];
+    towns: Array<{ x: number; y: number }>;
+    resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
+    heroes: Array<{
+      id: string;
+      attack: number;
+      defense: number;
+      movement: number;
+      armies: Parameters<typeof createCombatBoard>[0]["armies"];
+      x: number;
+      y: number;
+    }>;
+  }>;
+  const neutralArmies = (game?.neutralArmies ?? []) as unknown as Array<{
+    id: string;
+    x: number;
+    y: number;
+    status: string;
+    stacks: UnitStack[];
+  }>;
+  const gamePlayer = players.find((player) => player.userId === user.id);
+
+  if (!game || !gamePlayer) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
+  if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
+  if (game.currentTurnPlayerId !== gamePlayer.id) {
+    return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
   }
 
-  const gamePlayer = await prisma.gamePlayer.findFirst({ where: { gameId: id, userId: session.user.id } });
-  if (!gamePlayer) return NextResponse.json({ error: "Vous n'êtes pas dans cette partie" }, { status: 403 });
-
-  const game = await prisma.game.findUnique({ where: { id } });
-  if (!game || game.status !== "ACTIVE") return NextResponse.json({ error: "Partie inactive" }, { status: 400 });
-  const completedTurn = await prisma.turn.findUnique({
-    where: {
-      gameId_gamePlayerId_turnNumber: {
-        gameId: id,
-        gamePlayerId: gamePlayer.id,
-        turnNumber: game.turnNumber,
-      },
-    },
-  });
-  if (completedTurn?.isCompleted) {
-    return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
+  const attacker = gamePlayer.heroes.find((hero) => hero.id === body.attackerHeroId);
+  if (!attacker) return NextResponse.json({ error: "Heros attaquant invalide" }, { status: 400 });
+  if (body.mode === "AUTO" && body.targetType === "hero") {
+    return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
   }
 
-  const attacker = await prisma.hero.findUnique({
-    where: { id: body.attackerHeroId },
-    include: { armies: true, gamePlayer: true },
-  });
-  if (!attacker || attacker.gamePlayerId !== gamePlayer.id) {
-    return NextResponse.json({ error: "Héros attaquant invalide" }, { status: 400 });
-  }
+  // Move hero to combat location if a valid path is provided
+  if (Array.isArray(body.path) && body.path.length >= 2) {
+    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, body.path, attacker.movement ?? 10);
+    if (validation.ok) {
+      const lastPos = body.path[body.path.length - 1] as { x: number; y: number };
+      await supabase.from("heroes").update({
+        x: lastPos.x,
+        y: lastPos.y,
+        movement: Math.max(0, (attacker.movement ?? 10) - validation.usedMovement),
+      }).eq("id", attacker.id);
+      attacker.x = lastPos.x;
+      attacker.y = lastPos.y;
 
-  const activeCombat = await prisma.combat.findFirst({
-    where: {
-      status: "ACTIVE",
-      OR: [
-        { attackerHeroId: attacker.id },
-        { defenderHeroId: attacker.id },
-        { participants: { some: { heroId: attacker.id } } },
-      ],
-    },
-  });
-  if (activeCombat) return NextResponse.json({ error: "Ce héros est déjà en combat" }, { status: 400 });
-
-  const targetType = body.targetType as "hero" | "monster" | "building";
-  if (targetType === "hero") {
-    return startHeroCombat(id, mode, attacker, String(body.targetId));
-  }
-  if (targetType === "monster") {
-    return startNeutralCombat(id, mode, attacker, String(body.targetId));
-  }
-  if (targetType === "building") {
-    return startBuildingCombat(id, mode, attacker, String(body.targetId));
-  }
-
-  return NextResponse.json({ error: "Cible invalide" }, { status: 400 });
-}
-
-async function startHeroCombat(gameId: string, mode: CombatMode, attacker: LoadedHero, targetId: string) {
-  if (mode === "AUTO") {
-    return NextResponse.json({ error: "Les combats entre joueurs sont toujours manuels" }, { status: 400 });
-  }
-
-  const defender = await prisma.hero.findUnique({
-    where: { id: targetId },
-    include: { armies: true, gamePlayer: true },
-  });
-  if (!defender || defender.gamePlayerId === attacker.gamePlayerId) {
-    return NextResponse.json({ error: "Cible invalide" }, { status: 400 });
-  }
-
-  const distance = Math.abs(attacker.x - defender.x) + Math.abs(attacker.y - defender.y);
-  if (distance > Math.max(1, attacker.movement)) {
-    return NextResponse.json({ error: "Cible trop éloignée" }, { status: 400 });
-  }
-
-  const combat = await prisma.$transaction(async (tx) => {
-    const created = await tx.combat.create({
-      data: {
-        gameId,
-        mode: "MANUAL",
-        attackerPlayerId: attacker.gamePlayerId,
-        defenderPlayerId: defender.gamePlayerId,
-        attackerHeroId: attacker.id,
-        defenderHeroId: defender.id,
-        x: defender.x,
-        y: defender.y,
-        boardState: { units: [] },
-        turnQueue: [],
-        actionLog: ["Le combat commence."],
-      },
-    });
-    const attackerParticipant = await tx.combatParticipant.create({ data: { combatId: created.id, playerId: attacker.gamePlayerId, heroId: attacker.id, side: "attacker" } });
-    const defenderParticipant = await tx.combatParticipant.create({ data: { combatId: created.id, playerId: defender.gamePlayerId, heroId: defender.id, side: "defender" } });
-    const board = createCombatBoard(
-      heroSnapshot(attacker, attackerParticipant.id),
-      heroSnapshot(defender, defenderParticipant.id)
-    );
-    return tx.combat.update({
-      where: { id: created.id },
-      data: {
-        currentPlayerId: board.currentPlayerId,
-        currentUnitId: board.currentUnitId,
-        boardState: JSON.parse(JSON.stringify(board.boardState)),
-        turnQueue: JSON.parse(JSON.stringify(board.turnQueue)),
-      },
-      include: { participants: true },
-    });
-  });
-  return NextResponse.json({ combat });
-}
-
-async function startNeutralCombat(gameId: string, mode: CombatMode, attacker: LoadedHero, targetId: string) {
-  let neutral = await prisma.neutralArmy.findFirst({
-    where: { id: targetId, gameId },
-    include: { stacks: true },
-  });
-  if (!neutral) neutral = await createNeutralArmyFromMap(gameId, targetId);
-  if (!neutral || neutral.status !== "ACTIVE") return NextResponse.json({ error: "Monstres introuvables" }, { status: 400 });
-
-  const distance = Math.abs(attacker.x - neutral.x) + Math.abs(attacker.y - neutral.y);
-  if (distance > Math.max(1, attacker.movement)) return NextResponse.json({ error: "Cible trop éloignée" }, { status: 400 });
-
-  const attackerSnapshot = heroSnapshot(attacker);
-  const defenderSnapshot = {
-    id: neutral.id,
-    playerId: null,
-    attack: 0,
-    defense: 0,
-    armies: neutral.stacks.map(stackToUnit),
-  };
-
-  if (mode === "AUTO") {
-    const summary = resolveAutomaticCombat(attackerSnapshot, defenderSnapshot);
-    const attackerWon = summary.winnerId === attacker.id;
-    await applyNeutralCombatResult(attackerWon, attacker, neutral.id, summary, neutral.x, neutral.y);
-    summary.attackerDied = !attackerWon;
-    const combat = await prisma.combat.create({
-      data: {
-        gameId,
-        mode,
-        status: "RESOLVED",
-        attackerPlayerId: attacker.gamePlayerId,
-        attackerHeroId: attacker.id,
-        neutralArmyId: neutral.id,
-        x: neutral.x,
-        y: neutral.y,
-        boardState: { units: [] },
-        result: JSON.parse(JSON.stringify(summary)),
-      },
-    });
-    return NextResponse.json({ combat, result: summary });
-  }
-
-  const combat = await prisma.$transaction(async (tx) => {
-    const created = await tx.combat.create({
-      data: {
-        gameId,
-        mode,
-        attackerPlayerId: attacker.gamePlayerId,
-        attackerHeroId: attacker.id,
-        neutralArmyId: neutral.id,
-        x: neutral.x,
-        y: neutral.y,
-        boardState: { units: [] },
-        turnQueue: [],
-        actionLog: ["Le combat commence."],
-      },
-    });
-    const attackerParticipant = await tx.combatParticipant.create({ data: { combatId: created.id, playerId: attacker.gamePlayerId, heroId: attacker.id, side: "attacker" } });
-    const board = createCombatBoard(heroSnapshot(attacker, attackerParticipant.id), defenderSnapshot);
-    return tx.combat.update({
-      where: { id: created.id },
-      data: {
-        currentPlayerId: board.currentPlayerId ?? attacker.gamePlayerId,
-        currentUnitId: board.currentUnitId,
-        boardState: JSON.parse(JSON.stringify(board.boardState)),
-        turnQueue: JSON.parse(JSON.stringify(board.turnQueue)),
-      },
-      include: { participants: true },
-    });
-  });
-  return NextResponse.json({ combat });
-}
-
-async function applyNeutralCombatResult(attackerWon: boolean, attacker: LoadedHero, neutralArmyId: string, summary: ReturnType<typeof resolveAutomaticCombat>, x: number, y: number) {
-  await prisma.$transaction(async (tx) => {
-    if (!attackerWon) {
-      await tx.army.deleteMany({ where: { heroId: attacker.id } });
-      await tx.hero.delete({ where: { id: attacker.id } });
-      return;
+      const newlyVisible = computeVisibleTiles(
+        mapData,
+        getPlayerVisionCenters({
+          heroes: [{ position: { x: lastPos.x, y: lastPos.y } }],
+          towns: (gamePlayer.towns ?? []).map((t) => ({ position: { x: t.x, y: t.y } })),
+        }),
+        5
+      );
+      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+      for (const key of newlyVisible) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
     }
-    let heroSurvives = false;
-    for (const army of attacker.armies) {
-      const loss = summary.attackerLosses.find((item) => item.unitType === army.unitType);
-      const nextCount = Math.max(0, army.count - (loss?.lost ?? 0));
-      if (nextCount > 0) {
-        heroSurvives = true;
-        await tx.army.update({ where: { id: army.id }, data: { count: nextCount, health: nextCount * army.maxHealth } });
-      } else {
-        await tx.army.delete({ where: { id: army.id } });
+  }
+
+  const defender = getDefender({
+    targetId: String(body.targetId ?? ""),
+    targetType: String(body.targetType ?? ""),
+    attackerPlayerId: gamePlayer.id,
+    players,
+    neutralArmies,
+  });
+  const buildingDefender = !defender && body.targetType === "building"
+    ? await getBuildingDefender(supabase, id, String(body.targetId ?? ""))
+    : null;
+  const targetDefender = defender ?? buildingDefender;
+  if (!targetDefender) {
+    const debug = {
+      gameId: id,
+      targetType: body.targetType,
+      targetId: body.targetId,
+      attackerHeroId: body.attackerHeroId,
+      neutralArmies: neutralArmies.length,
+      activeNeutralArmies: neutralArmies.filter((army) => army.status === "ACTIVE").length,
+      playerCount: players.length,
+    };
+    console.warn("Invalid combat target", debug);
+    return NextResponse.json({
+      error: "Cible de combat invalide",
+      details: debug,
+    }, { status: 400 });
+  }
+
+  const combatStart = createCombatBoard(
+    {
+      id: attacker.id,
+      playerId: gamePlayer.id,
+      heroId: attacker.id,
+      attack: attacker.attack,
+      defense: attacker.defense,
+      armies: attacker.armies,
+    },
+    {
+      id: targetDefender.id,
+      playerId: targetDefender.playerId,
+      heroId: targetDefender.heroId,
+      attack: targetDefender.attack,
+      defense: targetDefender.defense,
+      armies: targetDefender.armies,
+    }
+  );
+  const autoResult = body.mode === "AUTO"
+    ? resolveAutomaticCombat(
+      {
+        id: attacker.id,
+        playerId: gamePlayer.id,
+        heroId: attacker.id,
+        attack: attacker.attack,
+        defense: attacker.defense,
+        armies: attacker.armies,
+      },
+      {
+        id: targetDefender.id,
+        playerId: targetDefender.playerId,
+        heroId: targetDefender.heroId,
+        attack: targetDefender.attack,
+        defense: targetDefender.defense,
+        armies: targetDefender.armies,
       }
+    )
+    : null;
+  const result = autoResult
+    ? {
+      ...autoResult,
+      winnerPlayerId: autoResult.winnerId === attacker.id ? gamePlayer.id : targetDefender.playerId,
     }
-    await tx.neutralArmy.update({ where: { id: neutralArmyId }, data: { status: "DEFEATED" } });
-    if (heroSurvives) {
-      await tx.hero.update({ where: { id: attacker.id }, data: { x, y, movement: 0, experience: { increment: summary.experienceGained } } });
+    : null;
+
+  const { data, error } = await supabase
+    .from("combats")
+    .insert({
+      game_id: id,
+      mode: body.mode ?? "MANUAL",
+      status: result ? "RESOLVED" : "ACTIVE",
+      attacker_player_id: gamePlayer.id,
+      defender_player_id: targetDefender.playerId,
+      attacker_hero_id: attacker.id,
+      defender_hero_id: targetDefender.heroId,
+      neutral_army_id: targetDefender.neutralArmyId,
+      x: targetDefender.x,
+      y: targetDefender.y,
+      board_state: combatStart.boardState,
+      current_player_id: result ? null : combatStart.currentPlayerId,
+      current_unit_id: result ? null : combatStart.currentUnitId,
+      turn_queue: combatStart.turnQueue,
+      action_log: result ? ["Combat automatique.", ...result.log] : ["Combat lance."],
+      result,
+    })
+    .select("*, combat_participants(*)")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (autoResult && result) {
+    const attackerWon = autoResult.winnerId === attacker.id;
+    if (attackerWon) {
+      if (targetDefender.neutralArmyId) {
+        await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
+      } else if (!targetDefender.playerId) {
+        await supabase
+          .from("resource_buildings")
+          .update({ game_player_id: gamePlayer.id, guardian_power: 0 })
+          .eq("game_id", id)
+          .eq("id", targetDefender.id);
+      }
     } else {
-      await tx.hero.delete({ where: { id: attacker.id } });
+      await supabase.from("armies").delete().eq("hero_id", attacker.id);
+      await supabase.from("heroes").delete().eq("id", attacker.id);
     }
-  });
+  }
+
+  return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
 }
 
-function heroSnapshot(hero: LoadedHero, participantId?: string) {
+async function getBuildingDefender(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  targetId: string
+) {
+  const { data: building, error } = await supabase
+    .from("resource_buildings")
+    .select("id,x,y,guardian_power")
+    .eq("game_id", gameId)
+    .eq("id", targetId)
+    .maybeSingle();
+
+  if (error || !building || building.guardian_power <= 0) return null;
+
+  const count = Math.max(5, Math.ceil(Number(building.guardian_power) / 12));
   return {
-    id: hero.id,
-    playerId: hero.gamePlayerId,
-    heroId: hero.id,
-    participantId: participantId ?? null,
-    attack: hero.attack,
-    defense: hero.defense,
-    armies: hero.armies.map(armyToUnit),
-  };
-}
-
-function armyToUnit(army: { id: string; unitType: string; count: number; health: number; maxHealth: number; position: number }): UnitStack {
-  return { id: army.id, unitType: army.unitType as UnitType, count: army.count, health: army.health, maxHealth: army.maxHealth, position: army.position };
-}
-
-function stackToUnit(stack: { id: string; unitType: string; count: number; health: number; maxHealth: number; position: number }): UnitStack {
-  return armyToUnit(stack);
-}
-
-async function createNeutralArmyFromMap(gameId: string, targetId: string) {
-  const neutralId = targetId.startsWith(`${gameId}-`) ? targetId : `${gameId}-${targetId}`;
-  const existing = await prisma.neutralArmy.findFirst({
-    where: { id: neutralId, gameId },
-    include: { stacks: true },
-  });
-  if (existing) return existing;
-
-  const game = await prisma.game.findUnique({ where: { id: gameId } });
-  const mapData = game?.mapData as { tiles?: Array<Array<{ x: number; y: number; object?: { id: string; type: string } }>> } | null;
-  const tile = mapData?.tiles?.flatMap((row) => row).find((item) => item.object?.id === targetId && item.object.type === "monster");
-  if (!tile) return null;
-  const count = 8 + ((tile.x + tile.y) % 12);
-  return prisma.neutralArmy.create({
-    data: {
-      id: neutralId,
-      gameId,
-      x: tile.x,
-      y: tile.y,
-      stacks: {
-        create: [{ unitType: "pikeman", count, health: count * 12, maxHealth: 12, position: 0 }],
-      },
-    },
-    include: { stacks: true },
-  });
-}
-
-async function startBuildingCombat(gameId: string, mode: CombatMode, attacker: LoadedHero, buildingId: string) {
-  const building = await prisma.resourceBuilding.findUnique({ where: { id: buildingId } });
-  if (!building || building.gameId !== gameId) {
-    return NextResponse.json({ error: "Bâtiment introuvable" }, { status: 400 });
-  }
-  if (building.guardianPower <= 0) {
-    return NextResponse.json({ error: "Ce bâtiment n'a pas de gardiens" }, { status: 400 });
-  }
-
-  const distance = Math.abs(attacker.x - building.x) + Math.abs(attacker.y - building.y);
-  if (distance > Math.max(1, attacker.movement)) {
-    return NextResponse.json({ error: "Cible trop éloignée" }, { status: 400 });
-  }
-
-  const guardianId = `bldguard-${buildingId}`;
-  let neutral = await prisma.neutralArmy.findFirst({ where: { id: guardianId }, include: { stacks: true } });
-  if (!neutral) {
-    const stacks = guardianStacksFromPower(building.guardianPower);
-    neutral = await prisma.neutralArmy.create({
-      data: {
-        id: guardianId,
-        gameId,
-        x: building.x,
-        y: building.y,
-        stacks: {
-          create: stacks.map((s, i) => ({
-            unitType: s.unitType,
-            count: s.count,
-            health: s.count * unitMaxHealth(s.unitType),
-            maxHealth: unitMaxHealth(s.unitType),
-            position: i,
-          })),
-        },
-      },
-      include: { stacks: true },
-    });
-  }
-  if (neutral.status !== "ACTIVE") {
-    return NextResponse.json({ error: "Les gardiens ont déjà été vaincus" }, { status: 400 });
-  }
-
-  const attackerSnapshot = heroSnapshot(attacker);
-  const defenderSnapshot = {
-    id: neutral.id,
+    id: building.id,
     playerId: null,
-    attack: 0,
-    defense: 0,
-    armies: neutral.stacks.map(stackToUnit),
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: [{
+      id: `${building.id}-guards`,
+      unitType: UnitType.PIKEMAN,
+      count,
+      health: count * 12,
+      maxHealth: 12,
+      position: 0,
+    }],
+    x: building.x,
+    y: building.y,
   };
-
-  if (mode === "AUTO") {
-    const summary = resolveAutomaticCombat(attackerSnapshot, defenderSnapshot);
-    const attackerWon = summary.winnerId === attacker.id;
-    let heroSurvivedBuilding = false;
-    await prisma.$transaction(async (tx) => {
-      if (!attackerWon) {
-        await tx.army.deleteMany({ where: { heroId: attacker.id } });
-        await tx.hero.delete({ where: { id: attacker.id } });
-        return;
-      }
-      let heroSurvives = false;
-      for (const army of attacker.armies) {
-        const loss = summary.attackerLosses.find((item) => item.unitType === army.unitType);
-        const nextCount = Math.max(0, army.count - (loss?.lost ?? 0));
-        if (nextCount > 0) {
-          heroSurvives = true;
-          await tx.army.update({ where: { id: army.id }, data: { count: nextCount, health: nextCount * army.maxHealth } });
-        } else {
-          await tx.army.delete({ where: { id: army.id } });
-        }
-      }
-      heroSurvivedBuilding = heroSurvives;
-      await tx.neutralArmy.update({ where: { id: neutral.id }, data: { status: "DEFEATED" } });
-      if (heroSurvives) {
-        await tx.resourceBuilding.update({ where: { id: buildingId }, data: { gamePlayerId: attacker.gamePlayerId, guardianPower: 0 } });
-        await tx.hero.update({ where: { id: attacker.id }, data: { x: building.x, y: building.y, movement: 0, experience: { increment: summary.experienceGained } } });
-      } else {
-        await tx.hero.delete({ where: { id: attacker.id } });
-      }
-    });
-    summary.attackerDied = !attackerWon || !heroSurvivedBuilding;
-    const combat = await prisma.combat.create({
-      data: {
-        gameId,
-        mode,
-        status: "RESOLVED",
-        attackerPlayerId: attacker.gamePlayerId,
-        attackerHeroId: attacker.id,
-        neutralArmyId: neutral.id,
-        x: building.x,
-        y: building.y,
-        boardState: { units: [] },
-        result: JSON.parse(JSON.stringify(summary)),
-      },
-    });
-    return NextResponse.json({ combat, result: summary });
-  }
-
-  const combat = await prisma.$transaction(async (tx) => {
-    const created = await tx.combat.create({
-      data: {
-        gameId,
-        mode,
-        attackerPlayerId: attacker.gamePlayerId,
-        attackerHeroId: attacker.id,
-        neutralArmyId: neutral.id,
-        x: building.x,
-        y: building.y,
-        boardState: { units: [] },
-        turnQueue: [],
-        actionLog: ["Le combat commence."],
-      },
-    });
-    const attackerParticipant = await tx.combatParticipant.create({ data: { combatId: created.id, playerId: attacker.gamePlayerId, heroId: attacker.id, side: "attacker" } });
-    const board = createCombatBoard(heroSnapshot(attacker, attackerParticipant.id), defenderSnapshot);
-    return tx.combat.update({
-      where: { id: created.id },
-      data: {
-        currentPlayerId: board.currentPlayerId ?? attacker.gamePlayerId,
-        currentUnitId: board.currentUnitId,
-        boardState: JSON.parse(JSON.stringify(board.boardState)),
-        turnQueue: JSON.parse(JSON.stringify(board.turnQueue)),
-      },
-      include: { participants: true },
-    });
-  });
-  return NextResponse.json({ combat });
 }
 
-function guardianStacksFromPower(power: number): { unitType: string; count: number }[] {
-  if (power < 150) {
-    return [{ unitType: "pikeman", count: Math.max(1, Math.floor(power / 12)) }];
+function validateCombatPath(
+  map: GameMap,
+  start: { x: number; y: number },
+  path: Array<{ x: number; y: number }>,
+  movement: number
+): { ok: true; usedMovement: number } | { ok: false } {
+  if (!Array.isArray(path) || path.length < 2) return { ok: false };
+  if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false };
+
+  let usedMovement = 0;
+  for (let i = 1; i < path.length; i++) {
+    const prev = path[i - 1];
+    const curr = path[i];
+    if (Math.abs(prev.x - curr.x) + Math.abs(prev.y - curr.y) !== 1) return { ok: false };
+    const tile = map.tiles[curr.y]?.[curr.x];
+    // Allow the final tile even if occupied by a monster/enemy (that's the combat target)
+    if (!tile || (!tile.isPassable && i < path.length - 1)) return { ok: false };
+    usedMovement += tile.movementCost ?? 1;
   }
-  if (power < 400) {
-    return [
-      { unitType: "pikeman", count: Math.max(1, Math.floor((power * 0.6) / 12)) },
-      { unitType: "archer", count: Math.max(1, Math.floor((power * 0.4) / 8)) },
-    ];
-  }
-  return [
-    { unitType: "archer", count: Math.max(1, Math.floor((power * 0.5) / 8)) },
-    { unitType: "griffin", count: Math.max(1, Math.floor((power * 0.5) / 25)) },
-  ];
+  if (usedMovement > movement) return { ok: false };
+  return { ok: true, usedMovement };
 }
 
-function unitMaxHealth(unitType: string): number {
-  if (unitType === "pikeman") return 12;
-  if (unitType === "archer") return 8;
-  if (unitType === "griffin") return 25;
-  return 10;
-}
+function getDefender({
+  targetId,
+  targetType,
+  attackerPlayerId,
+  players,
+  neutralArmies,
+}: {
+  targetId: string;
+  targetType: string;
+  attackerPlayerId: string;
+  players: Array<{
+    id: string;
+    resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
+    heroes: Array<{ id: string; attack: number; defense: number; armies: UnitStack[]; x: number; y: number }>;
+  }>;
+  neutralArmies: Array<{ id: string; x: number; y: number; status: string; stacks: UnitStack[] }>;
+}) {
+  if (targetType === "hero") {
+    for (const player of players) {
+      if (player.id === attackerPlayerId) continue;
+      const hero = player.heroes.find((item) => item.id === targetId);
+      if (!hero) continue;
+      return {
+        id: hero.id,
+        playerId: player.id,
+        heroId: hero.id,
+        neutralArmyId: null,
+        attack: hero.attack,
+        defense: hero.defense,
+        armies: hero.armies,
+        x: hero.x,
+        y: hero.y,
+      };
+    }
+  }
 
-type LoadedHero = Prisma.HeroGetPayload<{ include: { armies: true; gamePlayer: true } }>;
+  if (targetType === "monster") {
+    const army = neutralArmies.find((item) => item.id === targetId && item.status === "ACTIVE");
+    if (!army) return null;
+    return {
+      id: army.id,
+      playerId: null,
+      heroId: null,
+      neutralArmyId: army.id,
+      attack: 1,
+      defense: 1,
+      armies: army.stacks,
+      x: army.x,
+      y: army.y,
+    };
+  }
+
+  if (targetType === "building") {
+    const building = players.flatMap((player) => player.resourceBuildings).find((item) => item.id === targetId);
+    if (!building || building.guardianPower <= 0) return null;
+    const count = Math.max(5, Math.ceil(building.guardianPower / 12));
+    return {
+      id: building.id,
+      playerId: null,
+      heroId: null,
+      neutralArmyId: null,
+      attack: 1,
+      defense: 1,
+      armies: [{
+        id: `${building.id}-guards`,
+        unitType: UnitType.PIKEMAN,
+        count,
+        health: count * 12,
+        maxHealth: 12,
+        position: 0,
+      }],
+      x: building.x,
+      y: building.y,
+    };
+  }
+
+  return null;
+}

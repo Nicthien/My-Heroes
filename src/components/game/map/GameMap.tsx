@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { IsometricRenderer, MapObjectData } from "@/lib/rendering/isometric/renderer";
 import { PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
 import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
@@ -104,7 +104,9 @@ export default function GameMapComponent() {
         const firstHero = currentPlayer?.heroes[0];
         if (firstHero) {
           renderer.centerOnTile(firstHero.position.x, firstHero.position.y);
-          useGameStore.getState().selectHero(firstHero.id);
+          if (gameState.status !== "PENDING") {
+            useGameStore.getState().selectHero(firstHero.id);
+          }
         }
         didInitialCenter.current = true;
       }
@@ -121,6 +123,35 @@ export default function GameMapComponent() {
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
   }, [selectedHeroId, gameState]);
+
+  useEffect(() => {
+    if (gameState?.status !== "PENDING") return;
+
+    pendingMoveRef.current = null;
+    pendingAttackRef.current = null;
+    rendererRef.current?.clearHighlights();
+    useGameStore.setState({
+      selectedHeroId: null,
+      selectedTownId: null,
+      pendingCombat: null,
+      pendingJoinCombat: null,
+      activeCombat: null,
+      isCombatMode: false,
+    });
+  }, [gameState?.status]);
+
+  useEffect(() => {
+    if (gameState?.status !== "ACTIVE" || selectedHeroId) return;
+
+    const currentPlayer = gameState.players.find(
+      (player) => player.userId === session?.user?.id
+    );
+    const firstHero = currentPlayer?.heroes[0];
+    if (!firstHero) return;
+
+    selectHero(firstHero.id);
+    rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
+  }, [gameState, selectedHeroId, selectHero, session?.user?.id]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2 || e.button === 1) {
@@ -146,6 +177,13 @@ export default function GameMapComponent() {
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (!rendererRef.current || !gameState) return;
+    if (gameState.status === "PENDING") {
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      rendererRef.current.clearHighlights();
+      return;
+    }
+
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -155,9 +193,15 @@ export default function GameMapComponent() {
     const myPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
     );
-    const canAct = Boolean(
-      myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
+    const isCurrentTurn = Boolean(
+      myPlayer && gameState.currentTurnPlayerId === myPlayer.id
     );
+    const canAct = Boolean(
+      myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && isCurrentTurn && !myPlayer.hasEndedTurn
+    );
+    const blockedTurnMessage = myPlayer?.hasEndedTurn
+      ? "Vous avez déjà terminé votre tour."
+      : "Ce n'est pas votre tour.";
 
     const objects = rendererRef.current.getObjectsAtScreen(screenX, screenY);
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
@@ -196,7 +240,7 @@ export default function GameMapComponent() {
             return;
           }
           if (!canAct) {
-            setCombatMessage("Vous avez déjà terminé votre tour.");
+            setCombatMessage(blockedTurnMessage);
             pendingAttackRef.current = null;
             rendererRef.current.clearHighlights();
             return;
@@ -246,7 +290,7 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -254,7 +298,7 @@ export default function GameMapComponent() {
 
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
-        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero" });
+        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero", destination, path });
         return;
       }
 
@@ -290,7 +334,7 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -341,7 +385,7 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           return;
         }
 
@@ -351,7 +395,7 @@ export default function GameMapComponent() {
           pendingAttackRef.current = null;
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0xff6600);
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building" });
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building", destination, path });
           return;
         }
 
@@ -428,10 +472,10 @@ export default function GameMapComponent() {
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
           if (!canAct) {
-            setCombatMessage("Vous avez déjà terminé votre tour.");
+            setCombatMessage(blockedTurnMessage);
             return;
           }
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster" });
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster", destination: tile, path });
           return;
         }
 
@@ -439,7 +483,7 @@ export default function GameMapComponent() {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
           if (!isMyBuilding) {
             if (!canAct) {
-              setCombatMessage("Vous avez déjà terminé votre tour.");
+              setCombatMessage(blockedTurnMessage);
               return;
             }
 
@@ -449,7 +493,7 @@ export default function GameMapComponent() {
               pendingAttackRef.current = null;
               rendererRef.current.highlightPath(path);
               rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
-              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building" });
+              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building", destination: tile, path });
               return;
             }
 
@@ -517,12 +561,13 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingMoveRef.current = null;
           rendererRef.current.clearHighlights();
           return;
         }
 
+        const moveDestination = tile;
         rendererRef.current.highlightPath(path);
         fetch(`/api/games/${gameState.id}/action`, {
           method: "POST",
@@ -545,10 +590,26 @@ export default function GameMapComponent() {
             pendingMoveRef.current = null;
             rendererRef.current?.clearHighlights();
 
-            // Recharger immédiatement le serveur pour avoir la vraie carte
-            refreshGameState(gameState.id, session?.user?.id).then((state) => {
-              if (state) useGameStore.getState().setGameState(state);
-            });
+            // Mise à jour optimiste : déplacer le héros immédiatement côté client
+            // La synchronisation complète (brouillard, mouvement restant) arrive via le realtime Supabase
+            const snapshot = useGameStore.getState().gameState;
+            if (snapshot && moveDestination) {
+              const usedMovement = path.slice(1).reduce((total, p) => {
+                const t = snapshot.map.tiles[p.y]?.[p.x];
+                return total + (t?.movementCost ?? 1);
+              }, 0);
+              useGameStore.getState().setGameState({
+                ...snapshot,
+                players: snapshot.players.map((player) => ({
+                  ...player,
+                  heroes: player.heroes.map((hero) =>
+                    hero.id === selectedHeroId
+                      ? { ...hero, position: moveDestination, movement: Math.max(0, hero.movement - usedMovement) }
+                      : hero
+                  ),
+                })),
+              });
+            }
 
             if (data.interaction?.type === "COLLECT") {
               const r = data.interaction.resource;

@@ -1,18 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
-import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 
 export default function CombatChoiceModal() {
-  const { data: session } = useSession();
   const { gameState, pendingCombat, setPendingCombat, setActiveCombat, setCombatResult, setGameState, setCombatMessage } = useGameStore();
   const autoStartedRef = useRef<string | null>(null);
   const pendingKey = pendingCombat ? `${pendingCombat.attackerHeroId}:${pendingCombat.targetId}:${pendingCombat.targetType}` : null;
 
   const startCombat = useCallback(async (mode: "AUTO" | "MANUAL") => {
     if (!gameState || !pendingCombat) return;
+
+    // Optimistic hero movement to combat destination
+    if (pendingCombat.destination && pendingCombat.path) {
+      const { destination, path } = pendingCombat;
+      const usedMovement = path.slice(1).reduce((total, p) => {
+        const t = gameState.map.tiles[p.y]?.[p.x];
+        return total + (t?.movementCost ?? 1);
+      }, 0);
+      setGameState({
+        ...gameState,
+        players: gameState.players.map((player) => ({
+          ...player,
+          heroes: player.heroes.map((hero) =>
+            hero.id === pendingCombat.attackerHeroId
+              ? { ...hero, position: destination, movement: Math.max(0, (hero.movement ?? 0) - usedMovement) }
+              : hero
+          ),
+        })),
+      });
+    }
+
     const response = await fetch(`/api/games/${gameState.id}/combats`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -21,6 +39,7 @@ export default function CombatChoiceModal() {
         attackerHeroId: pendingCombat.attackerHeroId,
         targetId: pendingCombat.targetId,
         targetType: pendingCombat.targetType,
+        path: pendingCombat.path,
       }),
     });
 
@@ -33,11 +52,11 @@ export default function CombatChoiceModal() {
 
     const data = await response.json();
     setPendingCombat(null);
+    const combatPayload = data.combat ?? data;
     if (data.result) setCombatResult(data.result);
-    if (mode === "MANUAL" && data.combat) setActiveCombat(mapCombat(data.combat));
-    const refreshed = await refreshGameState(gameState.id, session?.user?.id);
-    if (refreshed) setGameState(refreshed);
-  }, [gameState, pendingCombat, session?.user?.id, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
+    if (mode === "MANUAL" && combatPayload) setActiveCombat(mapCombat(combatPayload));
+    // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
+  }, [gameState, pendingCombat, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
 
   useEffect(() => {
     if (!pendingCombat || !pendingKey) return;

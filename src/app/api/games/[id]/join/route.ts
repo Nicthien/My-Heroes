@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
+import { GameMap } from "@/lib/game/types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getGameWithRelations } from "@/lib/supabase/game-db";
 
 const HERO_NAMES: Record<string, string[]> = {
   castle: ["Sire Christian", "Seigneur Haart", "Sire Vorcharch", "Rion", "Adela"],
@@ -20,114 +22,87 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
   const body = await request.json();
   const faction = (body.faction || "castle") as string;
+  const supabase = createAdminClient();
 
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: {
-      players: {
-        include: { heroes: true, towns: true },
-      },
-    },
-  });
+  await supabase.from("profiles").upsert({
+    id: user.id,
+    email: user.email,
+    name: user.name ?? user.email ?? "Joueur",
+  }, { onConflict: "id" });
 
-  if (!game) {
-    return NextResponse.json({ error: "Partie non trouvée" }, { status: 404 });
+  const game = await getGameWithRelations(supabase, id);
+  if (!game) return NextResponse.json({ error: "Partie non trouvee" }, { status: 404 });
+  const players = game.players as unknown as Array<{ id: string; userId: string; turnOrder: number }>;
+
+  if (players.some((player) => player.userId === user.id)) {
+    return NextResponse.json({ error: "Deja dans cette partie" }, { status: 400 });
   }
-
-  const existingPlayer = game.players.find((p) => p.userId === session.user!.id);
-  if (existingPlayer) {
-    return NextResponse.json({ error: "Déjà dans cette partie" }, { status: 400 });
-  }
-
   if (game.status !== "PENDING") {
-    return NextResponse.json({ error: "La partie a déjà commencé" }, { status: 400 });
+    return NextResponse.json({ error: "La partie a deja commence" }, { status: 400 });
   }
-
-  if (game.players.length >= game.maxPlayers) {
+  if (players.length >= Number(game.maxPlayers)) {
     return NextResponse.json({ error: "La partie est pleine" }, { status: 400 });
   }
 
-  const turnOrder = game.players.length;
-  const color = PLAYER_COLORS[turnOrder] || "#ffffff";
-
-  const mapData = game.mapData as Record<string, unknown>;
+  const turnOrder = players.length;
+  const mapData = game.mapData as GameMap;
   const startPos = placePlayerStart(mapData, turnOrder);
-
+  const initialExplored = computeVisibleTiles(mapData, [{ x: startPos.x, y: startPos.y }], 5);
   const heroNames = HERO_NAMES[faction] || HERO_NAMES.castle;
-  const heroName = heroNames[turnOrder % heroNames.length];
 
-  const initialExplored = computeVisibleTiles(
-    mapData as unknown as Parameters<typeof computeVisibleTiles>[0],
-    [{ x: startPos.x, y: startPos.y }],
-    5
-  );
-
-  const gamePlayer = await prisma.gamePlayer.create({
-    data: {
-      gameId: id,
-      userId: session.user.id,
+  const { data: playerRow, error: playerError } = await supabase
+    .from("game_players")
+    .insert({
+      game_id: id,
+      user_id: user.id,
       faction,
-      color,
-      turnOrder,
-      exploredTiles: Array.from(initialExplored),
-      heroes: {
-        create: {
-          name: heroName,
-          attack: 2,
-          defense: 2,
-          spellPower: 1,
-          knowledge: 1,
-          x: startPos.x,
-          y: startPos.y,
-          armies: {
-            create: [
-              { unitType: "pikeman", count: 20, health: 240, maxHealth: 12, position: 0 },
-              { unitType: "archer", count: 12, health: 144, maxHealth: 12, position: 1 },
-              { unitType: "griffin", count: 4, health: 120, maxHealth: 30, position: 2 },
-            ],
-          },
-        },
-      },
-      towns: {
-        create: {
-          name: "Château",
-          townType: faction,
-          x: startPos.x,
-          y: startPos.y,
-          buildings: ["castle"],
-          garrison: [],
-        },
-      },
-    },
-    include: {
-      heroes: { include: { armies: true } },
-      towns: true,
-    },
+      color: PLAYER_COLORS[turnOrder] || "#ffffff",
+      turn_order: turnOrder,
+      explored_tiles: Array.from(initialExplored),
+    })
+    .select("*")
+    .single();
+
+  if (playerError) return NextResponse.json({ error: playerError.message }, { status: 500 });
+
+  const { data: heroRow, error: heroError } = await supabase
+    .from("heroes")
+    .insert({
+      game_player_id: playerRow.id,
+      name: heroNames[turnOrder % heroNames.length],
+      attack: 2,
+      defense: 2,
+      spell_power: 1,
+      knowledge: 1,
+      x: startPos.x,
+      y: startPos.y,
+    })
+    .select("*")
+    .single();
+
+  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
+
+  await supabase.from("armies").insert([
+    { hero_id: heroRow.id, unit_type: "pikeman", count: 20, health: 240, max_health: 12, position: 0 },
+    { hero_id: heroRow.id, unit_type: "archer", count: 12, health: 144, max_health: 12, position: 1 },
+    { hero_id: heroRow.id, unit_type: "griffin", count: 4, health: 120, max_health: 30, position: 2 },
+  ]);
+
+  await supabase.from("towns").insert({
+    game_player_id: playerRow.id,
+    name: "Chateau",
+    town_type: faction,
+    x: startPos.x,
+    y: startPos.y,
+    buildings: ["castle"],
+    garrison: [],
   });
 
-  const allPlayers = [...game.players, gamePlayer];
-  const shouldStart = allPlayers.length >= game.maxPlayers;
-
-  if (shouldStart) {
-    await prisma.game.update({
-      where: { id },
-      data: {
-        status: "ACTIVE",
-        currentTurnPlayerId: allPlayers[0].id,
-      },
-    });
-  }
-
-  return NextResponse.json({
-    gamePlayer,
-    gameStarted: shouldStart,
-  }, { status: 201 });
+  return NextResponse.json({ gamePlayer: playerRow, gameStarted: false }, { status: 201 });
 }

@@ -11,7 +11,6 @@ import {
   Position,
   MapObject,
   ResourceBuildingType,
-  ResourceBuilding,
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES } from "../economy";
@@ -537,6 +536,7 @@ export function initializeGameState(
   return {
     id,
     status: "ACTIVE",
+    maxPlayers: players.length,
     players,
     map,
     turnNumber: 1,

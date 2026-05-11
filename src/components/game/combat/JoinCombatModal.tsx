@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 
@@ -24,7 +24,8 @@ export default function JoinCombatModal() {
       return;
     }
     const data = await response.json();
-    setActiveCombat(mapCombat(data.combat));
+    const combatPayload = data.combat ?? data;
+    if (combatPayload) setActiveCombat(mapCombat(combatPayload));
     setPendingJoinCombat(null);
     const refreshed = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshed) setGameState(refreshed);

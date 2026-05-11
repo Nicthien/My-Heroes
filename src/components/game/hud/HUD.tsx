@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { Resources, Faction, BuildingType, UnitType, ResourceBuildingType } from "@/lib/game/types";
+import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   BUILDING_RULES,
@@ -145,12 +145,18 @@ function HUDContent() {
   );
   const isPending = gameState.status === "PENDING";
   const hasActiveCombats = (gameState.activeCombats?.length ?? 0) > 0;
+  const isCurrentTurn = Boolean(
+    myPlayer && gameState.currentTurnPlayerId === myPlayer.id
+  );
 
   const canAct = Boolean(
-    myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
+    myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && isCurrentTurn && !myPlayer.hasEndedTurn
   );
   const isWaitingForPlayers = Boolean(
     myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn
+  );
+  const isWaitingForTurn = Boolean(
+    myPlayer && gameState.status === "ACTIVE" && !isCurrentTurn && !myPlayer.hasEndedTurn
   );
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
@@ -195,7 +201,10 @@ function HUDContent() {
       body: JSON.stringify({ type: "END_TURN" }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Impossible de finir le tour."));
+      return;
+    }
 
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
@@ -206,14 +215,18 @@ function HUDContent() {
       method: "POST",
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+      if (refreshedState && refreshedState.status !== "PENDING") {
+        useGameStore.getState().setGameState(refreshedState);
+        return;
+      }
+      setCombatMessage(await getApiErrorMessage(response, "Impossible de demarrer la partie."));
+      return;
+    }
 
-    const updatedGame = await response.json();
-    useGameStore.getState().setGameState({
-      ...gameState,
-      status: "ACTIVE",
-      currentTurnPlayerId: updatedGame.currentTurnPlayerId,
-    });
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
   const handleBuild = async (building: BuildingType) => {
@@ -228,7 +241,10 @@ function HUDContent() {
       body: JSON.stringify({ type: "BUILD", townId: selectedTown.id, building }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Construction impossible."));
+      return;
+    }
 
     const nextResources = subtractCost(myPlayer.resources, rule.cost);
     setGameState({
@@ -270,7 +286,10 @@ function HUDContent() {
       }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Recrutement impossible."));
+      return;
+    }
 
     const firstHero = myPlayer.heroes[0];
     const nextResources = subtractCost(myPlayer.resources, rule.cost);
@@ -405,7 +424,7 @@ function HUDContent() {
                     : "border-red-300/30 bg-red-500/15 text-red-200 shadow-red-950/30"
                 }`}
               >
-                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "En attente des autres joueurs" : "Observation"}
+                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : isWaitingForTurn ? "En attente de votre tour" : "Observation"}
               </span>
             )}
           </div>
@@ -691,16 +710,31 @@ function HUDContent() {
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
         {isPending ? (
           <div className="min-w-80 rounded-2xl border border-yellow-400/40 bg-[#070712]/85 p-5 text-center shadow-2xl shadow-black/50 backdrop-blur-xl">
-            <div className="text-yellow-200 font-bold">Partie en attente</div>
-            <div className="text-gray-300 text-sm mt-1">
-              {gameState.players.length} joueur(s). Tu peux démarrer pour tester en solo.
+            <div className="text-yellow-200 font-bold">Salle d&apos;attente</div>
+            <div className="mt-2 flex flex-col gap-1">
+              {gameState.players.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 text-sm">
+                  <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                  <span className="text-gray-200 font-medium">{p.name || "Joueur"}</span>
+                  {p.turnOrder === 0 && <span className="text-xs text-yellow-400">(hôte)</span>}
+                </div>
+              ))}
+              {gameState.players.length < (gameState.maxPlayers ?? 8) && (
+                <div className="text-gray-500 text-xs mt-1">
+                  {(gameState.maxPlayers ?? 8) - gameState.players.length} place(s) libre(s)
+                </div>
+              )}
             </div>
-            <button
-              className="mt-3 bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded font-bold"
-              onClick={handleStartGame}
-            >
-              Démarrer la partie
-            </button>
+            {myPlayer?.turnOrder === 0 ? (
+              <button
+                className="mt-4 bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded font-bold"
+                onClick={handleStartGame}
+              >
+                Démarrer la partie
+              </button>
+            ) : (
+              <div className="mt-4 text-gray-400 text-sm">En attente que l&apos;hôte démarre la partie…</div>
+            )}
           </div>
         ) : (
           <div className="text-center">
@@ -725,4 +759,9 @@ function HUDContent() {
       </div>
     </div>
   );
+}
+
+async function getApiErrorMessage(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null);
+  return typeof data?.error === "string" ? data.error : fallback;
 }

@@ -1,5 +1,5 @@
 import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
-import { GameMap, MapTile, TerrainType, Position, MapObject, ResourceBuildingType } from "@/lib/game/types";
+import { GameMap, MapTile, TerrainType, Position, MapObject } from "@/lib/game/types";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
@@ -12,6 +12,7 @@ import CombatScreen from "@/components/game/combat/CombatScreen";
 import ActiveCombatsPanel from "@/components/game/combat/ActiveCombatsPanel";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
+import { createClient } from "@/lib/supabase/browser";
 
 const GameMapComponent = dynamic(
   () => import("@/components/game/map/GameMap"),
@@ -27,8 +28,10 @@ export default function GamePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const supabase = createClient();
     const loadGame = async () => {
       if (!gameId) return;
+      setError("");
       const hadGameState = Boolean(useGameStore.getState().gameState);
       if (!hadGameState) {
         useGameStore.getState().setLoading(true);
@@ -43,6 +46,7 @@ export default function GamePage() {
           }
           setGameState(mapApiToGameState(data, userId));
         } else {
+          useGameStore.getState().resetGame();
           setError("Partie non trouvée");
         }
       } catch {
@@ -54,8 +58,23 @@ export default function GamePage() {
     };
 
     loadGame();
-    const interval = setInterval(loadGame, 10000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel(`game:${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, loadGame)
+      .subscribe();
+
+    const interval = setInterval(loadGame, 30000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [gameId, setGameState, userId]);
 
   useEffect(() => {

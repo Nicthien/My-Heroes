@@ -101,6 +101,7 @@ export async function POST(request: Request) {
   });
 
   await createNeutralArmies(game.id, mapData);
+  await createResourceBuildings(game.id, mapData);
 
   return NextResponse.json(game, { status: 201 });
 }
@@ -143,5 +144,30 @@ function prefixMonsterIds(mapData: ReturnType<typeof import("@/lib/game/engine")
         tile.object.id = `${prefix}-${tile.object.id}`;
       }
     }
+  }
+}
+
+async function createResourceBuildings(gameId: string, mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>) {
+  const buildingTiles = mapData.tiles.flatMap((row) =>
+    row.filter((tile) => tile.object?.type === "building")
+  );
+
+  for (const tile of buildingTiles) {
+    const id = tile.object?.id;
+    const buildingType = tile.object?.subtype;
+    const guardianPower = tile.object?.guardianPower ?? 200;
+    if (!id || !buildingType) continue;
+
+    await prisma.resourceBuilding.create({
+      data: {
+        id,
+        gameId,
+        gamePlayerId: null,
+        buildingType,
+        x: tile.x,
+        y: tile.y,
+        guardianPower,
+      },
+    });
   }
 }

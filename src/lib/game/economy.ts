@@ -1,4 +1,4 @@
-import { BuildingType, Resources, UnitType } from "./types";
+import { BuildingType, Resources, ResourceBuildingType, UnitType } from "./types";
 
 export type ResourceCost = Partial<Resources>;
 
@@ -9,6 +9,52 @@ export interface BuildingRule {
   cost: ResourceCost;
   requires?: BuildingType[];
 }
+
+export interface ResourceBuildingRule {
+  type: ResourceBuildingType;
+  label: string;
+  production: Partial<Resources>;
+  guardianBasePower: number;
+}
+
+export const RESOURCE_BUILDING_RULES: ResourceBuildingRule[] = [
+  {
+    type: ResourceBuildingType.GOLD_MINE,
+    label: "Mine d'or",
+    production: { gold: 1000 },
+    guardianBasePower: 300,
+  },
+  {
+    type: ResourceBuildingType.SAWMILL,
+    label: "Scierie",
+    production: { wood: 5 },
+    guardianBasePower: 200,
+  },
+  {
+    type: ResourceBuildingType.ORE_PIT,
+    label: "Mine de minerai",
+    production: { ore: 5 },
+    guardianBasePower: 250,
+  },
+  {
+    type: ResourceBuildingType.ALCHEMIST_LAB,
+    label: "Laboratoire d'alchimiste",
+    production: { mercury: 3 },
+    guardianBasePower: 350,
+  },
+  {
+    type: ResourceBuildingType.CRYSTAL_CAVERN,
+    label: "Caverne de cristaux",
+    production: { crystals: 3 },
+    guardianBasePower: 350,
+  },
+  {
+    type: ResourceBuildingType.SULFUR_DUNE,
+    label: "Dune de soufre",
+    production: { sulfur: 3 },
+    guardianBasePower: 350,
+  },
+];
 
 export interface UnitRule {
   type: UnitType;

@@ -1,5 +1,5 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
-import { GameMap, MapTile, TerrainType, Position, MapObject } from "@/lib/game/types";
+import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
+import { GameMap, MapTile, TerrainType, Position, MapObject, ResourceBuildingType } from "@/lib/game/types";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
@@ -46,9 +46,36 @@ const RESOURCE_COLORS: Record<string, number> = {
   gold: 0xffd700,
   wood: 0x8b4513,
   ore: 0x808080,
-  mercury: 0x90ee90,
+  mercury: 0xb56cff,
   crystals: 0x00ffff,
   sulfur: 0xffa500,
+};
+
+const RESOURCE_LABELS: Record<string, string> = {
+  gold: "OR",
+  wood: "BOIS",
+  ore: "MIN",
+  mercury: "MER",
+  crystals: "CRI",
+  sulfur: "SOU",
+};
+
+const RESOURCE_BUILDING_COLORS: Record<string, number> = {
+  gold_mine: 0xffd700,
+  sawmill: 0x8b4513,
+  ore_pit: 0x808080,
+  alchemist_lab: 0xb56cff,
+  crystal_cavern: 0x00ffff,
+  sulfur_dune: 0xffa500,
+};
+
+const RESOURCE_BUILDING_LABELS: Record<string, string> = {
+  gold_mine: "Mine d'or",
+  sawmill: "Scierie",
+  ore_pit: "Mine",
+  alchemist_lab: "Labo",
+  crystal_cavern: "Cristaux",
+  sulfur_dune: "Soufre",
 };
 
 const FACTION_COLORS: Record<string, number> = {
@@ -61,6 +88,36 @@ const FACTION_COLORS: Record<string, number> = {
   stronghold: 0xf97316,
   fortress: 0x059669,
 };
+
+const MAP_SPRITES = {
+  hero: "/assets/sprites/map/hero-cavalier.svg",
+  town: "/assets/sprites/map/town-castle.svg",
+  monster: "/assets/sprites/map/monster.svg",
+  resources: {
+    gold: "/assets/sprites/resources/gold.svg",
+    wood: "/assets/sprites/resources/wood.svg",
+    ore: "/assets/sprites/resources/ore.svg",
+    mercury: "/assets/sprites/resources/mercury.svg",
+    crystals: "/assets/sprites/resources/crystals.svg",
+    sulfur: "/assets/sprites/resources/sulfur.svg",
+  } as Record<string, string>,
+  buildings: {
+    gold_mine: "/assets/sprites/map/gold-mine.svg",
+    sawmill: "/assets/sprites/map/sawmill.svg",
+    ore_pit: "/assets/sprites/map/ore-pit.svg",
+    alchemist_lab: "/assets/sprites/map/alchemist-lab.svg",
+    crystal_cavern: "/assets/sprites/map/crystal-cavern.svg",
+    sulfur_dune: "/assets/sprites/map/sulfur-dune.svg",
+  } as Record<string, string>,
+};
+
+const MAP_SPRITE_PATHS = [
+  MAP_SPRITES.hero,
+  MAP_SPRITES.town,
+  MAP_SPRITES.monster,
+  ...Object.values(MAP_SPRITES.resources),
+  ...Object.values(MAP_SPRITES.buildings),
+];
 
 function cartToIso(cartX: number, cartY: number): { x: number; y: number } {
   return {
@@ -76,16 +133,27 @@ function isoToCart(isoX: number, isoY: number): { x: number; y: number } {
   };
 }
 
+function parseHexColor(color: string): number | null {
+  const normalized = color.trim().replace(/^#/, "");
+  const hex = normalized.length === 3
+    ? normalized.split("").map((char) => char + char).join("")
+    : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return Number.parseInt(hex, 16);
+}
+
 export interface MapObjectData {
-  type: "hero" | "town" | "combat";
+  type: "hero" | "town" | "combat" | "building";
   id: string;
-  playerId: string;
+  playerId: string | null;
   x: number;
   y: number;
   faction: string;
   color: string;
   name: string;
   onWater?: boolean;
+  buildingType?: string;
 }
 
 export class IsometricRenderer {
@@ -136,6 +204,7 @@ export class IsometricRenderer {
     this.app.stage.addChild(this.fogContainer);
 
     this.app.stage.sortableChildren = true;
+    await Assets.load(MAP_SPRITE_PATHS);
     this.initialized = true;
   }
 
@@ -219,29 +288,19 @@ export class IsometricRenderer {
     container.y = isoY;
 
     if (object.type === "resource" && object.subtype) {
-      const color = RESOURCE_COLORS[object.subtype] || 0xffd700;
-      const g = new Graphics();
-      g.circle(0, -8, 6);
-      g.fill(color);
-      g.stroke({ width: 1, color: 0xffffff });
-      container.addChild(g);
-
-      const label = new Text({
-        text: object.subtype === "gold" ? "G" : object.subtype[0].toUpperCase(),
-        style: {
-          fill: 0xffffff,
-          fontSize: 8,
-          fontWeight: "bold",
-        },
-      });
-      label.anchor.set(0.5);
-      label.y = -8;
-      container.addChild(label);
+      this.renderResourceIcon(container, object.subtype);
     } else if (object.type === "monster") {
+      const monster = Sprite.from(MAP_SPRITES.monster);
+      monster.anchor.set(0.5, 1);
+      monster.width = 44;
+      monster.height = 44;
+      monster.y = 3;
+      container.addChild(monster);
+
       const g = new Graphics();
-      g.rect(-6, -14, 12, 12);
-      g.fill(0x8b0000);
-      g.stroke({ width: 1, color: 0x000000 });
+      g.roundRect(-12, -43, 24, 10, 4);
+      g.fill({ color: 0x000000, alpha: 0.48 });
+      g.stroke({ width: 1, color: 0xffd166, alpha: 0.7 });
       container.addChild(g);
 
       const label = new Text({
@@ -253,11 +312,220 @@ export class IsometricRenderer {
         },
       });
       label.anchor.set(0.5);
-      label.y = -8;
+      label.y = -38;
       container.addChild(label);
+    } else if (object.type === "building" && object.subtype) {
+      this.renderBuildingOnTile(container, object.subtype, object.guardianPower);
     }
 
     this.mapContainer.addChild(container);
+  }
+
+  private renderResourceIcon(container: Container, subtype: string) {
+    const color = RESOURCE_COLORS[subtype] || 0xffd700;
+    const spritePath = MAP_SPRITES.resources[subtype];
+
+    if (spritePath) {
+      const resource = Sprite.from(spritePath);
+      resource.anchor.set(0.5, 1);
+      resource.width = 38;
+      resource.height = 38;
+      resource.y = 4;
+      container.addChild(resource);
+
+      const label = new Text({
+        text: RESOURCE_LABELS[subtype] || subtype.slice(0, 3).toUpperCase(),
+        style: {
+          fill: 0xffffff,
+          fontSize: 6,
+          fontWeight: "bold",
+          stroke: { color: 0x000000, width: 2 },
+        },
+      });
+      label.anchor.set(0.5);
+      label.y = 5;
+      container.addChild(label);
+      return;
+    }
+
+    const shadow = new Graphics();
+    shadow.ellipse(0, 1, 13, 6);
+    shadow.fill({ color: 0x000000, alpha: 0.35 });
+    container.addChild(shadow);
+
+    const glow = new Graphics();
+    glow.circle(0, -12, 12);
+    glow.fill({ color, alpha: 0.24 });
+    container.addChild(glow);
+
+    const badge = new Graphics();
+    badge.circle(0, -12, 10);
+    badge.fill({ color: 0x10111f, alpha: 0.94 });
+    badge.stroke({ width: 2, color });
+    container.addChild(badge);
+
+    if (subtype === "gold") {
+      const coin = new Graphics();
+      coin.ellipse(0, -12, 7, 6);
+      coin.fill(0xffd84d);
+      coin.stroke({ width: 2, color: 0xfff2a8 });
+      coin.ellipse(0, -12, 4, 3);
+      coin.stroke({ width: 1, color: 0xb7791f });
+      coin.moveTo(0, -16);
+      coin.lineTo(0, -8);
+      coin.stroke({ width: 1, color: 0x8a5a00 });
+      container.addChild(coin);
+    } else if (subtype === "wood") {
+      const logBack = new Graphics();
+      logBack.roundRect(-7, -17, 14, 5, 3);
+      logBack.fill(0x5b2d12);
+      logBack.stroke({ width: 1, color: 0xd08a35 });
+      container.addChild(logBack);
+
+      const logFront = new Graphics();
+      logFront.roundRect(-6, -12, 14, 5, 3);
+      logFront.fill(0x8b4513);
+      logFront.stroke({ width: 1, color: 0xffc170 });
+      logFront.circle(-3, -9.5, 2);
+      logFront.stroke({ width: 1, color: 0xfcd19b });
+      container.addChild(logFront);
+    } else if (subtype === "ore") {
+      const rock = new Graphics();
+      rock.moveTo(-7, -10);
+      rock.lineTo(-3, -18);
+      rock.lineTo(5, -17);
+      rock.lineTo(8, -11);
+      rock.lineTo(2, -6);
+      rock.closePath();
+      rock.fill(0x9ca3af);
+      rock.stroke({ width: 1, color: 0xe5e7eb });
+      rock.moveTo(-2, -16);
+      rock.lineTo(2, -8);
+      rock.moveTo(-5, -11);
+      rock.lineTo(7, -12);
+      rock.stroke({ width: 1, color: 0x6b7280 });
+      container.addChild(rock);
+    } else if (subtype === "mercury") {
+      const neck = new Graphics();
+      neck.roundRect(-3, -20, 6, 5, 1);
+      neck.fill(0xe9d5ff);
+      neck.stroke({ width: 1, color: 0xffffff });
+      container.addChild(neck);
+
+      const vial = new Graphics();
+      vial.roundRect(-6, -16, 12, 10, 5);
+      vial.fill(0xc084fc);
+      vial.stroke({ width: 1, color: 0xf5d0fe });
+      vial.moveTo(-4, -11);
+      vial.lineTo(4, -11);
+      vial.stroke({ width: 1, color: 0xffffff });
+      container.addChild(vial);
+    } else if (subtype === "crystals") {
+      const crystal = new Graphics();
+      crystal.moveTo(0, -21);
+      crystal.lineTo(8, -14);
+      crystal.lineTo(5, -6);
+      crystal.lineTo(-5, -6);
+      crystal.lineTo(-8, -14);
+      crystal.closePath();
+      crystal.fill(0x67e8f9);
+      crystal.stroke({ width: 1, color: 0xecfeff });
+      crystal.moveTo(0, -21);
+      crystal.lineTo(0, -6);
+      crystal.moveTo(-8, -14);
+      crystal.lineTo(8, -14);
+      crystal.stroke({ width: 1, color: 0x0891b2 });
+      container.addChild(crystal);
+    } else if (subtype === "sulfur") {
+      const cloud = new Graphics();
+      cloud.circle(-5, -11, 4);
+      cloud.circle(0, -14, 5);
+      cloud.circle(5, -11, 4);
+      cloud.roundRect(-8, -12, 16, 7, 4);
+      cloud.fill(0xfacc15);
+      cloud.stroke({ width: 1, color: 0xfff2a8 });
+      container.addChild(cloud);
+    }
+
+    const label = new Text({
+      text: RESOURCE_LABELS[subtype] || subtype.slice(0, 3).toUpperCase(),
+      style: {
+        fill: 0xffffff,
+        fontSize: 6,
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    label.anchor.set(0.5);
+    label.y = 3;
+    container.addChild(label);
+  }
+  private renderBuildingOnTile(container: Container, subtype: string, guardianPower?: number) {
+    const color = RESOURCE_BUILDING_COLORS[subtype] || 0x808080;
+    const spritePath = MAP_SPRITES.buildings[subtype];
+
+    if (spritePath) {
+      const building = Sprite.from(spritePath);
+      building.anchor.set(0.5, 1);
+      building.width = 52;
+      building.height = 52;
+      building.y = 6;
+      container.addChild(building);
+    } else {
+      const shadow = new Graphics();
+      shadow.ellipse(0, 1, 14, 6);
+      shadow.fill({ color: 0x000000, alpha: 0.35 });
+      container.addChild(shadow);
+
+      const base = new Graphics();
+      base.roundRect(-10, -16, 20, 14, 3);
+      base.fill(0x555555);
+      base.stroke({ width: 1, color: 0x888888 });
+      container.addChild(base);
+
+      const roof = new Graphics();
+      roof.moveTo(-12, -16);
+      roof.lineTo(0, -28);
+      roof.lineTo(12, -16);
+      roof.closePath();
+      roof.fill(color);
+      roof.stroke({ width: 1, color: 0xffffff });
+      container.addChild(roof);
+    }
+
+    const nameLabel = new Text({
+      text: RESOURCE_BUILDING_LABELS[subtype] || subtype,
+      style: {
+        fill: 0xffffff,
+        fontSize: 7,
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    nameLabel.anchor.set(0.5);
+    nameLabel.y = 5;
+    container.addChild(nameLabel);
+
+    if (guardianPower && guardianPower > 0) {
+      const shieldBg = new Graphics();
+      shieldBg.roundRect(-8, -42, 16, 10, 3);
+      shieldBg.fill({ color: 0x000000, alpha: 0.6 });
+      shieldBg.stroke({ width: 1, color: 0xff4444 });
+      container.addChild(shieldBg);
+
+      const shieldLabel = new Text({
+        text: `${Math.ceil(guardianPower / 100)}`,
+        style: {
+          fill: 0xff6666,
+          fontSize: 8,
+          fontWeight: "bold",
+          stroke: { color: 0x000000, width: 1 },
+        },
+      });
+      shieldLabel.anchor.set(0.5);
+      shieldLabel.y = -37;
+      container.addChild(shieldLabel);
+    }
   }
 
   setObjects(objects: MapObjectData[]) {
@@ -287,6 +555,8 @@ export class IsometricRenderer {
       this.renderHero(container, obj);
     } else if (obj.type === "combat") {
       this.renderCombatMarker(container);
+    } else if (obj.type === "building") {
+      this.renderBuildingObject(container, obj);
     }
 
     this.objectContainer.addChild(container);
@@ -313,8 +583,87 @@ export class IsometricRenderer {
     container.addChild(label);
   }
 
+  private renderBuildingObject(container: Container, obj: MapObjectData) {
+    const buildingType = obj.buildingType || "";
+    const color = RESOURCE_BUILDING_COLORS[buildingType] || 0x808080;
+    const spritePath = MAP_SPRITES.buildings[buildingType];
+
+    const shadow = new Graphics();
+    shadow.ellipse(0, 1, 14, 6);
+    shadow.fill({ color: 0x000000, alpha: 0.35 });
+    container.addChild(shadow);
+
+    if (spritePath) {
+      const building = Sprite.from(spritePath);
+      building.anchor.set(0.5, 1);
+      building.width = 52;
+      building.height = 52;
+      building.y = 6;
+      container.addChild(building);
+    } else {
+      const base = new Graphics();
+      base.roundRect(-10, -16, 20, 14, 3);
+      base.fill(0x555555);
+      base.stroke({ width: 1, color: 0x888888 });
+      container.addChild(base);
+
+      const roof = new Graphics();
+      roof.moveTo(-12, -16);
+      roof.lineTo(0, -28);
+      roof.lineTo(12, -16);
+      roof.closePath();
+      roof.fill(color);
+      roof.stroke({ width: 1, color: 0xffffff });
+      container.addChild(roof);
+    }
+
+    const label = new Text({
+      text: RESOURCE_BUILDING_LABELS[buildingType] || buildingType,
+      style: {
+        fill: 0xffffff,
+        fontSize: 7,
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    label.anchor.set(0.5);
+    label.y = 5;
+    container.addChild(label);
+
+    if (obj.playerId) {
+      const bannerColor = parseHexColor(obj.color ?? "") ?? 0x808080;
+      this.renderBanner(container, 0, -30, bannerColor, 14, 10);
+    }
+  }
+
   private renderTown(container: Container, obj: MapObjectData) {
     const factionColor = FACTION_COLORS[obj.faction] || 0x3b82f6;
+    const bannerColor = parseHexColor(obj.color) ?? factionColor;
+    if (MAP_SPRITES.town) {
+      const town = Sprite.from(MAP_SPRITES.town);
+      town.anchor.set(0.5, 1);
+      town.width = 82;
+      town.height = 82;
+      town.y = 20;
+      container.addChild(town);
+
+      this.renderBanner(container, 0, -43, bannerColor, 18, 12);
+
+      const label = new Text({
+        text: obj.name,
+        style: {
+          fill: 0xffffff,
+          fontSize: 11,
+          fontWeight: "bold",
+          stroke: { color: 0x000000, width: 3 },
+        },
+      });
+      label.anchor.set(0.5);
+      label.y = 26;
+      container.addChild(label);
+      return;
+    }
+
     const wallColor = 0x555555;
     const roofColor = 0x8b0000;
 
@@ -426,21 +775,7 @@ export class IsometricRenderer {
     portcullis.fill(0x222222);
     container.addChild(portcullis);
 
-    // Drapeau sur le donjon
-    const flagPole = new Graphics();
-    flagPole.moveTo(0, -48);
-    flagPole.lineTo(0, -60);
-    flagPole.stroke({ width: 2, color: 0x222222 });
-    container.addChild(flagPole);
-
-    const flag = new Graphics();
-    flag.moveTo(0, -60);
-    flag.lineTo(14, -54);
-    flag.lineTo(0, -48);
-    flag.closePath();
-    flag.fill(factionColor);
-    flag.stroke({ width: 1, color: 0xffffff });
-    container.addChild(flag);
+    this.renderBanner(container, 0, -48, bannerColor, 18, 12);
 
     const label = new Text({
       text: obj.name,
@@ -458,114 +793,239 @@ export class IsometricRenderer {
 
   private renderHero(container: Container, obj: MapObjectData) {
     const factionColor = FACTION_COLORS[obj.faction] || 0x3b82f6;
+    const bannerColor = parseHexColor(obj.color) ?? factionColor;
     if (obj.onWater) {
-      this.renderBoatHero(container, obj, factionColor);
+      this.renderBoatHero(container, obj, factionColor, bannerColor);
       return;
     }
 
-    const horseColor = 0x5d4037;
-    const armorColor = 0xb0bec5;
+    if (MAP_SPRITES.hero) {
+      const hero = Sprite.from(MAP_SPRITES.hero);
+      hero.anchor.set(0.5, 1);
+      hero.width = 62;
+      hero.height = 62;
+      hero.y = 15;
+      container.addChild(hero);
 
-    // Ombre
+      this.renderBanner(container, -16, -19, bannerColor, 16, 12);
+
+      const labelPlate = new Graphics();
+      labelPlate.roundRect(-24, 15, 48, 12, 5);
+      labelPlate.fill({ color: 0x000000, alpha: 0.42 });
+      labelPlate.stroke({ width: 1, color: 0xffd166, alpha: 0.7 });
+      container.addChild(labelPlate);
+
+      const label = new Text({
+        text: obj.name,
+        style: {
+          fill: 0xffd700,
+          fontSize: 10,
+          fontWeight: "bold",
+          stroke: { color: 0x000000, width: 3 },
+        },
+      });
+      label.anchor.set(0.5);
+      label.y = 20;
+      container.addChild(label);
+      return;
+    }
+
+    const horseColor = 0x6d4c41;
+    const horseLight = 0x8d6e63;
+    const horseDark = 0x3e2723;
+    const armorColor = 0xcfd8dc;
+    const armorShadow = 0x78909c;
+    const gold = 0xffd166;
+
     const shadow = new Graphics();
-    shadow.ellipse(0, 10, 14, 6);
-    shadow.fill({ color: 0x000000, alpha: 0.3 });
+    shadow.ellipse(0, 11, 19, 7);
+    shadow.fill({ color: 0x000000, alpha: 0.28 });
     container.addChild(shadow);
 
-    // Cheval (corps)
+    const tail = new Graphics();
+    tail.moveTo(-15, -5);
+    tail.lineTo(-25, -13);
+    tail.lineTo(-22, -4);
+    tail.lineTo(-15, 1);
+    tail.closePath();
+    tail.fill(0x2a1710);
+    tail.stroke({ width: 1, color: horseDark });
+    container.addChild(tail);
+
     const horseBody = new Graphics();
-    horseBody.ellipse(0, -2, 16, 8);
+    horseBody.ellipse(-1, -3, 18, 9);
     horseBody.fill(horseColor);
-    horseBody.stroke({ width: 1, color: 0x3e2723 });
+    horseBody.stroke({ width: 1.5, color: horseDark });
+    horseBody.ellipse(2, -6, 12, 4);
+    horseBody.fill({ color: horseLight, alpha: 0.45 });
     container.addChild(horseBody);
 
-    // Cheval (tête)
+    const saddleBlanket = new Graphics();
+    saddleBlanket.roundRect(-8, -13, 17, 10, 3);
+    saddleBlanket.fill(bannerColor);
+    saddleBlanket.stroke({ width: 1, color: gold });
+    container.addChild(saddleBlanket);
+
+    const saddle = new Graphics();
+    saddle.ellipse(0, -12, 9, 4);
+    saddle.fill(0x2b1a12);
+    saddle.stroke({ width: 1, color: 0xb8860b });
+    container.addChild(saddle);
+
     const horseHead = new Graphics();
-    horseHead.ellipse(12, -10, 7, 5);
+    horseHead.ellipse(15, -11, 8, 5);
     horseHead.fill(horseColor);
-    horseHead.stroke({ width: 1, color: 0x3e2723 });
+    horseHead.stroke({ width: 1.5, color: horseDark });
+    horseHead.ellipse(20, -10, 3, 2);
+    horseHead.fill(0xc49a6c);
     container.addChild(horseHead);
 
-    // Cheval (crinière)
+    const ear = new Graphics();
+    ear.moveTo(13, -16);
+    ear.lineTo(16, -22);
+    ear.lineTo(18, -15);
+    ear.closePath();
+    ear.fill(horseColor);
+    ear.stroke({ width: 1, color: horseDark });
+    container.addChild(ear);
+
     const mane = new Graphics();
-    mane.moveTo(6, -14);
-    mane.lineTo(10, -16);
-    mane.lineTo(8, -8);
+    mane.moveTo(7, -15);
+    mane.lineTo(13, -18);
+    mane.lineTo(11, -7);
+    mane.lineTo(5, -9);
     mane.closePath();
-    mane.fill(0x212121);
+    mane.fill(0x24130c);
     container.addChild(mane);
 
-    // Jambes avant
-    const legFL = new Graphics();
-    legFL.rect(8, 4, 3, 8);
-    legFL.fill(horseColor);
-    container.addChild(legFL);
+    const bridle = new Graphics();
+    bridle.moveTo(12, -12);
+    bridle.lineTo(22, -12);
+    bridle.moveTo(18, -16);
+    bridle.lineTo(15, -6);
+    bridle.stroke({ width: 1, color: gold });
+    container.addChild(bridle);
 
-    const legFR = new Graphics();
-    legFR.rect(12, 4, 3, 8);
-    legFR.fill(horseColor);
-    container.addChild(legFR);
+    const eye = new Graphics();
+    eye.circle(19, -13, 1.2);
+    eye.fill(0x111111);
+    container.addChild(eye);
 
-    // Jambes arrière
-    const legBL = new Graphics();
-    legBL.rect(-10, 4, 3, 7);
-    legBL.fill(horseColor);
-    container.addChild(legBL);
+    const legs = new Graphics();
+    legs.moveTo(9, 2);
+    legs.lineTo(14, 12);
+    legs.moveTo(13, 1);
+    legs.lineTo(9, 11);
+    legs.moveTo(-8, 2);
+    legs.lineTo(-13, 11);
+    legs.moveTo(-4, 3);
+    legs.lineTo(-3, 12);
+    legs.stroke({ width: 3, color: horseColor });
+    legs.moveTo(13, 12);
+    legs.lineTo(18, 12);
+    legs.moveTo(8, 11);
+    legs.lineTo(12, 11);
+    legs.moveTo(-14, 11);
+    legs.lineTo(-10, 11);
+    legs.moveTo(-4, 12);
+    legs.lineTo(0, 12);
+    legs.stroke({ width: 2, color: 0x151515 });
+    container.addChild(legs);
 
-    const legBR = new Graphics();
-    legBR.rect(-6, 4, 3, 7);
-    legBR.fill(horseColor);
-    container.addChild(legBR);
+    const cape = new Graphics();
+    cape.moveTo(-4, -22);
+    cape.lineTo(-17, -15);
+    cape.lineTo(-13, -2);
+    cape.lineTo(-1, -8);
+    cape.closePath();
+    cape.fill({ color: bannerColor, alpha: 0.88 });
+    cape.stroke({ width: 1, color: 0x2d1b1b });
+    container.addChild(cape);
 
-    // Cavalier (torse)
     const riderBody = new Graphics();
-    riderBody.rect(-4, -22, 10, 14);
+    riderBody.roundRect(-5, -24, 11, 15, 3);
     riderBody.fill(armorColor);
-    riderBody.stroke({ width: 1, color: 0x78909c });
+    riderBody.stroke({ width: 1.5, color: armorShadow });
+    riderBody.moveTo(-3, -21);
+    riderBody.lineTo(4, -21);
+    riderBody.moveTo(-2, -17);
+    riderBody.lineTo(5, -17);
+    riderBody.stroke({ width: 1, color: 0xf8fafc });
     container.addChild(riderBody);
 
-    // Cavalier (tête)
+    const arm = new Graphics();
+    arm.moveTo(5, -20);
+    arm.lineTo(12, -17);
+    arm.stroke({ width: 3, color: armorColor });
+    arm.stroke({ width: 1, color: armorShadow });
+    container.addChild(arm);
+
     const riderHead = new Graphics();
-    riderHead.circle(1, -26, 5);
+    riderHead.circle(1, -29, 5);
     riderHead.fill(0xffcc80);
     riderHead.stroke({ width: 1, color: 0xe0e0e0 });
     container.addChild(riderHead);
 
-    // Heaume / casque
     const helmet = new Graphics();
-    helmet.arc(1, -26, 5, Math.PI, 0);
+    helmet.arc(1, -29, 5, Math.PI, 0);
     helmet.fill(factionColor);
-    helmet.stroke({ width: 1, color: 0xffffff });
+    helmet.stroke({ width: 1.5, color: 0xffffff });
+    helmet.rect(-1, -29, 6, 2);
+    helmet.fill(0xe2e8f0);
     container.addChild(helmet);
 
-    // Plume sur le casque
     const plume = new Graphics();
-    plume.moveTo(1, -31);
-    plume.lineTo(4, -38);
-    plume.lineTo(-1, -33);
+    plume.moveTo(1, -34);
+    plume.lineTo(6, -43);
+    plume.lineTo(1, -39);
+    plume.lineTo(-3, -43);
+    plume.lineTo(-1, -34);
     plume.closePath();
-    plume.fill(0xffd700);
+    plume.fill(gold);
+    plume.stroke({ width: 1, color: 0x9a6b00 });
     container.addChild(plume);
 
-    // Épée / lance
+    this.renderBanner(container, -16, -19, bannerColor, 16, 12);
+
     const lance = new Graphics();
     lance.moveTo(10, -18);
-    lance.lineTo(22, -34);
+    lance.lineTo(26, -39);
     lance.stroke({ width: 2, color: 0x90a4ae });
-    // Pointe de lance
-    lance.moveTo(20, -32);
-    lance.lineTo(24, -36);
-    lance.lineTo(20, -38);
+    lance.moveTo(24, -37);
+    lance.lineTo(29, -42);
+    lance.lineTo(24, -44);
     lance.closePath();
-    lance.fill(0xc0c0c0);
+    lance.fill(0xe5e7eb);
+    lance.moveTo(18, -29);
+    lance.lineTo(26, -31);
+    lance.lineTo(21, -24);
+    lance.closePath();
+    lance.fill(bannerColor);
+    lance.stroke({ width: 1, color: gold });
     container.addChild(lance);
 
-    // Bouclier
     const shield = new Graphics();
-    shield.ellipse(-8, -14, 5, 7);
+    shield.moveTo(-10, -20);
+    shield.lineTo(-3, -17);
+    shield.lineTo(-4, -9);
+    shield.lineTo(-10, -5);
+    shield.lineTo(-16, -9);
+    shield.lineTo(-17, -17);
+    shield.closePath();
     shield.fill(factionColor);
-    shield.stroke({ width: 1, color: 0xffd700 });
+    shield.stroke({ width: 1.5, color: gold });
+    shield.moveTo(-10, -18);
+    shield.lineTo(-10, -7);
+    shield.moveTo(-15, -14);
+    shield.lineTo(-5, -14);
+    shield.stroke({ width: 1, color: 0xffffff });
     container.addChild(shield);
+
+    const labelPlate = new Graphics();
+    labelPlate.roundRect(-24, 15, 48, 12, 5);
+    labelPlate.fill({ color: 0x000000, alpha: 0.42 });
+    labelPlate.stroke({ width: 1, color: gold, alpha: 0.7 });
+    container.addChild(labelPlate);
 
     const label = new Text({
       text: obj.name,
@@ -581,7 +1041,26 @@ export class IsometricRenderer {
     container.addChild(label);
   }
 
-  private renderBoatHero(container: Container, obj: MapObjectData, factionColor: number) {
+  private renderBanner(container: Container, x: number, y: number, color: number, width: number, height: number) {
+    const pole = new Graphics();
+    pole.moveTo(x, y);
+    pole.lineTo(x, y - height - 8);
+    pole.stroke({ width: 2, color: 0x222222 });
+    container.addChild(pole);
+
+    const banner = new Graphics();
+    banner.moveTo(x, y - height - 8);
+    banner.lineTo(x + width, y - height - 5);
+    banner.lineTo(x + width - 3, y - height / 2 - 4);
+    banner.lineTo(x + width, y - 3);
+    banner.lineTo(x, y - 5);
+    banner.closePath();
+    banner.fill(color);
+    banner.stroke({ width: 1, color: 0xffffff });
+    container.addChild(banner);
+  }
+
+  private renderBoatHero(container: Container, obj: MapObjectData, factionColor: number, bannerColor: number) {
     const shadow = new Graphics();
     shadow.ellipse(0, 12, 20, 6);
     shadow.fill({ color: 0x000000, alpha: 0.25 });
@@ -617,7 +1096,7 @@ export class IsometricRenderer {
     flag.lineTo(11, -25);
     flag.lineTo(0, -21);
     flag.closePath();
-    flag.fill(factionColor);
+    flag.fill(bannerColor);
     container.addChild(flag);
 
     const label = new Text({

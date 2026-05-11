@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <polygon points="32,6 52,22 52,46 32,58 12,46 12,22" fill="#5a3a1e" stroke="#3a2210" stroke-width="1.5"/>
+  <polygon points="32,6 52,22 32,34 12,22" fill="#7a4a28" stroke="#3a2210" stroke-width="0.5"/>
+  <polygon points="12,22 32,34 32,58 12,46" fill="#4a2e16" stroke="#3a2210" stroke-width="0.5"/>
+  <polygon points="32,34 52,22 52,46 32,58" fill="#3e2212" stroke="#3a2210" stroke-width="0.5"/>
+  <rect x="18" y="28" width="12" height="4" rx="1" fill="#8b5a2b" stroke="#5a3a1e" stroke-width="0.5"/>
+  <rect x="16" y="32" width="16" height="4" rx="1" fill="#9b6a3b" stroke="#5a3a1e" stroke-width="0.5"/>
+  <circle cx="18" cy="30" r="3" fill="#c4884a" stroke="#8b5a2b" stroke-width="0.5"/>
+  <circle cx="14" cy="34" r="3" fill="#a0704a" stroke="#8b5a2b" stroke-width="0.5"/>
+  <path d="M 38 16 Q 42 22, 38 28" fill="none" stroke="#8b5a2b" stroke-width="2"/>
+  <path d="M 42 14 Q 46 20, 42 28" fill="none" stroke="#6a4a2b" stroke-width="2"/>
+  <polygon points="36,12 42,4 48,12" fill="#4a8f4b" stroke="#2a6f2b" stroke-width="0.5"/>
+  <polygon points="32,8 38,2 44,8" fill="#5aaf5b" stroke="#2a6f2b" stroke-width="0.5"/>
+</svg>

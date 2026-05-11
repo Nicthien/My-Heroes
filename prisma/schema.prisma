@@ -83,6 +83,7 @@ model Game {
   turns       Turn[]
   combats     Combat[]
   neutralArmies NeutralArmy[]
+  resourceBuildings ResourceBuilding[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -113,6 +114,7 @@ model GamePlayer {
   towns Town[]
   turns Turn[]
   combatParticipants CombatParticipant[]
+  resourceBuildings ResourceBuilding[]
 
   @@unique([gameId, userId])
   @@map("game_players")
@@ -249,6 +251,21 @@ model Town {
   gamePlayer GamePlayer @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
 
   @@map("towns")
+}
+
+model ResourceBuilding {
+  id            String  @id @default(cuid())
+  gameId        String
+  gamePlayerId  String?
+  buildingType  String
+  x             Int
+  y             Int
+  guardianPower Int     @default(0)
+
+  game        Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  gamePlayer  GamePlayer? @relation(fields: [gamePlayerId], references: [id], onDelete: SetNull)
+
+  @@map("resource_buildings")
 }
 
 model Turn {

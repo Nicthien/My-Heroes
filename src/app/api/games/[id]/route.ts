@@ -20,6 +20,7 @@ export async function GET(
         include: {
           heroes: { include: { armies: true } },
           towns: true,
+          resourceBuildings: true,
           user: { select: { name: true } },
         },
       },

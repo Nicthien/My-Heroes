@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CombatBoardUnit, CombatSummary, UnitType } from "@/lib/game/types";
-import { COMBAT_COLS, COMBAT_ROWS, executeManualCombatAction, getHexDistance, getLosses } from "@/lib/game/combat/persistent";
+import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, UnitType } from "@/lib/game/types";
+import { executeManualCombatAction, getHexDistance, getHexNeighbors, getLosses, isTerrainBlocked } from "@/lib/game/combat/persistent";
 
 export async function POST(
   request: Request,
@@ -22,9 +22,10 @@ export async function POST(
     return NextResponse.json({ error: "Ce n'est pas à vous de jouer" }, { status: 403 });
   }
 
-  const boardState = combat.boardState as unknown as { units: CombatBoardUnit[] };
+  const boardState = combat.boardState as unknown as { units: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   let next = executeManualCombatAction({
     units: boardState.units,
+    terrain: boardState.terrain ?? [],
     turnQueue: combat.turnQueue as unknown as string[],
     round: combat.round,
     currentUnitId: combat.currentUnitId,
@@ -37,9 +38,10 @@ export async function POST(
     const actor = next.units.find((unit) => unit.id === next.currentUnitId);
     const target = next.units.find((unit) => unit.side !== actor?.side);
     if (!actor || !target) break;
-    const neutralAction = getNeutralAction(actor, target, next.units);
+    const neutralAction = getNeutralAction(actor, target, next.units, boardState.terrain ?? []);
     next = executeManualCombatAction({
       units: next.units,
+      terrain: boardState.terrain ?? [],
       turnQueue: next.turnQueue,
       round: next.round,
       currentUnitId: next.currentUnitId,
@@ -60,7 +62,7 @@ export async function POST(
         currentPlayerId: null,
         currentUnitId: null,
         round: next.round,
-        boardState: JSON.parse(JSON.stringify({ units: next.units })),
+        boardState: JSON.parse(JSON.stringify({ units: next.units, terrain: boardState.terrain ?? [] })),
         turnQueue: [],
         actionLog,
         result: JSON.parse(JSON.stringify(summary)),
@@ -75,7 +77,7 @@ export async function POST(
       currentPlayerId: next.currentPlayerId,
       currentUnitId: next.currentUnitId,
       round: next.round,
-      boardState: JSON.parse(JSON.stringify({ units: next.units })),
+      boardState: JSON.parse(JSON.stringify({ units: next.units, terrain: boardState.terrain ?? [] })),
       turnQueue: JSON.parse(JSON.stringify(next.turnQueue)),
       actionLog,
     },
@@ -84,17 +86,17 @@ export async function POST(
   return NextResponse.json({ combat: updated });
 }
 
-function getNeutralAction(actor: CombatBoardUnit, target: CombatBoardUnit, units: CombatBoardUnit[]) {
+function getNeutralAction(actor: CombatBoardUnit, target: CombatBoardUnit, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
   const distance = getHexDistance(actor, target);
   if (actor.ranged && actor.shots > 0) return { type: "SHOOT" as const, targetUnitId: target.id };
   if (distance <= 1) return { type: "ATTACK" as const, targetUnitId: target.id };
 
-  const destination = findBestMoveToward(actor, target, units);
+  const destination = findBestMoveToward(actor, target, units, terrain);
   if (destination) return { type: "MOVE" as const, q: destination.q, r: destination.r };
   return { type: "DEFEND" as const };
 }
 
-function findBestMoveToward(actor: CombatBoardUnit, target: CombatBoardUnit, units: CombatBoardUnit[]) {
+function findBestMoveToward(actor: CombatBoardUnit, target: CombatBoardUnit, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
   const occupied = new Set(units.map((unit) => `${unit.q},${unit.r}`));
   const startKey = `${actor.q},${actor.r}`;
   const queue = [{ q: actor.q, r: actor.r, steps: 0 }];
@@ -112,24 +114,13 @@ function findBestMoveToward(actor: CombatBoardUnit, target: CombatBoardUnit, uni
 
     for (const neighbor of getHexNeighbors(current.q, current.r)) {
       const key = `${neighbor.q},${neighbor.r}`;
-      if (seen.has(key) || occupied.has(key)) continue;
+      if (seen.has(key) || occupied.has(key) || isTerrainBlocked(neighbor.q, neighbor.r, terrain)) continue;
       seen.add(key);
       queue.push({ ...neighbor, steps: current.steps + 1 });
     }
   }
 
   return best;
-}
-
-function getHexNeighbors(q: number, r: number) {
-  const even = r % 2 === 0;
-  const deltas = even
-    ? [[1, 0], [-1, 0], [0, -1], [-1, -1], [0, 1], [-1, 1]]
-    : [[1, 0], [-1, 0], [1, -1], [0, -1], [1, 1], [0, 1]];
-
-  return deltas
-    .map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
-    .filter((cell) => cell.q >= 0 && cell.q < COMBAT_COLS && cell.r >= 0 && cell.r < COMBAT_ROWS);
 }
 
 async function finishCombat(

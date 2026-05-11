@@ -1,6 +1,7 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
+  ResourceBuilding, ResourceBuildingType,
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 
@@ -21,6 +22,7 @@ interface ApiPlayer {
   exploredTiles: string[];
   heroes: ApiHero[];
   towns: ApiTown[];
+  resourceBuildings?: ApiResourceBuilding[];
 }
 
 interface ApiTurn {
@@ -64,6 +66,15 @@ interface ApiTown {
   garrison: string[];
   availableRecruits?: Record<string, number>;
   lastBuiltTurn?: number | null;
+}
+
+interface ApiResourceBuilding {
+  id: string;
+  gamePlayerId: string | null;
+  buildingType: string;
+  x: number;
+  y: number;
+  guardianPower: number;
 }
 
 interface ApiCombat {
@@ -148,6 +159,13 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
       availableRecruits: (t.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
       lastBuiltTurn: t.lastBuiltTurn ?? null,
     })),
+    resourceBuildings: (p.resourceBuildings ?? []).map((b): ResourceBuilding => ({
+      id: b.id,
+      type: b.buildingType as ResourceBuildingType,
+      position: { x: b.x, y: b.y },
+      ownerId: b.gamePlayerId,
+      guardianPower: b.guardianPower ?? 0,
+    })),
     isAlive: p.isAlive,
     turnOrder: p.turnOrder,
     exploredTiles: p.exploredTiles ?? [],
@@ -174,6 +192,8 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
       exploredSet.add(key);
     }
   }
+  const allBuildings = players.flatMap((p) => p.resourceBuildings);
+
   if (mapData?.tiles) {
     for (let y = 0; y < mapData.height; y++) {
       for (let x = 0; x < mapData.width; x++) {
@@ -185,6 +205,14 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
             delete tile.object;
           } else if (obj.type === "monster" && (killed.has(obj.id) || defeatedNeutralArmies.has(obj.id))) {
             delete tile.object;
+          } else if (obj.type === "building") {
+            const buildingData = allBuildings.find((b) => b.id === obj.id || (b.position.x === x && b.position.y === y));
+            if (buildingData) {
+              obj.guardianPower = buildingData.guardianPower;
+            }
+            if (!exploredSet.has(`${x},${y}`)) {
+              delete tile.object;
+            }
           } else if (!exploredSet.has(`${x},${y}`)) {
             delete tile.object;
           }

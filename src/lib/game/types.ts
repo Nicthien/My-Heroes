@@ -148,10 +148,28 @@ export interface MapTile {
   object?: MapObject;
 }
 
+export enum ResourceBuildingType {
+  GOLD_MINE = "gold_mine",
+  SAWMILL = "sawmill",
+  ORE_PIT = "ore_pit",
+  ALCHEMIST_LAB = "alchemist_lab",
+  CRYSTAL_CAVERN = "crystal_cavern",
+  SULFUR_DUNE = "sulfur_dune",
+}
+
+export interface ResourceBuilding {
+  id: string;
+  type: ResourceBuildingType;
+  position: Position;
+  ownerId: string | null;
+  guardianPower: number;
+}
+
 export interface MapObject {
   type: "town" | "hero" | "resource" | "artifact" | "monster" | "building" | "combat";
   id: string;
   subtype?: string;
+  guardianPower?: number;
 }
 
 export type CombatMode = "AUTO" | "MANUAL";
@@ -176,6 +194,14 @@ export interface CombatBoardUnit extends UnitStack {
   waited: boolean;
 }
 
+export type CombatTerrainType = "rock" | "water";
+
+export interface CombatTerrainFeature {
+  type: CombatTerrainType;
+  q: number;
+  r: number;
+}
+
 export interface CombatParticipant {
   id: string;
   playerId: string;
@@ -197,7 +223,7 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[] };
+  boardState: { units: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
@@ -234,6 +260,7 @@ export interface Player {
   resources: Resources;
   heroes: Hero[];
   towns: Town[];
+  resourceBuildings: ResourceBuilding[];
   isAlive: boolean;
   turnOrder: number;
   exploredTiles: string[];
@@ -244,6 +271,7 @@ export type GameAction =
   | { type: "MOVE_HERO"; heroId: string; path: Position[] }
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
+  | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }

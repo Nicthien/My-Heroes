@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
+import { Resources, Faction, BuildingType, UnitType, ResourceBuildingType } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   BUILDING_RULES,
@@ -12,7 +13,19 @@ import {
   canAfford,
   formatCost,
   subtractCost,
+  RESOURCE_BUILDING_RULES,
 } from "@/lib/game/economy";
+
+const RESOURCE_ITEMS = [
+  { key: "gold", label: "Or", short: "Or", src: "/assets/sprites/resources/gold.svg", text: "text-yellow-200", ring: "ring-yellow-300/50", glow: "shadow-yellow-500/25", bg: "from-yellow-300 to-amber-600" },
+  { key: "wood", label: "Bois", short: "Bois", src: "/assets/sprites/resources/wood.svg", text: "text-orange-200", ring: "ring-orange-300/40", glow: "shadow-orange-700/25", bg: "from-amber-700 to-orange-950" },
+  { key: "ore", label: "Minerai", short: "Min.", src: "/assets/sprites/resources/ore.svg", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
+  { key: "mercury", label: "Mercure", short: "Merc.", src: "/assets/sprites/resources/mercury.svg", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
+  { key: "crystals", label: "Cristaux", short: "Crist.", src: "/assets/sprites/resources/crystals.svg", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
+  { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.svg", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
+] as const;
+
+type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 
 function factionLabel(f: Faction): string {
   const labels: Record<string, string> = {
@@ -69,14 +82,36 @@ function buildingTypeLabel(building: string): string {
 
 function ResourceBar({ resources }: { resources: Resources }) {
   return (
-    <div className="flex gap-3 text-sm">
-      <span title="Or" className="text-yellow-400">{resources.gold} Or</span>
-      <span title="Bois" className="text-amber-600">{resources.wood} Bois</span>
-      <span title="Minerai" className="text-gray-400">{resources.ore} Min.</span>
-      <span title="Mercure" className="text-purple-400">{resources.mercury} Merc.</span>
-      <span title="Cristaux" className="text-cyan-400">{resources.crystals} Crist.</span>
-      <span title="Soufre" className="text-yellow-600">{resources.sulfur} Soufre</span>
+    <div className="grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-3 xl:text-sm">
+      {RESOURCE_ITEMS.map((item) => (
+        <span
+          key={item.key}
+          title={`${item.label} : ${resources[item.key]}`}
+          className={`group flex min-w-0 items-center gap-1.5 rounded-full border border-white/10 bg-slate-950/70 px-2 py-1 ${item.text} shadow-lg ${item.glow} backdrop-blur transition hover:-translate-y-0.5 hover:border-white/25 xl:px-2.5`}
+        >
+          <ResourceIcon item={item} />
+          <span className="font-extrabold tabular-nums text-white">{resources[item.key]}</span>
+          <span className="truncate font-semibold text-current/90">{item.short}</span>
+        </span>
+      ))}
     </div>
+  );
+}
+
+function ResourceIcon({ item }: { item: ResourceItem }) {
+  return (
+    <span
+      className={`relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br ${item.bg} ring-1 ${item.ring} shadow-inner`}
+      aria-hidden="true"
+    >
+      <Image
+        src={item.src}
+        alt=""
+        width={28}
+        height={28}
+        className="h-7 w-7 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]"
+      />
+    </span>
   );
 }
 
@@ -344,44 +379,54 @@ function HUDContent() {
   return (
     <div className="absolute inset-0 pointer-events-none">
       {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 bg-black/70 p-2 pointer-events-auto">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
-            <span className="text-white font-bold text-lg">My Heroes</span>
-            <span className="text-gray-300">
-              Année {gameState.calendar.yearNumber}, Mois {gameState.calendar.monthOfYear}, Semaine {gameState.calendar.weekOfMonth}, Jour {gameState.calendar.dayOfWeek}
-            </span>
+      <div className="absolute top-0 left-0 right-0 border-b border-white/10 bg-[#070712]/85 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur-xl pointer-events-auto">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+          <div className="min-w-0 justify-self-start text-left">
+            <div className="whitespace-nowrap bg-gradient-to-r from-amber-200 via-white to-cyan-200 bg-clip-text text-xl font-black tracking-wide text-transparent drop-shadow md:text-2xl">
+              My Heroes
+            </div>
+            <div className="text-xs font-medium leading-snug text-slate-300 md:text-sm">
+              <div>Année {gameState.calendar.yearNumber}, Mois {gameState.calendar.monthOfYear}</div>
+              <div>Semaine {gameState.calendar.weekOfMonth}, Jour {gameState.calendar.dayOfWeek}</div>
+            </div>
+          </div>
+
+          <div className="justify-self-center text-center">
             {isPending && (
-              <span className="px-2 py-0.5 rounded text-sm font-bold bg-yellow-800 text-yellow-200">
+              <span className="inline-flex max-w-[18rem] rounded-full border border-yellow-400/30 bg-yellow-500/15 px-4 py-2 text-sm font-bold text-yellow-100 shadow-lg shadow-yellow-900/30">
                 En attente de joueurs
               </span>
             )}
             {!isPending && (
               <span
-                className={`px-2 py-0.5 rounded text-sm font-bold ${
+                className={`inline-flex max-w-[19rem] rounded-full border px-4 py-2 text-sm font-bold leading-snug shadow-lg ${
                   canAct
-                    ? "bg-green-700 text-green-200"
-                    : "bg-red-900 text-red-300"
+                    ? "border-emerald-300/30 bg-emerald-500/20 text-emerald-100 shadow-emerald-900/30"
+                    : "border-red-300/30 bg-red-500/15 text-red-200 shadow-red-950/30"
                 }`}
               >
                 {canAct ? "À vous de jouer" : isWaitingForPlayers ? "En attente des autres joueurs" : "Observation"}
               </span>
             )}
           </div>
-          {myPlayer && <ResourceBar resources={myPlayer.resources} />}
-          <button
-            className="text-gray-300 hover:text-red-400 text-sm font-bold px-2 py-1 rounded hover:bg-white/10 transition"
-            onClick={handleLeaveGame}
-            title={myPlayer?.turnOrder !== 0 && isPending ? "Quitter la partie" : "Retour au dashboard"}
-          >
-            {myPlayer?.turnOrder !== 0 && isPending ? "Quitter" : "Retour"}
-          </button>
+
+          <div className="flex min-w-0 items-center justify-end gap-3 justify-self-end">
+            {myPlayer && <ResourceBar resources={myPlayer.resources} />}
+            <button
+              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-sm font-bold leading-tight text-slate-300 transition hover:border-red-300/40 hover:bg-red-500/10 hover:text-red-200"
+              onClick={handleLeaveGame}
+              title={myPlayer?.turnOrder !== 0 && isPending ? "Quitter la partie" : "Retour au dashboard"}
+            >
+              <span className="block">{myPlayer?.turnOrder !== 0 && isPending ? "Quitter" : "Retour"}</span>
+              <span className="block text-[0.65rem] font-semibold text-slate-500">menu</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Player list */}
-      <div className="absolute top-12 right-2 pointer-events-auto">
-        <div className="bg-black/70 rounded-lg p-2 space-y-1 text-sm min-w-48">
+      <div className="absolute top-24 right-3 pointer-events-auto">
+        <div className="min-w-56 space-y-1 rounded-2xl border border-white/10 bg-[#070712]/80 p-2 text-sm shadow-2xl shadow-black/40 backdrop-blur-xl">
           {[...gameState.players]
             .sort((a, b) => {
               if (a.id === myPlayer?.id) return -1;
@@ -391,12 +436,12 @@ function HUDContent() {
             .map((p) => (
               <div
                 key={p.id}
-                className={`flex items-center gap-2 px-2 py-1 rounded ${
-                   p.id === myPlayer?.id ? "bg-white/10" : ""
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 transition ${
+                  p.id === myPlayer?.id ? "bg-white/10 shadow-inner shadow-white/5" : "hover:bg-white/5"
                 }`}
               >
                 <div
-                  className="w-3 h-3 rounded-full border border-white/20"
+                  className="h-3 w-3 rounded-full border border-white/40 shadow-lg"
                   style={{ backgroundColor: p.color }}
                 />
                 <span className={p.isAlive ? "text-white" : "text-gray-500 line-through"}>
@@ -411,10 +456,26 @@ function HUDContent() {
               </div>
             ))}
         </div>
+        {myPlayer && myPlayer.resourceBuildings.length > 0 && (
+          <div className="mt-2 min-w-56 rounded-2xl border border-white/10 bg-[#070712]/80 p-2 text-sm shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div className="text-yellow-200 font-bold text-xs mb-1">Mines contrôlées</div>
+            {myPlayer.resourceBuildings.map((b) => {
+              const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === b.type);
+              const label = rule ? rule.label : b.type;
+              const prod = rule ? Object.entries(rule.production).map(([k, v]) => `+${v} ${k}`).join(", ") : "";
+              return (
+                <div key={b.id} className="flex items-center justify-between text-xs text-gray-300 py-0.5">
+                  <span>{label}</span>
+                  <span className="text-yellow-300">{prod}/sem.</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {combatMessage && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-lg border border-yellow-700/70 bg-black/85 px-5 py-3 text-center shadow-xl">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-2xl border border-yellow-400/40 bg-[#080714]/90 px-6 py-4 text-center shadow-2xl shadow-yellow-950/40 backdrop-blur-xl">
           <div className="text-yellow-200 font-bold">{combatMessage}</div>
           <button
             className="mt-2 text-sm text-gray-300 hover:text-white"
@@ -426,7 +487,7 @@ function HUDContent() {
       )}
 
       {canAct && !isPending && notificationPermission === "default" && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-lg border border-green-500/70 bg-green-950/90 px-6 py-3 text-center shadow-xl shadow-green-900/40">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-2xl border border-green-400/50 bg-green-950/90 px-6 py-3 text-center shadow-2xl shadow-green-900/40 backdrop-blur-xl">
           <button
             className="rounded bg-green-700 px-3 py-1 text-sm font-bold text-white hover:bg-green-600"
             onClick={requestNotifications}
@@ -438,9 +499,9 @@ function HUDContent() {
 
       {/* Hero panel */}
       {selectedHero && (
-        <div className="absolute bottom-16 left-4 bg-black/80 rounded-lg p-4 pointer-events-auto min-w-64 border border-yellow-700/50">
+        <div className="absolute bottom-16 left-4 min-w-72 rounded-2xl border border-amber-400/30 bg-[#070712]/85 p-5 pointer-events-auto shadow-2xl shadow-black/50 backdrop-blur-xl">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-white font-bold text-lg">{selectedHero.name}</h3>
+            <h3 className="text-xl font-black text-white drop-shadow">{selectedHero.name}</h3>
             <button
               className="text-gray-400 hover:text-white text-sm"
               onClick={() => useGameStore.getState().selectHero(null)}
@@ -458,7 +519,7 @@ function HUDContent() {
             <span className="text-cyan-400">SAV : {selectedHero.stats.knowledge}</span>
           </div>
           <div className="flex items-center gap-2 mt-2 text-sm">
-            <div className={`px-2 py-0.5 rounded ${
+            <div className={`rounded-lg px-3 py-1 font-bold shadow-lg ${
               selectedHero.movement > 5
                 ? "bg-green-900 text-green-300"
                 : selectedHero.movement > 0
@@ -469,11 +530,11 @@ function HUDContent() {
             </div>
           </div>
           {selectedHero.armies.length > 0 && (
-            <div className="mt-2 border-t border-gray-700 pt-2">
+            <div className="mt-3 border-t border-white/10 pt-3">
               <div className="text-gray-400 text-xs mb-1">Armée</div>
               <div className="grid grid-cols-2 gap-1">
                 {selectedHero.armies.map((unit) => (
-                  <div key={unit.id} className="text-white text-sm bg-gray-800/50 px-1.5 py-0.5 rounded">
+                  <div key={unit.id} className="rounded-lg border border-white/5 bg-slate-900/80 px-2 py-1 text-sm text-white shadow-inner shadow-white/5">
                     <span className="text-gray-400 text-xs">{unitTypeLabel(unit.unitType)}</span>
                     <span className="ml-1 font-bold">{unit.count}</span>
                   </div>
@@ -486,9 +547,9 @@ function HUDContent() {
 
       {/* Town panel */}
       {selectedTown && (
-        <div className="absolute bottom-16 right-4 bg-black/80 rounded-lg p-4 pointer-events-auto w-[28rem] max-h-[70vh] overflow-y-auto border border-yellow-700/50">
+        <div className="absolute bottom-16 right-4 w-[28rem] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl border border-amber-400/30 bg-[#070712]/85 p-5 pointer-events-auto shadow-2xl shadow-black/50 backdrop-blur-xl">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-white font-bold text-lg">{selectedTown.name}</h3>
+            <h3 className="text-xl font-black text-white drop-shadow">{selectedTown.name}</h3>
             <button
               className="text-gray-400 hover:text-white text-sm"
               onClick={() => useGameStore.getState().selectTown(null)}
@@ -521,7 +582,7 @@ function HUDContent() {
               Construction déjà réalisée aujourd&apos;hui dans ce château.
             </div>
           )}
-          <div className="mt-4 border-t border-gray-700 pt-3">
+          <div className="mt-4 border-t border-white/10 pt-3">
             <div className="text-yellow-200 font-bold mb-2">Construire</div>
             <div className="space-y-2">
               {BUILDING_RULES.map((rule) => {
@@ -540,7 +601,7 @@ function HUDContent() {
                   isPending;
 
                 return (
-                  <div key={rule.type} className="bg-gray-900/80 rounded p-2">
+                  <div key={rule.type} className="rounded-xl border border-white/5 bg-slate-950/70 p-3 shadow-inner shadow-white/5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-white text-sm font-bold">{rule.label}</div>
@@ -572,7 +633,7 @@ function HUDContent() {
             </div>
           </div>
 
-          <div className="mt-4 border-t border-gray-700 pt-3">
+          <div className="mt-4 border-t border-white/10 pt-3">
             <div className="text-yellow-200 font-bold mb-2">Recruter</div>
             <div className="space-y-2">
               {UNIT_RULES.map((rule) => {
@@ -588,7 +649,7 @@ function HUDContent() {
                   isPending;
 
                 return (
-                  <div key={rule.type} className="bg-gray-900/80 rounded p-2">
+                  <div key={rule.type} className="rounded-xl border border-white/5 bg-slate-950/70 p-3 shadow-inner shadow-white/5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-white text-sm font-bold">{rule.label}</div>
@@ -629,7 +690,7 @@ function HUDContent() {
       {/* Bouton de fin de tour */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
         {isPending ? (
-          <div className="bg-black/80 border border-yellow-700/60 rounded-lg p-4 text-center min-w-80">
+          <div className="min-w-80 rounded-2xl border border-yellow-400/40 bg-[#070712]/85 p-5 text-center shadow-2xl shadow-black/50 backdrop-blur-xl">
             <div className="text-yellow-200 font-bold">Partie en attente</div>
             <div className="text-gray-300 text-sm mt-1">
               {gameState.players.length} joueur(s). Tu peux démarrer pour tester en solo.
@@ -649,9 +710,9 @@ function HUDContent() {
             </div>
           )}
           <button
-            className={`px-8 py-3 rounded-lg font-bold text-lg transition ${
+            className={`rounded-2xl px-10 py-4 text-xl font-black transition ${
               canAct && !hasActiveCombats
-                ? "bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/50"
+                ? "bg-gradient-to-br from-red-500 to-red-800 text-white shadow-2xl shadow-red-900/60 hover:-translate-y-0.5 hover:from-red-400 hover:to-red-700"
                 : "bg-gray-700 text-gray-400 cursor-not-allowed"
             }`}
             disabled={!canAct || hasActiveCombats}

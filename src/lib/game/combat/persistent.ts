@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatSide, CombatSummary, Hero, UnitStack, UnitType } from "../types";
+import { CombatBoardUnit, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 
@@ -20,11 +20,12 @@ export function createCombatBoard(
   defender: CombatParticipantSnapshot
 ) {
   const units: CombatBoardUnit[] = [];
-  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1, 1);
-  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2, 1);
+  const terrain = createCombatTerrain();
+  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1, 1, undefined, terrain);
+  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2, 1, undefined, terrain);
   const turnQueue = buildTurnQueue(units, 1);
   return {
-    boardState: { units },
+    boardState: { units, terrain },
     turnQueue,
     currentUnitId: turnQueue[0] ?? null,
     currentPlayerId: units.find((unit) => unit.id === turnQueue[0])?.ownerPlayerId ?? null,
@@ -40,11 +41,12 @@ function addUnits(
   participantId: string | null,
   q: number,
   joinsRound: number,
-  preferredRows = [1, 2, 3, 4, 5, 6, 7]
+  preferredRows = [1, 2, 3, 4, 5, 6, 7],
+  terrain: CombatTerrainFeature[] = []
 ) {
   armies.filter((army) => army.count > 0).forEach((army, index) => {
     const rule = getUnitRule(army.unitType);
-    const r = findFreeRow(units, q, preferredRows[index % preferredRows.length]);
+    const r = findFreeRow(units, q, preferredRows[index % preferredRows.length], terrain);
     units.push({
       ...army,
       side,
@@ -68,6 +70,7 @@ function addUnits(
 
 export function addReinforcementUnits(params: {
   units: CombatBoardUnit[];
+  terrain?: CombatTerrainFeature[];
   armies: UnitStack[];
   side: CombatSide;
   ownerPlayerId: string;
@@ -76,15 +79,15 @@ export function addReinforcementUnits(params: {
   joinsRound: number;
 }) {
   const q = params.side === "attacker" ? 0 : COMBAT_COLS - 1;
-  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, q, params.joinsRound, [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, q, params.joinsRound, [0, 1, 2, 3, 4, 5, 6, 7, 8], params.terrain ?? []);
 }
 
-function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number) {
+function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, terrain: CombatTerrainFeature[]) {
   for (let offset = 0; offset < COMBAT_ROWS; offset++) {
     const candidates = [preferredRow + offset, preferredRow - offset];
     for (const r of candidates) {
       if (r < 0 || r >= COMBAT_ROWS) continue;
-      if (!units.some((unit) => unit.q === q && unit.r === r)) return r;
+      if (!isTerrainBlocked(q, r, terrain) && !units.some((unit) => unit.q === q && unit.r === r)) return r;
     }
   }
 
@@ -113,6 +116,7 @@ function offsetToCube(q: number, r: number) {
 
 export function executeManualCombatAction(params: {
   units: CombatBoardUnit[];
+  terrain?: CombatTerrainFeature[];
   turnQueue: string[];
   round: number;
   currentUnitId: string | null;
@@ -129,9 +133,9 @@ export function executeManualCombatAction(params: {
   if (params.action.type === "MOVE") {
     const q = Number(params.action.q);
     const r = Number(params.action.r);
-    if (isInside(q, r) && !units.some((unit) => unit.q === q && unit.r === r)) {
-      const distance = getHexDistance(actor, { q, r });
-      if (distance <= actor.speed) {
+    if (isInside(q, r) && !isTerrainBlocked(q, r, params.terrain) && !units.some((unit) => unit.q === q && unit.r === r)) {
+      const path = findPath(actor, { q, r }, units, params.terrain ?? []);
+      if (path.length > 1 && path.length - 1 <= actor.speed) {
         actor.q = q;
         actor.r = r;
         didAct = true;
@@ -227,6 +231,73 @@ function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | nu
 
 function isInside(q: number, r: number) {
   return Number.isInteger(q) && Number.isInteger(r) && q >= 0 && q < COMBAT_COLS && r >= 0 && r < COMBAT_ROWS;
+}
+
+export function isTerrainBlocked(q: number, r: number, terrain: CombatTerrainFeature[] = []) {
+  return terrain.some((feature) => feature.q === q && feature.r === r);
+}
+
+export function getHexNeighbors(q: number, r: number) {
+  const even = r % 2 === 0;
+  const deltas = even
+    ? [[1, 0], [-1, 0], [0, -1], [-1, -1], [0, 1], [-1, 1]]
+    : [[1, 0], [-1, 0], [1, -1], [0, -1], [1, 1], [0, 1]];
+
+  return deltas
+    .map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
+    .filter((cell) => isInside(cell.q, cell.r));
+}
+
+function findPath(start: { q: number; r: number }, end: { q: number; r: number }, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
+  const startKey = `${start.q},${start.r}`;
+  const endKey = `${end.q},${end.r}`;
+  const occupied = new Set(units.map((unit) => `${unit.q},${unit.r}`));
+  const queue: { q: number; r: number; path: { q: number; r: number }[] }[] = [{ q: start.q, r: start.r, path: [{ q: start.q, r: start.r }] }];
+  const seen = new Set([startKey]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (`${current.q},${current.r}` === endKey) return current.path;
+
+    for (const neighbor of getHexNeighbors(current.q, current.r)) {
+      const key = `${neighbor.q},${neighbor.r}`;
+      if (seen.has(key)) continue;
+      if (isTerrainBlocked(neighbor.q, neighbor.r, terrain)) continue;
+      if (occupied.has(key) && key !== startKey && key !== endKey) continue;
+      seen.add(key);
+      queue.push({ ...neighbor, path: [...current.path, neighbor] });
+    }
+  }
+
+  return [];
+}
+
+function createCombatTerrain() {
+  const terrain: CombatTerrainFeature[] = [];
+  const occupied = new Set<string>();
+  const addFeature = (type: CombatTerrainFeature["type"], q: number, r: number) => {
+    const key = `${q},${r}`;
+    if (!isInside(q, r) || q <= 1 || q >= COMBAT_COLS - 2 || occupied.has(key)) return false;
+    occupied.add(key);
+    terrain.push({ type, q, r });
+    return true;
+  };
+
+  for (let pool = 0; pool < 2; pool++) {
+    let current = { q: 4 + Math.floor(Math.random() * 5), r: 2 + Math.floor(Math.random() * 5) };
+    const size = 2 + Math.floor(Math.random() * 2);
+    for (let index = 0; index < size; index++) {
+      addFeature("water", current.q, current.r);
+      const neighbors = getHexNeighbors(current.q, current.r).filter((cell) => cell.q > 1 && cell.q < COMBAT_COLS - 2);
+      current = neighbors[Math.floor(Math.random() * neighbors.length)] ?? current;
+    }
+  }
+
+  for (let rock = 0; rock < 4; rock++) {
+    addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * COMBAT_ROWS));
+  }
+
+  return terrain;
 }
 
 export function resolveAutomaticCombat(attacker: CombatParticipantSnapshot, defender: CombatParticipantSnapshot): CombatSummary {

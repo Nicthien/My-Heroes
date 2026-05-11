@@ -3,7 +3,8 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { IsometricRenderer, MapObjectData } from "@/lib/rendering/isometric/renderer";
-import { PersistentCombat, Position } from "@/lib/game/types";
+import { PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
+import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { findPath, computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -325,6 +326,90 @@ export default function GameMapComponent() {
         return;
       }
 
+      const isNeutralOrEnemyBuilding =
+        obj.type === "building" && myPlayer && obj.playerId !== myPlayer.id;
+      if (isNeutralOrEnemyBuilding && selectedHeroId) {
+        const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+        if (!hero) return;
+
+        const destination = { x: obj.x, y: obj.y };
+        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        if (path.length <= 1) {
+          rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+
+        const pendingCapture = pendingAttackRef.current;
+        const isConfirmingCapture =
+          pendingCapture?.heroId === selectedHeroId &&
+          pendingCapture.targetId === obj.id;
+
+        if (!isConfirmingCapture) {
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = {
+            heroId: selectedHeroId,
+            targetId: obj.id,
+            destination,
+            path,
+          };
+          rendererRef.current.highlightPath(path);
+          rendererRef.current.highlightTile(destination.x, destination.y, 0x00ff00);
+          const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
+          const label = buildingRule ? buildingRule.label : obj.name || "Bâtiment";
+          if (!obj.playerId) {
+            setCombatMessage(`Cliquez à nouveau pour capturer : ${label}`);
+          } else {
+            setCombatMessage(`Cliquez à nouveau pour capturer : ${label} (ennemi)`);
+          }
+          return;
+        }
+
+        if (!canAct) {
+          setCombatMessage("Vous avez déjà terminé votre tour.");
+          pendingAttackRef.current = null;
+          rendererRef.current.clearHighlights();
+          return;
+        }
+
+        pendingAttackRef.current = null;
+        rendererRef.current.clearHighlights();
+
+        fetch(`/api/games/${gameState.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "CAPTURE_BUILDING",
+            heroId: selectedHeroId,
+            buildingId: obj.id,
+          }),
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              const data = await response.json().catch(() => ({}));
+              if (data.interaction?.resource === "defeat") {
+                setCombatMessage("Défaite... Les gardiens ont vaincu votre héros.");
+              } else {
+                setCombatMessage(data.error || "Capture impossible.");
+              }
+              return null;
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (!data) return;
+            refreshGameState(gameState.id, session?.user?.id).then((state) => {
+              if (state) useGameStore.getState().setGameState(state);
+            });
+            if (data.interaction?.type === "CAPTURE_BUILDING") {
+              setCombatMessage(`Bâtiment capturé ! (${data.interaction.production || ""})`);
+            } else {
+              setCombatMessage("Bâtiment capturé.");
+            }
+          });
+        return;
+      }
+
       if (obj.type === "hero") {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
@@ -335,6 +420,14 @@ export default function GameMapComponent() {
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
         selectTown(obj.id);
+      } else if (obj.type === "building") {
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current?.clearHighlights();
+        const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
+        const label = buildingRule ? buildingRule.label : obj.name || "Bâtiment";
+        const ownerStr = obj.playerId ? (obj.playerId === myPlayer?.id ? " (vous)" : " (ennemi)") : " (neutre)";
+        setCombatMessage(`${label}${ownerStr} — Production hebdomadaire: ${buildingRule ? Object.entries(buildingRule.production).map(([k, v]) => `+${v} ${k}`).join(", ") : "aucune"}`);
       }
       return;
     }
@@ -466,6 +559,9 @@ function selectObjectOnTile(
   const combat = objects.find((obj) => obj.type === "combat");
   if (combat) return combat;
 
+  const enemyBuilding = objects.find((obj) => obj.type === "building" && !obj.playerId);
+  if (enemyBuilding) return enemyBuilding;
+
   const hero = objects.find((obj) => obj.type === "hero");
   const town = objects.find((obj) => obj.type === "town");
 
@@ -539,10 +635,40 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
         playerId: player.id,
         x: town.position.x,
         y: town.position.y,
-        faction: player.faction as string,
+        faction: town.faction as string,
         color: player.color,
         name: town.name,
       });
+    }
+  }
+
+  // Resource buildings from map tiles + ownership data
+  const allBuildings: ResourceBuilding[] = gameState.players.flatMap((p) => p.resourceBuildings);
+  if (gameState.map?.tiles) {
+    for (let y = 0; y < gameState.map.height; y++) {
+      for (let x = 0; x < gameState.map.width; x++) {
+        const tile = gameState.map.tiles[y]?.[x];
+        if (!tile?.object || tile.object.type !== "building") continue;
+        const key = `${x},${y}`;
+        if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+
+        const building = allBuildings.find((b) => b.position.x === x && b.position.y === y);
+        const owner = building?.ownerId
+          ? gameState.players.find((p) => p.id === building.ownerId || p.resourceBuildings.some((rb) => rb.id === building.id))
+          : undefined;
+
+        objects.push({
+          type: "building",
+          id: tile.object.id,
+          playerId: owner?.id ?? null,
+          x,
+          y,
+          faction: owner?.faction as string ?? "",
+          color: owner?.color ?? "",
+          name: building?.type ?? tile.object.subtype ?? "",
+          buildingType: tile.object.subtype,
+        });
+      }
     }
   }
 

@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { CombatBoardUnit, PersistentCombat } from "@/lib/game/types";
+import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { COMBAT_COLS, COMBAT_ROWS, getHexDistance } from "@/lib/game/combat/persistent";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
+
+const HEX_WIDTH = 56;
+const HEX_HEIGHT = 48;
+const HEX_COL_STEP = HEX_WIDTH;
+const HEX_ROW_STEP = HEX_HEIGHT * 0.75;
+const HEX_ROW_OFFSET = HEX_WIDTH / 2;
+const HEX_GRID_WIDTH = HEX_ROW_OFFSET + (COMBAT_COLS - 1) * HEX_COL_STEP + HEX_WIDTH;
+const HEX_GRID_HEIGHT = (COMBAT_ROWS - 1) * HEX_ROW_STEP + HEX_HEIGHT;
 
 export default function CombatScreen() {
   const { data: session } = useSession();
@@ -96,26 +104,29 @@ export default function CombatScreen() {
 function HexGrid({ combat, isMyAction, onAction }: { combat: PersistentCombat; isMyAction: boolean; onAction: (action: Record<string, unknown>) => void }) {
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const units = combat.boardState.units;
+  const terrain = combat.boardState.terrain ?? [];
   const currentUnit = units.find((unit) => unit.id === combat.currentUnitId);
   const occupied = new Set(units.map((unit) => `${unit.q},${unit.r}`));
+  const blocked = new Set(terrain.map((feature) => `${feature.q},${feature.r}`));
   const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
 
   const cells = [];
   for (let r = 0; r < COMBAT_ROWS; r++) {
     for (let q = 0; q < COMBAT_COLS; q++) {
       const unit = units.find((item) => item.q === q && item.r === r);
+      const feature = terrain.find((item) => item.q === q && item.r === r);
       const distance = currentUnit ? getHexDistance(currentUnit, { q, r }) : 999;
-      const path = currentUnit && !unit ? findHexPath(currentUnit, { q, r }, occupied) : [];
-      const reachable = isMyAction && currentUnit && !unit && path.length > 1 && path.length - 1 <= currentUnit.speed;
+      const path = currentUnit && !unit && !feature ? findHexPath(currentUnit, { q, r }, occupied, blocked) : [];
+      const reachable = isMyAction && currentUnit && !unit && !feature && path.length > 1 && path.length - 1 <= currentUnit.speed;
       const isPendingDestination = activePendingMove?.q === q && activePendingMove.r === r;
       const isPendingPath = Boolean(activePendingMove?.path.some((step) => step.q === q && step.r === r));
       const attackable = isMyAction && currentUnit && unit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0));
       cells.push(
         <button
           key={`${q}-${r}`}
-          className={`absolute flex h-12 w-14 items-center justify-center text-xs font-bold transition [clip-path:polygon(25%_0,75%_0,100%_50%,75%_100%,25%_100%,0_50%)] ${unit ? unit.side === "attacker" ? "bg-blue-700" : "bg-red-700" : isPendingDestination ? "bg-yellow-500 text-black ring-2 ring-white" : isPendingPath ? "bg-yellow-700/90" : reachable ? "bg-green-700/70 hover:bg-green-600" : "bg-black/35"} ${attackable ? "ring-2 ring-yellow-300" : ""} ${combat.currentUnitId === unit?.id ? "outline outline-2 outline-white" : ""}`}
-          style={{ left: q * 45 + (r % 2) * 22, top: r * 42 }}
-          disabled={!isMyAction || (!reachable && !attackable)}
+          className={`absolute flex items-center justify-center text-xs font-bold transition [clip-path:polygon(50%_0,100%_25%,100%_75%,50%_100%,0_75%,0_25%)] ${unit ? unit.side === "attacker" ? "bg-blue-700" : "bg-red-700" : feature ? getTerrainClass(feature) : isPendingDestination ? "bg-yellow-500 text-black ring-2 ring-white" : isPendingPath ? "bg-yellow-700/90" : reachable ? "bg-green-700/70 hover:bg-green-600" : "bg-black/35"} ${attackable ? "ring-2 ring-yellow-300" : ""} ${combat.currentUnitId === unit?.id ? "outline outline-2 outline-white" : ""}`}
+          style={{ left: q * HEX_COL_STEP + (r % 2) * HEX_ROW_OFFSET, top: r * HEX_ROW_STEP, width: HEX_WIDTH, height: HEX_HEIGHT }}
+          disabled={!isMyAction || Boolean(feature) || (!reachable && !attackable)}
           onClick={() => {
             if (attackable && unit) {
               setPendingMove(null);
@@ -129,20 +140,21 @@ function HexGrid({ combat, isMyAction, onAction }: { combat: PersistentCombat; i
               setPendingMove({ unitId: currentUnit.id, q, r, path });
             }
           }}
-          title={unit ? getUnitTitle(unit) : `${q},${r}`}
+          title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature) : `${q},${r}`}
         >
-          {unit ? <UnitToken unit={unit} /> : ""}
+          {unit ? <UnitToken unit={unit} /> : feature ? <TerrainToken feature={feature} /> : ""}
         </button>
       );
     }
   }
-  return <div className="relative h-[390px] w-[620px]">{cells}</div>;
+  return <div className="relative" style={{ width: HEX_GRID_WIDTH, height: HEX_GRID_HEIGHT }}>{cells}</div>;
 }
 
 function findHexPath(
   start: { q: number; r: number },
   end: { q: number; r: number },
-  occupied: Set<string>
+  occupied: Set<string>,
+  blocked: Set<string>
 ) {
   const startKey = `${start.q},${start.r}`;
   const endKey = `${end.q},${end.r}`;
@@ -158,6 +170,7 @@ function findHexPath(
     for (const neighbor of getHexNeighbors(current.q, current.r)) {
       const key = `${neighbor.q},${neighbor.r}`;
       if (seen.has(key)) continue;
+      if (blocked.has(key)) continue;
       if (occupied.has(key) && key !== startKey && key !== endKey) continue;
       seen.add(key);
       queue.push({ ...neighbor, path: [...current.path, neighbor] });
@@ -165,6 +178,20 @@ function findHexPath(
   }
 
   return [];
+}
+
+function TerrainToken({ feature }: { feature: CombatTerrainFeature }) {
+  return <div className="text-lg drop-shadow">{feature.type === "rock" ? "▲" : "≈"}</div>;
+}
+
+function getTerrainClass(feature: CombatTerrainFeature) {
+  return feature.type === "rock"
+    ? "bg-stone-700 text-stone-300 shadow-inner shadow-black/50"
+    : "bg-cyan-900/90 text-cyan-100 shadow-inner shadow-blue-950";
+}
+
+function getTerrainTitle(feature: CombatTerrainFeature) {
+  return feature.type === "rock" ? "Rochers" : "Eau";
 }
 
 function getHexNeighbors(q: number, r: number) {

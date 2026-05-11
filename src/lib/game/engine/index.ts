@@ -10,7 +10,11 @@ import {
   BuildingType,
   Position,
   MapObject,
+  ResourceBuildingType,
+  ResourceBuilding,
 } from "../types";
+
+import { RESOURCE_BUILDING_RULES } from "../economy";
 
 function isPassable(terrain: TerrainType): boolean {
   return terrain !== TerrainType.LAVA;
@@ -173,6 +177,24 @@ function placeResources(
     "sulfur",
   ];
 
+  const buildingTypes: { type: ResourceBuildingType; preferredTerrain: TerrainType[] }[] = [
+    { type: ResourceBuildingType.GOLD_MINE, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS] },
+    { type: ResourceBuildingType.SAWMILL, preferredTerrain: [TerrainType.FOREST, TerrainType.GRASS] },
+    { type: ResourceBuildingType.ORE_PIT, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS] },
+    { type: ResourceBuildingType.ALCHEMIST_LAB, preferredTerrain: [TerrainType.SNOW, TerrainType.MOUNTAIN, TerrainType.GRASS] },
+    { type: ResourceBuildingType.CRYSTAL_CAVERN, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.GRASS] },
+    { type: ResourceBuildingType.SULFUR_DUNE, preferredTerrain: [TerrainType.SAND, TerrainType.GRASS, TerrainType.LAVA] },
+  ];
+
+  const cornerSize = 7;
+  const margin = 5;
+  const startAnchors: Position[] = [
+    { x: 3, y: 3 },
+    { x: width - 4, y: 3 },
+    { x: 3, y: height - 4 },
+    { x: width - 4, y: height - 4 },
+  ];
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const tile = tiles[y][x];
@@ -196,6 +218,93 @@ function placeResources(
       }
     }
   }
+
+  for (const buildingDef of buildingTypes) {
+    const count = 2 + Math.floor(Math.random() * 2);
+    const candidates: { x: number; y: number; startDistance: number; terrainPenalty: number }[] = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const tile = tiles[y][x];
+        if (!tile.isPassable || tile.object) continue;
+        if (x < margin || x >= width - margin || y < margin || y >= height - margin) continue;
+
+        const inCorner =
+          (x < cornerSize && y < cornerSize) ||
+          (x >= width - cornerSize && y < cornerSize) ||
+          (x < cornerSize && y >= height - cornerSize) ||
+          (x >= width - cornerSize && y >= height - cornerSize);
+        if (inCorner) continue;
+
+        const terrainPenalty = buildingDef.preferredTerrain.includes(tile.terrain) ? 0 : 6;
+        const startDistance = Math.min(
+          ...startAnchors.map((start) => Math.abs(x - start.x) + Math.abs(y - start.y))
+        );
+        candidates.push({ x, y, startDistance, terrainPenalty });
+      }
+    }
+
+    const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === buildingDef.type);
+    const basePower = rule?.guardianBasePower ?? 200;
+    const maxStartDistance = Math.max(1, Math.floor((width + height) / 2));
+
+    let placed = 0;
+    for (let targetIndex = 0; targetIndex < count; targetIndex++) {
+      if (placed >= count) break;
+
+      const targetDistance = count === 1
+        ? maxStartDistance * 0.45
+        : maxStartDistance * (0.22 + (targetIndex / Math.max(1, count - 1)) * 0.56);
+
+      const orderedCandidates = [...candidates].sort((a, b) => {
+        const aScore = Math.abs(a.startDistance - targetDistance) + a.terrainPenalty;
+        const bScore = Math.abs(b.startDistance - targetDistance) + b.terrainPenalty;
+        return aScore - bScore;
+      });
+
+      for (const candidate of orderedCandidates) {
+        if (placed > targetIndex) break;
+
+        const tile = tiles[candidate.y][candidate.x];
+        if (tile.object) continue;
+
+        const tooClose = checkBuildingProximity(tiles, width, height, candidate.x, candidate.y, 5);
+        if (tooClose) continue;
+
+        const distFactor = Math.min(1, candidate.startDistance / maxStartDistance);
+        // Near starts: ~10% of base power (weak); far from starts: ~200% (very strong)
+        const guardianPower = Math.max(30, Math.floor(basePower * (0.1 + distFactor * 1.9)));
+
+        tile.object = {
+          type: "building",
+          id: `bld-${buildingDef.type}-${candidate.x}-${candidate.y}`,
+          subtype: buildingDef.type,
+          guardianPower,
+        };
+        placed++;
+      }
+    }
+  }
+}
+
+function checkBuildingProximity(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  radius: number
+): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const tile = tiles[ny][nx];
+      if (tile.object?.type === "building") return true;
+    }
+  }
+  return false;
 }
 
 export function placePlayerStart(mapData: GameMap | Record<string, unknown>, playerIndex: number): Position {
@@ -291,15 +400,27 @@ export function calculateIncome(player: Player): { gold: number; wood: number; o
   let gold = 500;
   let wood = 0;
   let ore = 0;
-  const mercury = 0;
-  const crystals = 0;
-  const sulfur = 0;
+  let mercury = 0;
+  let crystals = 0;
+  let sulfur = 0;
 
   for (const town of player.towns) {
     gold += 500;
     if (town.buildings.includes("resource_silo" as BuildingType)) gold += 500;
     wood += 2;
     ore += 1;
+  }
+
+  for (const building of player.resourceBuildings) {
+    const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === building.type);
+    if (rule && building.ownerId === player.id) {
+      gold += rule.production.gold ?? 0;
+      wood += rule.production.wood ?? 0;
+      ore += rule.production.ore ?? 0;
+      mercury += rule.production.mercury ?? 0;
+      crystals += rule.production.crystals ?? 0;
+      sulfur += rule.production.sulfur ?? 0;
+    }
   }
 
   return { gold, wood, ore, mercury, crystals, sulfur };

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CombatBoardUnit, CombatSide, UnitStack, UnitType } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSide, CombatTerrainFeature, UnitStack, UnitType } from "@/lib/game/types";
 import { addReinforcementUnits } from "@/lib/game/combat/persistent";
 
 export async function POST(
@@ -54,10 +54,11 @@ export async function POST(
     const participant = await tx.combatParticipant.create({
       data: { combatId: combat.id, playerId: gamePlayer.id, heroId: hero.id, side },
     });
-    const boardState = combat.boardState as unknown as { units: CombatBoardUnit[] };
+    const boardState = combat.boardState as unknown as { units: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
     const units = boardState.units.map((unit) => ({ ...unit }));
     addReinforcementUnits({
       units,
+      terrain: boardState.terrain ?? [],
       armies: hero.armies.map(armyToUnit),
       side,
       ownerPlayerId: gamePlayer.id,
@@ -74,7 +75,7 @@ export async function POST(
     return tx.combat.update({
       where: { id: combat.id },
       data: {
-        boardState: JSON.parse(JSON.stringify({ units })),
+        boardState: JSON.parse(JSON.stringify({ units, terrain: boardState.terrain ?? [] })),
         actionLog,
       },
       include: { participants: true },

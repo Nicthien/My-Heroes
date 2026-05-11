@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem \"c:\\\\AI\\\\My Heroes\\\\src\\\\app\\\\api\\\\games\" -Recurse -Name)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

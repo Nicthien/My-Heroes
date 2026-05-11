@@ -61,13 +61,19 @@ export default function CombatChoiceModal() {
     );
   }
 
+  const isBuilding = pendingCombat.targetType === "building";
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
       <div className="w-[min(92vw,34rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 shadow-2xl shadow-black text-white">
-        <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">Engagement</div>
+        <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">
+          {isBuilding ? "Gardiens du bâtiment" : "Engagement"}
+        </div>
         <h2 className="mt-2 text-2xl font-bold text-yellow-100">Choisir la résolution du combat</h2>
         <p className="mt-3 text-sm text-stone-300">
-          Le combat sera visible sur la carte générale. En mode manuel, les deux joueurs rejoignent le plateau tactique synchrone.
+          {isBuilding
+            ? "Ce bâtiment est défendu par des gardiens. Battez-les pour en prendre le contrôle."
+            : "Le combat sera visible sur la carte générale. En mode manuel, les deux joueurs rejoignent le plateau tactique synchrone."}
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <button className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 text-left hover:bg-blue-900" onClick={() => startCombat("AUTO")}>

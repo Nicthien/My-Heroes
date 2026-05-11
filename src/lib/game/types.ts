@@ -243,6 +243,7 @@ export interface CombatSummary {
   defenderLosses: CombatLoss[];
   experienceGained: number;
   log: string[];
+  attackerDied?: boolean;
 }
 
 export interface GameMap {

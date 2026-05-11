@@ -77,12 +77,15 @@ export async function POST(
   });
   if (activeCombat) return NextResponse.json({ error: "Ce héros est déjà en combat" }, { status: 400 });
 
-  const targetType = body.targetType as "hero" | "monster";
+  const targetType = body.targetType as "hero" | "monster" | "building";
   if (targetType === "hero") {
     return startHeroCombat(id, mode, attacker, String(body.targetId));
   }
   if (targetType === "monster") {
     return startNeutralCombat(id, mode, attacker, String(body.targetId));
+  }
+  if (targetType === "building") {
+    return startBuildingCombat(id, mode, attacker, String(body.targetId));
   }
 
   return NextResponse.json({ error: "Cible invalide" }, { status: 400 });
@@ -164,7 +167,9 @@ async function startNeutralCombat(gameId: string, mode: CombatMode, attacker: Lo
 
   if (mode === "AUTO") {
     const summary = resolveAutomaticCombat(attackerSnapshot, defenderSnapshot);
-    await applyNeutralCombatResult(summary.winnerId === attacker.id, attacker, neutral.id, summary, neutral.x, neutral.y);
+    const attackerWon = summary.winnerId === attacker.id;
+    await applyNeutralCombatResult(attackerWon, attacker, neutral.id, summary, neutral.x, neutral.y);
+    summary.attackerDied = !attackerWon;
     const combat = await prisma.combat.create({
       data: {
         gameId,
@@ -220,13 +225,23 @@ async function applyNeutralCombatResult(attackerWon: boolean, attacker: LoadedHe
       await tx.hero.delete({ where: { id: attacker.id } });
       return;
     }
-    for (const army of applyLossesToArmies(attacker.armies.map(armyToUnit), 0, false)) {
+    let heroSurvives = false;
+    for (const army of attacker.armies) {
       const loss = summary.attackerLosses.find((item) => item.unitType === army.unitType);
-      const nextCount = Math.max(1, army.count - (loss?.lost ?? 0));
-      await tx.army.update({ where: { id: army.id }, data: { count: nextCount, health: nextCount * army.maxHealth } });
+      const nextCount = Math.max(0, army.count - (loss?.lost ?? 0));
+      if (nextCount > 0) {
+        heroSurvives = true;
+        await tx.army.update({ where: { id: army.id }, data: { count: nextCount, health: nextCount * army.maxHealth } });
+      } else {
+        await tx.army.delete({ where: { id: army.id } });
+      }
     }
     await tx.neutralArmy.update({ where: { id: neutralArmyId }, data: { status: "DEFEATED" } });
-    await tx.hero.update({ where: { id: attacker.id }, data: { x, y, movement: 0, experience: { increment: summary.experienceGained } } });
+    if (heroSurvives) {
+      await tx.hero.update({ where: { id: attacker.id }, data: { x, y, movement: 0, experience: { increment: summary.experienceGained } } });
+    } else {
+      await tx.hero.delete({ where: { id: attacker.id } });
+    }
   });
 }
 
@@ -275,6 +290,158 @@ async function createNeutralArmyFromMap(gameId: string, targetId: string) {
     },
     include: { stacks: true },
   });
+}
+
+async function startBuildingCombat(gameId: string, mode: CombatMode, attacker: LoadedHero, buildingId: string) {
+  const building = await prisma.resourceBuilding.findUnique({ where: { id: buildingId } });
+  if (!building || building.gameId !== gameId) {
+    return NextResponse.json({ error: "Bâtiment introuvable" }, { status: 400 });
+  }
+  if (building.guardianPower <= 0) {
+    return NextResponse.json({ error: "Ce bâtiment n'a pas de gardiens" }, { status: 400 });
+  }
+
+  const distance = Math.abs(attacker.x - building.x) + Math.abs(attacker.y - building.y);
+  if (distance > Math.max(1, attacker.movement)) {
+    return NextResponse.json({ error: "Cible trop éloignée" }, { status: 400 });
+  }
+
+  const guardianId = `bldguard-${buildingId}`;
+  let neutral = await prisma.neutralArmy.findFirst({ where: { id: guardianId }, include: { stacks: true } });
+  if (!neutral) {
+    const stacks = guardianStacksFromPower(building.guardianPower);
+    neutral = await prisma.neutralArmy.create({
+      data: {
+        id: guardianId,
+        gameId,
+        x: building.x,
+        y: building.y,
+        stacks: {
+          create: stacks.map((s, i) => ({
+            unitType: s.unitType,
+            count: s.count,
+            health: s.count * unitMaxHealth(s.unitType),
+            maxHealth: unitMaxHealth(s.unitType),
+            position: i,
+          })),
+        },
+      },
+      include: { stacks: true },
+    });
+  }
+  if (neutral.status !== "ACTIVE") {
+    return NextResponse.json({ error: "Les gardiens ont déjà été vaincus" }, { status: 400 });
+  }
+
+  const attackerSnapshot = heroSnapshot(attacker);
+  const defenderSnapshot = {
+    id: neutral.id,
+    playerId: null,
+    attack: 0,
+    defense: 0,
+    armies: neutral.stacks.map(stackToUnit),
+  };
+
+  if (mode === "AUTO") {
+    const summary = resolveAutomaticCombat(attackerSnapshot, defenderSnapshot);
+    const attackerWon = summary.winnerId === attacker.id;
+    let heroSurvivedBuilding = false;
+    await prisma.$transaction(async (tx) => {
+      if (!attackerWon) {
+        await tx.army.deleteMany({ where: { heroId: attacker.id } });
+        await tx.hero.delete({ where: { id: attacker.id } });
+        return;
+      }
+      let heroSurvives = false;
+      for (const army of attacker.armies) {
+        const loss = summary.attackerLosses.find((item) => item.unitType === army.unitType);
+        const nextCount = Math.max(0, army.count - (loss?.lost ?? 0));
+        if (nextCount > 0) {
+          heroSurvives = true;
+          await tx.army.update({ where: { id: army.id }, data: { count: nextCount, health: nextCount * army.maxHealth } });
+        } else {
+          await tx.army.delete({ where: { id: army.id } });
+        }
+      }
+      heroSurvivedBuilding = heroSurvives;
+      await tx.neutralArmy.update({ where: { id: neutral.id }, data: { status: "DEFEATED" } });
+      if (heroSurvives) {
+        await tx.resourceBuilding.update({ where: { id: buildingId }, data: { gamePlayerId: attacker.gamePlayerId, guardianPower: 0 } });
+        await tx.hero.update({ where: { id: attacker.id }, data: { x: building.x, y: building.y, movement: 0, experience: { increment: summary.experienceGained } } });
+      } else {
+        await tx.hero.delete({ where: { id: attacker.id } });
+      }
+    });
+    summary.attackerDied = !attackerWon || !heroSurvivedBuilding;
+    const combat = await prisma.combat.create({
+      data: {
+        gameId,
+        mode,
+        status: "RESOLVED",
+        attackerPlayerId: attacker.gamePlayerId,
+        attackerHeroId: attacker.id,
+        neutralArmyId: neutral.id,
+        x: building.x,
+        y: building.y,
+        boardState: { units: [] },
+        result: JSON.parse(JSON.stringify(summary)),
+      },
+    });
+    return NextResponse.json({ combat, result: summary });
+  }
+
+  const combat = await prisma.$transaction(async (tx) => {
+    const created = await tx.combat.create({
+      data: {
+        gameId,
+        mode,
+        attackerPlayerId: attacker.gamePlayerId,
+        attackerHeroId: attacker.id,
+        neutralArmyId: neutral.id,
+        x: building.x,
+        y: building.y,
+        boardState: { units: [] },
+        turnQueue: [],
+        actionLog: ["Le combat commence."],
+      },
+    });
+    const attackerParticipant = await tx.combatParticipant.create({ data: { combatId: created.id, playerId: attacker.gamePlayerId, heroId: attacker.id, side: "attacker" } });
+    const board = createCombatBoard(heroSnapshot(attacker, attackerParticipant.id), defenderSnapshot);
+    return tx.combat.update({
+      where: { id: created.id },
+      data: {
+        currentPlayerId: board.currentPlayerId ?? attacker.gamePlayerId,
+        currentUnitId: board.currentUnitId,
+        boardState: JSON.parse(JSON.stringify(board.boardState)),
+        turnQueue: JSON.parse(JSON.stringify(board.turnQueue)),
+      },
+      include: { participants: true },
+    });
+  });
+  return NextResponse.json({ combat });
+}
+
+function guardianStacksFromPower(power: number): { unitType: string; count: number }[] {
+  if (power < 150) {
+    return [{ unitType: "pikeman", count: Math.max(1, Math.floor(power / 12)) }];
+  }
+  if (power < 400) {
+    return [
+      { unitType: "pikeman", count: Math.max(1, Math.floor((power * 0.6) / 12)) },
+      { unitType: "archer", count: Math.max(1, Math.floor((power * 0.4) / 8)) },
+    ];
+  }
+  return [
+    { unitType: "archer", count: Math.max(1, Math.floor((power * 0.5) / 8)) },
+    { unitType: "griffin", count: Math.max(1, Math.floor((power * 0.5) / 25)) },
+  ];
+}
+
+function unitMaxHealth(unitType: string): number {
+  if (unitType === "pikeman") return 12;
+  if (unitType === "archer") return 8;
+  if (unitType === "griffin") return 25;
+  return 10;
 }
 
 type LoadedHero = Prisma.HeroGetPayload<{ include: { armies: true; gamePlayer: true } }>;

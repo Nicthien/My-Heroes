@@ -340,72 +340,53 @@ export default function GameMapComponent() {
           return;
         }
 
-        const pendingCapture = pendingAttackRef.current;
-        const isConfirmingCapture =
-          pendingCapture?.heroId === selectedHeroId &&
-          pendingCapture.targetId === obj.id;
-
-        if (!isConfirmingCapture) {
-          pendingMoveRef.current = null;
-          pendingAttackRef.current = {
-            heroId: selectedHeroId,
-            targetId: obj.id,
-            destination,
-            path,
-          };
-          rendererRef.current.highlightPath(path);
-          rendererRef.current.highlightTile(destination.x, destination.y, 0x00ff00);
-          const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
-          const label = buildingRule ? buildingRule.label : obj.name || "Bâtiment";
-          if (!obj.playerId) {
-            setCombatMessage(`Cliquez à nouveau pour capturer : ${label}`);
-          } else {
-            setCombatMessage(`Cliquez à nouveau pour capturer : ${label} (ennemi)`);
-          }
+        if (!canAct) {
+          setCombatMessage("Vous avez déjà terminé votre tour.");
           return;
         }
 
-        if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+        const guardianPower = gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0;
+        if (guardianPower > 0) {
+          pendingMoveRef.current = null;
           pendingAttackRef.current = null;
-          rendererRef.current.clearHighlights();
+          rendererRef.current.highlightPath(path);
+          rendererRef.current.highlightTile(destination.x, destination.y, 0xff6600);
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building" });
+          return;
+        }
+
+        // Pas de gardiens — double-clic pour confirmer la capture
+        const pendingCapture = pendingAttackRef.current;
+        const isConfirmingCapture =
+          pendingCapture?.heroId === selectedHeroId && pendingCapture.targetId === obj.id;
+
+        if (!isConfirmingCapture) {
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = { heroId: selectedHeroId, targetId: obj.id, destination, path };
+          rendererRef.current.highlightPath(path);
+          rendererRef.current.highlightTile(destination.x, destination.y, 0x00ff00);
+          const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
+          const label = buildingRule?.label ?? obj.name ?? "Bâtiment";
+          setCombatMessage(`Cliquez à nouveau pour capturer : ${label}${obj.playerId ? " (ennemi)" : ""}`);
           return;
         }
 
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
-
         fetch(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "CAPTURE_BUILDING",
-            heroId: selectedHeroId,
-            buildingId: obj.id,
-          }),
+          body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: obj.id }),
         })
-          .then(async (response) => {
-            if (!response.ok) {
-              const data = await response.json().catch(() => ({}));
-              if (data.interaction?.resource === "defeat") {
-                setCombatMessage("Défaite... Les gardiens ont vaincu votre héros.");
-              } else {
-                setCombatMessage(data.error || "Capture impossible.");
-              }
-              return null;
-            }
-            return response.json();
-          })
+          .then(async (r) => (r.ok ? r.json() : null))
           .then((data) => {
             if (!data) return;
-            refreshGameState(gameState.id, session?.user?.id).then((state) => {
-              if (state) useGameStore.getState().setGameState(state);
+            refreshGameState(gameState.id, session?.user?.id).then((s) => {
+              if (s) useGameStore.getState().setGameState(s);
             });
-            if (data.interaction?.type === "CAPTURE_BUILDING") {
-              setCombatMessage(`Bâtiment capturé ! (${data.interaction.production || ""})`);
-            } else {
-              setCombatMessage("Bâtiment capturé.");
-            }
+            setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
+              ? `Bâtiment capturé ! (${data.interaction.production || ""})`
+              : "Bâtiment capturé.");
           });
         return;
       }
@@ -457,6 +438,22 @@ export default function GameMapComponent() {
         if (targetTile?.object?.type === "building") {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
           if (!isMyBuilding) {
+            if (!canAct) {
+              setCombatMessage("Vous avez déjà terminé votre tour.");
+              return;
+            }
+
+            const guardianPower = targetTile.object?.guardianPower ?? 0;
+            if (guardianPower > 0) {
+              pendingMoveRef.current = null;
+              pendingAttackRef.current = null;
+              rendererRef.current.highlightPath(path);
+              rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
+              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building" });
+              return;
+            }
+
+            // Pas de gardiens — double-clic pour confirmer la capture
             const pendingCapture = pendingAttackRef.current;
             const isConfirmingCapture =
               pendingCapture?.heroId === selectedHeroId &&
@@ -469,13 +466,6 @@ export default function GameMapComponent() {
               rendererRef.current.highlightTile(tile.x, tile.y, 0x00ff00);
               const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === targetTile.object!.subtype);
               setCombatMessage(`Cliquez à nouveau pour capturer : ${buildingRule?.label ?? "Bâtiment"}`);
-              return;
-            }
-
-            if (!canAct) {
-              setCombatMessage("Vous avez déjà terminé votre tour.");
-              pendingAttackRef.current = null;
-              rendererRef.current.clearHighlights();
               return;
             }
 

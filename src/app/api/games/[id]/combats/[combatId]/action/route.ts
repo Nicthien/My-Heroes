@@ -54,7 +54,9 @@ export async function POST(
   const actionLog = [...((combat.actionLog as unknown as string[]) ?? []), ...next.log];
 
   if (next.result) {
-    const summary = await finishCombat(combat, next.units, actionLog, next.result);
+    const { summary, heresToDelete } = await finishCombat(combat, next.units, actionLog, next.result);
+    summary.attackerDied = heresToDelete.includes(combat.attackerHeroId);
+    // Update combat BEFORE deleting heroes — hero deletion cascades to combat (onDelete: Cascade)
     const resolved = await prisma.combat.update({
       where: { id: combat.id },
       data: {
@@ -68,6 +70,9 @@ export async function POST(
         result: JSON.parse(JSON.stringify(summary)),
       },
     });
+    for (const heroId of heresToDelete) {
+      await prisma.hero.delete({ where: { id: heroId } }).catch(() => {});
+    }
     return NextResponse.json({ combat: resolved, result: summary });
   }
 
@@ -128,7 +133,7 @@ async function finishCombat(
   units: CombatBoardUnit[],
   log: string[],
   winnerSide: "attacker" | "defender"
-): Promise<CombatSummary> {
+): Promise<{ summary: CombatSummary; heresToDelete: string[] }> {
   if (!combat) throw new Error("Combat introuvable");
   const attackerRemaining = units.filter((unit) => unit.side === "attacker");
   const defenderRemaining = units.filter((unit) => unit.side === "defender");
@@ -145,6 +150,10 @@ async function finishCombat(
     experienceGained: winnerSide === "attacker" ? 500 : 0,
     log,
   };
+
+  // Heroes to delete are returned to the caller so they can be deleted AFTER the combat
+  // record is updated — deleting the attacker hero triggers onDelete: Cascade on Combat.
+  const heresToDelete: string[] = [];
 
   await prisma.$transaction(async (tx) => {
     const winnerUnits = winnerSide === "attacker" ? attackerRemaining : defenderRemaining;
@@ -165,9 +174,8 @@ async function finishCombat(
       }
     }
 
-    if (winnerSide === "attacker") {
-      await tx.hero.update({ where: { id: combat.attackerHeroId }, data: { x: combat.x, y: combat.y, movement: 0, experience: { increment: summary.experienceGained } } });
-      if (combat.neutralArmyId) await tx.neutralArmy.update({ where: { id: combat.neutralArmyId }, data: { status: "DEFEATED" } });
+    if (winnerSide === "attacker" && combat.neutralArmyId) {
+      await tx.neutralArmy.update({ where: { id: combat.neutralArmyId }, data: { status: "DEFEATED" } });
     }
 
     const participantHeroIds = getParticipantHeroIds(combat);
@@ -176,23 +184,31 @@ async function finishCombat(
       .map((participant) => participant.heroId);
     for (const heroId of loserHeroIds) {
       await tx.army.deleteMany({ where: { heroId } });
-      await tx.hero.delete({ where: { id: heroId } });
+      heresToDelete.push(heroId);
     }
 
     const winnerHeroIds = participantHeroIds
       .filter((participant) => participant.side === winnerSide)
       .map((participant) => participant.heroId);
+    const survivingWinnerHeroIds = new Set<string>();
     for (const heroId of winnerHeroIds) {
       await tx.army.deleteMany({
-        where: {
-          heroId,
-          id: { notIn: Array.from(survivingArmyIds) },
-        },
+        where: { heroId, id: { notIn: Array.from(survivingArmyIds) } },
       });
-
       const remainingArmies = await tx.army.count({ where: { heroId } });
       if (remainingArmies === 0) {
-        await tx.hero.delete({ where: { id: heroId } });
+        heresToDelete.push(heroId);
+      } else {
+        survivingWinnerHeroIds.add(heroId);
+      }
+    }
+
+    // Hero position update and building capture only if attacker hero survived
+    if (winnerSide === "attacker" && survivingWinnerHeroIds.has(combat.attackerHeroId)) {
+      await tx.hero.update({ where: { id: combat.attackerHeroId }, data: { x: combat.x, y: combat.y, movement: 0, experience: { increment: summary.experienceGained } } });
+      if (combat.neutralArmyId?.startsWith("bldguard-")) {
+        const buildingId = combat.neutralArmyId.slice("bldguard-".length);
+        await tx.resourceBuilding.update({ where: { id: buildingId }, data: { gamePlayerId: combat.attackerPlayerId, guardianPower: 0 } });
       }
     }
 
@@ -206,7 +222,7 @@ async function finishCombat(
     }
   });
 
-  return summary;
+  return { summary, heresToDelete };
 }
 
 function getParticipantHeroIds(combat: NonNullable<Awaited<ReturnType<typeof loadCombatForAction>>>) {

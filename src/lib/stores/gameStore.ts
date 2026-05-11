@@ -7,7 +7,7 @@ interface GameStore {
   selectedHeroId: string | null;
   selectedTownId: string | null;
   combatMessage: string | null;
-  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" } | null;
+  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" | "building" } | null;
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
   activeCombat: PersistentCombat | null;
   minimizedCombatIds: string[];

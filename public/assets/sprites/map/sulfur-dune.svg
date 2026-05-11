@@ -1,19 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <polygon points="32,6 54,22 54,44 32,58 10,44 10,22" fill="#8a6a1a" stroke="#6a4a0a" stroke-width="1.5"/>
-  <polygon points="32,6 54,22 32,34 10,22" fill="#aa8a2a" stroke="#6a4a0a" stroke-width="0.5"/>
-  <polygon points="10,22 32,34 32,58 10,44" fill="#7a5a1a" stroke="#6a4a0a" stroke-width="0.5"/>
-  <polygon points="32,34 54,22 54,44 32,58" fill="#5a3a0a" stroke="#6a4a0a" stroke-width="0.5"/>
-  <ellipse cx="32" cy="14" rx="14" ry="6" fill="#ffa500" fill-opacity="0.5" stroke="#cc7000" stroke-width="0.5"/>
-  <ellipse cx="24" cy="20" rx="8" ry="4" fill="#ffa500" fill-opacity="0.4"/>
-  <ellipse cx="40" cy="18" rx="10" ry="5" fill="#ffa500" fill-opacity="0.35"/>
-  <ellipse cx="18" cy="38" rx="8" ry="8" fill="#ffa500" fill-opacity="0.25" stroke="#cc7000" stroke-width="0.3"/>
-  <ellipse cx="44" cy="34" rx="6" ry="6" fill="#ffa500" fill-opacity="0.3" stroke="#cc7000" stroke-width="0.3"/>
-  <ellipse cx="28" cy="30" rx="5" ry="5" fill="#ffcc00" fill-opacity="0.3"/>
-  <circle cx="20" cy="12" r="3" fill="#ffa500" fill-opacity="0.6"/>
-  <circle cx="44" cy="10" r="4" fill="#ffa500" fill-opacity="0.5"/>
-  <circle cx="36" cy="8" r="2" fill="#ffcc00" fill-opacity="0.5"/>
-  <circle cx="14" cy="28" r="2" fill="#ffa500" fill-opacity="0.4"/>
-  <circle cx="48" cy="26" r="2" fill="#ffcc00" fill-opacity="0.4"/>
-  <rect x="24" y="22" width="16" height="12" rx="2" fill="#6a4a0a" stroke="#4a2a00" stroke-width="0.4" fill-opacity="0.4"/>
-  <circle cx="32" cy="28" r="3" fill="#ffa500" fill-opacity="0.7" stroke="#cc7000" stroke-width="0.5"/>
+  <!-- Shadow -->
+  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#00000040"/>
+  <!-- Sandy volcanic ground -->
+  <ellipse cx="32" cy="54" rx="26" ry="8" fill="#b89030" stroke="#8a6a18" stroke-width="1.2"/>
+  <!-- Main dune mound -->
+  <polygon points="8,54 32,20 56,54" fill="#c8a838" stroke="#8a6a18" stroke-width="1.2"/>
+  <polygon points="8,54 32,20 20,54" fill="#d8b848" stroke="none"/>
+  <polygon points="20,54 32,20 42,54" fill="#c0a030" stroke="none"/>
+  <!-- Volcanic cracks in dune (orange/red) -->
+  <path d="M22,48 Q26,42 28,46" fill="none" stroke="#e04800" stroke-width="1.5"/>
+  <path d="M36,44 Q40,38 42,44" fill="none" stroke="#c83000" stroke-width="1.5"/>
+  <path d="M30,52 Q32,48 34,52" fill="none" stroke="#d04000" stroke-width="1.2"/>
+  <!-- Hot crack glow -->
+  <path d="M22,48 Q26,42 28,46" fill="none" stroke="#ff8020" stroke-width="0.8" opacity="0.6"/>
+  <path d="M36,44 Q40,38 42,44" fill="none" stroke="#ff6010" stroke-width="0.8" opacity="0.6"/>
+  <!-- SULFUR CRYSTAL FORMATIONS (main icon) -->
+  <!-- Left sulfur crystals -->
+  <polygon points="14,40 10,54 18,54" fill="#e8d020" stroke="#b0a010" stroke-width="0.8"/>
+  <polygon points="14,40 10,54 14,54" fill="#f8e840" opacity="0.5"/>
+  <polygon points="10,42 7,53 13,53" fill="#d8c010" stroke="#a09000" stroke-width="0.8"/>
+  <polygon points="18,38 15,52 21,52" fill="#e0c818" stroke="#a09000" stroke-width="0.8"/>
+  <!-- Center sulfur crystal (large, most visible) -->
+  <polygon points="32,10 26,42 38,42" fill="#f0d020" stroke="#c0a008" stroke-width="1.2"/>
+  <polygon points="32,10 26,42 32,42" fill="#fff060" opacity="0.5"/>
+  <!-- Crystal glint -->
+  <line x1="30" y1="16" x2="34" y2="38" stroke="#ffffff" stroke-width="0.8" opacity="0.4"/>
+  <!-- Right sulfur crystals -->
+  <polygon points="50,38 47,52 53,52" fill="#e8d020" stroke="#b0a010" stroke-width="0.8"/>
+  <polygon points="50,38 47,52 50,52" fill="#f8e840" opacity="0.5"/>
+  <polygon points="54,42 51,54 57,54" fill="#d8c010" stroke="#a09000" stroke-width="0.8"/>
+  <polygon points="46,36 43,50 49,50" fill="#e0c818" stroke="#a09000" stroke-width="0.8"/>
+  <!-- Steam/sulfur gas vents -->
+  <path d="M24,36 Q22,28 24,22 Q26,16 24,10" fill="none" stroke="#f0f0c0" stroke-width="1.8" opacity="0.55" stroke-linecap="round"/>
+  <path d="M40,34 Q42,26 40,20 Q38,14 40,8" fill="none" stroke="#e8e8b0" stroke-width="1.5" opacity="0.45" stroke-linecap="round"/>
+  <path d="M32,32 Q30,24 32,18" fill="none" stroke="#fffff0" stroke-width="1.2" opacity="0.4" stroke-linecap="round"/>
+  <!-- Sulfur tip glow -->
+  <circle cx="32" cy="11" r="2.5" fill="#fff080" opacity="0.8"/>
 </svg>

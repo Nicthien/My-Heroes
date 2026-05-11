@@ -1,12 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <polygon points="32,4 56,20 56,44 32,60 8,44 8,20" fill="#c9a84c" stroke="#8b6914" stroke-width="1.5"/>
-  <polygon points="32,4 56,20 32,36 8,20" fill="#e6c55a" stroke="#8b6914" stroke-width="0.5"/>
-  <polygon points="8,20 32,36 32,60 8,44" fill="#a88a3a" stroke="#8b6914" stroke-width="0.5"/>
-  <polygon points="32,36 56,20 56,44 32,60" fill="#96782e" stroke="#8b6914" stroke-width="0.5"/>
-  <rect x="22" y="22" width="20" height="14" rx="2" fill="#5a4510" stroke="#8b6914" stroke-width="0.8"/>
-  <rect x="28" y="26" width="8" height="10" rx="1" fill="#3a2a08" stroke="#5a4510" stroke-width="0.5"/>
-  <circle cx="38" cy="14" r="5" fill="#ffd700" stroke="#b8860b" stroke-width="1"/>
-  <circle cx="36" cy="12" r="2" fill="#fff4a0"/>
-  <rect x="40" y="8" width="10" height="3" rx="1" fill="#ffd700" stroke="#b8860b" stroke-width="0.5"/>
-  <rect x="40" y="13" width="10" height="3" rx="1" fill="#ffd700" stroke="#b8860b" stroke-width="0.5"/>
+  <!-- Shadow -->
+  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#00000040"/>
+  <!-- Rocky hill -->
+  <polygon points="8,52 32,14 56,52" fill="#7a6a52" stroke="#5a4a38" stroke-width="1.2"/>
+  <polygon points="8,52 32,14 20,52" fill="#9a8a6a" stroke="none"/>
+  <ellipse cx="32" cy="52" rx="24" ry="6" fill="#7a6a52" stroke="#5a4a38" stroke-width="1"/>
+  <!-- Rock texture highlights -->
+  <polygon points="16,44 26,26 30,44" fill="#8a7a60" stroke="none" opacity="0.5"/>
+  <polygon points="38,28 48,42 42,42" fill="#6a5a42" stroke="none" opacity="0.5"/>
+  <!-- Mine entrance dark tunnel -->
+  <path d="M21,54 L21,42 Q32,28 43,42 L43,54 Z" fill="#120e06"/>
+  <!-- Wooden support frame -->
+  <rect x="19" y="40" width="26" height="3" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
+  <rect x="19" y="40" width="3" height="14" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
+  <rect x="42" y="40" width="3" height="14" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
+  <!-- Gold glow deep in mine -->
+  <ellipse cx="32" cy="50" rx="8" ry="4" fill="#ffd700" opacity="0.6"/>
+  <ellipse cx="32" cy="50" rx="5" ry="2.5" fill="#fff8a0" opacity="0.8"/>
+  <!-- Gold nuggets scattered -->
+  <circle cx="13" cy="49" r="3.5" fill="#ffd700" stroke="#c8900a" stroke-width="1"/>
+  <circle cx="11" cy="47" r="1.5" fill="#ffe880"/>
+  <circle cx="51" cy="48" r="3" fill="#ffc800" stroke="#c8900a" stroke-width="1"/>
+  <circle cx="32" cy="18" r="2.5" fill="#ffd700" stroke="#c8900a" stroke-width="0.8"/>
+  <!-- Pickaxe icon -->
+  <line x1="46" y1="28" x2="55" y2="19" stroke="#5a4a38" stroke-width="2.2"/>
+  <polygon points="55,19 60,12 63,17 58,22" fill="#b0a090" stroke="#5a4a38" stroke-width="1"/>
+  <polygon points="55,19 50,14 55,9 60,12" fill="#d0c0b0" stroke="#5a4a38" stroke-width="1"/>
 </svg>

@@ -453,6 +453,62 @@ export default function GameMapComponent() {
           setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster" });
           return;
         }
+
+        if (targetTile?.object?.type === "building") {
+          const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
+          if (!isMyBuilding) {
+            const pendingCapture = pendingAttackRef.current;
+            const isConfirmingCapture =
+              pendingCapture?.heroId === selectedHeroId &&
+              pendingCapture.targetId === targetTile.object.id;
+
+            if (!isConfirmingCapture) {
+              pendingMoveRef.current = null;
+              pendingAttackRef.current = { heroId: selectedHeroId, targetId: targetTile.object.id, destination: tile, path };
+              rendererRef.current.highlightPath(path);
+              rendererRef.current.highlightTile(tile.x, tile.y, 0x00ff00);
+              const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === targetTile.object!.subtype);
+              setCombatMessage(`Cliquez à nouveau pour capturer : ${buildingRule?.label ?? "Bâtiment"}`);
+              return;
+            }
+
+            if (!canAct) {
+              setCombatMessage("Vous avez déjà terminé votre tour.");
+              pendingAttackRef.current = null;
+              rendererRef.current.clearHighlights();
+              return;
+            }
+
+            pendingAttackRef.current = null;
+            rendererRef.current.clearHighlights();
+            fetch(`/api/games/${gameState.id}/action`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: targetTile.object.id }),
+            })
+              .then(async (response) => {
+                if (!response.ok) {
+                  const data = await response.json().catch(() => ({}));
+                  setCombatMessage(data.interaction?.resource === "defeat"
+                    ? "Défaite... Les gardiens ont vaincu votre héros."
+                    : data.error || "Capture impossible.");
+                  return null;
+                }
+                return response.json();
+              })
+              .then((data) => {
+                if (!data) return;
+                refreshGameState(gameState.id, session?.user?.id).then((state) => {
+                  if (state) useGameStore.getState().setGameState(state);
+                });
+                setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
+                  ? `Bâtiment capturé ! (${data.interaction.production || ""})`
+                  : "Bâtiment capturé.");
+              });
+            return;
+          }
+        }
+
         pendingAttackRef.current = null;
         const pendingMove = pendingMoveRef.current;
         const isConfirmingMove =

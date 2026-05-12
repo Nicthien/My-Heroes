@@ -37,7 +37,7 @@ export async function POST(
   if (!user) return response;
 
   const { id } = await params;
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const supabase = createAdminClient();
   const gamePlayer = await getGamePlayer(supabase, id, user.id);
 
@@ -45,36 +45,18 @@ export async function POST(
 
   const game = await getGameWithRelations(supabase, id);
   if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
-  if (game.currentTurnPlayerId !== gamePlayer.id) {
-    return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
-  }
+  if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
 
-  const players = (game.players as unknown as Array<{ id: string; isAlive: boolean; turnOrder: number }>)
-    .filter((player: { isAlive: boolean }) => player.isAlive)
-    .sort((a: { turnOrder: number }, b: { turnOrder: number }) => a.turnOrder - b.turnOrder);
-  const currentIndex = players.findIndex((player: { id: string }) => player.id === game.currentTurnPlayerId);
-  const nextPlayerId = players[(currentIndex + 1) % players.length]?.id;
-
-  if (!nextPlayerId || body.nextPlayerId !== nextPlayerId) {
-    return NextResponse.json({ error: "Prochain joueur invalide" }, { status: 400 });
-  }
-
-  const { error: updateError } = await supabase
-    .from("games")
-    .update({ current_turn_player_id: nextPlayerId })
-    .eq("id", id)
-    .select("id")
-    .single();
-
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
-
-  await supabase.from("turns").insert({
+  const { error: turnError } = await supabase.from("turns").upsert({
     game_id: id,
     game_player_id: gamePlayer.id,
     turn_number: game.turnNumber,
     actions: body.actions || [],
     is_completed: true,
+  }, {
+    onConflict: "game_id,game_player_id,turn_number",
   });
+  if (turnError) return NextResponse.json({ error: turnError.message }, { status: 500 });
 
   const updatedGame = await getGameWithRelations(supabase, id);
   return NextResponse.json(updatedGame);

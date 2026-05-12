@@ -25,7 +25,14 @@ const RESOURCE_ITEMS = [
   { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.svg", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
 ] as const;
 
+const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
+
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
+
+function getNotificationPromptDismissed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(NOTIFICATION_PROMPT_DISMISSED_KEY) === "true";
+}
 
 function factionLabel(f: Faction): string {
   const labels: Record<string, string> = {
@@ -129,6 +136,9 @@ function HUDContent() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     typeof Notification === "undefined" ? "denied" : Notification.permission
   );
+  const [notificationPromptDismissed, setNotificationPromptDismissed] = useState(
+    getNotificationPromptDismissed
+  );
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
     gameState: nullableGameState,
@@ -145,18 +155,11 @@ function HUDContent() {
   );
   const isPending = gameState.status === "PENDING";
   const hasActiveCombats = (gameState.activeCombats?.length ?? 0) > 0;
-  const isCurrentTurn = Boolean(
-    myPlayer && gameState.currentTurnPlayerId === myPlayer.id
-  );
-
   const canAct = Boolean(
-    myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && isCurrentTurn && !myPlayer.hasEndedTurn
+    myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
   );
   const isWaitingForPlayers = Boolean(
     myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn
-  );
-  const isWaitingForTurn = Boolean(
-    myPlayer && gameState.status === "ACTIVE" && !isCurrentTurn && !myPlayer.hasEndedTurn
   );
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
@@ -366,10 +369,33 @@ function HUDContent() {
   };
 
   const requestNotifications = async () => {
-    if (typeof Notification === "undefined") return;
+    setNotificationPromptDismissed(true);
+    window.localStorage.setItem(NOTIFICATION_PROMPT_DISMISSED_KEY, "true");
+
+    if (typeof Notification === "undefined") {
+      setNotificationPermission("denied");
+      return;
+    }
+
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
   };
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+
+    const syncPermission = () => {
+      setNotificationPermission(Notification.permission);
+    };
+
+    window.addEventListener("focus", syncPermission);
+    document.addEventListener("visibilitychange", syncPermission);
+
+    return () => {
+      window.removeEventListener("focus", syncPermission);
+      document.removeEventListener("visibilitychange", syncPermission);
+    };
+  }, []);
 
   useEffect(() => {
     if (isPending) {
@@ -424,7 +450,7 @@ function HUDContent() {
                     : "border-red-300/30 bg-red-500/15 text-red-200 shadow-red-950/30"
                 }`}
               >
-                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : isWaitingForTurn ? "En attente de votre tour" : "Observation"}
+                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
               </span>
             )}
           </div>
@@ -505,7 +531,7 @@ function HUDContent() {
         </div>
       )}
 
-      {canAct && !isPending && notificationPermission === "default" && (
+      {canAct && !isPending && notificationPermission === "default" && !notificationPromptDismissed && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-2xl border border-green-400/50 bg-green-950/90 px-6 py-3 text-center shadow-2xl shadow-green-900/40 backdrop-blur-xl">
           <button
             className="rounded bg-green-700 px-3 py-1 text-sm font-bold text-white hover:bg-green-600"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useSession } from "@/lib/auth/client";
@@ -26,33 +26,45 @@ export default function GamePage() {
   const userId = session?.user?.id;
   const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat } = useGameStore();
   const [error, setError] = useState("");
+  const loadRequestIdRef = useRef(0);
 
   useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
+
+    useGameStore.getState().setLoading(true);
+    if (useGameStore.getState().gameState?.id !== gameId) {
+      useGameStore.getState().resetGame();
+      useGameStore.getState().setLoading(true);
+    }
     const loadGame = async () => {
       if (!gameId) return;
+      if (useGameStore.getState().isMovePending) return;
       setError("");
-      const hadGameState = Boolean(useGameStore.getState().gameState);
-      if (!hadGameState) {
-        useGameStore.getState().setLoading(true);
-      }
+      const requestId = ++loadRequestIdRef.current;
       try {
-        const res = await fetch(`/api/games/${gameId}`);
+        const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
+        if (cancelled) return;
+        if (requestId !== loadRequestIdRef.current) return;
         if (res.ok) {
           const data = await res.json();
           if (!data.mapData) {
             const { generateMap } = await import("@/lib/game/engine");
             data.mapData = generateMap(data.mapWidth, data.mapHeight);
           }
-          setGameState(mapApiToGameState(data, userId));
+          const nextGameState = mapApiToGameState(data, userId);
+          if (nextGameState.id === gameId) {
+            setGameState(nextGameState);
+          }
         } else {
           useGameStore.getState().resetGame();
           setError("Partie non trouvée");
         }
       } catch {
+        if (cancelled) return;
         setError("Erreur de chargement");
       }
-      if (!hadGameState) {
+      if (!cancelled) {
         useGameStore.getState().setLoading(false);
       }
     };
@@ -70,8 +82,9 @@ export default function GamePage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, loadGame)
       .subscribe();
 
-    const interval = setInterval(loadGame, 30000);
+    const interval = setInterval(loadGame, 2000);
     return () => {
+      cancelled = true;
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
@@ -96,7 +109,7 @@ export default function GamePage() {
     );
   }
 
-  if (isLoading || !gameState) {
+  if (isLoading || !gameState || gameState.id !== gameId) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-xl">Chargement de la partie...</div>

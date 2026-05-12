@@ -1,7 +1,7 @@
 import { mapApiToGameState } from "./api";
 
 export async function refreshGameState(gameId: string, userId?: string) {
-  const res = await fetch(`/api/games/${gameId}`);
+  const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
   if (!res.ok) return null;
   const data = await res.json();
   if (!data.mapData) {

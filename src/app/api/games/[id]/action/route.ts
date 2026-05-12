@@ -83,9 +83,6 @@ export async function POST(
     if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
     if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
     if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
-    if (game.currentTurnPlayerId !== gamePlayer.id) {
-      return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
-    }
 
     const players = game.players as unknown as Array<{
       id: string;
@@ -111,11 +108,15 @@ export async function POST(
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
       const lastPos = action.path[action.path.length - 1];
-      await supabase.from("heroes").update({
+      const { error: heroUpdateError } = await supabase.from("heroes").update({
         x: lastPos.x,
         y: lastPos.y,
         movement: Math.max(0, hero.movement - validation.usedMovement),
       }).eq("id", hero.id);
+      if (heroUpdateError) {
+        console.error("heroes.update failed:", heroUpdateError, { heroId: hero.id, x: lastPos.x, y: lastPos.y, movement: hero.movement, used: validation.usedMovement });
+        return NextResponse.json({ error: `Erreur mise à jour héros: ${heroUpdateError.message}` }, { status: 500 });
+      }
 
       const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
         item.id === hero.id ? { ...hero, x: lastPos.x, y: lastPos.y } : item

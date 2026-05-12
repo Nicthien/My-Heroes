@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/client";
+import { useGameStore } from "@/lib/stores/gameStore";
 
 interface PlayerInfo {
   id: string;
@@ -93,6 +94,7 @@ export default function DashboardPage() {
 
   const createGame = async () => {
     setCreating(true);
+    useGameStore.getState().resetGame();
     const res = await fetch("/api/games", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -112,6 +114,7 @@ export default function DashboardPage() {
   };
 
   const joinGame = async (gameId: string) => {
+    useGameStore.getState().resetGame();
     const res = await fetch(`/api/games/${gameId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,6 +141,9 @@ export default function DashboardPage() {
       return;
     }
 
+    if (useGameStore.getState().gameState?.id === gameId) {
+      useGameStore.getState().resetGame();
+    }
     await loadMyGames();
     if (showJoin) await loadOpenGames();
   };
@@ -155,6 +161,9 @@ export default function DashboardPage() {
       return;
     }
 
+    if (useGameStore.getState().gameState?.id === gameId) {
+      useGameStore.getState().resetGame();
+    }
     await loadMyGames();
     if (showJoin) await loadOpenGames();
   };

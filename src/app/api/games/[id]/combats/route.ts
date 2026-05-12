@@ -67,8 +67,12 @@ export async function POST(
 
   if (!game || !gamePlayer) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
   if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
-  if (game.currentTurnPlayerId !== gamePlayer.id) {
-    return NextResponse.json({ error: "Ce n'est pas votre tour" }, { status: 403 });
+
+  const completedTurn = ((game.turns ?? []) as Array<{ gamePlayerId: string; turnNumber: number; isCompleted: boolean }>).find(
+    (turn) => turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
+  );
+  if (completedTurn) {
+    return NextResponse.json({ error: "Vous avez deja termine votre tour" }, { status: 403 });
   }
 
   const attacker = gamePlayer.heroes.find((hero) => hero.id === body.attackerHeroId);

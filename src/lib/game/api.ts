@@ -1,7 +1,7 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
-  ResourceBuilding, ResourceBuildingType,
+  ResourceBuilding, ResourceBuildingType, TavernHeroOffer,
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 
@@ -34,6 +34,8 @@ interface ApiTurn {
 interface ApiHero {
   id: string;
   name: string;
+  class?: string;
+  specialty?: string | null;
   level: number;
   experience: number;
   attack: number;
@@ -65,6 +67,7 @@ interface ApiTown {
   buildings: string[];
   garrison: string[];
   availableRecruits?: Record<string, number>;
+  tavernOffer?: TavernHeroOffer[];
   lastBuiltTurn?: number | null;
 }
 
@@ -127,7 +130,8 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
     heroes: p.heroes.map((h): Hero => ({
       id: h.id,
       name: h.name,
-      class: "knight" as HeroClass,
+      class: (h.class ?? "knight") as HeroClass,
+      specialty: h.specialty ?? undefined,
       level: h.level,
       experience: h.experience,
       stats: {
@@ -157,6 +161,7 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
       buildings: (t.buildings || []) as BuildingType[],
       garrison: (t.garrison || []) as never[],
       availableRecruits: (t.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
+      tavernOffer: t.tavernOffer ?? [],
       lastBuiltTurn: t.lastBuiltTurn ?? null,
     })),
     resourceBuildings: (p.resourceBuildings ?? []).map((b): ResourceBuilding => ({

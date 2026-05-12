@@ -164,6 +164,7 @@ export interface Hero {
   id: string;
   name: string;
   class: HeroClass;
+  specialty?: string;
   level: number;
   experience: number;
   stats: HeroStats;
@@ -171,6 +172,14 @@ export interface Hero {
   movement: number;
   maxMovement: number;
   armies: UnitStack[];
+}
+
+export interface TavernHeroOffer {
+  templateId: string;
+  name: string;
+  class: HeroClass;
+  faction: Faction;
+  specialty: string;
 }
 
 export interface Town {
@@ -182,6 +191,7 @@ export interface Town {
   buildings: BuildingType[];
   garrison: UnitStack[];
   availableRecruits: Partial<Record<UnitType, number>>;
+  tavernOffer?: TavernHeroOffer[];
   lastBuiltTurn?: number | null;
 }
 
@@ -331,6 +341,7 @@ export type GameAction =
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
+  | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }

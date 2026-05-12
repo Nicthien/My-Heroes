@@ -44,6 +44,14 @@ export default function JoinCombatModal() {
 
   if (pendingJoinCombat.side) return null;
 
+  const combat = gameState.activeCombats?.find((c) => c.id === pendingJoinCombat.combatId);
+  const attackerPlayer = gameState.players.find((p) => p.id === combat?.attackerPlayerId);
+  const defenderPlayer = combat?.defenderPlayerId
+    ? gameState.players.find((p) => p.id === combat.defenderPlayerId)
+    : null;
+  const attackerLabel = attackerPlayer?.name ?? "Attaquant";
+  const defenderLabel = defenderPlayer?.name ?? (combat?.neutralArmyId ? "Armée neutre" : "Défenseur");
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
       <div className="w-[min(92vw,32rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 text-white shadow-2xl">
@@ -51,8 +59,20 @@ export default function JoinCombatModal() {
         <h2 className="mt-2 text-2xl font-bold text-yellow-100">Choisir le camp à soutenir</h2>
         <p className="mt-3 text-sm text-stone-300">Les unités de ce héros rejoindront le combat au prochain round.</p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 font-bold hover:bg-blue-900" onClick={() => join("attacker")}>Soutenir l&apos;attaquant</button>
-          <button className="rounded-lg border border-red-500 bg-red-950/80 p-4 font-bold hover:bg-red-900" onClick={() => join("defender")}>Soutenir le défenseur</button>
+          <button
+            className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 font-bold hover:bg-blue-900"
+            onClick={() => join("attacker")}
+          >
+            <div>Soutenir l&apos;attaquant</div>
+            <div className="mt-1 text-xs font-normal text-blue-200/80">{attackerLabel}</div>
+          </button>
+          <button
+            className="rounded-lg border border-red-500 bg-red-950/80 p-4 font-bold hover:bg-red-900"
+            onClick={() => join("defender")}
+          >
+            <div>Soutenir le défenseur</div>
+            <div className="mt-1 text-xs font-normal text-red-200/80">{defenderLabel}</div>
+          </button>
         </div>
         <button className="mt-5 text-sm text-stone-400 hover:text-white" onClick={() => setPendingJoinCombat(null)}>Annuler</button>
       </div>

@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
+import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   BUILDING_RULES,
@@ -270,6 +271,29 @@ function HUDContent() {
         };
       }),
     });
+  };
+
+  const handleRecruitHero = async (templateId: string) => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
+    if (myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD) {
+      setCombatMessage("Or insuffisant pour engager un héros.");
+      return;
+    }
+    if (myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
+      setCombatMessage(`Maximum ${MAX_HEROES_PER_PLAYER} héros atteint.`);
+      return;
+    }
+    const response = await fetch(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "RECRUIT_HERO", townId: selectedTown.id, templateId }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Recrutement de héros impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+    if (refreshedState) setGameState(refreshedState);
   };
 
   const handleRecruit = async (unitType: UnitType) => {
@@ -705,6 +729,53 @@ function HUDContent() {
               })}
             </div>
           </div>
+
+          {selectedTown.buildings.includes(BuildingType.TAVERN) && (
+            <div className="mt-4 border-t border-amber-700/40 pt-3">
+              <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Taverne</div>
+              {(selectedTown.tavernOffer ?? []).length === 0 ? (
+                <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
+                  Aucun héros disponible pour le moment.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(selectedTown.tavernOffer ?? []).map((hero) => {
+                    const atMax = myPlayer ? myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER : true;
+                    const tooPoor = !myPlayer || myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD;
+                    const disabled = !canAct || !isMyTown || isPending || atMax || tooPoor;
+                    return (
+                      <div key={hero.templateId} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-bold text-amber-100">{hero.name}</div>
+                            <div className="text-xs text-amber-200/60">
+                              {hero.class} · {factionLabel(hero.faction as Faction)}
+                            </div>
+                            <div className="text-xs text-amber-300/80">Spécialité : {hero.specialty}</div>
+                            <div className="mt-1 text-xs text-amber-300">{HERO_RECRUIT_COST_GOLD} or</div>
+                            {atMax && (
+                              <div className="mt-1 text-xs text-red-300">Maximum {MAX_HEROES_PER_PLAYER} héros</div>
+                            )}
+                          </div>
+                          <button
+                            className={`rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
+                              disabled
+                                ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                                : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
+                            }`}
+                            disabled={disabled}
+                            onClick={() => handleRecruitHero(hero.templateId)}
+                          >
+                            Engager
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-4 border-t border-amber-700/40 pt-3">
             <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Recruter</div>

@@ -341,10 +341,22 @@ class PhaserMapScene extends Phaser.Scene {
           this.addBadge(this.objectLayer, iso.x, y - 37, String(Math.ceil(object.guardianPower / 100)), 0xff4444, y + 6);
         }
       } else if (object.type === "combat") {
-        const marker = this.add.star(iso.x, y - 12, 8, 9, 22, 0xff6b00, 1);
+        const markerY = y - 60;
+        const markerDepth = y + 1000;
+        const marker = this.add.star(iso.x, markerY, 8, 9, 22, 0xff6b00, 1);
         marker.setStrokeStyle(2, 0xfff2a8, 1);
+        marker.setDepth(markerDepth);
         this.objectLayer.add(marker);
-        this.addSmallLabel(this.objectLayer, iso.x, y - 38, "COMBAT");
+        const label = this.add.text(iso.x, markerY, "!", {
+          color: "#ffffff",
+          fontSize: "16px",
+          fontStyle: "bold",
+          stroke: "#000000",
+          strokeThickness: 3,
+        });
+        label.setOrigin(0.5);
+        label.setDepth(markerDepth + 1);
+        this.objectLayer.add(label);
       }
     }
 

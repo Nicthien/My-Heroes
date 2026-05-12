@@ -14,6 +14,7 @@ import {
   goldText,
   ornateFrame,
 } from "./theme";
+import ActiveCombatsPanel from "../combat/ActiveCombatsPanel";
 
 export default function SidePanel() {
   const { data: session } = useSession();
@@ -123,6 +124,8 @@ export default function SidePanel() {
           );
         })}
       </Section>
+
+      <ActiveCombatsPanel />
     </div>
   );
 }

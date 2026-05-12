@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { BUILDING_RULES, DWELLING_TIERS, FACTION_UNITS, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
-import { BuildingType, Faction, GameMap, Resources, UnitType } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, HeroClass, Resources, UnitType } from "@/lib/game/types";
+import {
+  CLASS_STARTING_STATS,
+  HERO_RECRUIT_COST_GOLD,
+  MAX_HEROES_PER_PLAYER,
+  TAVERN_OFFER_SIZE,
+  getHeroTemplate,
+  pickTavernOffer,
+  startingArmyForFaction,
+  type TavernOffer,
+} from "@/lib/game/heroes";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -20,6 +30,7 @@ interface MinimalTown {
   townType?: string;
   buildings?: string[];
   availableRecruits?: Record<string, number>;
+  tavernOffer?: TavernOffer[];
 }
 
 interface MinimalResourceBuilding {
@@ -203,10 +214,97 @@ export async function POST(
       if (!canAfford(resources, rule.cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
       await supabase.from("game_players").update(subtractCost(resources, rule.cost)).eq("id", gamePlayer.id);
-      await supabase.from("towns").update({
+      const townUpdate: Record<string, unknown> = {
         buildings: [...buildings, building],
         last_built_turn: game.turnNumber,
-      }).eq("id", town.id);
+      };
+      if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
+        const townFaction = ((town.townType ?? gamePlayer.faction ?? "castle") as Faction);
+        townUpdate.tavern_offer = pickTavernOffer(townFaction);
+      }
+      let { error: townErr } = await supabase.from("towns").update(townUpdate).eq("id", town.id);
+      if (townErr && "tavern_offer" in townUpdate) {
+        delete townUpdate.tavern_offer;
+        ({ error: townErr } = await supabase.from("towns").update(townUpdate).eq("id", town.id));
+      }
+      if (townErr) {
+        console.error("towns.update failed:", townErr, { townId: town.id, update: townUpdate });
+        return NextResponse.json({ error: `Erreur construction: ${townErr.message}` }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "RECRUIT_HERO") {
+      const town = gamePlayer.towns.find((item) => item.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+
+      const buildings = (town.buildings ?? []) as string[];
+      if (!buildings.includes(BuildingType.TAVERN)) {
+        return NextResponse.json({ error: "Construisez d'abord la Taverne" }, { status: 400 });
+      }
+
+      const offer = (town.tavernOffer ?? []) as TavernOffer[];
+      const picked = offer.find((entry) => entry.templateId === action.templateId);
+      if (!picked) return NextResponse.json({ error: "Héros indisponible" }, { status: 400 });
+
+      const template = getHeroTemplate(action.templateId);
+      if (!template) return NextResponse.json({ error: "Héros inconnu" }, { status: 400 });
+
+      if (gamePlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
+        return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} héros par joueur` }, { status: 400 });
+      }
+
+      const resources = playerResources(gamePlayer);
+      if (resources.gold < HERO_RECRUIT_COST_GOLD) {
+        return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+      }
+
+      const stats = CLASS_STARTING_STATS[template.class as HeroClass];
+      const army = startingArmyForFaction(template.faction);
+
+      await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
+
+      const { data: heroRow, error: heroError } = await supabase
+        .from("heroes")
+        .insert({
+          game_player_id: gamePlayer.id,
+          name: template.name,
+          hero_class: template.class,
+          specialty: template.specialty,
+          attack: stats.attack,
+          defense: stats.defense,
+          spell_power: stats.spellPower,
+          knowledge: stats.knowledge,
+          x: town.x,
+          y: town.y,
+        })
+        .select("*")
+        .single();
+      if (heroError || !heroRow) {
+        return NextResponse.json({ error: `Erreur création héros: ${heroError?.message ?? "inconnue"}` }, { status: 500 });
+      }
+
+      const unitRule = UNIT_RULES[army.unitType];
+      if (unitRule) {
+        await supabase.from("armies").insert({
+          hero_id: heroRow.id,
+          unit_type: army.unitType,
+          count: army.count,
+          health: unitRule.health * army.count,
+          max_health: unitRule.health,
+          position: 0,
+        });
+      }
+
+      const remaining = offer.filter((entry) => entry.templateId !== action.templateId);
+      const excludeIds = remaining.map((entry) => entry.templateId);
+      const replacements = pickTavernOffer(
+        ((town.townType ?? gamePlayer.faction ?? "castle") as Faction),
+        excludeIds,
+        Math.max(0, TAVERN_OFFER_SIZE - remaining.length)
+      );
+      await supabase.from("towns").update({ tavern_offer: [...remaining, ...replacements] }).eq("id", town.id);
+
       return NextResponse.json({ success: true });
     }
 

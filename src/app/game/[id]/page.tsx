@@ -9,7 +9,6 @@ import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
 import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
-import ActiveCombatsPanel from "@/components/game/combat/ActiveCombatsPanel";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
 import { createClient } from "@/lib/supabase/browser";
@@ -128,7 +127,6 @@ export default function GamePage() {
     <div className="h-screen w-screen bg-gray-900 relative overflow-hidden">
       <GameMapComponent />
       <HUD />
-      <ActiveCombatsPanel />
       <CombatChoiceModal />
       <JoinCombatModal />
       <CombatResultModal />

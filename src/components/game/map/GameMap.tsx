@@ -515,9 +515,16 @@ export default function GameMapComponent() {
             return;
           }
           const existingParticipant = combat.participants?.find((participant) => participant.playerId === myPlayer.id);
+          const inferredSide: "attacker" | "defender" | undefined =
+            existingParticipant?.side ??
+            (combat.attackerPlayerId === myPlayer.id
+              ? "attacker"
+              : combat.defenderPlayerId === myPlayer.id
+              ? "defender"
+              : undefined);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
-          setPendingJoinCombat({ combatId: combat.id, heroId: selectedHeroId, side: existingParticipant?.side });
+          setPendingJoinCombat({ combatId: combat.id, heroId: selectedHeroId, side: inferredSide });
           return;
         }
         setActiveCombat(combat);

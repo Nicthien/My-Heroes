@@ -3,7 +3,8 @@ import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles } from "@/lib/game/engine";
 import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
-import { Faction } from "@/lib/game/types";
+import { Faction, HeroClass } from "@/lib/game/types";
+import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
 
@@ -103,24 +104,44 @@ export async function POST(request: Request) {
 
   if (playerError) return NextResponse.json({ error: playerError.message }, { status: 500 });
 
-  const { data: heroRow, error: heroError } = await supabase
+  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  const factionHeroes = HERO_ROSTER.filter((h) => h.faction === factionKey);
+  const startingHero = factionHeroes.length > 0
+    ? factionHeroes[Math.floor(Math.random() * factionHeroes.length)]
+    : null;
+  const heroClass = (startingHero?.class ?? HeroClass.KNIGHT) as HeroClass;
+  const heroStats = CLASS_STARTING_STATS[heroClass];
+
+  const heroInsert: Record<string, unknown> = {
+    game_player_id: playerRow.id,
+    name: startingHero?.name ?? "Sire Christian",
+    hero_class: heroClass,
+    specialty: startingHero?.specialty ?? null,
+    attack: heroStats.attack,
+    defense: heroStats.defense,
+    spell_power: heroStats.spellPower,
+    knowledge: heroStats.knowledge,
+    x: startPos.x,
+    y: startPos.y,
+  };
+
+  let { data: heroRow, error: heroError } = await supabase
     .from("heroes")
-    .insert({
-      game_player_id: playerRow.id,
-      name: "Sire Christian",
-      attack: 2,
-      defense: 2,
-      spell_power: 1,
-      knowledge: 1,
-      x: startPos.x,
-      y: startPos.y,
-    })
+    .insert(heroInsert)
     .select("*")
     .single();
 
-  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
+  if (heroError) {
+    delete heroInsert.hero_class;
+    delete heroInsert.specialty;
+    ({ data: heroRow, error: heroError } = await supabase
+      .from("heroes")
+      .insert(heroInsert)
+      .select("*")
+      .single());
+  }
 
-  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
   const { error: armyError } = await supabase.from("armies").insert(buildStarterArmy(factionKey, heroRow.id));
   if (armyError) return NextResponse.json({ error: armyError.message }, { status: 500 });
 

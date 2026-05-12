@@ -4,6 +4,12 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/browser";
 
+export async function getSupabaseAccessToken() {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthSession {
@@ -20,7 +26,7 @@ interface AuthContextValue {
   user: User | null;
 }
 
-const AuthContext = createContext<AuthContextValue>({
+export const AuthContext = createContext<AuthContextValue>({
   data: null,
   status: "loading",
   user: null,

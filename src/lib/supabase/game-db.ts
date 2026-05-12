@@ -60,6 +60,8 @@ export function toHero(row: DbRow) {
     id: row.id,
     gamePlayerId: row.game_player_id,
     name: row.name,
+    class: row.hero_class ?? "knight",
+    specialty: row.specialty ?? null,
     level: row.level,
     experience: row.experience,
     attack: row.attack,
@@ -100,6 +102,7 @@ export function toTown(row: DbRow) {
     buildings: row.buildings ?? [],
     garrison: row.garrison ?? [],
     availableRecruits: row.available_recruits ?? {},
+    tavernOffer: row.tavern_offer ?? [],
     lastBuiltTurn: row.last_built_turn,
   };
 }

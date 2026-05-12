@@ -62,6 +62,7 @@ export enum HeroClass {
 }
 
 export enum UnitType {
+  // Château
   PIKEMAN = "pikeman",
   HALBERDIER = "halberdier",
   ARCHER = "archer",
@@ -76,6 +77,62 @@ export enum UnitType {
   CHAMPION = "champion",
   ANGEL = "angel",
   ARCHANGEL = "archangel",
+  // Rempart
+  CENTAUR = "centaur",
+  DWARF = "dwarf",
+  WOOD_ELF = "wood_elf",
+  PEGASUS = "pegasus",
+  DENDROID = "dendroid",
+  UNICORN = "unicorn",
+  GREEN_DRAGON = "green_dragon",
+  // Tour
+  GREMLIN = "gremlin",
+  GARGOYLE = "gargoyle",
+  GOLEM = "golem",
+  MAGE = "mage",
+  GENIE = "genie",
+  NAGA = "naga",
+  GIANT = "giant",
+  // Hadès
+  IMP = "imp",
+  GOG = "gog",
+  HELL_HOUND = "hell_hound",
+  DEMON = "demon",
+  PIT_FIEND = "pit_fiend",
+  EFREET = "efreet",
+  DEVIL = "devil",
+  // Nécropole
+  SKELETON = "skeleton",
+  ZOMBIE = "zombie",
+  WIGHT = "wight",
+  VAMPIRE = "vampire",
+  LICH = "lich",
+  BLACK_KNIGHT = "black_knight",
+  BONE_DRAGON = "bone_dragon",
+  // Donjon
+  TROGLODYTE = "troglodyte",
+  HARPY = "harpy",
+  BEHOLDER = "beholder",
+  MEDUSA = "medusa",
+  MINOTAUR = "minotaur",
+  MANTICORE = "manticore",
+  RED_DRAGON = "red_dragon",
+  // Bastion
+  GOBLIN = "goblin",
+  WOLF_RIDER = "wolf_rider",
+  ORC = "orc",
+  OGRE = "ogre",
+  ROC = "roc",
+  CYCLOPS = "cyclops",
+  BEHEMOTH = "behemoth",
+  // Forteresse
+  GNOLL = "gnoll",
+  LIZARDMAN = "lizardman",
+  SERPENT_FLY = "serpent_fly",
+  BASILISK = "basilisk",
+  GORGON = "gorgon",
+  WYVERN = "wyvern",
+  HYDRA = "hydra",
 }
 
 export interface Resources {
@@ -107,6 +164,7 @@ export interface Hero {
   id: string;
   name: string;
   class: HeroClass;
+  specialty?: string;
   level: number;
   experience: number;
   stats: HeroStats;
@@ -114,6 +172,14 @@ export interface Hero {
   movement: number;
   maxMovement: number;
   armies: UnitStack[];
+}
+
+export interface TavernHeroOffer {
+  templateId: string;
+  name: string;
+  class: HeroClass;
+  faction: Faction;
+  specialty: string;
 }
 
 export interface Town {
@@ -125,6 +191,7 @@ export interface Town {
   buildings: BuildingType[];
   garrison: UnitStack[];
   availableRecruits: Partial<Record<UnitType, number>>;
+  tavernOffer?: TavernHeroOffer[];
   lastBuiltTurn?: number | null;
 }
 
@@ -274,6 +341,7 @@ export type GameAction =
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
+  | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }

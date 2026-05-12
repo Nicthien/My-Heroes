@@ -3,7 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const body = await request.json().catch(() => ({}));

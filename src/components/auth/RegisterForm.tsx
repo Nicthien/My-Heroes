@@ -25,16 +25,25 @@ export default function RegisterForm() {
 
     setLoading(true);
 
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name },
-      },
-    });
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+        },
+      });
 
-    if (signUpError) {
-      setError(signUpError.message || "Erreur lors de l'inscription");
+      if (signUpError) {
+        setError(signUpError.message || "Erreur lors de l'inscription");
+        setLoading(false);
+        return;
+      }
+    } catch (error) {
+      console.error("Supabase auth network error:", error);
+      setError(
+        "Impossible de contacter le serveur d'authentification. Vérifiez votre connexion réseau ou la configuration de Supabase."
+      );
       setLoading(false);
       return;
     }
@@ -65,8 +74,9 @@ export default function RegisterForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-gray-300 text-sm block mb-1">Nom</label>
+            <label htmlFor="register-name" className="text-gray-300 text-sm block mb-1">Nom</label>
             <input
+              id="register-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -75,8 +85,9 @@ export default function RegisterForm() {
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm block mb-1">Email</label>
+            <label htmlFor="register-email" className="text-gray-300 text-sm block mb-1">Email</label>
             <input
+              id="register-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -85,10 +96,11 @@ export default function RegisterForm() {
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="register-password" className="text-gray-300 text-sm block mb-1">
               Mot de passe
             </label>
             <input
+              id="register-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -97,10 +109,11 @@ export default function RegisterForm() {
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="register-confirm-password" className="text-gray-300 text-sm block mb-1">
               Confirmer
             </label>
             <input
+              id="register-confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

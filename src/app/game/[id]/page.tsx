@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useSession } from "@/lib/auth/client";
+import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
 import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
-import ActiveCombatsPanel from "@/components/game/combat/ActiveCombatsPanel";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
 import { createClient } from "@/lib/supabase/browser";
@@ -37,13 +36,20 @@ export default function GamePage() {
       useGameStore.getState().resetGame();
       useGameStore.getState().setLoading(true);
     }
+    const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+      const token = await getSupabaseAccessToken();
+      const headers = new Headers(init?.headers);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      return fetch(input, { ...init, headers, credentials: "include" });
+    };
+
     const loadGame = async () => {
       if (!gameId) return;
       if (useGameStore.getState().isMovePending) return;
       setError("");
       const requestId = ++loadRequestIdRef.current;
       try {
-        const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
+        const res = await fetchWithAuth(`/api/games/${gameId}`, { cache: "no-store" });
         if (cancelled) return;
         if (requestId !== loadRequestIdRef.current) return;
         if (res.ok) {
@@ -121,7 +127,6 @@ export default function GamePage() {
     <div className="h-screen w-screen bg-gray-900 relative overflow-hidden">
       <GameMapComponent />
       <HUD />
-      <ActiveCombatsPanel />
       <CombatChoiceModal />
       <JoinCombatModal />
       <CombatResultModal />

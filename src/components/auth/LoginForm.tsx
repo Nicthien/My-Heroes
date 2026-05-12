@@ -17,17 +17,26 @@ export default function LoginForm() {
     setLoading(true);
     setError("");
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: identifier,
-      password,
-    });
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
 
-    if (signInError) {
-      setError("Email ou mot de passe incorrect");
-      setLoading(false);
-    } else {
+      if (signInError) {
+        setError("Email ou mot de passe incorrect");
+        setLoading(false);
+        return;
+      }
+
       router.push("/dashboard");
       router.refresh();
+    } catch (error) {
+      console.error("Supabase auth network error:", error);
+      setError(
+        "Impossible de contacter le serveur d'authentification. Vérifiez votre connexion réseau ou la configuration de Supabase."
+      );
+      setLoading(false);
     }
   };
 
@@ -49,10 +58,11 @@ export default function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="login-email" className="text-gray-300 text-sm block mb-1">
               Email
             </label>
             <input
+              id="login-email"
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
@@ -61,10 +71,11 @@ export default function LoginForm() {
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="login-password" className="text-gray-300 text-sm block mb-1">
               Mot de passe
             </label>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

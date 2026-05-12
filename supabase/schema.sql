@@ -57,6 +57,8 @@ create table public.heroes (
   id uuid primary key default gen_random_uuid(),
   game_player_id uuid not null references public.game_players(id) on delete cascade,
   name text not null,
+  hero_class text not null default 'knight',
+  specialty text,
   level integer not null default 1,
   experience integer not null default 0,
   attack integer not null default 1,
@@ -92,8 +94,14 @@ create table public.towns (
   buildings jsonb not null default '[]',
   garrison jsonb not null default '[]',
   available_recruits jsonb not null default '{}',
+  tavern_offer jsonb not null default '[]',
   last_built_turn integer
 );
+
+-- Migration for existing databases (idempotent):
+-- alter table public.heroes add column if not exists hero_class text not null default 'knight';
+-- alter table public.heroes add column if not exists specialty text;
+-- alter table public.towns add column if not exists tavern_offer jsonb not null default '[]';
 
 create table public.neutral_armies (
   id text primary key,

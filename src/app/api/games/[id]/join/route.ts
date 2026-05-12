@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
-import { GameMap } from "@/lib/game/types";
+import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { Faction, GameMap, HeroClass } from "@/lib/game/types";
+import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
-
-const HERO_NAMES: Record<string, string[]> = {
-  castle: ["Sire Christian", "Seigneur Haart", "Sire Vorcharch", "Rion", "Adela"],
-  rampart: ["Gemma", "Mephala", "Ufretin", "Ryland", "Ivor"],
-  tower: ["Josefa", "Astral", "Terek", "Fafner", "Neela"],
-  inferno: ["Fiona", "Rashka", "Marius", "Ignatius", "Octavia"],
-  necropolis: ["Thant", "Moandor", "Nagash", "Sirus", "Vidomina"],
-  dungeon: ["Lorena", "Suzerain", "Dace", "Ajit", "Damacon"],
-  stronghold: ["Yog", "Gurnisson", "Shiva", "Tyraxor", "Crag Hack"],
-  fortress: ["Voy", "Drakon", "Wystan", "Ros", "Tiva"],
-};
 
 const PLAYER_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#ec4899"];
 
@@ -22,7 +13,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const { id } = await params;
@@ -54,7 +45,6 @@ export async function POST(
   const mapData = game.mapData as GameMap;
   const startPos = placePlayerStart(mapData, turnOrder);
   const initialExplored = computeVisibleTiles(mapData, [{ x: startPos.x, y: startPos.y }], 5);
-  const heroNames = HERO_NAMES[faction] || HERO_NAMES.castle;
 
   const { data: playerRow, error: playerError } = await supabase
     .from("game_players")
@@ -71,33 +61,65 @@ export async function POST(
 
   if (playerError) return NextResponse.json({ error: playerError.message }, { status: 500 });
 
-  const { data: heroRow, error: heroError } = await supabase
+  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  const factionHeroes = HERO_ROSTER.filter((h) => h.faction === factionKey);
+  const startingHero = factionHeroes.length > 0
+    ? factionHeroes[Math.floor(Math.random() * factionHeroes.length)]
+    : null;
+  const heroClass = (startingHero?.class ?? HeroClass.KNIGHT) as HeroClass;
+  const heroStats = CLASS_STARTING_STATS[heroClass];
+
+  const heroInsert: Record<string, unknown> = {
+    game_player_id: playerRow.id,
+    name: startingHero?.name ?? "Sire Christian",
+    hero_class: heroClass,
+    specialty: startingHero?.specialty ?? null,
+    attack: heroStats.attack,
+    defense: heroStats.defense,
+    spell_power: heroStats.spellPower,
+    knowledge: heroStats.knowledge,
+    x: startPos.x,
+    y: startPos.y,
+  };
+
+  let { data: heroRow, error: heroError } = await supabase
     .from("heroes")
-    .insert({
-      game_player_id: playerRow.id,
-      name: heroNames[turnOrder % heroNames.length],
-      attack: 2,
-      defense: 2,
-      spell_power: 1,
-      knowledge: 1,
-      x: startPos.x,
-      y: startPos.y,
-    })
+    .insert(heroInsert)
     .select("*")
     .single();
 
-  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
+  if (heroError) {
+    delete heroInsert.hero_class;
+    delete heroInsert.specialty;
+    ({ data: heroRow, error: heroError } = await supabase
+      .from("heroes")
+      .insert(heroInsert)
+      .select("*")
+      .single());
+  }
 
-  await supabase.from("armies").insert([
-    { hero_id: heroRow.id, unit_type: "pikeman", count: 20, health: 240, max_health: 12, position: 0 },
-    { hero_id: heroRow.id, unit_type: "archer", count: 12, health: 144, max_health: 12, position: 1 },
-    { hero_id: heroRow.id, unit_type: "griffin", count: 4, health: 120, max_health: 30, position: 2 },
-  ]);
+  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
+  const tiers = FACTION_UNITS[factionKey];
+  const starterCounts: [number, number, number] = [20, 12, 4];
+  await supabase.from("armies").insert(
+    starterCounts.map((count, i) => {
+      const unitType = tiers[i];
+      const rule = UNIT_RULES[unitType];
+      return {
+        hero_id: heroRow.id,
+        unit_type: unitType,
+        count,
+        health: rule.health * count,
+        max_health: rule.health,
+        position: i,
+      };
+    })
+  );
 
   await supabase.from("towns").insert({
     game_player_id: playerRow.id,
-    name: "Chateau",
-    town_type: faction,
+    name: FACTION_TOWN_NAMES[factionKey],
+    town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
     buildings: ["castle"],

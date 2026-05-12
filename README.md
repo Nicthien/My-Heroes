@@ -4,7 +4,7 @@ Jeu video de strategie au tour par tour inspire de **Heroes of Might and Magic I
 
 ## Description
 
-My Heroes est un jeu de strategie au tour par tour ou les joueurs explorent une carte, collectent des ressources, recrutent des heros et des armees, et affrontent leurs adversaires dans des batailles tactiques. Le projet est construit avec Next.js, Supabase et PixiJS.
+My Heroes est un jeu de strategie au tour par tour ou les joueurs explorent une carte, collectent des ressources, recrutent des heros et des armees, et affrontent leurs adversaires dans des batailles tactiques. Le projet est construit avec Next.js, Supabase et Phaser.
 
 ## Prerequis
 
@@ -63,6 +63,7 @@ les injecte automatiquement depuis `supabase status`.
 - **Base de donnees** : Supabase Postgres
 - **Authentification** : Supabase Auth
 - **Realtime** : Supabase Realtime
+- **Rendu carte** : Phaser
 
 ## Licence
 

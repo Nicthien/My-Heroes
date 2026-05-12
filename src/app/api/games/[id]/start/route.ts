@@ -4,10 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const { id } = await params;

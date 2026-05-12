@@ -5,7 +5,7 @@
             "name": "Next.js: debug server-side",
             "type": "node-terminal",
             "request": "launch",
-            "command": "npm run dev",
+            "command": "npm run dev:web -- --hostname 0.0.0.0",
             "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
         },
         {
@@ -23,7 +23,7 @@
             "type": "node",
             "request": "launch",
             "program": "${workspaceFolder}/node_modules/next/dist/bin/next",
-            "args": ["dev"],
+            "args": ["dev", "--hostname", "0.0.0.0"],
             "cwd": "${workspaceFolder}",
             "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"],
             "serverReadyAction": {

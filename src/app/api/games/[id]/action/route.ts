@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { BUILDING_RULES, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
-import { BuildingType, GameMap, Resources, UnitType } from "@/lib/game/types";
+import { BUILDING_RULES, DWELLING_TIERS, FACTION_UNITS, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
+import { BuildingType, Faction, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -17,6 +17,7 @@ interface MinimalTown {
   id: string;
   x: number;
   y: number;
+  townType?: string;
   buildings?: string[];
   availableRecruits?: Record<string, number>;
 }
@@ -54,6 +55,7 @@ interface MinimalPlayer {
   id: string;
   isAlive?: boolean;
   turnOrder?: number;
+  faction?: string;
   gold: number;
   wood: number;
   ore: number;
@@ -71,7 +73,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, response } = await requireCurrentUser();
+    const { user, response } = await requireCurrentUser(request);
     if (!user) return response;
 
     const { id } = await params;
@@ -211,7 +213,7 @@ export async function POST(
     if (action.type === "RECRUIT_UNIT") {
       const unitType = action.unitType as UnitType;
       const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES.find((item) => item.type === unitType);
+      const rule = UNIT_RULES[unitType];
       const hero = gamePlayer.heroes[0];
       const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
       if (!rule || !hero || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
@@ -373,10 +375,14 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
       const recruits: Record<string, number> = { ...(town.availableRecruits ?? {}) };
-      for (const rule of UNIT_RULES) {
-        if (buildings.includes(rule.dwelling)) {
-          recruits[rule.type] = (recruits[rule.type] ?? 0) + rule.growth;
-        }
+      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? "castle") as Faction;
+      const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
+      for (let tier = 0; tier < DWELLING_TIERS.length; tier++) {
+        if (!buildings.includes(DWELLING_TIERS[tier])) continue;
+        const unitType = factionTiers[tier];
+        const rule = UNIT_RULES[unitType];
+        if (!rule) continue;
+        recruits[unitType] = (recruits[unitType] ?? 0) + rule.growth;
       }
       await supabase.from("towns").update({ available_recruits: recruits }).eq("id", town.id);
     }

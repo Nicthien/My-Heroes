@@ -13,7 +13,10 @@
       "Bash(Write-Output \"Cache vide\")",
       "Bash(powershell -Command \"Get-Process -Name 'node' -ErrorAction SilentlyContinue | Stop-Process -Force; Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; Write-Output 'Cache vide'\")",
       "Bash(npm run *)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "WebFetch(domain:heroes.thelazy.net)",
+      "Bash(powershell -Command \"Get-Content 'c:\\\\AI\\\\My Heroes\\\\.env.example'\")",
+      "Bash(supabase start *)"
     ]
   }
 }

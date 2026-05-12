@@ -25,16 +25,25 @@ export default function RegisterForm() {
 
     setLoading(true);
 
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name },
-      },
-    });
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+        },
+      });
 
-    if (signUpError) {
-      setError(signUpError.message || "Erreur lors de l'inscription");
+      if (signUpError) {
+        setError(signUpError.message || "Erreur lors de l'inscription");
+        setLoading(false);
+        return;
+      }
+    } catch (error) {
+      console.error("Supabase auth network error:", error);
+      setError(
+        "Impossible de contacter le serveur d'authentification. Vérifiez votre connexion réseau ou la configuration de Supabase."
+      );
       setLoading(false);
       return;
     }

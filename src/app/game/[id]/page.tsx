@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useSession } from "@/lib/auth/client";
+import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
@@ -37,13 +37,20 @@ export default function GamePage() {
       useGameStore.getState().resetGame();
       useGameStore.getState().setLoading(true);
     }
+    const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+      const token = await getSupabaseAccessToken();
+      const headers = new Headers(init?.headers);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      return fetch(input, { ...init, headers, credentials: "include" });
+    };
+
     const loadGame = async () => {
       if (!gameId) return;
       if (useGameStore.getState().isMovePending) return;
       setError("");
       const requestId = ++loadRequestIdRef.current;
       try {
-        const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
+        const res = await fetchWithAuth(`/api/games/${gameId}`, { cache: "no-store" });
         if (cancelled) return;
         if (requestId !== loadRequestIdRef.current) return;
         if (res.ok) {

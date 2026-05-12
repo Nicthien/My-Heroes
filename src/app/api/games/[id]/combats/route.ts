@@ -7,10 +7,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const { id } = await params;
@@ -33,7 +33,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const { id } = await params;

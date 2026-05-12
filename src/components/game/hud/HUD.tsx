@@ -9,6 +9,8 @@ import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   BUILDING_RULES,
+  DWELLING_TIERS,
+  FACTION_UNITS,
   UNIT_RULES,
   canAfford,
   formatCost,
@@ -50,7 +52,7 @@ function factionLabel(f: Faction): string {
     castle: "Château",
     rampart: "Rempart",
     tower: "Tour",
-    inferno: "Enfer",
+    inferno: "Hadès",
     necropolis: "Nécropole",
     dungeon: "Donjon",
     stronghold: "Bastion",
@@ -60,23 +62,7 @@ function factionLabel(f: Faction): string {
 }
 
 function unitTypeLabel(u: string): string {
-  const labels: Record<string, string> = {
-    pikeman: "Piquier",
-    halberdier: "Hallebardier",
-    archer: "Archer",
-    marksman: "Tireur d'élite",
-    griffin: "Griffon",
-    royal_griffin: "Griffon royal",
-    swordsman: "Épéiste",
-    crusader: "Croisé",
-    monk: "Moine",
-    zealot: "Zélote",
-    cavalier: "Cavalier",
-    champion: "Champion",
-    angel: "Ange",
-    archangel: "Archange",
-  };
-  return labels[u] || u;
+  return UNIT_RULES[u as UnitType]?.label ?? u;
 }
 
 function buildingTypeLabel(building: string): string {
@@ -100,12 +86,12 @@ function buildingTypeLabel(building: string): string {
 
 function ResourceBar({ resources }: { resources: Resources }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-3 xl:text-sm">
+    <div className="grid grid-cols-3 gap-1.5 text-xs xl:text-sm">
       {RESOURCE_ITEMS.map((item) => (
         <span
           key={item.key}
           title={`${item.label} : ${resources[item.key]}`}
-          className="group flex min-w-0 items-center gap-1.5 rounded-lg border border-amber-700/50 bg-gradient-to-b from-stone-900 to-black px-2 py-1 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)] transition hover:-translate-y-0.5 hover:border-amber-400/70 xl:px-2.5"
+          className="group flex min-w-[5rem] items-center justify-between gap-2 rounded-lg border border-amber-700/50 bg-gradient-to-b from-stone-900 to-black px-2.5 py-1 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)] transition hover:-translate-y-0.5 hover:border-amber-400/70 xl:min-w-[5.5rem] xl:px-3"
         >
           <ResourceIcon item={item} />
           <span className="font-black tabular-nums text-amber-100 drop-shadow">{resources[item.key]}</span>
@@ -118,15 +104,15 @@ function ResourceBar({ resources }: { resources: Resources }) {
 function ResourceIcon({ item }: { item: ResourceItem }) {
   return (
     <span
-      className={`relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br ${item.bg} ring-1 ${item.ring} shadow-inner`}
+      className={`relative grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gradient-to-br ${item.bg} ring-1 ${item.ring} shadow-inner`}
       aria-hidden="true"
     >
       <Image
         src={item.src}
         alt=""
-        width={28}
-        height={28}
-        className="h-7 w-7 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]"
+        width={24}
+        height={24}
+        className="h-6 w-6 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]"
       />
     </span>
   );
@@ -272,7 +258,11 @@ function HUDContent() {
               ? {
                   ...town,
                   buildings: [...town.buildings, building],
-                  availableRecruits: addImmediateDwellingGrowth(town.availableRecruits, building),
+                  availableRecruits: addImmediateDwellingGrowth(
+                    town.availableRecruits,
+                    building,
+                    ((town as { townType?: string }).townType ?? town.faction ?? "castle") as Faction
+                  ),
                   lastBuiltTurn: gameState.turnNumber,
                 }
               : town
@@ -285,7 +275,7 @@ function HUDContent() {
   const handleRecruit = async (unitType: UnitType) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
-    const rule = UNIT_RULES.find((item) => item.type === unitType);
+    const rule = UNIT_RULES[unitType];
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
 
     const response = await fetch(`/api/games/${gameState.id}/action`, {
@@ -368,13 +358,18 @@ function HUDContent() {
 
   const addImmediateDwellingGrowth = (
     stock: Partial<Record<UnitType, number>>,
-    building: BuildingType
+    building: BuildingType,
+    townFaction: Faction
   ) => {
-    const unitRule = UNIT_RULES.find((item) => item.dwelling === building);
+    const tier = DWELLING_TIERS.indexOf(building);
+    if (tier < 0) return stock;
+    const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
+    const unitType = factionTiers[tier];
+    const unitRule = UNIT_RULES[unitType];
     if (!unitRule) return stock;
     return {
       ...stock,
-      [unitRule.type]: (stock[unitRule.type] ?? 0) + unitRule.growth,
+      [unitType]: (stock[unitType] ?? 0) + unitRule.growth,
     };
   };
 
@@ -714,8 +709,15 @@ function HUDContent() {
           <div className="mt-4 border-t border-amber-700/40 pt-3">
             <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Recruter</div>
             <div className="space-y-2">
-              {UNIT_RULES.map((rule) => {
-                const hasDwelling = selectedTown.buildings.includes(rule.dwelling);
+              {(() => {
+                const townFaction = ((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction;
+                const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
+                return factionTiers.map((unitType, tier) => ({
+                  rule: UNIT_RULES[unitType],
+                  tier,
+                }));
+              })().map(({ rule, tier }) => {
+                const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
                 const available = selectedTown.availableRecruits[rule.type] ?? 0;
                 const disabled =
                   !hasDwelling ||
@@ -739,7 +741,7 @@ function HUDContent() {
                         )}
                         {!hasDwelling && (
                           <div className="mt-1 text-xs text-red-300">
-                            Prérequis : {buildingTypeLabel(rule.dwelling)}
+                            Prérequis : {buildingTypeLabel(DWELLING_TIERS[tier])}
                           </div>
                         )}
                       </div>

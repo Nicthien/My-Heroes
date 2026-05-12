@@ -17,17 +17,26 @@ export default function LoginForm() {
     setLoading(true);
     setError("");
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: identifier,
-      password,
-    });
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
 
-    if (signInError) {
-      setError("Email ou mot de passe incorrect");
-      setLoading(false);
-    } else {
+      if (signInError) {
+        setError("Email ou mot de passe incorrect");
+        setLoading(false);
+        return;
+      }
+
       router.push("/dashboard");
       router.refresh();
+    } catch (error) {
+      console.error("Supabase auth network error:", error);
+      setError(
+        "Impossible de contacter le serveur d'authentification. Vérifiez votre connexion réseau ou la configuration de Supabase."
+      );
+      setLoading(false);
     }
   };
 

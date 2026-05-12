@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth/client";
+import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   CornerOrnaments,
@@ -42,16 +42,83 @@ interface OpenGame {
   players: PlayerInfo[];
 }
 
-const FACTION_META: Record<string, { label: string; color: string; desc: string }> = {
-  castle: { label: "Château", color: "#3b82f6", desc: "Chevaliers et clercs humains" },
-  rampart: { label: "Rempart", color: "#22c55e", desc: "Rôdeurs elfes et druides" },
-  tower: { label: "Tour", color: "#8b5cf6", desc: "Mages et alchimistes" },
-  inferno: { label: "Enfer", color: "#ef4444", desc: "Démons et hérétiques" },
-  necropolis: { label: "Nécropole", color: "#6b7280", desc: "Morts-vivants et nécromanciens" },
-  dungeon: { label: "Donjon", color: "#7c3aed", desc: "Seigneurs sombres et sorciers" },
-  stronghold: { label: "Bastion", color: "#f97316", desc: "Barbares orcs" },
-  fortress: { label: "Forteresse", color: "#059669", desc: "Hommes-lézards et sorcières" },
+type FactionAlignment = "good" | "evil" | "barbarian";
+
+const FACTION_META: Record<
+  string,
+  { label: string; color: string; alignment: FactionAlignment; tagline: string; desc: string; emblem: string }
+> = {
+  castle: {
+    label: "Château",
+    color: "#3b82f6",
+    alignment: "good",
+    emblem: "♔",
+    tagline: "Nobles humains & créatures célestes",
+    desc: "Piquiers, archers, griffons, croisés, cavaliers et anges combattent au nom de la lumière.",
+  },
+  rampart: {
+    label: "Rempart",
+    color: "#22c55e",
+    alignment: "good",
+    emblem: "🌳",
+    tagline: "Elfes, nains et dragons",
+    desc: "Nains, elfes archers, pégases, druides, licornes et dragons d'or veillent sur la forêt.",
+  },
+  tower: {
+    label: "Tour",
+    color: "#8b5cf6",
+    alignment: "good",
+    emblem: "✦",
+    tagline: "Créatures liées à la magie",
+    desc: "Gremlins, golems, mages, génies et titans : la science arcanique au service du bien.",
+  },
+  inferno: {
+    label: "Hadès",
+    color: "#ef4444",
+    alignment: "evil",
+    emblem: "🔥",
+    tagline: "La ville des démons et des diables",
+    desc: "Lutins, gogs, cerbères, démons, magogs et diables surgis des Enfers.",
+  },
+  necropolis: {
+    label: "Nécropole",
+    color: "#6b7280",
+    alignment: "evil",
+    emblem: "☠",
+    tagline: "Morts-vivants et fantômes",
+    desc: "Squelettes, zombies, fantômes, vampires, liches et dragons-os ressuscités.",
+  },
+  dungeon: {
+    label: "Donjon",
+    color: "#7c3aed",
+    alignment: "evil",
+    emblem: "✸",
+    tagline: "Créatures maléfiques des profondeurs",
+    desc: "Troglodytes, harpies, gorgones, minotaures, manticores et dragons noirs.",
+  },
+  stronghold: {
+    label: "Bastion",
+    color: "#f97316",
+    alignment: "barbarian",
+    emblem: "⚔",
+    tagline: "Adeptes de la force brute",
+    desc: "Gobelins, orcs, ogres, rocs, cyclopes et puissants béhémoths.",
+  },
+  fortress: {
+    label: "Forteresse",
+    color: "#059669",
+    alignment: "barbarian",
+    emblem: "🐍",
+    tagline: "Poison, marécages et écailles",
+    desc: "Gnolls, hommes-lézards, mouches dragons, basilics, gorgones et hydres venimeuses.",
+  },
 };
+
+const ALIGNMENT_GROUPS: { key: FactionAlignment; label: string; accent: string }[] = [
+  { key: "good", label: "Les bons", accent: "text-sky-200" },
+  { key: "evil", label: "Les mauvais", accent: "text-rose-200" },
+  { key: "barbarian", label: "Les barbares", accent: "text-orange-200" },
+];
 
 function factionLabel(faction: string) {
   return FACTION_META[faction]?.label ?? faction;
@@ -69,15 +136,45 @@ export default function DashboardPage() {
   const [maxPlayers, setMaxPlayers] = useState(2);
   const router = useRouter();
 
+  const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+    const token = await getSupabaseAccessToken();
+    const headers = new Headers(init?.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers, credentials: "include" });
+  };
+
+  const parseJsonResponse = async (response: Response) => {
+    const text = await response.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      console.error("Failed to parse JSON response:", text, error);
+      return null;
+    }
+  };
+
   const loadMyGames = async () => {
-    const response = await fetch("/api/games", { cache: "no-store" });
-    const data = await response.json();
+    const response = await fetchWithAuth("/api/games", { cache: "no-store" });
+    if (!response.ok) {
+      console.warn("loadMyGames failed", response.status);
+      setGames([]);
+      return;
+    }
+
+    const data = await parseJsonResponse(response);
     setGames(Array.isArray(data) ? data : []);
   };
 
   const loadOpenGames = async () => {
-    const response = await fetch("/api/games/open", { cache: "no-store" });
-    const data = await response.json();
+    const response = await fetchWithAuth("/api/games/open", { cache: "no-store" });
+    if (!response.ok) {
+      console.warn("loadOpenGames failed", response.status);
+      setOpenGames([]);
+      return;
+    }
+
+    const data = await parseJsonResponse(response);
     setOpenGames(Array.isArray(data) ? data : []);
   };
 
@@ -104,7 +201,7 @@ export default function DashboardPage() {
   const createGame = async () => {
     setCreating(true);
     useGameStore.getState().resetGame();
-    const res = await fetch("/api/games", {
+    const res = await fetchWithAuth("/api/games", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -124,7 +221,7 @@ export default function DashboardPage() {
 
   const joinGame = async (gameId: string) => {
     useGameStore.getState().resetGame();
-    const res = await fetch(`/api/games/${gameId}/join`, {
+    const res = await fetchWithAuth(`/api/games/${gameId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ faction: selectedFaction }),
@@ -140,7 +237,7 @@ export default function DashboardPage() {
   const leaveGame = async (gameId: string) => {
     if (!confirm("Voulez-vous vraiment quitter cette partie ?")) return;
 
-    const response = await fetch(`/api/games/${gameId}/leave`, {
+    const response = await fetchWithAuth(`/api/games/${gameId}/leave`, {
       method: "POST",
     });
 
@@ -160,7 +257,7 @@ export default function DashboardPage() {
   const deleteGame = async (gameId: string) => {
     if (!confirm("Voulez-vous vraiment supprimer cette partie ? Cette action est définitive.")) return;
 
-    const response = await fetch(`/api/games/${gameId}`, {
+    const response = await fetchWithAuth(`/api/games/${gameId}`, {
       method: "DELETE",
     });
 
@@ -254,23 +351,34 @@ export default function DashboardPage() {
             </div>
 
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {Object.entries(FACTION_META).map(([key, meta]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedFaction(key)}
-                  className={`rounded-lg border p-3 text-left transition ${
-                    selectedFaction === key
-                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                    <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+            <div className="mb-4 space-y-3">
+              {ALIGNMENT_GROUPS.map((group) => (
+                <div key={group.key}>
+                  <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(FACTION_META)
+                      .filter(([, m]) => m.alignment === group.key)
+                      .map(([key, meta]) => (
+                        <button
+                          key={key}
+                          onClick={() => setSelectedFaction(key)}
+                          className={`rounded-lg border p-3 text-left transition ${
+                            selectedFaction === key
+                              ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                              : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-base" aria-hidden>{meta.emblem}</span>
+                            <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                            <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
+                          <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
+                        </button>
+                      ))}
                   </div>
-                  <div className="mt-1 text-xs text-amber-200/60">{meta.desc}</div>
-                </button>
+                </div>
               ))}
             </div>
 
@@ -301,22 +409,34 @@ export default function DashboardPage() {
             <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Rejoindre une partie</h2>
 
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Votre faction</label>
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {Object.entries(FACTION_META).map(([key, meta]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedFaction(key)}
-                  className={`rounded-lg border p-2 text-left transition ${
-                    selectedFaction === key
-                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                    <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+            <div className="mb-4 space-y-2">
+              {ALIGNMENT_GROUPS.map((group) => (
+                <div key={group.key}>
+                  <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(FACTION_META)
+                      .filter(([, m]) => m.alignment === group.key)
+                      .map(([key, meta]) => (
+                        <button
+                          key={key}
+                          onClick={() => setSelectedFaction(key)}
+                          title={meta.desc}
+                          className={`rounded-lg border p-2 text-left transition ${
+                            selectedFaction === key
+                              ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                              : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm" aria-hidden>{meta.emblem}</span>
+                            <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                            <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                          </div>
+                          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-amber-200/60">{meta.tagline}</div>
+                        </button>
+                      ))}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
 

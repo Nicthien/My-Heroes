@@ -3,8 +3,8 @@ import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toGame } from "@/lib/supabase/game-db";
 
-export async function GET() {
-  const { user, response } = await requireCurrentUser();
+export async function GET(request: Request) {
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const supabase = createAdminClient();

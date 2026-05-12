@@ -2,11 +2,31 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles } from "@/lib/game/engine";
+import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { Faction } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
 
-export async function GET() {
-  const { user, response } = await requireCurrentUser();
+const STARTER_ARMY_COUNTS: [number, number, number] = [20, 12, 4];
+
+function buildStarterArmy(faction: Faction, heroId: string) {
+  const tiers = FACTION_UNITS[faction] ?? FACTION_UNITS[Faction.CASTLE];
+  return STARTER_ARMY_COUNTS.map((count, i) => {
+    const unitType = tiers[i];
+    const rule = UNIT_RULES[unitType];
+    return {
+      hero_id: heroId,
+      unit_type: unitType,
+      count,
+      health: rule.health * count,
+      max_health: rule.health,
+      position: i,
+    };
+  });
+}
+
+export async function GET(request: Request) {
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const supabase = createAdminClient();
@@ -32,7 +52,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const supabase = createAdminClient();
@@ -100,17 +120,14 @@ export async function POST(request: Request) {
 
   if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
 
-  const { error: armyError } = await supabase.from("armies").insert([
-    { hero_id: heroRow.id, unit_type: "pikeman", count: 20, health: 240, max_health: 12, position: 0 },
-    { hero_id: heroRow.id, unit_type: "archer", count: 12, health: 144, max_health: 12, position: 1 },
-    { hero_id: heroRow.id, unit_type: "griffin", count: 4, health: 120, max_health: 30, position: 2 },
-  ]);
+  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  const { error: armyError } = await supabase.from("armies").insert(buildStarterArmy(factionKey, heroRow.id));
   if (armyError) return NextResponse.json({ error: armyError.message }, { status: 500 });
 
   const { error: townError } = await supabase.from("towns").insert({
     game_player_id: playerRow.id,
-    name: "Chateau",
-    town_type: "castle",
+    name: FACTION_TOWN_NAMES[factionKey],
+    town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
     buildings: ["castle"],

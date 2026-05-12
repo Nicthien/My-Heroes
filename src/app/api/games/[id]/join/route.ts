@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
-import { GameMap } from "@/lib/game/types";
+import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { Faction, GameMap } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -22,7 +23,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, response } = await requireCurrentUser();
+  const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
 
   const { id } = await params;
@@ -88,16 +89,28 @@ export async function POST(
 
   if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
 
-  await supabase.from("armies").insert([
-    { hero_id: heroRow.id, unit_type: "pikeman", count: 20, health: 240, max_health: 12, position: 0 },
-    { hero_id: heroRow.id, unit_type: "archer", count: 12, health: 144, max_health: 12, position: 1 },
-    { hero_id: heroRow.id, unit_type: "griffin", count: 4, health: 120, max_health: 30, position: 2 },
-  ]);
+  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  const tiers = FACTION_UNITS[factionKey];
+  const starterCounts: [number, number, number] = [20, 12, 4];
+  await supabase.from("armies").insert(
+    starterCounts.map((count, i) => {
+      const unitType = tiers[i];
+      const rule = UNIT_RULES[unitType];
+      return {
+        hero_id: heroRow.id,
+        unit_type: unitType,
+        count,
+        health: rule.health * count,
+        max_health: rule.health,
+        position: i,
+      };
+    })
+  );
 
   await supabase.from("towns").insert({
     game_player_id: playerRow.id,
-    name: "Chateau",
-    town_type: faction,
+    name: FACTION_TOWN_NAMES[factionKey],
+    town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
     buildings: ["castle"],

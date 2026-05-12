@@ -1,51 +1,44 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireCurrentUser } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getGameWithRelations } from "@/lib/supabase/game-db";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
   const { id } = await params;
+  const supabase = createAdminClient();
+  const game = await getGameWithRelations(supabase, id);
 
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: { players: { orderBy: { turnOrder: "asc" } } },
-  });
+  if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
 
-  if (!game) {
-    return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
-  }
-
-  const currentUserPlayer = game.players.find(
-    (player) => player.userId === session.user!.id
-  );
-
+  const players = game.players as unknown as Array<{ id: string; userId: string; turnOrder: number }>;
+  const currentUserPlayer = players.find((player) => player.userId === user.id);
   if (!currentUserPlayer) {
     return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
   }
-
   if (game.status !== "PENDING") {
     return NextResponse.json({ error: "La partie est deja demarree" }, { status: 400 });
   }
-
-  const firstPlayer = game.players[0];
-  if (!firstPlayer) {
-    return NextResponse.json({ error: "Aucun joueur dans la partie" }, { status: 400 });
+  if (currentUserPlayer.turnOrder !== 0) {
+    return NextResponse.json({ error: "Seul le createur peut demarrer la partie" }, { status: 403 });
   }
 
-  const updatedGame = await prisma.game.update({
-    where: { id },
-    data: {
-      status: "ACTIVE",
-      currentTurnPlayerId: firstPlayer.id,
-    },
-  });
+  const firstPlayer = [...players].sort((a, b) => a.turnOrder - b.turnOrder)[0];
+  if (!firstPlayer) return NextResponse.json({ error: "Aucun joueur dans la partie" }, { status: 400 });
 
+  const { error } = await supabase
+    .from("games")
+    .update({ status: "ACTIVE", current_turn_player_id: firstPlayer.id })
+    .eq("id", id)
+    .select("id")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const updatedGame = await getGameWithRelations(supabase, id);
   return NextResponse.json(updatedGame);
 }

@@ -1,56 +1,32 @@
-import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email ou nom d'utilisateur", type: "text" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        const identifier = String(credentials?.email ?? "").trim();
-        const password = String(credentials?.password ?? "");
+export async function getCurrentUser() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getUser();
 
-        if (!identifier || !password) return null;
+  if (error || !data.user) return null;
 
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [{ email: identifier }, { name: identifier }],
-          },
-        });
+  return {
+    id: data.user.id,
+    email: data.user.email ?? null,
+    name: (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? null,
+  };
+}
 
-        if (!user || !user.password) return null;
+export async function auth() {
+  const user = await getCurrentUser();
+  return user ? { user } : null;
+}
 
-        const isValid = await bcrypt.compare(password, user.password);
+export async function requireCurrentUser() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      user: null,
+      response: NextResponse.json({ error: "Non autorise" }, { status: 401 }),
+    };
+  }
 
-        if (!isValid) return null;
-
-        return { id: user.id, email: user.email, name: user.name };
-      },
-    }),
-  ],
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/auth/login",
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-});
+  return { user, response: null };
+}

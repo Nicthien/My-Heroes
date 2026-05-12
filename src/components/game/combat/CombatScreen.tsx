@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { COMBAT_COLS, COMBAT_ROWS, getHexDistance } from "@/lib/game/combat/persistent";
@@ -53,7 +53,9 @@ export default function CombatScreen() {
     });
     if (!response.ok) return;
     const data = await response.json();
-    const mapped = mapCombat(data.combat);
+    const combatPayload = data.combat ?? data;
+    if (!combatPayload) return;
+    const mapped = mapCombat(combatPayload);
     if (data.result) {
       setActiveCombat(null);
       setCombatResult(data.result);

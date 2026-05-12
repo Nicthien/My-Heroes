@@ -9,4 +9,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Never commit secrets (passwords, tokens, API keys) to the repository.
 - `.env*` files are ignored by git, except `.env.example` which serves as a template.
 - Always verify that no sensitive data is present in the code before pushing.
-- Database credentials and NextAuth secrets must remain in `.env` (not versioned).
+- Supabase service role keys and database credentials must remain in `.env` (not versioned).

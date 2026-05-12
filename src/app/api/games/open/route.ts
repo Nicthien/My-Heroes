@@ -1,29 +1,24 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireCurrentUser } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { toGame } from "@/lib/supabase/game-db";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const { user, response } = await requireCurrentUser();
+  if (!user) return response;
 
-  const games = await prisma.game.findMany({
-    where: {
-      status: "PENDING",
-      players: {
-        none: { userId: session.user.id },
-      },
-    },
-    include: {
-      players: {
-        include: {
-          user: { select: { name: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("games")
+    .select("*, game_players!game_players_game_id_fkey(*, profiles(name))")
+    .eq("status", "PENDING")
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const games = (data ?? [])
+    .map(toGame)
+    .filter((game) => !(game.players as unknown as Array<{ userId: string }>).some((player) => player.userId === user.id));
 
   return NextResponse.json(games);
 }

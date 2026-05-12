@@ -1,5 +1,5 @@
 import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
-import { GameMap, MapTile, TerrainType, Position, MapObject, ResourceBuildingType } from "@/lib/game/types";
+import { GameMap, MapTile, TerrainType, Position, MapObject } from "@/lib/game/types";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
@@ -160,6 +160,7 @@ export class IsometricRenderer {
   private app: Application;
   private mapContainer: Container;
   private objectContainer: Container;
+  private reachableContainer: Container;
   private highlightContainer: Container;
   private fogContainer: Container;
   private fogTiles: Map<string, Graphics> = new Map();
@@ -175,10 +176,12 @@ export class IsometricRenderer {
     this.app = new Application();
     this.mapContainer = new Container();
     this.objectContainer = new Container();
+    this.reachableContainer = new Container();
     this.highlightContainer = new Container();
     this.fogContainer = new Container();
     this.mapContainer.zIndex = 0;
     this.fogContainer.zIndex = 20;
+    this.reachableContainer.zIndex = 4;
     this.highlightContainer.zIndex = 5;
     this.objectContainer.zIndex = 10;
     this.objectContainer.sortableChildren = true;
@@ -200,6 +203,7 @@ export class IsometricRenderer {
 
     this.app.stage.addChild(this.mapContainer);
     this.app.stage.addChild(this.objectContainer);
+    this.app.stage.addChild(this.reachableContainer);
     this.app.stage.addChild(this.highlightContainer);
     this.app.stage.addChild(this.fogContainer);
 
@@ -1116,6 +1120,8 @@ export class IsometricRenderer {
   private syncObjectPositions() {
     this.objectContainer.x = this.mapContainer.x;
     this.objectContainer.y = this.mapContainer.y;
+    this.reachableContainer.x = this.mapContainer.x;
+    this.reachableContainer.y = this.mapContainer.y;
     this.highlightContainer.x = this.mapContainer.x;
     this.highlightContainer.y = this.mapContainer.y;
     this.fogContainer.x = this.mapContainer.x;
@@ -1127,26 +1133,76 @@ export class IsometricRenderer {
     this.highlightContainer.removeChildren();
 
     for (const pos of path) {
-      const iso = cartToIso(pos.x, pos.y);
-      const surfaceY = this.getSurfaceY(pos.x, pos.y);
-      const highlight = new Graphics();
-
-      highlight.moveTo(0, -TILE_HEIGHT / 2);
-      highlight.lineTo(TILE_WIDTH / 2, 0);
-      highlight.lineTo(0, TILE_HEIGHT / 2);
-      highlight.lineTo(-TILE_WIDTH / 2, 0);
-      highlight.closePath();
-      highlight.fill({ color: 0xffff00, alpha: 0.3 });
-
-      highlight.x = iso.x;
-      highlight.y = surfaceY;
-
-      this.highlightContainer.addChild(highlight);
+      this.drawHighlight(pos.x, pos.y, 0xffff00, 0.3);
     }
+  }
+
+  highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string) {
+    if (!this.isReady()) return;
+    this.highlightContainer.removeChildren();
+
+    for (const pos of reachable) {
+      this.drawHighlight(pos.x, pos.y, 0x00ff00, 0.75);
+    }
+    for (const pos of unreachable) {
+      this.drawHighlight(pos.x, pos.y, 0xef4444, 0.6);
+    }
+
+    if (turnsLabel) {
+      const last = unreachable.length > 0
+        ? unreachable[unreachable.length - 1]
+        : reachable[reachable.length - 1];
+      if (last) this.drawTurnBadge(last.x, last.y, turnsLabel);
+    }
+  }
+
+  private drawTurnBadge(x: number, y: number, label: string) {
+    const iso = cartToIso(x, y);
+    const surfaceY = this.getSurfaceY(x, y);
+    const container = new Container();
+    container.x = iso.x;
+    container.y = surfaceY;
+
+    const bg = new Graphics();
+    bg.circle(0, 0, 11);
+    bg.fill({ color: 0x000000, alpha: 0.78 });
+    bg.stroke({ width: 2, color: 0xffd166 });
+    container.addChild(bg);
+
+    const text = new Text({
+      text: label,
+      style: {
+        fill: 0xffffff,
+        fontSize: 12,
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    text.anchor.set(0.5);
+    container.addChild(text);
+
+    this.highlightContainer.addChild(container);
   }
 
   highlightTile(x: number, y: number, color: number = 0x00ff00) {
     if (!this.isReady()) return;
+    this.drawHighlight(x, y, color, 0.4);
+  }
+
+  highlightTiles(tiles: Position[], color: number = 0x00ff00, alpha: number = 0.22) {
+    if (!this.isReady()) return;
+    this.reachableContainer.removeChildren();
+    for (const tile of tiles) {
+      this.drawHighlightInto(this.reachableContainer, tile.x, tile.y, color, alpha);
+    }
+  }
+
+  clearReachable() {
+    if (!this.isReady()) return;
+    this.reachableContainer.removeChildren();
+  }
+
+  private drawHighlightInto(target: Container, x: number, y: number, color: number, alpha: number) {
     const iso = cartToIso(x, y);
     const surfaceY = this.getSurfaceY(x, y);
     const highlight = new Graphics();
@@ -1156,12 +1212,16 @@ export class IsometricRenderer {
     highlight.lineTo(0, TILE_HEIGHT / 2);
     highlight.lineTo(-TILE_WIDTH / 2, 0);
     highlight.closePath();
-    highlight.fill({ color, alpha: 0.4 });
+    highlight.fill({ color, alpha });
 
     highlight.x = iso.x;
     highlight.y = surfaceY;
 
-    this.highlightContainer.addChild(highlight);
+    target.addChild(highlight);
+  }
+
+  private drawHighlight(x: number, y: number, color: number, alpha: number) {
+    this.drawHighlightInto(this.highlightContainer, x, y, color, alpha);
   }
 
   clearHighlights() {
@@ -1190,8 +1250,6 @@ export class IsometricRenderer {
     this.mapContainer.x = screenCenterX - iso.x;
     this.mapContainer.y = screenCenterY - iso.y;
     this.syncObjectPositions();
-    this.highlightContainer.x = this.mapContainer.x;
-    this.highlightContainer.y = this.mapContainer.y;
   }
 
   panCamera(dx: number, dy: number) {

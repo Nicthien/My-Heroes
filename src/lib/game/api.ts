@@ -230,13 +230,16 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
   return {
     id: data.id as string,
     status: data.status as GameState["status"],
+    maxPlayers: (data.maxPlayers as number) ?? 8,
     players,
     map: mapData,
     turnNumber,
     calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
     winnerId: data.winnerId as string | undefined,
-    activeCombats: ((data.combats as ApiCombat[] | undefined) ?? []).map((combat) => ({
+    activeCombats: ((data.combats as ApiCombat[] | undefined) ?? [])
+      .filter((combat) => combat.status === "ACTIVE")
+      .map((combat) => ({
       id: combat.id,
       gameId: combat.gameId,
       mode: combat.mode,

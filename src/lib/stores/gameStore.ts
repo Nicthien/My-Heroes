@@ -4,18 +4,21 @@ import { processAction } from "@/lib/game/engine";
 
 interface GameStore {
   gameState: GameState | null;
+  gameStateVersion: number;
   selectedHeroId: string | null;
   selectedTownId: string | null;
   combatMessage: string | null;
-  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" | "building" } | null;
+  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" | "building"; destination?: { x: number; y: number }; path?: Array<{ x: number; y: number }> } | null;
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
   activeCombat: PersistentCombat | null;
   minimizedCombatIds: string[];
   lastCombatResult: CombatSummary | null;
   isCombatMode: boolean;
   isLoading: boolean;
+  isMovePending: boolean;
 
   setGameState: (state: GameState) => void;
+  setMovePending: (pending: boolean) => void;
   setCombatMessage: (message: string | null) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
@@ -33,6 +36,7 @@ interface GameStore {
 
 export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
+  gameStateVersion: 0,
   selectedHeroId: null,
   selectedTownId: null,
   combatMessage: null,
@@ -43,8 +47,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastCombatResult: null,
   isCombatMode: false,
   isLoading: false,
+  isMovePending: false,
 
-  setGameState: (state) => set({ gameState: state }),
+  setGameState: (state) => set((prev) => ({ gameState: state, gameStateVersion: prev.gameStateVersion + 1 })),
+  setMovePending: (pending) => set({ isMovePending: pending }),
 
   setCombatMessage: (message) => set({ combatMessage: message }),
   setPendingCombat: (combat) => set({ pendingCombat: combat }),
@@ -84,6 +90,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetGame: () =>
     set({
       gameState: null,
+      gameStateVersion: 0,
       selectedHeroId: null,
       selectedTownId: null,
       combatMessage: null,
@@ -94,5 +101,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastCombatResult: null,
       isCombatMode: false,
       isLoading: false,
+      isMovePending: false,
     }),
 }));

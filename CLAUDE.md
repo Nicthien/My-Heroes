@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**My Heroes** is a turn-based strategy game inspired by Heroes of Might and Magic III. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, PostgreSQL, Prisma ORM, and PixiJS for isometric rendering.
+**My Heroes** is a turn-based strategy game inspired by Heroes of Might and Magic III. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, Supabase, and PixiJS for isometric rendering.
 
 ## Core Commands
 
@@ -19,12 +19,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run lint` - Run ESLint
 
 **Database:**
-- `npx prisma migrate dev` - Create and apply migrations
-- `npx prisma studio` - Open Prisma Studio GUI for database inspection
-- `npx prisma generate` - Regenerate Prisma client after schema changes
+- Apply `supabase/schema.sql` in the Supabase SQL Editor after schema changes
 
 **Environment Setup:**
-Copy `.env.example` to `.env` and configure `DATABASE_URL` and `AUTH_SECRET`.
+Copy `.env.example` to `.env` and configure the Supabase URL, publishable key, and service role key.
 
 ## Architecture Overview
 
@@ -43,10 +41,10 @@ Copy `.env.example` to `.env` and configure `DATABASE_URL` and `AUTH_SECRET`.
   - `combat/` - Combat system (auto-resolve and persistent hex grid)
 - `src/lib/rendering/isometric/` - PixiJS isometric renderer (camera, fog of war, elevation)
 - `src/lib/stores/gameStore.ts` - Zustand client state (game state, UI selections, combat UI)
-- `src/lib/auth/index.ts` - NextAuth.js configuration
+- `src/lib/auth/index.ts` - Supabase auth helpers for Route Handlers
 - `src/components/` - React components (auth forms, game UI panels)
 
-### Data Model (Prisma)
+### Data Model (Supabase)
 
 Relations: User → GamePlayer ↔ Hero/Town/Army/Combat; Game → Turn/Combat/NeutralArmy/ResourceBuilding
 
@@ -107,7 +105,7 @@ Key fields:
 2. **Persistent Combats** - Combats stored in DB; multiple simultaneous combats allowed; players can join as reinforcements mid-combat
 3. **Hex Grid Combat** - Odd-offset coordinates provide tactical depth vs simpler square grids
 4. **Fog of War Rendering** - Separate layer combining visible and explored tiles for clear feedback
-5. **NextAuth Credentials Provider** - Username/password auth with JWT sessions and Prisma adapter
+5. **Supabase Auth** - Email/password auth with Supabase-managed sessions
 6. **Speed-Based Turn Queue** - Units with higher speed act first within a combat round; queue refreshed each round
 
 ## Common Development Tasks
@@ -136,19 +134,17 @@ Import game types from @/lib/game/types.ts and state from @/lib/stores/gameStore
 
 ## Debugging & Inspection
 
-- **Database state**: `npx prisma studio` to inspect game/player/combat records live
+- **Database state**: use the Supabase dashboard/table editor to inspect game/player/combat records live
 - **Map generation**: MapData is JSON-serialized; check tile.object for resources, terrain distribution, guardian power values
 - **Combat board**: CombatBoardUnit array contains position (q,r), health, speed, damage; trace buildTurnQueue() output
 - **Rendering issues**: Check IsometricRenderer.isReady(), zIndex stacking (mapContainer=0, objectContainer=10, fogContainer=20)
-- **Auth**: Verify NextAuth session via auth() utility; check Prisma user and session records
+- **Auth**: Verify Supabase session via `getCurrentUser()`/`requireCurrentUser()` and inspect `auth.users` plus `profiles`
 
 ## Key Dependencies
 
 - **Next.js 16** - Framework and App Router
-- **NextAuth.js 5** - JWT authentication
-- **Prisma 5** - ORM and migrations
+- **Supabase JS** - Auth, database access, and Realtime subscriptions
 - **PixiJS 8** - WebGL 2D renderer
 - **Zustand 5** - Client state management
 - **Tailwind CSS 4** - Styling
 - **Simplex Noise** - Procedural terrain generation
-- **bcryptjs** - Password hashing

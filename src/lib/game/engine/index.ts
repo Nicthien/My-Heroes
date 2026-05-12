@@ -11,7 +11,6 @@ import {
   Position,
   MapObject,
   ResourceBuildingType,
-  ResourceBuilding,
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES } from "../economy";
@@ -396,6 +395,56 @@ export function findPath(
   return [];
 }
 
+export function computeReachableTiles(
+  map: GameMap,
+  start: Position,
+  maxMovement: number
+): Set<string> {
+  const reachable = new Set<string>([`${start.x},${start.y}`]);
+  const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const openSet: { pos: Position; cost: number }[] = [{ pos: start, cost: 0 }];
+
+  while (openSet.length > 0) {
+    openSet.sort((a, b) => a.cost - b.cost);
+    const current = openSet.shift()!;
+    const currentKey = `${current.pos.x},${current.pos.y}`;
+    if (current.cost > (bestCost.get(currentKey) ?? Number.POSITIVE_INFINITY)) continue;
+
+    const neighbors = [
+      { x: current.pos.x + 1, y: current.pos.y },
+      { x: current.pos.x - 1, y: current.pos.y },
+      { x: current.pos.x, y: current.pos.y + 1 },
+      { x: current.pos.x, y: current.pos.y - 1 },
+    ];
+
+    for (const neighbor of neighbors) {
+      if (
+        neighbor.x < 0 ||
+        neighbor.x >= map.width ||
+        neighbor.y < 0 ||
+        neighbor.y >= map.height
+      ) {
+        continue;
+      }
+
+      const tile = map.tiles[neighbor.y]?.[neighbor.x];
+      if (!tile?.isPassable) continue;
+
+      const nextCost = current.cost + tile.movementCost;
+      if (nextCost > maxMovement) continue;
+
+      const neighborKey = `${neighbor.x},${neighbor.y}`;
+      if (nextCost >= (bestCost.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
+
+      bestCost.set(neighborKey, nextCost);
+      reachable.add(neighborKey);
+      openSet.push({ pos: neighbor, cost: nextCost });
+    }
+  }
+
+  return reachable;
+}
+
 export function calculateIncome(player: Player): { gold: number; wood: number; ore: number; mercury: number; crystals: number; sulfur: number } {
   let gold = 500;
   let wood = 0;
@@ -537,6 +586,7 @@ export function initializeGameState(
   return {
     id,
     status: "ACTIVE",
+    maxPlayers: players.length,
     players,
     map,
     turnNumber: 1,

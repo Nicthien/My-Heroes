@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 
 export default function RegisterForm() {
   const [name, setName] = useState("");
@@ -12,6 +12,7 @@ export default function RegisterForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,24 +25,28 @@ export default function RegisterForm() {
 
     setLoading(true);
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name },
+      },
     });
 
-    if (res.ok) {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (result?.ok) router.push("/dashboard");
-    } else {
-      const data = await res.json();
-      setError(data.error || "Erreur lors de l'inscription");
+    if (signUpError) {
+      setError(signUpError.message || "Erreur lors de l'inscription");
       setLoading(false);
+      return;
     }
+
+    await fetch("/api/auth/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    router.push("/dashboard");
+    router.refresh();
   };
 
   return (

@@ -292,6 +292,7 @@ export interface CombatState {
 export interface GameState {
   id: string;
   status: "PENDING" | "ACTIVE" | "COMPLETED" | "ABANDONED";
+  maxPlayers: number;
   players: Player[];
   map: GameMap;
   turnNumber: number;

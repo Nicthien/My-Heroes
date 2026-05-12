@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { IsometricRenderer, MapObjectData } from "@/lib/rendering/isometric/renderer";
 import { PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
 import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { findPath, computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
+import { findPath, computeReachableTiles, computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
 import { refreshGameState } from "@/lib/game/refresh";
 
 export default function GameMapComponent() {
@@ -21,6 +21,7 @@ export default function GameMapComponent() {
     heroId: string;
     destination: Position;
     path: Position[];
+    finalDestination?: Position;
   } | null>(null);
   const pendingAttackRef = useRef<{
     heroId: string;
@@ -28,6 +29,7 @@ export default function GameMapComponent() {
     destination: Position;
     path: Position[];
   } | null>(null);
+  const isSyncingMoveRef = useRef(false);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
   const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat } = useGameStore();
@@ -101,10 +103,14 @@ export default function GameMapComponent() {
       }
 
       if (!didInitialCenter.current) {
+        const firstTown = currentPlayer?.towns[0];
         const firstHero = currentPlayer?.heroes[0];
-        if (firstHero) {
-          renderer.centerOnTile(firstHero.position.x, firstHero.position.y);
-          useGameStore.getState().selectHero(firstHero.id);
+        const centerTarget = gameState.status === "PENDING" ? firstTown : firstHero;
+        if (centerTarget) {
+          renderer.centerOnTile(centerTarget.position.x, centerTarget.position.y);
+          if (gameState.status !== "PENDING" && firstHero) {
+            useGameStore.getState().selectHero(firstHero.id);
+          }
         }
         didInitialCenter.current = true;
       }
@@ -112,15 +118,133 @@ export default function GameMapComponent() {
   }, [gameState, session?.user?.id, activeCombat]);
 
   useEffect(() => {
-    if (!rendererRef.current?.isReady() || !gameState || !selectedHeroId) return;
-    if (lastCenteredHeroIdRef.current === selectedHeroId) return;
+    if (!rendererRef.current?.isReady() || !gameState) return;
+    if (!selectedHeroId) {
+      rendererRef.current.clearReachable();
+      return;
+    }
 
     const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
-    if (hero) {
+    if (!hero) {
+      rendererRef.current.clearReachable();
+      return;
+    }
+
+    const reachableTiles = Array.from(computeReachableTiles(gameState.map, hero.position, hero.movement))
+      .map((key) => {
+        const [x, y] = key.split(",").map(Number);
+        return { x, y };
+      });
+    rendererRef.current.highlightTiles(reachableTiles, 0x32d583, 0.2);
+
+    if (lastCenteredHeroIdRef.current !== selectedHeroId) {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
   }, [selectedHeroId, gameState]);
+
+  const previousTurnRef = useRef<number | null>(null);
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady() || !gameState) return;
+    if (previousTurnRef.current === gameState.turnNumber) return;
+    previousTurnRef.current = gameState.turnNumber;
+
+    const pending = pendingMoveRef.current;
+    if (!pending) return;
+
+    const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === pending.heroId);
+    if (!hero) {
+      pendingMoveRef.current = null;
+      renderer.clearHighlights();
+      return;
+    }
+
+    const target = pending.finalDestination ?? pending.destination;
+    const fullPath = findPath(gameState.map, hero.position, target, Number.POSITIVE_INFINITY);
+    if (fullPath.length <= 1) {
+      pendingMoveRef.current = null;
+      renderer.clearHighlights();
+      return;
+    }
+
+    let usedCost = 0;
+    let splitIndex = 0;
+    for (let i = 1; i < fullPath.length; i++) {
+      const t = gameState.map.tiles[fullPath[i].y]?.[fullPath[i].x];
+      const c = t?.movementCost ?? 1;
+      if (usedCost + c > hero.movement) break;
+      usedCost += c;
+      splitIndex = i;
+    }
+
+    if (splitIndex === fullPath.length - 1) {
+      pendingMoveRef.current = { heroId: pending.heroId, destination: target, path: fullPath };
+      renderer.highlightPath(fullPath);
+      return;
+    }
+
+    const reachable = fullPath.slice(0, splitIndex + 1);
+    const unreachable = fullPath.slice(splitIndex + 1);
+    const totalCost = fullPath.slice(1).reduce((acc, p) => {
+      const t = gameState.map.tiles[p.y]?.[p.x];
+      return acc + (t?.movementCost ?? 1);
+    }, 0);
+    const remaining = totalCost - usedCost;
+    const maxMove = hero.maxMovement > 0 ? hero.maxMovement : 1;
+    const additionalTurns = Math.max(1, Math.ceil(remaining / maxMove));
+    const turnsLabel = `${additionalTurns + (splitIndex > 0 ? 1 : 0)}`;
+
+    if (splitIndex === 0) {
+      pendingMoveRef.current = {
+        heroId: pending.heroId,
+        destination: hero.position,
+        path: [hero.position],
+        finalDestination: target,
+      };
+      renderer.highlightPartialPath([hero.position], unreachable, turnsLabel);
+      return;
+    }
+
+    const partialDestination = reachable[reachable.length - 1];
+    pendingMoveRef.current = {
+      heroId: pending.heroId,
+      destination: partialDestination,
+      path: reachable,
+      finalDestination: target,
+    };
+    renderer.highlightPartialPath(reachable, unreachable, turnsLabel);
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState?.status !== "PENDING") return;
+
+    pendingMoveRef.current = null;
+    pendingAttackRef.current = null;
+    rendererRef.current?.clearHighlights();
+    rendererRef.current?.clearReachable();
+    useGameStore.setState({
+      selectedHeroId: null,
+      selectedTownId: null,
+      pendingCombat: null,
+      pendingJoinCombat: null,
+      activeCombat: null,
+      isCombatMode: false,
+    });
+  }, [gameState?.status]);
+
+  useEffect(() => {
+    if (gameState?.status !== "ACTIVE" || selectedHeroId) return;
+
+    const currentPlayer = gameState.players.find(
+      (player) => player.userId === session?.user?.id
+    );
+    const firstHero = currentPlayer?.heroes[0];
+    if (!firstHero) return;
+
+    selectHero(firstHero.id);
+    rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
+  }, [gameState, selectedHeroId, selectHero, session?.user?.id]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2 || e.button === 1) {
@@ -146,6 +270,14 @@ export default function GameMapComponent() {
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (!rendererRef.current || !gameState) return;
+    if (gameState.status === "PENDING") {
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      isSyncingMoveRef.current = false;
+      rendererRef.current.clearHighlights();
+      return;
+    }
+
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -158,9 +290,163 @@ export default function GameMapComponent() {
     const canAct = Boolean(
       myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
     );
+    const blockedTurnMessage = myPlayer?.hasEndedTurn
+      ? "Vous avez déjà terminé votre tour."
+      : "Vous ne pouvez pas jouer pour le moment.";
 
     const objects = rendererRef.current.getObjectsAtScreen(screenX, screenY);
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
+
+    if (isSyncingMoveRef.current) {
+      return;
+    }
+
+    const handleOutOfRange = (heroSrc: { id: string; position: Position; movement: number; maxMovement: number }, destination: Position): "handled" | "inaccessible" => {
+      const renderer = rendererRef.current;
+      if (!renderer || !gameState) return "inaccessible";
+      if (destination.x === heroSrc.position.x && destination.y === heroSrc.position.y) {
+        return "inaccessible";
+      }
+
+      let fullPath = findPath(gameState.map, heroSrc.position, destination, Number.POSITIVE_INFINITY);
+      if (fullPath.length <= 1) {
+        // Destination impassable / disconnected: try adjacent tiles
+        const candidates = [
+          { x: destination.x + 1, y: destination.y },
+          { x: destination.x - 1, y: destination.y },
+          { x: destination.x, y: destination.y + 1 },
+          { x: destination.x, y: destination.y - 1 },
+        ];
+        let best: Position[] = [];
+        for (const c of candidates) {
+          if (c.x < 0 || c.x >= gameState.map.width || c.y < 0 || c.y >= gameState.map.height) continue;
+          if (!gameState.map.tiles[c.y][c.x].isPassable) continue;
+          const p = findPath(gameState.map, heroSrc.position, c, Number.POSITIVE_INFINITY);
+          if (p.length > 1 && (best.length === 0 || getPathMovementCost(gameState.map, p) < getPathMovementCost(gameState.map, best))) {
+            best = p;
+          }
+        }
+        if (best.length <= 1) return "inaccessible";
+        fullPath = best;
+      }
+
+      let usedCost = 0;
+      let splitIndex = 0;
+      for (let i = 1; i < fullPath.length; i++) {
+        const t = gameState.map.tiles[fullPath[i].y]?.[fullPath[i].x];
+        const c = t?.movementCost ?? 1;
+        if (usedCost + c > heroSrc.movement) break;
+        usedCost += c;
+        splitIndex = i;
+      }
+
+      const reachable = fullPath.slice(0, splitIndex + 1);
+      const unreachable = fullPath.slice(splitIndex + 1);
+      const totalCost = getPathMovementCost(gameState.map, fullPath);
+      const remaining = totalCost - usedCost;
+      const maxMove = heroSrc.maxMovement > 0 ? heroSrc.maxMovement : 1;
+      const additionalTurns = Math.max(1, Math.ceil(remaining / maxMove));
+      const turnsLabel = `${additionalTurns + (splitIndex > 0 ? 1 : 0)}`;
+
+      if (splitIndex === 0) {
+        renderer.highlightPartialPath([heroSrc.position], unreachable, turnsLabel);
+        pendingAttackRef.current = null;
+        pendingMoveRef.current = {
+          heroId: heroSrc.id,
+          destination: heroSrc.position,
+          path: [heroSrc.position],
+          finalDestination: destination,
+        };
+        return "handled";
+      }
+
+      const partialDestination = reachable[reachable.length - 1];
+      renderer.highlightPartialPath(reachable, unreachable, turnsLabel);
+
+      pendingAttackRef.current = null;
+      const pendingMove = pendingMoveRef.current;
+      const isConfirmingMove =
+        pendingMove?.heroId === heroSrc.id &&
+        pendingMove.destination.x === partialDestination.x &&
+        pendingMove.destination.y === partialDestination.y;
+
+      if (!isConfirmingMove) {
+        pendingMoveRef.current = {
+          heroId: heroSrc.id,
+          destination: partialDestination,
+          path: reachable,
+          finalDestination: destination,
+        };
+        return "handled";
+      }
+
+      if (!canAct) {
+        setCombatMessage(blockedTurnMessage);
+        pendingMoveRef.current = null;
+        renderer.clearHighlights();
+        return "handled";
+      }
+
+      const moveDestination = partialDestination;
+      const movePath = reachable;
+      isSyncingMoveRef.current = true;
+      useGameStore.getState().setMovePending(true);
+      fetch(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "MOVE_HERO",
+          heroId: heroSrc.id,
+          path: movePath.map((p: Position) => ({ x: p.x, y: p.y })),
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            isSyncingMoveRef.current = false;
+            useGameStore.getState().setMovePending(false);
+            setCombatMessage(await getApiErrorMessage(res));
+            return null;
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (!data) return;
+          pendingMoveRef.current = null;
+          rendererRef.current?.clearHighlights();
+          const snapshot = useGameStore.getState().gameState;
+          if (snapshot) {
+            const usedMovement = movePath.slice(1).reduce((total, p) => {
+              const t = snapshot.map.tiles[p.y]?.[p.x];
+              return total + (t?.movementCost ?? 1);
+            }, 0);
+            useGameStore.getState().setGameState({
+              ...snapshot,
+              players: snapshot.players.map((player) => ({
+                ...player,
+                heroes: player.heroes.map((h) =>
+                  h.id === heroSrc.id
+                    ? { ...h, position: moveDestination, movement: Math.max(0, h.movement - usedMovement) }
+                    : h
+                ),
+              })),
+            });
+          }
+          refreshGameState(gameState.id, session?.user?.id)
+            .then((state) => {
+              if (state) useGameStore.getState().setGameState(state);
+            })
+            .finally(() => {
+              isSyncingMoveRef.current = false;
+              useGameStore.getState().setMovePending(false);
+            });
+        })
+        .catch(() => {
+          isSyncingMoveRef.current = false;
+          useGameStore.getState().setMovePending(false);
+          setCombatMessage("Deplacement impossible pour le moment.");
+        });
+      return "handled";
+    };
 
       if (objects.length > 0) {
       const selectedObject = selectObjectOnTile(
@@ -181,8 +467,10 @@ export default function GameMapComponent() {
           const destination = { x: obj.x, y: obj.y };
           const path = findPath(gameState.map, hero.position, destination, hero.movement);
           if (path.length <= 1) {
-            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
-            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            if (handleOutOfRange(hero, destination) === "inaccessible") {
+              rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+              setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            }
             return;
           }
           const pendingJoin = pendingAttackRef.current;
@@ -196,7 +484,7 @@ export default function GameMapComponent() {
             return;
           }
           if (!canAct) {
-            setCombatMessage("Vous avez déjà terminé votre tour.");
+            setCombatMessage(blockedTurnMessage);
             pendingAttackRef.current = null;
             rendererRef.current.clearHighlights();
             return;
@@ -222,8 +510,10 @@ export default function GameMapComponent() {
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
         if (path.length <= 1) {
-          rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
-          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          if (handleOutOfRange(hero, destination) === "inaccessible") {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          }
           return;
         }
 
@@ -246,7 +536,7 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -254,7 +544,7 @@ export default function GameMapComponent() {
 
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
-        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero" });
+        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero", destination, path });
         return;
       }
 
@@ -265,8 +555,10 @@ export default function GameMapComponent() {
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
         if (path.length <= 1) {
-          rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
-          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          if (handleOutOfRange(hero, destination) === "inaccessible") {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          }
           return;
         }
 
@@ -290,7 +582,7 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
           return;
@@ -335,13 +627,15 @@ export default function GameMapComponent() {
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
         if (path.length <= 1) {
-          rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
-          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          if (handleOutOfRange(hero, destination) === "inaccessible") {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          }
           return;
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           return;
         }
 
@@ -351,7 +645,7 @@ export default function GameMapComponent() {
           pendingAttackRef.current = null;
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0xff6600);
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building" });
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building", destination, path });
           return;
         }
 
@@ -428,10 +722,10 @@ export default function GameMapComponent() {
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
           if (!canAct) {
-            setCombatMessage("Vous avez déjà terminé votre tour.");
+            setCombatMessage(blockedTurnMessage);
             return;
           }
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster" });
+          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster", destination: tile, path });
           return;
         }
 
@@ -439,7 +733,7 @@ export default function GameMapComponent() {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
           if (!isMyBuilding) {
             if (!canAct) {
-              setCombatMessage("Vous avez déjà terminé votre tour.");
+              setCombatMessage(blockedTurnMessage);
               return;
             }
 
@@ -449,7 +743,7 @@ export default function GameMapComponent() {
               pendingAttackRef.current = null;
               rendererRef.current.highlightPath(path);
               rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
-              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building" });
+              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building", destination: tile, path });
               return;
             }
 
@@ -517,13 +811,16 @@ export default function GameMapComponent() {
         }
 
         if (!canAct) {
-          setCombatMessage("Vous avez déjà terminé votre tour.");
+          setCombatMessage(blockedTurnMessage);
           pendingMoveRef.current = null;
           rendererRef.current.clearHighlights();
           return;
         }
 
+        const moveDestination = tile;
         rendererRef.current.highlightPath(path);
+        isSyncingMoveRef.current = true;
+        useGameStore.getState().setMovePending(true);
         fetch(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -535,6 +832,8 @@ export default function GameMapComponent() {
         })
           .then(async (res) => {
             if (!res.ok) {
+              isSyncingMoveRef.current = false;
+              useGameStore.getState().setMovePending(false);
               setCombatMessage(await getApiErrorMessage(res));
               return null;
             }
@@ -545,10 +844,35 @@ export default function GameMapComponent() {
             pendingMoveRef.current = null;
             rendererRef.current?.clearHighlights();
 
-            // Recharger immédiatement le serveur pour avoir la vraie carte
-            refreshGameState(gameState.id, session?.user?.id).then((state) => {
-              if (state) useGameStore.getState().setGameState(state);
-            });
+            // Mise à jour optimiste : déplacer le héros immédiatement côté client
+            // La synchronisation complète (brouillard, mouvement restant) arrive via le realtime Supabase
+            const snapshot = useGameStore.getState().gameState;
+            if (snapshot && moveDestination) {
+              const usedMovement = path.slice(1).reduce((total, p) => {
+                const t = snapshot.map.tiles[p.y]?.[p.x];
+                return total + (t?.movementCost ?? 1);
+              }, 0);
+              useGameStore.getState().setGameState({
+                ...snapshot,
+                players: snapshot.players.map((player) => ({
+                  ...player,
+                  heroes: player.heroes.map((hero) =>
+                    hero.id === selectedHeroId
+                      ? { ...hero, position: moveDestination, movement: Math.max(0, hero.movement - usedMovement) }
+                      : hero
+                  ),
+                })),
+              });
+            }
+
+            refreshGameState(gameState.id, session?.user?.id)
+              .then((state) => {
+                if (state) useGameStore.getState().setGameState(state);
+              })
+              .finally(() => {
+                isSyncingMoveRef.current = false;
+                useGameStore.getState().setMovePending(false);
+              });
 
             if (data.interaction?.type === "COLLECT") {
               const r = data.interaction.resource;
@@ -563,10 +887,20 @@ export default function GameMapComponent() {
                 useGameStore.getState().setCombatMessage("Défaite... Votre héros a péri contre le monstre.");
               }
             }
+          })
+          .catch(() => {
+            isSyncingMoveRef.current = false;
+            useGameStore.getState().setMovePending(false);
+            setCombatMessage("Deplacement impossible pour le moment.");
           });
       } else {
-        rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
-        setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+        if (tile.x === hero.position.x && tile.y === hero.position.y) {
+          return;
+        }
+        if (handleOutOfRange(hero, tile) === "inaccessible") {
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+        }
       }
     }
   }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, session?.user?.id]);
@@ -617,6 +951,13 @@ function selectObjectOnTile(
   return hero ?? town ?? objects[0];
 }
 
+function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[]) {
+  return path.slice(1).reduce((total, position) => {
+    const tile = map.tiles[position.y]?.[position.x];
+    return total + (tile?.movementCost ?? 1);
+  }, 0);
+}
+
 function getMapRenderKey(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"]) {
   const parts = [`${map.width}x${map.height}`];
 
@@ -656,20 +997,22 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
   for (const player of gameState.players) {
     const isCurrentPlayer = player.id === currentPlayer?.id;
 
-    for (const hero of player.heroes) {
-      const key = `${hero.position.x},${hero.position.y}`;
-      if (!isCurrentPlayer && !visiblePositions.has(key)) continue;
-      objects.push({
-        type: "hero",
-        id: hero.id,
-        playerId: player.id,
-        x: hero.position.x,
-        y: hero.position.y,
-        faction: player.faction as string,
-        color: player.color,
-        name: hero.name,
-        onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
-      });
+    if (gameState.status !== "PENDING") {
+      for (const hero of player.heroes) {
+        const key = `${hero.position.x},${hero.position.y}`;
+        if (!isCurrentPlayer && !visiblePositions.has(key)) continue;
+        objects.push({
+          type: "hero",
+          id: hero.id,
+          playerId: player.id,
+          x: hero.position.x,
+          y: hero.position.y,
+          faction: player.faction as string,
+          color: player.color,
+          name: hero.name,
+          onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
+        });
+      }
     }
     for (const town of player.towns) {
       const key = `${town.position.x},${town.position.y}`;

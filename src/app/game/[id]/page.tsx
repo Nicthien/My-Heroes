@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
@@ -12,6 +12,7 @@ import CombatScreen from "@/components/game/combat/CombatScreen";
 import ActiveCombatsPanel from "@/components/game/combat/ActiveCombatsPanel";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
+import { createClient } from "@/lib/supabase/browser";
 
 const GameMapComponent = dynamic(
   () => import("@/components/game/map/GameMap"),
@@ -25,37 +26,68 @@ export default function GamePage() {
   const userId = session?.user?.id;
   const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat } = useGameStore();
   const [error, setError] = useState("");
+  const loadRequestIdRef = useRef(0);
 
   useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+
+    useGameStore.getState().setLoading(true);
+    if (useGameStore.getState().gameState?.id !== gameId) {
+      useGameStore.getState().resetGame();
+      useGameStore.getState().setLoading(true);
+    }
     const loadGame = async () => {
       if (!gameId) return;
-      const hadGameState = Boolean(useGameStore.getState().gameState);
-      if (!hadGameState) {
-        useGameStore.getState().setLoading(true);
-      }
+      if (useGameStore.getState().isMovePending) return;
+      setError("");
+      const requestId = ++loadRequestIdRef.current;
       try {
-        const res = await fetch(`/api/games/${gameId}`);
+        const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
+        if (cancelled) return;
+        if (requestId !== loadRequestIdRef.current) return;
         if (res.ok) {
           const data = await res.json();
           if (!data.mapData) {
             const { generateMap } = await import("@/lib/game/engine");
             data.mapData = generateMap(data.mapWidth, data.mapHeight);
           }
-          setGameState(mapApiToGameState(data, userId));
+          const nextGameState = mapApiToGameState(data, userId);
+          if (nextGameState.id === gameId) {
+            setGameState(nextGameState);
+          }
         } else {
+          useGameStore.getState().resetGame();
           setError("Partie non trouvée");
         }
       } catch {
+        if (cancelled) return;
         setError("Erreur de chargement");
       }
-      if (!hadGameState) {
+      if (!cancelled) {
         useGameStore.getState().setLoading(false);
       }
     };
 
     loadGame();
-    const interval = setInterval(loadGame, 10000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel(`game:${gameId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, loadGame)
+      .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, loadGame)
+      .subscribe();
+
+    const interval = setInterval(loadGame, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [gameId, setGameState, userId]);
 
   useEffect(() => {
@@ -77,7 +109,7 @@ export default function GamePage() {
     );
   }
 
-  if (isLoading || !gameState) {
+  if (isLoading || !gameState || gameState.id !== gameId) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-xl">Chargement de la partie...</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth/client";
 import { PersistentCombat } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
 

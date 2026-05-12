@@ -97,7 +97,7 @@ function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, 
 export function buildTurnQueue(units: CombatBoardUnit[], round = 1) {
   return [...units]
     .filter((unit) => unit.count > 0 && (unit.joinsRound ?? 1) <= round)
-    .sort((a, b) => b.speed - a.speed || (a.side === "attacker" ? -1 : 1) || a.position - b.position)
+    .sort((a, b) => b.speed - a.speed || (a.side === "attacker" ? -1 : 1) - (b.side === "attacker" ? -1 : 1) || a.position - b.position)
     .map((unit) => unit.id);
 }
 
@@ -149,10 +149,16 @@ export function executeManualCombatAction(params: {
       const canShoot = params.action.type === "SHOOT" && actor.ranged && actor.shots > 0;
       if (distance <= 1 || canShoot) {
         if (canShoot) actor.shots = Math.max(0, actor.shots - 1);
-        applyDamage(actor, target, getStats(actor.side, params), log);
+        applyDamage(actor, target, {
+          attack: getStats(actor.side, params).attack,
+          defense: getStats(target.side, params).defense,
+        }, log);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
-          applyDamage(target, actor, getStats(target.side, params), log, true);
+          applyDamage(target, actor, {
+            attack: getStats(target.side, params).attack,
+            defense: getStats(actor.side, params).defense,
+          }, log, true);
           target.hasRetaliated = true;
         }
       }
@@ -206,7 +212,9 @@ function applyDamage(attacker: CombatBoardUnit, defender: CombatBoardUnit, stats
   const lost = Math.max(0, defender.count - Math.ceil(nextHealth / defender.maxHealth));
   defender.health = nextHealth;
   defender.count = nextHealth > 0 ? Math.ceil(nextHealth / defender.maxHealth) : 0;
-  log.push(`${getUnitRule(attacker.unitType).label}${retaliation ? " riposte" : " attaque"}: ${lost} pertes.`);
+  const side = attacker.side === "attacker" ? "Héros" : "Défenseur";
+  const verb = retaliation ? "riposte" : "attaque";
+  log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb}: ${lost} perte(s) ennemie(s).`);
 }
 
 function getStats(side: CombatSide, params: { attackerStats: { attack: number; defense: number }; defenderStats: { attack: number; defense: number } }) {

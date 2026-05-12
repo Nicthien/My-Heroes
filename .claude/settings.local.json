@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem \"c:\\\\AI\\\\My Heroes\\\\src\\\\app\\\\api\\\\games\" -Recurse -Name)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\AI\\\\My Heroes\\\\src\\\\lib\\\\game\\\\combat\" -File -Recurse)",
+      "Bash(Select-Object FullName)",
+      "Bash(npx next *)",
+      "Bash(npx supabase *)",
+      "Bash(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "Bash(Stop-Process -Force)",
+      "Bash(Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue)",
+      "Bash(Write-Output \"Cache vide\")",
+      "Bash(powershell -Command \"Get-Process -Name 'node' -ErrorAction SilentlyContinue | Stop-Process -Force; Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; Write-Output 'Cache vide'\")",
+      "Bash(npm run *)"
     ]
   }
 }

@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
+import {
+  CornerOrnaments,
+  FleurDeLis,
+  OrnateHeader,
+  ParchmentBackground,
+  goldText,
+  ornateFrame,
+  ornateFramePolished,
+} from "@/components/game/hud/theme";
 
 interface PlayerInfo {
   id: string;
@@ -170,30 +179,41 @@ export default function DashboardPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Chargement...</div>
+      <div className="min-h-screen bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900 flex items-center justify-center">
+        <div className={`text-xl font-black uppercase tracking-widest ${goldText}`}>Chargement...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+    <div
+      className="min-h-screen bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 15% 10%, rgba(217,119,6,0.08) 0, transparent 40%), radial-gradient(circle at 85% 80%, rgba(120,53,15,0.12) 0, transparent 45%)",
+      }}
+    >
       <div className="max-w-5xl mx-auto p-8">
         <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white">My Heroes</h1>
-            <p className="text-gray-400 mt-1">Bienvenue, {session?.user?.name}</p>
+          <div className="flex items-center gap-4">
+            <FleurDeLis className="h-10 w-10 text-amber-400 drop-shadow" />
+            <div>
+              <h1 className={`text-4xl font-black tracking-[0.15em] ${goldText}`}>MY HEROES</h1>
+              <p className="text-sm uppercase tracking-wider text-amber-200/70 mt-1">
+                Bienvenue, {session?.user?.name}
+              </p>
+            </div>
           </div>
           <div className="flex gap-3">
             <button
               onClick={() => { setShowCreate(true); setShowJoin(false); }}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold transition"
+              className="rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700"
             >
               Nouvelle partie
             </button>
             <button
               onClick={() => { setShowJoin(true); setShowCreate(false); loadOpenGames().catch(() => setOpenGames([])); }}
-              className="bg-green-700 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-bold transition"
+              className="rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
             >
               Rejoindre
             </button>
@@ -202,27 +222,29 @@ export default function DashboardPage() {
 
         {/* Dialogue de création */}
         {showCreate && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-            <h2 className="text-white text-xl font-bold mb-4">Créer une partie</h2>
+          <div className={`relative ${ornateFramePolished} mb-6 p-6`}>
+            <CornerOrnaments />
+            <ParchmentBackground />
+            <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Créer une partie</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label htmlFor="game-name" className="text-gray-300 text-sm block mb-1">Nom</label>
+                <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Nom</label>
                 <input
                   id="game-name"
                   type="text"
                   value={gameName}
                   onChange={(e) => setGameName(e.target.value)}
                   placeholder={`Partie de ${session?.user?.name}`}
-                  className="w-full bg-gray-700 text-white p-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="max-players" className="text-gray-300 text-sm block mb-1">Joueurs max</label>
+                <label htmlFor="max-players" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Joueurs max</label>
                 <select
                   id="max-players"
                   value={maxPlayers}
                   onChange={(e) => setMaxPlayers(Number(e.target.value))}
-                  className="w-full bg-gray-700 text-white p-2 rounded border border-gray-600"
+                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
                 >
                   {[2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <option key={n} value={n}>{n} joueurs</option>
@@ -231,23 +253,23 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <label className="text-gray-300 text-sm block mb-2">Faction</label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {Object.entries(FACTION_META).map(([key, meta]) => (
                 <button
                   key={key}
                   onClick={() => setSelectedFaction(key)}
-                  className={`p-3 rounded-lg border-2 transition text-left ${
+                  className={`rounded-lg border p-3 text-left transition ${
                     selectedFaction === key
-                      ? "border-yellow-500 bg-gray-700"
-                      : "border-gray-600 bg-gray-800 hover:bg-gray-700"
+                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: meta.color }} />
-                    <span className="text-white font-bold text-sm">{meta.label}</span>
+                    <div className="h-4 w-4 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                    <span className="text-sm font-bold text-amber-100">{meta.label}</span>
                   </div>
-                  <div className="text-gray-400 text-xs mt-1">{meta.desc}</div>
+                  <div className="mt-1 text-xs text-amber-200/60">{meta.desc}</div>
                 </button>
               ))}
             </div>
@@ -257,13 +279,13 @@ export default function DashboardPage() {
                 onClick={createGame}
                 disabled={creating}
                 data-testid="create-game-submit"
-                className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded font-bold disabled:opacity-50"
+                className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creating ? "Création..." : "Créer"}
               </button>
               <button
                 onClick={() => setShowCreate(false)}
-                className="bg-gray-700 text-gray-300 px-6 py-2 rounded hover:bg-gray-600"
+                className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100"
               >
                 Annuler
               </button>
@@ -273,41 +295,43 @@ export default function DashboardPage() {
 
         {/* Dialogue pour rejoindre une partie */}
         {showJoin && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-            <h2 className="text-white text-xl font-bold mb-4">Rejoindre une partie</h2>
+          <div className={`relative ${ornateFramePolished} mb-6 p-6`}>
+            <CornerOrnaments />
+            <ParchmentBackground />
+            <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Rejoindre une partie</h2>
 
-            <label className="text-gray-300 text-sm block mb-2">Votre faction</label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Votre faction</label>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {Object.entries(FACTION_META).map(([key, meta]) => (
                 <button
                   key={key}
                   onClick={() => setSelectedFaction(key)}
-                  className={`p-2 rounded-lg border-2 transition text-left ${
+                  className={`rounded-lg border p-2 text-left transition ${
                     selectedFaction === key
-                      ? "border-yellow-500 bg-gray-700"
-                      : "border-gray-600 bg-gray-800 hover:bg-gray-700"
+                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: meta.color }} />
-                    <span className="text-white text-sm font-bold">{meta.label}</span>
+                    <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                    <span className="text-sm font-bold text-amber-100">{meta.label}</span>
                   </div>
                 </button>
               ))}
             </div>
 
             {openGames.length === 0 ? (
-              <div className="text-gray-400 text-center py-4">Aucune partie en attente</div>
+              <div className="py-4 text-center italic text-amber-200/50">Aucune partie en attente</div>
             ) : (
               <div className="space-y-2 mb-4">
                 {openGames.map((game) => (
                   <div
                     key={game.id}
-                    className="bg-gray-700/50 border border-gray-600 rounded p-3 flex items-center justify-between"
+                    className="flex items-center justify-between rounded-md border border-amber-700/40 bg-stone-950/60 p-3"
                   >
                     <div>
-                      <div className="text-white font-bold">{game.name}</div>
-                      <div className="text-gray-400 text-sm">
+                      <div className="font-bold text-amber-100">{game.name}</div>
+                      <div className="text-xs uppercase tracking-wider text-amber-200/60">
                         {game.players.length}/{game.maxPlayers} joueurs
                       </div>
                     </div>
@@ -315,14 +339,14 @@ export default function DashboardPage() {
                       {game.players.map((p, i) => (
                         <div
                           key={i}
-                          className="w-6 h-6 rounded-full border-2 border-white"
+                          className="h-6 w-6 rounded-full ring-2 ring-amber-300/60"
                           style={{ backgroundColor: p.color }}
                           title={factionLabel(p.faction)}
                         />
                       ))}
                       <button
                         onClick={() => joinGame(game.id)}
-                        className="bg-green-700 hover:bg-green-600 text-white px-4 py-1 rounded font-bold text-sm"
+                        className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-1 text-sm font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
                       >
                         Rejoindre
                       </button>
@@ -334,13 +358,13 @@ export default function DashboardPage() {
 
             <button
               onClick={() => loadOpenGames().catch(() => setOpenGames([]))}
-              className="bg-blue-700 text-white px-6 py-2 rounded hover:bg-blue-600 mr-3"
+              className="mr-3 rounded-md border border-amber-700/50 bg-stone-950/80 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100"
             >
               Actualiser
             </button>
             <button
               onClick={() => setShowJoin(false)}
-              className="bg-gray-700 text-gray-300 px-6 py-2 rounded hover:bg-gray-600"
+              className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100"
             >
               Fermer
             </button>
@@ -348,90 +372,94 @@ export default function DashboardPage() {
         )}
 
         {/* Mes parties */}
-        <h2 className="text-white text-xl font-bold mb-4">Mes parties</h2>
-        <div className="space-y-3">
-          {games.length === 0 && (
-            <div className="text-gray-500 text-center py-12">
-              Aucune partie. Créez ou rejoignez-en une !
-            </div>
-          )}
-          {games.map((game) => {
-            const myPlayer = game.players.find(
-              (player) => player.userId === session?.user?.id
-            );
-            const isHost = myPlayer?.turnOrder === 0;
+        <div className={`relative ${ornateFrame}`}>
+          <CornerOrnaments />
+          <ParchmentBackground />
+          <OrnateHeader>Mes parties</OrnateHeader>
+          <div className="space-y-3 p-4">
+            {games.length === 0 && (
+              <div className="py-12 text-center italic text-amber-200/40">
+                Aucune partie. Créez ou rejoignez-en une !
+              </div>
+            )}
+            {games.map((game) => {
+              const myPlayer = game.players.find(
+                (player) => player.userId === session?.user?.id
+              );
+              const isHost = myPlayer?.turnOrder === 0;
+              const statusLabel =
+                game.status === "PENDING" ? "En attente" :
+                game.status === "ACTIVE" ? "En cours" :
+                game.status === "COMPLETED" ? "Terminée" : game.status;
+              const statusColor =
+                game.status === "ACTIVE" ? "text-emerald-300" :
+                game.status === "PENDING" ? "text-amber-300" :
+                game.status === "COMPLETED" ? "text-cyan-300" : "text-stone-400";
 
-            return (
-            <div
-              key={game.id}
-              className="bg-gray-800/80 border border-gray-700 rounded-lg p-4 hover:border-gray-500 transition cursor-pointer"
-              onClick={() => router.push(`/game/${game.id}`)}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-bold">{game.name}</h3>
-                  <div className="text-gray-400 text-sm mt-1">
-                    Tour {game.turnNumber} |{" "}
-                    <span className={
-                      game.status === "ACTIVE" ? "text-green-400" :
-                      game.status === "PENDING" ? "text-yellow-400" :
-                      game.status === "COMPLETED" ? "text-blue-400" : "text-gray-400"
-                    }>
-                      {game.status === "PENDING" ? "En attente" :
-                       game.status === "ACTIVE" ? "En cours" :
-                        game.status === "COMPLETED" ? "Terminée" : game.status}
-                    </span>
-                    | {game.mapWidth}x{game.mapHeight}
+              return (
+              <div
+                key={game.id}
+                className="cursor-pointer rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-4 transition hover:border-amber-400/60 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.15)]"
+                onClick={() => router.push(`/game/${game.id}`)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`text-lg font-black ${goldText}`}>{game.name}</h3>
+                    <div className="mt-1 text-xs uppercase tracking-wider text-amber-200/70">
+                      Tour {game.turnNumber} <span className="mx-1 text-amber-700">◆</span>
+                      <span className={`font-bold ${statusColor}`}>{statusLabel}</span>
+                      <span className="mx-1 text-amber-700">◆</span>
+                      {game.mapWidth}×{game.mapHeight}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-gray-400 text-sm">
-                    {game.players.length}/{game.maxPlayers}
-                  </div>
-                  <div className="flex gap-1 mt-1">
-                    {game.players.map((p, i) => (
-                      <div
-                        key={i}
-                        className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold"
-                        style={{
-                          backgroundColor: p.color,
-                          borderColor: p.isAlive ? "#22c55e" : "#ef4444",
-                          color: "#fff",
-                        }}
-                        title={factionLabel(p.faction)}
-                      >
-                        {p.user.name?.[0]?.toUpperCase() || "?"}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 mt-3 justify-end">
-                    {isHost ? (
-                      <button
-                        className="bg-red-800 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteGame(game.id).catch(console.error);
-                        }}
-                      >
-                        Supprimer
-                      </button>
-                    ) : game.status === "PENDING" ? (
-                      <button
-                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1 rounded text-xs font-bold"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          leaveGame(game.id).catch(console.error);
-                        }}
-                      >
-                        Quitter
-                      </button>
-                    ) : null}
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wider text-amber-200/60">
+                      {game.players.length}/{game.maxPlayers}
+                    </div>
+                    <div className="mt-1 flex justify-end gap-1">
+                      {game.players.map((p, i) => (
+                        <div
+                          key={i}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white shadow-inner shadow-black/40"
+                          style={{
+                            backgroundColor: p.color,
+                            boxShadow: `inset 0 0 0 2px ${p.isAlive ? "rgba(252,211,77,0.6)" : "rgba(239,68,68,0.6)"}`,
+                          }}
+                          title={factionLabel(p.faction)}
+                        >
+                          {p.user.name?.[0]?.toUpperCase() || "?"}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex justify-end gap-2">
+                      {isHost ? (
+                        <button
+                          className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteGame(game.id).catch(console.error);
+                          }}
+                        >
+                          Supprimer
+                        </button>
+                      ) : game.status === "PENDING" ? (
+                        <button
+                          className="rounded-md border border-amber-700/40 bg-stone-950/70 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            leaveGame(game.id).catch(console.error);
+                          }}
+                        >
+                          Quitter
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

@@ -38,7 +38,7 @@ export default function GameMapComponent() {
   const isSyncingMoveRef = useRef(false);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
-  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat } = useGameStore();
+  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget } = useGameStore();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -160,6 +160,13 @@ export default function GameMapComponent() {
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
   }, [selectedHeroId, gameState, rendererReadyVersion]);
+
+  useEffect(() => {
+    if (!cameraTarget) return;
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady()) return;
+    renderer.centerOnTile(cameraTarget.x, cameraTarget.y);
+  }, [cameraTarget, rendererReadyVersion]);
 
   const previousTurnRef = useRef<number | null>(null);
   useEffect(() => {

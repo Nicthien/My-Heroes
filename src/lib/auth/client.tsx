@@ -20,7 +20,7 @@ interface AuthContextValue {
   user: User | null;
 }
 
-const AuthContext = createContext<AuthContextValue>({
+export const AuthContext = createContext<AuthContextValue>({
   data: null,
   status: "loading",
   user: null,

@@ -12,7 +12,8 @@
       "Bash(Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue)",
       "Bash(Write-Output \"Cache vide\")",
       "Bash(powershell -Command \"Get-Process -Name 'node' -ErrorAction SilentlyContinue | Stop-Process -Force; Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; Write-Output 'Cache vide'\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

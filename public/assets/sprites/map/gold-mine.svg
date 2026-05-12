@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#00000040"/>
+  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
   <!-- Rocky hill -->
   <polygon points="8,52 32,14 56,52" fill="#7a6a52" stroke="#5a4a38" stroke-width="1.2"/>
   <polygon points="8,52 32,14 20,52" fill="#9a8a6a" stroke="none"/>

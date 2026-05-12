@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useSession } from "@/lib/auth/client";
-import { IsometricRenderer, MapObjectData } from "@/lib/rendering/isometric/renderer";
+import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
 import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { findPath, computeReachableTiles, computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
 import { refreshGameState } from "@/lib/game/refresh";
 
+async function createMapRenderer(): Promise<MapRenderer> {
+  const { PhaserMapRenderer } = await import("@/lib/rendering/phaser/PhaserMapRenderer");
+  return new PhaserMapRenderer();
+}
+
 export default function GameMapComponent() {
   const { data: session } = useSession();
+  const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<IsometricRenderer | null>(null);
+  const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const didInitialCenter = useRef(false);
   const renderedMapKeyRef = useRef<string | null>(null);
@@ -39,13 +45,25 @@ export default function GameMapComponent() {
     if (!container) return;
 
     let cancelled = false;
-    const renderer = new IsometricRenderer();
-    rendererRef.current = renderer;
+    let activeRenderer: MapRenderer | null = null;
 
-    const initPromise = renderer.init(container).then(() => {
+    const initPromise = createMapRenderer().then(async (renderer) => {
+      activeRenderer = renderer;
       if (cancelled) {
         renderer.destroy();
+        return;
       }
+
+      rendererRef.current = renderer;
+
+      await renderer.init(container);
+
+      if (cancelled) {
+        rendererRef.current?.destroy();
+        return;
+      }
+
+      setRendererReadyVersion((version) => version + 1);
     });
     initPromiseRef.current = initPromise;
 
@@ -53,7 +71,7 @@ export default function GameMapComponent() {
       cancelled = true;
       initPromiseRef.current = null;
       rendererRef.current = null;
-      if (renderer.isReady()) renderer.destroy();
+      if (activeRenderer?.isReady()) activeRenderer.destroy();
     };
   }, []);
 
@@ -115,7 +133,7 @@ export default function GameMapComponent() {
         didInitialCenter.current = true;
       }
     });
-  }, [gameState, session?.user?.id, activeCombat]);
+  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;
@@ -141,7 +159,7 @@ export default function GameMapComponent() {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState]);
+  }, [selectedHeroId, gameState, rendererReadyVersion]);
 
   const previousTurnRef = useRef<number | null>(null);
   useEffect(() => {
@@ -214,7 +232,7 @@ export default function GameMapComponent() {
       finalDestination: target,
     };
     renderer.highlightPartialPath(reachable, unreachable, turnsLabel);
-  }, [gameState]);
+  }, [gameState, rendererReadyVersion]);
 
   useEffect(() => {
     if (gameState?.status !== "PENDING") return;
@@ -231,10 +249,10 @@ export default function GameMapComponent() {
       activeCombat: null,
       isCombatMode: false,
     });
-  }, [gameState?.status]);
+  }, [gameState?.status, rendererReadyVersion]);
 
   useEffect(() => {
-    if (gameState?.status !== "ACTIVE" || selectedHeroId) return;
+    if (gameState?.status !== "ACTIVE" || selectedHeroId || selectedTownId) return;
 
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
@@ -244,7 +262,7 @@ export default function GameMapComponent() {
 
     selectHero(firstHero.id);
     rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
-  }, [gameState, selectedHeroId, selectHero, session?.user?.id]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2 || e.button === 1) {
@@ -1056,6 +1074,7 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
           color: owner?.color ?? "",
           name: building?.type ?? tile.object.subtype ?? "",
           buildingType: tile.object.subtype,
+          guardianPower: tile.object.guardianPower ?? building?.guardianPower ?? 0,
         });
       }
     }

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#00000040"/>
+  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
   <!-- Rocky ground -->
   <ellipse cx="32" cy="54" rx="26" ry="8" fill="#706050" stroke="#504030" stroke-width="1.2"/>
   <!-- Outer pit rim (rocky edge) -->

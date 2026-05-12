@@ -755,6 +755,7 @@ function HUDContent() {
               <button
                 className="mt-4 bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded font-bold"
                 onClick={handleStartGame}
+                data-testid="start-game"
               >
                 Démarrer la partie
               </button>
@@ -777,6 +778,7 @@ function HUDContent() {
             }`}
             disabled={!canAct || hasActiveCombats}
             onClick={handleEndTurn}
+            data-testid="end-turn"
           >
             {isWaitingForPlayers ? "Tour terminé" : "Fin du tour"}
           </button>

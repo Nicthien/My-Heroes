@@ -49,10 +49,11 @@ export default function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="login-email" className="text-gray-300 text-sm block mb-1">
               Email
             </label>
             <input
+              id="login-email"
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
@@ -61,10 +62,11 @@ export default function LoginForm() {
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm block mb-1">
+            <label htmlFor="login-password" className="text-gray-300 text-sm block mb-1">
               Mot de passe
             </label>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

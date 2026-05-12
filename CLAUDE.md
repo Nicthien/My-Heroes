@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**My Heroes** is a turn-based strategy game inspired by Heroes of Might and Magic III. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, Supabase, and PixiJS for isometric rendering.
+**My Heroes** is a turn-based strategy game inspired by Heroes of Might and Magic III. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, Supabase, and Phaser for isometric rendering.
 
 ## Core Commands
 
@@ -39,7 +39,7 @@ Copy `.env.example` to `.env` and configure the Supabase URL, publishable key, a
   - `economy.ts` - Building/unit rules and resource calculations
   - `units.ts` - Unit stat tables
   - `combat/` - Combat system (auto-resolve and persistent hex grid)
-- `src/lib/rendering/isometric/` - PixiJS isometric renderer (camera, fog of war, elevation)
+- `src/lib/rendering/phaser/` - Phaser isometric renderer (camera, fog of war, elevation)
 - `src/lib/stores/gameStore.ts` - Zustand client state (game state, UI selections, combat UI)
 - `src/lib/auth/index.ts` - Supabase auth helpers for Route Handlers
 - `src/components/` - React components (auth forms, game UI panels)
@@ -74,8 +74,8 @@ Key fields:
   - Terrain obstacles (water, rock) block movement
   - Special actions: MOVE, ATTACK (melee), SHOOT (ranged), DEFEND (reduce damage), WAIT
 
-**Rendering** (src/lib/rendering/isometric/renderer.ts):
-- PixiJS dimetric projection (cartesian x,y to isometric screen coords)
+**Rendering** (src/lib/rendering/phaser/PhaserMapRenderer.ts):
+- Phaser dimetric projection (cartesian x,y to isometric screen coords)
 - Layer stack: mapContainer (tiles) → objectContainer (heroes/towns) → highlightContainer (path) → fogContainer (unexplored/unseen)
 - Elevation affects tile depth; higher elevation = lower screen position
 - Fog of war: full black (never seen), semi-transparent (explored but not visible)
@@ -137,14 +137,14 @@ Import game types from @/lib/game/types.ts and state from @/lib/stores/gameStore
 - **Database state**: use the Supabase dashboard/table editor to inspect game/player/combat records live
 - **Map generation**: MapData is JSON-serialized; check tile.object for resources, terrain distribution, guardian power values
 - **Combat board**: CombatBoardUnit array contains position (q,r), health, speed, damage; trace buildTurnQueue() output
-- **Rendering issues**: Check IsometricRenderer.isReady(), zIndex stacking (mapContainer=0, objectContainer=10, fogContainer=20)
+- **Rendering issues**: Check PhaserMapRenderer.isReady(), object depth ordering, fog/highlight containers, and browser console errors
 - **Auth**: Verify Supabase session via `getCurrentUser()`/`requireCurrentUser()` and inspect `auth.users` plus `profiles`
 
 ## Key Dependencies
 
 - **Next.js 16** - Framework and App Router
 - **Supabase JS** - Auth, database access, and Realtime subscriptions
-- **PixiJS 8** - WebGL 2D renderer
+- **Phaser 4** - WebGL/canvas game renderer
 - **Zustand 5** - Client state management
 - **Tailwind CSS 4** - Styling
 - **Simplex Noise** - Procedural terrain generation

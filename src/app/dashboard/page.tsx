@@ -206,8 +206,9 @@ export default function DashboardPage() {
             <h2 className="text-white text-xl font-bold mb-4">Créer une partie</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-gray-300 text-sm block mb-1">Nom</label>
+                <label htmlFor="game-name" className="text-gray-300 text-sm block mb-1">Nom</label>
                 <input
+                  id="game-name"
                   type="text"
                   value={gameName}
                   onChange={(e) => setGameName(e.target.value)}
@@ -216,8 +217,9 @@ export default function DashboardPage() {
                 />
               </div>
               <div>
-                <label className="text-gray-300 text-sm block mb-1">Joueurs max</label>
+                <label htmlFor="max-players" className="text-gray-300 text-sm block mb-1">Joueurs max</label>
                 <select
+                  id="max-players"
                   value={maxPlayers}
                   onChange={(e) => setMaxPlayers(Number(e.target.value))}
                   className="w-full bg-gray-700 text-white p-2 rounded border border-gray-600"
@@ -254,6 +256,7 @@ export default function DashboardPage() {
               <button
                 onClick={createGame}
                 disabled={creating}
+                data-testid="create-game-submit"
                 className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded font-bold disabled:opacity-50"
               >
                 {creating ? "Création..." : "Créer"}

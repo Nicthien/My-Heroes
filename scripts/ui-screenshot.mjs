@@ -21,14 +21,6 @@ await page.waitForTimeout(1500);
 
 await page.screenshot({ path: "screenshots/hud-1920-hero.png", fullPage: false });
 
-// Switch to town selection
-await page.evaluate(() => {
-  // @ts-ignore
-  window.__store = window.__store;
-});
-await page.evaluate(() => {
-  const stores = Object.values(globalThis).find(() => false);
-});
 // Click on the castle in side panel
 // Measure topbar title vs retour button
 const sizes = await page.evaluate(() => {

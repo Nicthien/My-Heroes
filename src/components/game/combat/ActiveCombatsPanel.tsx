@@ -4,12 +4,10 @@ import { useSession } from "@/lib/auth/client";
 import { PersistentCombat } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
-  CornerOrnaments,
-  OrnateHeader,
-  ParchmentBackground,
   goldText,
   ornateFrame,
 } from "../hud/theme";
+import CollapsiblePanel from "../hud/CollapsiblePanel";
 
 export default function ActiveCombatsPanel() {
   const { data: session } = useSession();
@@ -22,22 +20,21 @@ export default function ActiveCombatsPanel() {
   const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
 
   return (
-    <div className={`relative ${ornateFrame}`}>
-      <CornerOrnaments />
-      <ParchmentBackground />
-      <OrnateHeader>{`Combats (${combats.length})`}</OrnateHeader>
-      <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
-        {combats.map((combat) => (
-          <CombatRow
-            key={combat.id}
-            combat={combat}
-            myPlayerId={myPlayer?.id}
-            onOpen={() => restoreCombat(combat)}
-            onFocus={() => focusTile(combat.position.x, combat.position.y)}
-          />
-        ))}
-      </div>
-    </div>
+    <CollapsiblePanel
+      title={`Combats (${combats.length})`}
+      className={ornateFrame}
+      bodyClassName="max-h-64 space-y-1 overflow-y-auto px-2 py-2"
+    >
+      {combats.map((combat) => (
+        <CombatRow
+          key={combat.id}
+          combat={combat}
+          myPlayerId={myPlayer?.id}
+          onOpen={() => restoreCombat(combat)}
+          onFocus={() => focusTile(combat.position.x, combat.position.y)}
+        />
+      ))}
+    </CollapsiblePanel>
   );
 }
 

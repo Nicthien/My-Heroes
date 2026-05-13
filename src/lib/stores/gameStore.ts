@@ -18,10 +18,12 @@ interface GameStore {
   isMovePending: boolean;
   devRevealMap: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
+  zoomRequest: { direction: number; nonce: number } | null;
 
   setGameState: (state: GameState) => void;
   setMovePending: (pending: boolean) => void;
   focusTile: (x: number, y: number) => void;
+  zoomMap: (direction: number) => void;
   setCombatMessage: (message: string | null) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
@@ -54,12 +56,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isMovePending: false,
   devRevealMap: false,
   cameraTarget: null,
+  zoomRequest: null,
 
   setGameState: (state) => set((prev) => ({ gameState: state, gameStateVersion: prev.gameStateVersion + 1 })),
   setMovePending: (pending) => set({ isMovePending: pending }),
   focusTile: (x, y) =>
     set((state) => ({
       cameraTarget: { x, y, nonce: (state.cameraTarget?.nonce ?? 0) + 1 },
+    })),
+  zoomMap: (direction) =>
+    set((state) => ({
+      zoomRequest: { direction, nonce: (state.zoomRequest?.nonce ?? 0) + 1 },
     })),
 
   setCombatMessage: (message) => set({ combatMessage: message }),
@@ -115,5 +122,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isMovePending: false,
       devRevealMap: false,
       cameraTarget: null,
+      zoomRequest: null,
     }),
 }));

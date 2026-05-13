@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { MAP_SPRITES, MAP_SPRITE_PATHS } from "@/lib/rendering/phaser/assets";
+import { MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getTownSpritePath } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -761,10 +761,20 @@ class PhaserMapScene extends Phaser.Scene {
       const iso = cartToIso(object.x, object.y);
       const y = this.getSurfaceY(object.x, object.y);
       if (object.type === "hero") {
-        this.addObjectSprite(object, iso.x, y + 15, MAP_SPRITES.hero, 62, 62);
-        this.addBanner(this.objectLayer, iso.x - 16, y - 19, object.color, 16, 12, y + 15);
+        const metrics = getObjectMetrics(object);
+        if (!metrics) continue;
+        this.addObjectSprite(object, iso.x, y + metrics.offsetY, getHeroSpritePath(object.faction), metrics.width, metrics.height);
+        this.addBanner(
+          this.objectLayer,
+          iso.x - (object.inTown ? 10 : 16),
+          y + metrics.offsetY - metrics.height + (object.inTown ? 1 : -3),
+          object.color,
+          object.inTown ? 12 : 16,
+          object.inTown ? 8 : 12,
+          y + metrics.offsetY
+        );
       } else if (object.type === "town") {
-        this.addObjectSprite(object, iso.x, y + 20, MAP_SPRITES.town, 82, 82);
+        this.addObjectSprite(object, iso.x, y + 20, getTownSpritePath(object.faction), 82, 82);
         this.addBanner(this.objectLayer, iso.x, y - 43, object.color, 18, 12, y + 20);
       } else if (object.type === "building" && object.buildingType) {
         this.addObjectSprite(object, iso.x, y + 6, MAP_SPRITES.buildings[object.buildingType], 52, 52);
@@ -1382,7 +1392,9 @@ function isAllowedDecor(kind: DecorKind) {
 }
 
 function getObjectMetrics(object: MapObjectData) {
-  if (object.type === "hero") return { width: 62, height: 62, offsetY: 15 };
+  if (object.type === "hero") return object.inTown
+    ? { width: 36, height: 36, offsetY: 29 }
+    : { width: 62, height: 62, offsetY: 15 };
   if (object.type === "town") return { width: 82, height: 82, offsetY: 20 };
   if (object.type === "building") return { width: 52, height: 52, offsetY: 6 };
   if (object.type === "combat") return { width: 48, height: 48, offsetY: 10 };

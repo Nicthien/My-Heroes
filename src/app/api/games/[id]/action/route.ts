@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { BUILDING_RULES, DWELLING_TIERS, FACTION_UNITS, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
 import { BuildingType, Faction, GameMap, HeroClass, Resources, UnitType } from "@/lib/game/types";
@@ -29,6 +30,7 @@ interface MinimalTown {
   y: number;
   townType?: string;
   buildings?: string[];
+  garrison?: MinimalArmy[];
   availableRecruits?: Record<string, number>;
   tavernOffer?: TavernOffer[];
   isNeutral?: boolean;
@@ -380,9 +382,8 @@ export async function POST(
       const unitType = action.unitType as UnitType;
       const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
       const rule = UNIT_RULES[unitType];
-      const hero = gamePlayer.heroes[0];
       const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      if (!rule || !hero || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
+      if (!rule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
 
       const available = (town.availableRecruits?.[unitType] ?? 0);
       if (available < count) return NextResponse.json({ error: "Pas assez d'unites disponibles" }, { status: 400 });
@@ -392,11 +393,36 @@ export async function POST(
       if (!canAfford(resources, totalCost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
       await supabase.from("game_players").update(subtractCost(resources, totalCost)).eq("id", gamePlayer.id);
+      const nextGarrison = addUnitsToStackList(town.garrison ?? [], unitType, count, rule.health);
       await supabase.from("towns").update({
         available_recruits: { ...(town.availableRecruits ?? {}), [unitType]: available - count },
+        garrison: nextGarrison,
       }).eq("id", town.id);
 
-      const existing = hero.armies.find((army: { unitType: UnitType }) => army.unitType === unitType);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "TRANSFER_GARRISON_TO_HERO") {
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const rule = UNIT_RULES[unitType];
+      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
+      if (hero.x !== town.x || hero.y !== town.y) {
+        return NextResponse.json({ error: "Le heros doit etre au chateau pour recevoir la garnison" }, { status: 400 });
+      }
+
+      const garrison = town.garrison ?? [];
+      const source = garrison.find((unit) => unit.unitType === unitType);
+      if (!source || source.count < count) {
+        return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
+      }
+
+      const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
+      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
+
+      const existing = hero.armies.find((army) => army.unitType === unitType);
       if (existing) {
         await supabase.from("armies").update({
           count: existing.count + count,
@@ -412,6 +438,7 @@ export async function POST(
           position: hero.armies.length,
         });
       }
+
       return NextResponse.json({ success: true });
     }
 
@@ -443,6 +470,40 @@ function playerResources(player: {
     crystals: player.crystals,
     sulfur: player.sulfur,
   };
+}
+
+function addUnitsToStackList(stacks: MinimalArmy[], unitType: UnitType, count: number, maxHealth: number) {
+  const existing = stacks.find((unit) => unit.unitType === unitType);
+  if (existing) {
+    return stacks.map((unit) =>
+      unit.id === existing.id
+        ? { ...unit, count: unit.count + count, health: unit.health + maxHealth * count }
+        : unit
+    );
+  }
+
+  return [
+    ...stacks,
+    {
+      id: randomUUID(),
+      unitType,
+      count,
+      health: maxHealth * count,
+      maxHealth,
+      position: stacks.length,
+    },
+  ];
+}
+
+function removeUnitsFromStackList(stacks: MinimalArmy[], unitType: UnitType, count: number, maxHealth: number) {
+  return stacks
+    .map((unit) =>
+      unit.unitType === unitType
+        ? { ...unit, count: unit.count - count, health: Math.max(0, unit.health - maxHealth * count) }
+        : unit
+    )
+    .filter((unit) => unit.count > 0)
+    .map((unit, position) => ({ ...unit, position }));
 }
 
 async function incrementPlayerResource(supabase: ReturnType<typeof createAdminClient>, playerId: string, resource: string, amount: number) {

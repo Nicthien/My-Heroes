@@ -1,13 +1,14 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
+import { Resources, Faction, BuildingType, UnitStack, UnitType, type CombatBoardUnit } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
+import { UNIT_RULES as COMBAT_UNIT_RULES } from "@/lib/game/units";
 import {
   BUILDING_RULES,
   DWELLING_TIERS,
@@ -17,12 +18,18 @@ import {
   formatCost,
   subtractCost,
 } from "@/lib/game/economy";
+import {
+  UnitSilhouette,
+  getUnitModel,
+  getUnitPalette,
+} from "@/components/game/combat/CombatScreen";
 import SidePanel from "./SidePanel";
+import CollapsiblePanel from "./CollapsiblePanel";
+import MiniMap from "./MiniMap";
 import {
   CornerOrnaments,
   FleurDeLis,
   HourglassIcon,
-  OrnateHeader,
   ParchmentBackground,
   goldDivider,
   goldText,
@@ -42,6 +49,7 @@ const RESOURCE_ITEMS = [
 const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
+type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
 
 function getNotificationPromptDismissed() {
   if (typeof window === "undefined") return false;
@@ -119,6 +127,137 @@ function ResourceIcon({ item }: { item: ResourceItem }) {
   );
 }
 
+function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: UnitType; side?: "attacker" | "defender"; size?: "xs" | "sm" }) {
+  const rule = COMBAT_UNIT_RULES[unitType];
+  const unit: CombatBoardUnit = {
+    id: `preview-${unitType}`,
+    unitType,
+    count: 1,
+    health: rule?.health ?? 1,
+    maxHealth: rule?.health ?? 1,
+    position: 0,
+    side,
+    ownerPlayerId: null,
+    heroId: null,
+    participantId: null,
+    joinsRound: 1,
+    q: 0,
+    r: 0,
+    speed: rule?.speed ?? 4,
+    minDamage: rule?.minDamage ?? 1,
+    maxDamage: rule?.maxDamage ?? 1,
+    ranged: rule?.ranged ?? false,
+    shots: rule?.shots ?? 0,
+    hasRetaliated: false,
+    defended: false,
+    waited: false,
+  };
+  const model = getUnitModel(unit);
+  const palette = getUnitPalette(unit);
+  const frameSize = size === "xs" ? "h-10 w-10" : "h-12 w-12";
+  const spriteSize = size === "xs" ? "h-[42px] w-[32px]" : "h-[52px] w-[40px]";
+
+  return (
+    <span className={`relative grid shrink-0 place-items-center overflow-hidden rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black shadow-inner shadow-black/50 ${frameSize}`}>
+      <span
+        className={`block drop-shadow-[0_5px_5px_rgba(0,0,0,0.55)] ${spriteSize}`}
+        style={{ transform: side === "defender" ? "scaleX(-1)" : undefined }}
+      >
+        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} />
+      </span>
+    </span>
+  );
+}
+
+function TownTabButton({
+  active,
+  badge,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  badge?: number;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={`group relative flex h-9 w-12 shrink-0 items-center justify-center rounded-md border px-2 outline-none transition focus-visible:ring-2 focus-visible:ring-amber-200/70 ${
+        active
+          ? "border-amber-300/80 bg-gradient-to-b from-amber-700/45 to-amber-950/70 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.22)]"
+          : "border-amber-800/50 bg-black/35 text-amber-300/75 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.2)] hover:border-amber-500/60 hover:bg-amber-950/35 hover:text-amber-100"
+      }`}
+    >
+      <span className="grid h-5 w-5 place-items-center" aria-hidden="true">
+        {icon}
+      </span>
+      {typeof badge === "number" && badge > 0 && (
+        <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border border-amber-500/60 bg-amber-950 px-1 text-[10px] font-black leading-none text-amber-100">
+          {badge}
+        </span>
+      )}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-amber-600/60 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function TownTabIcon({ tab }: { tab: TownTab }) {
+  const common = "h-5 w-5";
+  switch (tab) {
+    case "summary":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 6h13" />
+          <path d="M8 12h13" />
+          <path d="M8 18h13" />
+          <path d="M3 6h.01" />
+          <path d="M3 12h.01" />
+          <path d="M3 18h.01" />
+        </svg>
+      );
+    case "build":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21h18" />
+          <path d="M5 21V8l7-5 7 5v13" />
+          <path d="M9 21v-6h6v6" />
+          <path d="M10 10h4" />
+        </svg>
+      );
+    case "recruit":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+          <circle cx="9.5" cy="7" r="4" />
+          <path d="M19 8v6" />
+          <path d="M22 11h-6" />
+        </svg>
+      );
+    case "garrison":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+          <path d="M9 12l2 2 4-5" />
+        </svg>
+      );
+    case "tavern":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 22h8" />
+          <path d="M12 11v11" />
+          <path d="M7 3h10l-1 8a4 4 0 0 1-8 0L7 3Z" />
+        </svg>
+      );
+  }
+}
+
 export default function HUD() {
   const gameState = useGameStore((state) => state.gameState);
 
@@ -140,6 +279,10 @@ function HUDContent() {
   const [showDevPanel, setShowDevPanel] = useState(false);
   const [devPassword, setDevPassword] = useState("");
   const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
+  const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
+    townId: null,
+    tab: "summary",
+  });
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
     gameState: nullableGameState,
@@ -181,6 +324,18 @@ function HUDContent() {
   const isMyTown = Boolean(
     selectedTownOwner && myPlayer && selectedTownOwner.id === myPlayer.id
   );
+  const heroAtSelectedTown = selectedTown && myPlayer
+    ? (
+        selectedHero && myPlayer.heroes.some((hero) => hero.id === selectedHero.id) &&
+        selectedHero.position.x === selectedTown.position.x &&
+        selectedHero.position.y === selectedTown.position.y
+          ? selectedHero
+          : myPlayer.heroes.find((hero) =>
+              hero.position.x === selectedTown.position.x &&
+              hero.position.y === selectedTown.position.y
+            )
+      )
+    : undefined;
 
   const handleLeaveGame = async () => {
     if (!myPlayer || !gameState) return;
@@ -324,13 +479,12 @@ function HUDContent() {
       return;
     }
 
-    const firstHero = myPlayer.heroes[0];
     const nextResources = subtractCost(myPlayer.resources, rule.cost);
 
     setGameState({
       ...gameState,
       players: gameState.players.map((player) => {
-        if (player.id !== myPlayer.id || !firstHero) return player;
+        if (player.id !== myPlayer.id) return player;
         return {
           ...player,
           resources: nextResources,
@@ -338,6 +492,7 @@ function HUDContent() {
             town.id === selectedTown.id
               ? {
                   ...town,
+                  garrison: addUnitsToLocalStackList(town.garrison, unitType, 1, rule.health),
                   availableRecruits: {
                     ...town.availableRecruits,
                     [unitType]: Math.max(0, (town.availableRecruits[unitType] ?? 0) - 1),
@@ -345,42 +500,57 @@ function HUDContent() {
                 }
               : town
           ),
-          heroes: player.heroes.map((hero) => {
-            if (hero.id !== firstHero.id) return hero;
-            const existingStack = hero.armies.find(
-              (army) => army.unitType === unitType
-            );
+        };
+      }),
+    });
+  };
 
-            if (existingStack) {
-              return {
-                ...hero,
-                armies: hero.armies.map((army) =>
-                  army.id === existingStack.id
-                    ? {
-                        ...army,
-                        count: army.count + 1,
-                        health: army.health + rule.health,
-                      }
-                    : army
-                ),
-              };
-            }
+  const handleTransferGarrisonToHero = async (unitType: UnitType) => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown || !heroAtSelectedTown) return;
 
-            return {
-              ...hero,
-              armies: [
-                ...hero.armies,
-                {
-                  id: `local-${Date.now()}`,
-                  unitType,
-                  count: 1,
-                  health: rule.health,
-                  maxHealth: rule.health,
-                  position: hero.armies.length,
-                },
-              ],
-            };
-          }),
+    const rule = UNIT_RULES[unitType];
+    if (!rule) return;
+
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "TRANSFER_GARRISON_TO_HERO",
+        townId: selectedTown.id,
+        heroId: heroAtSelectedTown.id,
+        unitType,
+        count: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      return;
+    }
+
+    const targetHeroId = heroAtSelectedTown.id;
+    setGameState({
+      ...gameState,
+      players: gameState.players.map((player) => {
+        if (player.id !== myPlayer.id) return player;
+        return {
+          ...player,
+          towns: player.towns.map((town) =>
+            town.id === selectedTown.id
+              ? {
+                  ...town,
+                  garrison: removeUnitsFromLocalStackList(town.garrison, unitType, 1, rule.health),
+                }
+              : town
+          ),
+          heroes: player.heroes.map((hero) =>
+            hero.id === targetHeroId
+              ? {
+                  ...hero,
+                  armies: addUnitsToLocalStackList(hero.armies, unitType, 1, rule.health),
+                }
+              : hero
+          ),
         };
       }),
     });
@@ -480,6 +650,50 @@ function HUDContent() {
     }
   }, [canAct, isPending, notificationPermission, turnNotificationKey]);
 
+  const selectedTownFaction = selectedTown
+    ? (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction)
+    : Faction.CASTLE;
+  const selectedTownFactionTiers = FACTION_UNITS[selectedTownFaction] ?? FACTION_UNITS[Faction.CASTLE];
+  const selectedTownRecruitEntries = selectedTownFactionTiers.map((unitType, tier) => ({
+    rule: UNIT_RULES[unitType],
+    tier,
+    unitType,
+  }));
+  const buildableBuildings = selectedTown
+    ? BUILDING_RULES.filter((rule) => {
+        const alreadyBuilt = selectedTown.buildings.includes(rule.type);
+        const missingRequirement = rule.requires?.some(
+          (requirement) => !selectedTown.buildings.includes(requirement)
+        );
+        return (
+          !alreadyBuilt &&
+          !missingRequirement &&
+          selectedTown.lastBuiltTurn !== gameState.turnNumber &&
+          Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost))
+        );
+      }).length
+    : 0;
+  const recruitableUnits = selectedTown
+    ? selectedTownRecruitEntries.filter(({ rule, tier }) => {
+        const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
+        const available = selectedTown.availableRecruits[rule.type] ?? 0;
+        return hasDwelling && available > 0 && Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost));
+      }).length
+    : 0;
+  const townTabs: { id: TownTab; label: string; badge?: number }[] = [
+    { id: "summary", label: "Résumé" },
+    { id: "build", label: "Construire", badge: buildableBuildings },
+    { id: "recruit", label: "Recruter", badge: recruitableUnits },
+    { id: "garrison", label: "Garnison", badge: selectedTown?.garrison.length },
+    ...(selectedTown?.buildings.includes(BuildingType.TAVERN)
+      ? [{ id: "tavern" as const, label: "Taverne", badge: selectedTown.tavernOffer?.length ?? 0 }]
+      : []),
+  ];
+  const activeTownTab = townTabState.townId === selectedTownId ? townTabState.tab : "summary";
+  const displayedTownTab = townTabs.some((tab) => tab.id === activeTownTab)
+    ? activeTownTab
+    : "summary";
+
   return (
     <div className="absolute inset-0 pointer-events-none">
       {/* Top bar */}
@@ -545,12 +759,19 @@ function HUDContent() {
 
       {/* Right column: players + side shortcuts */}
       <div className="pointer-events-none absolute right-3 top-[7rem] bottom-24 flex w-64 flex-col gap-3 overflow-hidden">
-        <div className={`relative ${ornateFrame} pointer-events-auto shrink-0`}>
-          <CornerOrnaments />
-          <ParchmentBackground />
-          <OrnateHeader>Joueurs</OrnateHeader>
-          <div className="space-y-0.5 px-2 py-2 text-sm">
-            {[...gameState.players]
+        <CollapsiblePanel
+          title="Carte"
+          className={`${ornateFrame} pointer-events-auto shrink-0`}
+          bodyClassName=""
+        >
+          <MiniMap />
+        </CollapsiblePanel>
+        <CollapsiblePanel
+          title="Joueurs"
+          className={`${ornateFrame} pointer-events-auto shrink-0`}
+          bodyClassName="space-y-0.5 px-2 py-2 text-sm"
+        >
+          {[...gameState.players]
               .sort((a, b) => {
                 if (a.id === myPlayer?.id) return -1;
                 if (b.id === myPlayer?.id) return 1;
@@ -577,8 +798,7 @@ function HUDContent() {
                   </span>
                 </div>
               ))}
-          </div>
-        </div>
+        </CollapsiblePanel>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           <SidePanel />
         </div>
@@ -664,6 +884,14 @@ function HUDContent() {
             >
               Remettre le brouillard
             </button>
+            <a
+              href="/dev/sprites"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
+            >
+              Galerie des sprites
+            </a>
           </div>
         </div>
       )}
@@ -681,28 +909,25 @@ function HUDContent() {
 
       {/* Hero panel */}
       {selectedHero && (
-        <div className={`${ornateFramePolished} pointer-events-auto absolute bottom-20 left-4 min-w-80`}>
-          <CornerOrnaments />
-          <ParchmentBackground />
-          <OrnateHeader
-            right={
+        <CollapsiblePanel
+          title={selectedHero.name}
+          className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] w-80 max-w-[calc(100vw-2rem)]`}
+          bodyClassName="space-y-3 p-4"
+          right={
               <button
                 className="rounded text-amber-300/60 transition hover:text-amber-100"
-                onClick={() => useGameStore.getState().selectHero(null)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  useGameStore.getState().selectHero(null);
+                }}
                 aria-label="Fermer"
               >
                 ✕
               </button>
             }
           >
-            Héros
-          </OrnateHeader>
-          <div className="space-y-3 p-4">
-            <div>
-              <h3 className={`text-xl font-black drop-shadow ${goldText}`}>{selectedHero.name}</h3>
-              <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                Niveau {selectedHero.level} · XP {selectedHero.experience}
-              </div>
+            <div className="text-xs uppercase tracking-wider text-amber-200/60">
+              Niveau {selectedHero.level} · XP {selectedHero.experience}
             </div>
             <div className={goldDivider} />
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -730,26 +955,26 @@ function HUDContent() {
                   {selectedHero.armies.map((unit) => (
                     <div
                       key={unit.id}
-                      className="flex items-baseline justify-between rounded-md border border-amber-700/40 bg-black/50 px-2 py-1 text-sm"
+                      className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-black/50 px-2 py-1 text-sm"
                     >
-                      <span className="truncate text-[11px] text-amber-200/70">{unitTypeLabel(unit.unitType)}</span>
+                      <UnitSprite unitType={unit.unitType} size="xs" />
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-amber-200/70">{unitTypeLabel(unit.unitType)}</span>
                       <span className="font-black text-amber-100">{unit.count}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-          </div>
-        </div>
+        </CollapsiblePanel>
       )}
 
       {/* Town panel */}
       {selectedTown && (
-        <div className={`${ornateFramePolished} pointer-events-auto absolute bottom-20 left-4 flex max-h-[calc(100vh-12rem)] w-[28rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}>
-          <CornerOrnaments />
-          <ParchmentBackground />
-          <OrnateHeader
-            right={
+        <CollapsiblePanel
+          title={selectedTown.name}
+          className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+          bodyClassName="flex min-h-0 flex-1 flex-col"
+          right={
               <button
                 className="rounded text-amber-300/60 transition hover:text-amber-100"
                 onClick={() => useGameStore.getState().selectTown(null)}
@@ -758,116 +983,244 @@ function HUDContent() {
                 ✕
               </button>
             }
-          >
-            Château
-          </OrnateHeader>
-          <div className="flex-1 overflow-y-auto p-4">
-          <div className="mb-3">
-            <h3 className={`text-xl font-black drop-shadow ${goldText}`}>{selectedTown.name}</h3>
+        >
+          <div className="border-b border-amber-700/30 px-4 py-3">
             <div className="text-xs uppercase tracking-wider text-amber-200/60">
-              {factionLabel(selectedTown.faction as Faction)} · Niveau {selectedTown.level}
+              {factionLabel(selectedTownFaction)} · Niveau {selectedTown.level}
             </div>
-          </div>
-          {!isMyTown && (
-            <div className="mt-2 rounded-md border border-red-500/50 bg-red-950/60 px-2 py-1 text-sm text-red-200">
-              Ville ennemie ou non contrôlée.
-            </div>
-          )}
-          {selectedTown.buildings.length > 0 && (
-            <div className="mt-2">
-              <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Bâtiments</div>
-              <div className="flex flex-wrap gap-1">
-                {selectedTown.buildings.map((b, i) => (
-                  <span key={i} className="rounded-md border border-amber-700/40 bg-black/50 px-2 py-0.5 text-[11px] text-amber-200/90">
-                    {buildingTypeLabel(b)}
-                  </span>
-                ))}
+            {!isMyTown && (
+              <div className="mt-2 rounded-md border border-red-500/50 bg-red-950/60 px-2 py-1 text-sm text-red-200">
+                Ville ennemie ou non contrôlée.
               </div>
-            </div>
-          )}
-          {isMyTown && selectedTown.lastBuiltTurn === gameState.turnNumber && (
-            <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-950/60 px-2 py-1 text-sm text-amber-200">
-              Construction déjà réalisée aujourd&apos;hui dans ce château.
-            </div>
-          )}
-          <div className="mt-4 border-t border-amber-700/40 pt-3">
-            <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Construire</div>
-            <div className="space-y-2">
-              {BUILDING_RULES.map((rule) => {
-                const alreadyBuilt = selectedTown.buildings.includes(rule.type);
-                const missingRequirement = rule.requires?.find(
-                  (requirement) => !selectedTown.buildings.includes(requirement)
-                );
-                const disabled =
-                  alreadyBuilt ||
-                  selectedTown.lastBuiltTurn === gameState.turnNumber ||
-                  Boolean(missingRequirement) ||
-                  !myPlayer ||
-                  !canAfford(myPlayer.resources, rule.cost) ||
-                  !canAct ||
-                  !isMyTown ||
-                  isPending;
-
-                return (
-                  <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-bold text-amber-100">{rule.label}</div>
-                        <div className="text-xs text-amber-200/60">{rule.description}</div>
-                        <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
-                        {missingRequirement && (
-                          <div className="mt-1 text-xs text-red-300">
-                            Prérequis manquant : {buildingTypeLabel(missingRequirement)}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        className={`rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
-                          disabled
-                            ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
-                            : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
-                        }`}
-                        disabled={disabled}
-                        onClick={() => handleBuild(rule.type)}
-                      >
-                        {alreadyBuilt ? "Construit" : "Construire"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            )}
+            {isMyTown && selectedTown.lastBuiltTurn === gameState.turnNumber && (
+              <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-950/60 px-2 py-1 text-sm text-amber-200">
+                Construction déjà réalisée aujourd&apos;hui dans ce château.
+              </div>
+            )}
           </div>
 
-          {selectedTown.buildings.includes(BuildingType.TAVERN) && (
-            <div className="mt-4 border-t border-amber-700/40 pt-3">
-              <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Taverne</div>
-              {(selectedTown.tavernOffer ?? []).length === 0 ? (
-                <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
-                  Aucun héros disponible pour le moment.
+          <div className="flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
+            {townTabs.map((tab) => (
+              <TownTabButton
+                key={tab.id}
+                active={displayedTownTab === tab.id}
+                badge={tab.badge}
+                icon={<TownTabIcon tab={tab.id} />}
+                label={tab.label}
+                onClick={() => setTownTabState({ townId: selectedTownId, tab: tab.id })}
+              />
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {displayedTownTab === "summary" && (
+              <div className="space-y-4">
+                <div>
+                  <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Bâtiments</div>
+                  {selectedTown.buildings.length === 0 ? (
+                    <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucun bâtiment.</div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedTown.buildings.map((b, i) => (
+                        <span key={i} className="rounded-md border border-amber-700/40 bg-black/50 px-2 py-0.5 text-[11px] text-amber-200/90">
+                          {buildingTypeLabel(b)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {(selectedTown.tavernOffer ?? []).map((hero) => {
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+                    <div className="text-lg font-black text-amber-100">{buildableBuildings}</div>
+                    <div className="text-amber-200/60">constructible</div>
+                  </div>
+                  <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+                    <div className="text-lg font-black text-amber-100">{recruitableUnits}</div>
+                    <div className="text-amber-200/60">recrutable</div>
+                  </div>
+                  <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+                    <div className="text-lg font-black text-amber-100">{selectedTown.garrison.length}</div>
+                    <div className="text-amber-200/60">garnison</div>
+                  </div>
+                </div>
+                {heroAtSelectedTown && (
+                  <div className="rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-sm text-sky-100">
+                    Héros présent : <span className="font-black">{heroAtSelectedTown.name}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {displayedTownTab === "garrison" && (
+              <div className="space-y-2">
+                {isMyTown && !heroAtSelectedTown && (
+                  <div className="rounded-md border border-red-500/40 bg-red-950/50 px-3 py-2 text-xs text-red-200">
+                    Aucun héros au château pour recevoir la garnison.
+                  </div>
+                )}
+                {selectedTown.garrison.length === 0 ? (
+                  <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucune unité en garnison.</div>
+                ) : (
+                  selectedTown.garrison.map((unit) => {
+                    const disabled = !canAct || !isMyTown || !heroAtSelectedTown || isPending;
+                    return (
+                      <div key={unit.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <UnitSprite unitType={unit.unitType} side="defender" />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
+                              <div className="text-xs text-amber-200/60">En garnison : {unit.count}</div>
+                            </div>
+                          </div>
+                          <button
+                            className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black transition ${
+                              disabled
+                                ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                                : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
+                            }`}
+                            disabled={disabled}
+                            onClick={() => handleTransferGarrisonToHero(unit.unitType)}
+                          >
+                            Vers {heroAtSelectedTown?.name ?? "héros"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {displayedTownTab === "build" && (
+              <div className="space-y-2">
+                {BUILDING_RULES.map((rule) => {
+                  const alreadyBuilt = selectedTown.buildings.includes(rule.type);
+                  const missingRequirement = rule.requires?.find((requirement) => !selectedTown.buildings.includes(requirement));
+                  const disabled =
+                    alreadyBuilt ||
+                    selectedTown.lastBuiltTurn === gameState.turnNumber ||
+                    Boolean(missingRequirement) ||
+                    !myPlayer ||
+                    !canAfford(myPlayer.resources, rule.cost) ||
+                    !canAct ||
+                    !isMyTown ||
+                    isPending;
+
+                  return (
+                    <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-amber-100">{rule.label}</div>
+                          <div className="text-xs text-amber-200/60">{rule.description}</div>
+                          <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
+                          {missingRequirement && (
+                            <div className="mt-1 text-xs text-red-300">Prérequis manquant : {buildingTypeLabel(missingRequirement)}</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={alreadyBuilt ? "Construit" : "Construire"}
+                          className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border transition focus-visible:ring-2 focus-visible:ring-amber-200/70 ${
+                            disabled
+                              ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                              : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
+                          }`}
+                          disabled={disabled}
+                          onClick={() => handleBuild(rule.type)}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            {alreadyBuilt ? (
+                              <>
+                                <path d="M20 6 9 17l-5-5" />
+                              </>
+                            ) : (
+                              <>
+                                <path d="M3 21h18" />
+                                <path d="M5 21V8l7-5 7 5v13" />
+                                <path d="M9 21v-6h6v6" />
+                                <path d="M12 8v4" />
+                                <path d="M10 10h4" />
+                              </>
+                            )}
+                          </svg>
+                          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-amber-600/60 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                            {alreadyBuilt ? "Construit" : "Construire"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {displayedTownTab === "recruit" && (
+              <div className="space-y-2">
+                {selectedTownRecruitEntries.map(({ rule, tier }) => {
+                  const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
+                  const available = selectedTown.availableRecruits[rule.type] ?? 0;
+                  const disabled =
+                    !hasDwelling ||
+                    available <= 0 ||
+                    !myPlayer ||
+                    !canAfford(myPlayer.resources, rule.cost) ||
+                    !canAct ||
+                    !isMyTown ||
+                    isPending;
+
+                  return (
+                    <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <UnitSprite unitType={rule.type} />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold text-amber-100">{rule.label}</div>
+                            <div className="text-xs text-amber-200/60">PV {rule.health} · {formatCost(rule.cost)} / unité</div>
+                            {hasDwelling && <div className="mt-1 text-xs text-emerald-300">Disponible : {available}</div>}
+                            {!hasDwelling && <div className="mt-1 text-xs text-red-300">Prérequis : {buildingTypeLabel(DWELLING_TIERS[tier])}</div>}
+                          </div>
+                        </div>
+                        <button
+                          className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black transition ${
+                            disabled
+                              ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                              : "border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
+                          }`}
+                          disabled={disabled}
+                          onClick={() => handleRecruit(rule.type)}
+                        >
+                          +1
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {displayedTownTab === "tavern" && (
+              <div className="space-y-2">
+                {(selectedTown.tavernOffer ?? []).length === 0 ? (
+                  <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucun héros disponible pour le moment.</div>
+                ) : (
+                  (selectedTown.tavernOffer ?? []).map((hero) => {
                     const atMax = myPlayer ? myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER : true;
                     const tooPoor = !myPlayer || myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD;
                     const disabled = !canAct || !isMyTown || isPending || atMax || tooPoor;
                     return (
                       <div key={hero.templateId} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
                         <div className="flex items-center justify-between gap-3">
-                          <div>
+                          <div className="min-w-0">
                             <div className="text-sm font-bold text-amber-100">{hero.name}</div>
-                            <div className="text-xs text-amber-200/60">
-                              {hero.class} · {factionLabel(hero.faction as Faction)}
-                            </div>
+                            <div className="text-xs text-amber-200/60">{hero.class} · {factionLabel(hero.faction as Faction)}</div>
                             <div className="text-xs text-amber-300/80">Spécialité : {hero.specialty}</div>
                             <div className="mt-1 text-xs text-amber-300">{HERO_RECRUIT_COST_GOLD} or</div>
-                            {atMax && (
-                              <div className="mt-1 text-xs text-red-300">Maximum {MAX_HEROES_PER_PLAYER} héros</div>
-                            )}
+                            {atMax && <div className="mt-1 text-xs text-red-300">Maximum {MAX_HEROES_PER_PLAYER} héros</div>}
                           </div>
                           <button
-                            className={`rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
+                            className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
                               disabled
                                 ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
                                 : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
@@ -880,70 +1233,12 @@ function HUDContent() {
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 border-t border-amber-700/40 pt-3">
-            <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Recruter</div>
-            <div className="space-y-2">
-              {(() => {
-                const townFaction = ((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction;
-                const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
-                return factionTiers.map((unitType, tier) => ({
-                  rule: UNIT_RULES[unitType],
-                  tier,
-                }));
-              })().map(({ rule, tier }) => {
-                const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
-                const available = selectedTown.availableRecruits[rule.type] ?? 0;
-                const disabled =
-                  !hasDwelling ||
-                  available <= 0 ||
-                  !myPlayer ||
-                  !canAfford(myPlayer.resources, rule.cost) ||
-                  !canAct ||
-                  !isMyTown ||
-                  isPending;
-
-                return (
-                  <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-bold text-amber-100">{rule.label}</div>
-                        <div className="text-xs text-amber-200/60">
-                          PV {rule.health} · {formatCost(rule.cost)} / unité
-                        </div>
-                        {hasDwelling && (
-                          <div className="mt-1 text-xs text-emerald-300">Disponible : {available}</div>
-                        )}
-                        {!hasDwelling && (
-                          <div className="mt-1 text-xs text-red-300">
-                            Prérequis : {buildingTypeLabel(DWELLING_TIERS[tier])}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        className={`rounded-md border px-3 py-1 text-sm font-black transition ${
-                          disabled
-                            ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
-                            : "border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
-                        }`}
-                        disabled={disabled}
-                        onClick={() => handleRecruit(rule.type)}
-                      >
-                        +1
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  })
+                )}
+              </div>
+            )}
           </div>
-          </div>
-        </div>
+        </CollapsiblePanel>
       )}
 
       {/* Bouton de fin de tour */}
@@ -1016,6 +1311,50 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
       <span className={`text-base font-black tabular-nums ${color}`}>{value}</span>
     </div>
   );
+}
+
+function addUnitsToLocalStackList(
+  stacks: UnitStack[],
+  unitType: UnitType,
+  count: number,
+  maxHealth: number
+) {
+  const existing = stacks.find((unit) => unit.unitType === unitType);
+  if (existing) {
+    return stacks.map((unit) =>
+      unit.id === existing.id
+        ? { ...unit, count: unit.count + count, health: unit.health + maxHealth * count }
+        : unit
+    );
+  }
+
+  return [
+    ...stacks,
+    {
+      id: `local-${Date.now()}`,
+      unitType,
+      count,
+      health: maxHealth * count,
+      maxHealth,
+      position: stacks.length,
+    },
+  ];
+}
+
+function removeUnitsFromLocalStackList(
+  stacks: UnitStack[],
+  unitType: UnitType,
+  count: number,
+  maxHealth: number
+) {
+  return stacks
+    .map((unit) =>
+      unit.unitType === unitType
+        ? { ...unit, count: unit.count - count, health: Math.max(0, unit.health - maxHealth * count) }
+        : unit
+    )
+    .filter((unit) => unit.count > 0)
+    .map((unit, position) => ({ ...unit, position }));
 }
 
 async function getApiErrorMessage(response: Response, fallback: string) {

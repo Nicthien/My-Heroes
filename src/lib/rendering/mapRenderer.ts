@@ -10,6 +10,7 @@ export interface MapObjectData {
   color: string;
   name: string;
   onWater?: boolean;
+  inTown?: boolean;
   buildingType?: string;
   guardianPower?: number;
 }

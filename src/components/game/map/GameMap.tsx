@@ -31,6 +31,8 @@ export default function GameMapComponent() {
   const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const didInitialCenter = useRef(false);
+  const didAutoSelectActiveHero = useRef(false);
+  const autoSelectGameIdRef = useRef<string | null>(null);
   const renderedMapKeyRef = useRef<string | null>(null);
   const lastCenteredHeroIdRef = useRef<string | null>(null);
   const pendingMoveRef = useRef<{
@@ -48,7 +50,7 @@ export default function GameMapComponent() {
   const isSyncingMoveRef = useRef(false);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
-  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget, devRevealMap } = useGameStore();
+  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget, zoomRequest, devRevealMap } = useGameStore();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -172,6 +174,13 @@ export default function GameMapComponent() {
     renderer.centerOnTile(cameraTarget.x, cameraTarget.y);
   }, [cameraTarget, rendererReadyVersion]);
 
+  useEffect(() => {
+    if (!zoomRequest) return;
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady()) return;
+    renderer.zoomCamera(zoomRequest.direction);
+  }, [zoomRequest, rendererReadyVersion]);
+
   const previousTurnRef = useRef<number | null>(null);
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -263,7 +272,23 @@ export default function GameMapComponent() {
   }, [gameState?.status, rendererReadyVersion]);
 
   useEffect(() => {
-    if (gameState?.status !== "ACTIVE" || selectedHeroId || selectedTownId) return;
+    if (!gameState || gameState.status !== "ACTIVE") {
+      didAutoSelectActiveHero.current = false;
+      autoSelectGameIdRef.current = null;
+      return;
+    }
+
+    if (autoSelectGameIdRef.current !== gameState.id) {
+      didAutoSelectActiveHero.current = false;
+      autoSelectGameIdRef.current = gameState.id;
+    }
+
+    if (selectedHeroId || selectedTownId) {
+      if (selectedHeroId) didAutoSelectActiveHero.current = true;
+      return;
+    }
+
+    if (didAutoSelectActiveHero.current) return;
 
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
@@ -271,6 +296,7 @@ export default function GameMapComponent() {
     const firstHero = currentPlayer?.heroes[0];
     if (!firstHero) return;
 
+    didAutoSelectActiveHero.current = true;
     selectHero(firstHero.id);
     rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
   }, [gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion]);
@@ -309,10 +335,6 @@ export default function GameMapComponent() {
       e.clientX - rect.left,
       e.clientY - rect.top
     );
-  }, []);
-
-  const handleZoomButton = useCallback((direction: number) => {
-    rendererRef.current?.zoomCamera(direction);
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -936,32 +958,6 @@ export default function GameMapComponent() {
       onClick={handleClick}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div
-        className="pointer-events-auto absolute right-4 top-24 z-20 grid overflow-hidden rounded-md border border-amber-700/60 bg-stone-950/85 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onMouseUp={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          aria-label="Zoomer"
-          title="Zoomer"
-          className="grid h-9 w-9 place-items-center border-b border-amber-800/60 text-xl font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
-          onClick={() => handleZoomButton(1)}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          aria-label="Dezoomer"
-          title="Dezoomer"
-          className="grid h-9 w-9 place-items-center text-xl font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
-          onClick={() => handleZoomButton(-1)}
-        >
-          -
-        </button>
-      </div>
     </div>
   );
 }
@@ -1056,6 +1052,7 @@ function buildObjects(
 
   for (const player of gameState.players) {
     const isCurrentPlayer = player.id === currentPlayer?.id;
+    const townPositions = new Set(player.towns.map((town) => `${town.position.x},${town.position.y}`));
 
     if (gameState.status !== "PENDING") {
       for (const hero of player.heroes) {
@@ -1071,6 +1068,7 @@ function buildObjects(
           color: player.color,
           name: hero.name,
           onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
+          inTown: townPositions.has(key),
         });
       }
     }

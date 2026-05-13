@@ -12,6 +12,20 @@ import {
 const PUBLIC_SVGS: { path: string; label: string; group: string }[] = [
   { path: "/assets/sprites/map/hero-cavalier.svg", label: "Hero Cavalier", group: "Map" },
   { path: "/assets/sprites/map/town-castle.svg", label: "Town Castle", group: "Map" },
+  { path: "/assets/sprites/map/hero-rampart.svg", label: "Hero Rampart", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-rampart.svg", label: "Town Rampart", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-tower.svg", label: "Hero Tower", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-tower.svg", label: "Town Tower", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-inferno.svg", label: "Hero Inferno", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-inferno.svg", label: "Town Inferno", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-necropolis.svg", label: "Hero Necropolis", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-necropolis.svg", label: "Town Necropolis", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-dungeon.svg", label: "Hero Dungeon", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-dungeon.svg", label: "Town Dungeon", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-stronghold.svg", label: "Hero Stronghold", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-stronghold.svg", label: "Town Stronghold", group: "Map Factions" },
+  { path: "/assets/sprites/map/hero-fortress.svg", label: "Hero Fortress", group: "Map Factions" },
+  { path: "/assets/sprites/map/town-fortress.svg", label: "Town Fortress", group: "Map Factions" },
   { path: "/assets/sprites/map/monster.svg", label: "Monster", group: "Map" },
   { path: "/assets/sprites/map/alchemist-lab.svg", label: "Alchemist Lab", group: "Map" },
   { path: "/assets/sprites/map/crystal-cavern.svg", label: "Crystal Cavern", group: "Map" },
@@ -157,7 +171,7 @@ export default function SpritesGalleryPage() {
   const fileGroups = Array.from(new Set(PUBLIC_SVGS.map((entry) => entry.group)));
 
   return (
-    <div className="min-h-screen bg-[#151712] px-8 py-10 text-stone-100">
+    <div className="h-screen overflow-y-auto bg-[#151712] px-8 py-10 text-stone-100">
       <header className="mx-auto max-w-7xl pb-6">
         <h1 className="text-3xl font-black text-amber-200">Galerie des sprites</h1>
         <p className="mt-1 text-sm text-stone-400">

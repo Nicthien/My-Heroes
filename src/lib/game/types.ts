@@ -400,6 +400,7 @@ export type GameAction =
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
+  | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }

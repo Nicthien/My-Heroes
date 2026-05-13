@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
@@ -383,7 +383,9 @@ function UnitModel({
 
   return (
     <span
-      className="pointer-events-none absolute block h-[105px] w-[82px]"
+      className={`pointer-events-none absolute block h-[105px] w-[82px] ${
+        active ? "drop-shadow-[0_0_12px_rgba(252,211,77,0.75)]" : attackable ? "drop-shadow-[0_0_12px_rgba(248,113,113,0.65)]" : ""
+      }`}
       style={{
         left: "calc(50% + 26px)",
         top: lifted ? -48 : 20,
@@ -412,7 +414,7 @@ function UnitModel({
 }
 
 export function UnitSilhouette({ kind, palette, ranged }: { kind: UnitModelKind; palette: ReturnType<typeof getUnitPalette>; ranged: boolean }) {
-  const gradId = useMemo(() => `g-${Math.random().toString(36).slice(2, 9)}`, []);
+  const gradId = `g-${useId().replace(/:/g, "")}`;
   return (
     <svg viewBox="0 0 70 92" width="100%" height="100%" className="overflow-visible" aria-hidden="true">
       <defs>

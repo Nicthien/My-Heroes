@@ -119,7 +119,11 @@ export async function POST(
   const buildingDefender = !defender && body.targetType === "building"
     ? await getBuildingDefender(supabase, id, String(body.targetId ?? ""))
     : null;
-  const targetDefender = defender ?? buildingDefender;
+  const targetPosition = getTargetPosition(body);
+  const townDefender = !defender && !buildingDefender && body.targetType === "town"
+    ? await getTownDefender(supabase, id, String(body.targetId ?? ""), targetPosition)
+    : null;
+  const targetDefender = defender ?? buildingDefender ?? townDefender;
   if (!targetDefender) {
     const debug = {
       gameId: id,
@@ -212,6 +216,8 @@ export async function POST(
     if (attackerWon) {
       if (targetDefender.neutralArmyId) {
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
+      } else if (body.targetType === "town") {
+        await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (!targetDefender.playerId) {
         await supabase
           .from("resource_buildings")
@@ -226,6 +232,70 @@ export async function POST(
   }
 
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+}
+
+function getTargetPosition(body: { destination?: { x?: unknown; y?: unknown }; path?: Array<{ x?: unknown; y?: unknown }> }) {
+  if (body.destination) return body.destination;
+  return Array.isArray(body.path) ? body.path[body.path.length - 1] : undefined;
+}
+
+async function getTownDefender(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  targetId: string,
+  targetPosition?: { x?: unknown; y?: unknown }
+) {
+  let { data: town, error } = await supabase
+    .from("towns")
+    .select("id,x,y,neutral_garrison")
+    .eq("game_id", gameId)
+    .eq("id", targetId)
+    .eq("is_neutral", true)
+    .maybeSingle();
+
+  const x = Number(targetPosition?.x);
+  const y = Number(targetPosition?.y);
+  if (!town && Number.isFinite(x) && Number.isFinite(y)) {
+    const fallback = await supabase
+      .from("towns")
+      .select("id,x,y,neutral_garrison")
+      .eq("game_id", gameId)
+      .eq("x", x)
+      .eq("y", y)
+      .eq("is_neutral", true)
+      .maybeSingle();
+    town = fallback.data;
+    error = fallback.error;
+  }
+
+  const garrison = (town?.neutral_garrison ?? []) as UnitStack[];
+  if (error || !town || garrison.length === 0) return null;
+
+  return {
+    id: town.id,
+    playerId: null,
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: garrison,
+    x: town.x,
+    y: town.y,
+  };
+}
+
+async function captureNeutralTown(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  townId: string,
+  playerId: string
+) {
+  await supabase
+    .from("towns")
+    .update({ game_player_id: playerId, is_neutral: false, neutral_garrison: [] })
+    .eq("game_id", gameId)
+    .eq("id", townId)
+    .eq("is_neutral", true);
 }
 
 async function getBuildingDefender(

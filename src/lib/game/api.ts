@@ -102,7 +102,11 @@ interface ApiCombat {
   result?: PersistentCombat["result"];
 }
 
-export function mapApiToGameState(data: Record<string, unknown>, currentUserId?: string): GameState {
+export function mapApiToGameState(
+  data: Record<string, unknown>,
+  currentUserId?: string,
+  options: { revealMap?: boolean } = {}
+): GameState {
   const turnNumber = data.turnNumber as number;
   const completedTurnPlayerIds = new Set(
     ((data.turns as ApiTurn[] | undefined) ?? [])
@@ -215,14 +219,14 @@ export function mapApiToGameState(data: Record<string, unknown>, currentUserId?:
             if (buildingData) {
               obj.guardianPower = buildingData.guardianPower;
             }
-            if (!exploredSet.has(`${x},${y}`)) {
+            if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
               delete tile.object;
             }
-          } else if (!exploredSet.has(`${x},${y}`)) {
+          } else if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
             delete tile.object;
           }
         }
-        if (!exploredSet.has(`${x},${y}`)) {
+        if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
           tile.terrain = "grass" as never;
           tile.elevation = 0;
           tile.isPassable = false;

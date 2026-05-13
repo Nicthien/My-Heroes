@@ -1,7 +1,11 @@
 import { mapApiToGameState } from "./api";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 
-export async function refreshGameState(gameId: string, userId?: string) {
+export async function refreshGameState(
+  gameId: string,
+  userId?: string,
+  options: { revealMap?: boolean } = {}
+) {
   const res = await fetchWithSupabaseAuth(`/api/games/${gameId}`, { cache: "no-store" });
   if (!res.ok) return null;
   const data = await res.json();
@@ -28,5 +32,5 @@ export async function refreshGameState(gameId: string, userId?: string) {
     }
   }
 
-  return mapApiToGameState(data, userId);
+  return mapApiToGameState(data, userId, options);
 }

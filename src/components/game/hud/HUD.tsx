@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
@@ -136,6 +136,10 @@ function HUDContent() {
   const [notificationPromptDismissed, setNotificationPromptDismissed] = useState(
     getNotificationPromptDismissed
   );
+  const [showDevPassword, setShowDevPassword] = useState(false);
+  const [showDevPanel, setShowDevPanel] = useState(false);
+  const [devPassword, setDevPassword] = useState("");
+  const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
     gameState: nullableGameState,
@@ -144,6 +148,8 @@ function HUDContent() {
     combatMessage,
     setCombatMessage,
     setGameState,
+    devRevealMap,
+    setDevRevealMap,
   } = useGameStore();
   const gameState = nullableGameState!;
 
@@ -206,7 +212,7 @@ function HUDContent() {
       return;
     }
 
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
@@ -216,7 +222,7 @@ function HUDContent() {
     });
 
     if (!response.ok) {
-      const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+      const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
       if (refreshedState && refreshedState.status !== "PENDING") {
         useGameStore.getState().setGameState(refreshedState);
         return;
@@ -225,7 +231,7 @@ function HUDContent() {
       return;
     }
 
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
@@ -292,7 +298,7 @@ function HUDContent() {
       setCombatMessage(await getApiErrorMessage(response, "Recrutement de héros impossible."));
       return;
     }
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id);
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
   };
 
@@ -410,6 +416,30 @@ function HUDContent() {
     setNotificationPermission(permission);
   };
 
+  const openDevPassword = () => {
+    setDevPassword("");
+    setDevPasswordError(null);
+    setShowDevPassword(true);
+  };
+
+  const unlockDevPanel = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (devPassword === "godmode") {
+      setShowDevPassword(false);
+      setShowDevPanel(true);
+      setDevPassword("");
+      setDevPasswordError(null);
+      return;
+    }
+    setDevPasswordError("Mauvais mot de passe.");
+  };
+
+  const setDevReveal = async (reveal: boolean) => {
+    setDevRevealMap(reveal);
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: reveal });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
   useEffect(() => {
     if (typeof Notification === "undefined") return;
 
@@ -456,7 +486,14 @@ function HUDContent() {
       <div className="pointer-events-auto absolute left-0 right-0 top-0 border-b-2 border-amber-700/60 bg-gradient-to-b from-[#1a1208] via-[#0e0904] to-[#1a1208] px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(252,211,77,0.15)]">
         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
           <div className="flex min-w-0 items-center gap-3 justify-self-start text-left">
-            <FleurDeLis className="h-6 w-6 shrink-0 text-amber-400 drop-shadow" />
+            <button
+              type="button"
+              aria-label="Mode DEV"
+              className="grid h-7 w-7 shrink-0 place-items-center text-amber-400 drop-shadow outline-none transition hover:text-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/70"
+              onDoubleClick={openDevPassword}
+            >
+              <FleurDeLis className="h-6 w-6" />
+            </button>
             <div>
               <div className={`whitespace-nowrap text-xl font-black tracking-[0.15em] md:text-2xl ${goldText}`}>
                 MY HEROES
@@ -556,6 +593,78 @@ function HUDContent() {
           >
             Fermer
           </button>
+        </div>
+      )}
+
+      {showDevPassword && (
+        <div className="pointer-events-auto absolute left-1/2 top-24 z-50 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
+          <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode dieu</div>
+          <div className={goldDivider + " my-3"} />
+          <form onSubmit={unlockDevPanel} className="space-y-3">
+            <label className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+              Mot de passe
+              <input
+                autoFocus
+                type="password"
+                value={devPassword}
+                onChange={(event) => {
+                  setDevPassword(event.target.value);
+                  setDevPasswordError(null);
+                }}
+                className="mt-2 w-full rounded-md border border-amber-700/50 bg-black/70 px-3 py-2 text-sm text-amber-50 outline-none ring-0 transition focus:border-amber-300"
+              />
+            </label>
+            {devPasswordError && <div className="text-xs font-bold text-red-300">{devPasswordError}</div>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-stone-600 bg-stone-900 px-3 py-2 text-xs font-black uppercase tracking-wider text-stone-200 transition hover:border-stone-400"
+                onClick={() => setShowDevPassword(false)}
+              >
+                Fermer
+              </button>
+              <button
+                type="submit"
+                className="rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300"
+              >
+                Entrer
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showDevPanel && (
+        <div className="pointer-events-auto absolute left-3 top-24 z-50 w-72 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
+          <div className="flex items-center justify-between gap-3">
+            <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+            <button
+              type="button"
+              className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-sm font-black text-amber-200 transition hover:border-amber-300"
+              onClick={() => setShowDevPanel(false)}
+              aria-label="Fermer le mode DEV"
+            >
+              X
+            </button>
+          </div>
+          <div className={goldDivider + " my-3"} />
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="w-full rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300 disabled:cursor-default disabled:border-emerald-400/50 disabled:bg-emerald-900/70 disabled:text-emerald-100"
+              onClick={() => void setDevReveal(true)}
+              disabled={devRevealMap}
+            >
+              {devRevealMap ? "Brouillard supprime" : "Supprimer le brouillard"}
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
+              onClick={() => void setDevReveal(false)}
+            >
+              Remettre le brouillard
+            </button>
+          </div>
         </div>
       )}
 

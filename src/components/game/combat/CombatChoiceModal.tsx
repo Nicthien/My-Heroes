@@ -40,6 +40,7 @@ export default function CombatChoiceModal() {
         attackerHeroId: pendingCombat.attackerHeroId,
         targetId: pendingCombat.targetId,
         targetType: pendingCombat.targetType,
+        destination: pendingCombat.destination,
         path: pendingCombat.path,
       }),
     });

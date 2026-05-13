@@ -28,6 +28,7 @@ export interface MapRenderer {
   clearReachable(): void;
   centerOnTile(x: number, y: number): void;
   panCamera(dx: number, dy: number): void;
+  zoomCamera(direction: number, screenX?: number, screenY?: number): void;
   getTileAtScreen(screenX: number, screenY: number): Position | null;
   getObjectsAtScreen(screenX: number, screenY: number): MapObjectData[];
   destroy(): void;

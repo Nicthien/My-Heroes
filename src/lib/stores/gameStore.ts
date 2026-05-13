@@ -8,7 +8,7 @@ interface GameStore {
   selectedHeroId: string | null;
   selectedTownId: string | null;
   combatMessage: string | null;
-  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" | "building"; destination?: { x: number; y: number }; path?: Array<{ x: number; y: number }> } | null;
+  pendingCombat: { attackerHeroId: string; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: { x: number; y: number }; path?: Array<{ x: number; y: number }> } | null;
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
   activeCombat: PersistentCombat | null;
   minimizedCombatIds: string[];
@@ -16,6 +16,7 @@ interface GameStore {
   isCombatMode: boolean;
   isLoading: boolean;
   isMovePending: boolean;
+  devRevealMap: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
 
   setGameState: (state: GameState) => void;
@@ -33,6 +34,7 @@ interface GameStore {
   dispatchAction: (action: GameAction) => void;
   setCombatMode: (isCombat: boolean) => void;
   setLoading: (loading: boolean) => void;
+  setDevRevealMap: (reveal: boolean) => void;
   resetGame: () => void;
 }
 
@@ -50,6 +52,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isCombatMode: false,
   isLoading: false,
   isMovePending: false,
+  devRevealMap: false,
   cameraTarget: null,
 
   setGameState: (state) => set((prev) => ({ gameState: state, gameStateVersion: prev.gameStateVersion + 1 })),
@@ -93,6 +96,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setCombatMode: (isCombat) => set({ isCombatMode: isCombat }),
 
   setLoading: (loading) => set({ isLoading: loading }),
+  setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
 
   resetGame: () =>
     set({
@@ -109,6 +113,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isCombatMode: false,
       isLoading: false,
       isMovePending: false,
+      devRevealMap: false,
       cameraTarget: null,
     }),
 }));

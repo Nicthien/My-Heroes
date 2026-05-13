@@ -31,6 +31,8 @@ interface MinimalTown {
   buildings?: string[];
   availableRecruits?: Record<string, number>;
   tavernOffer?: TavernOffer[];
+  isNeutral?: boolean;
+  neutralGarrison?: unknown[];
 }
 
 interface MinimalResourceBuilding {
@@ -178,6 +180,37 @@ export async function POST(
         interaction = { type: "FIGHT", resource: "victory", gold: 150 };
       }
 
+      // Capture d'un château neutre : si garnison vide → capture immédiate.
+      // (Le déclenchement du combat vs garnison est branché côté combat flow standard.)
+      if (tile?.object?.type === "town") {
+        const { data: neutralTown } = await supabase
+          .from("towns")
+          .select("id, is_neutral, neutral_garrison, town_type, name")
+          .eq("game_id", id)
+          .eq("x", lastPos.x)
+          .eq("y", lastPos.y)
+          .eq("is_neutral", true)
+          .maybeSingle();
+        if (neutralTown) {
+          const garrison = (neutralTown.neutral_garrison ?? []) as unknown[];
+          if (garrison.length === 0) {
+            await supabase
+              .from("towns")
+              .update({
+                game_player_id: gamePlayer.id,
+                is_neutral: false,
+                neutral_garrison: [],
+              })
+              .eq("id", neutralTown.id);
+            await supabase
+              .from("heroes")
+              .update({ experience: hero.experience + 250 })
+              .eq("id", hero.id);
+            interaction = { type: "CAPTURE_TOWN" };
+          }
+        }
+      }
+
       return NextResponse.json({ success: true, interaction });
     }
 
@@ -195,9 +228,44 @@ export async function POST(
 
     if (action.type === "CAPTURE_TOWN") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const town = players.flatMap((player) => player.towns).find((item) => item.id === action.townId);
+      let town = players.flatMap((player) => player.towns).find((item) => item.id === action.townId);
+      if (!town) {
+        const mapData = game.mapData as GameMap;
+        const mapTownTile = mapData.tiles
+          .flatMap((row) => row)
+          .find((tile) => tile.object?.type === "town" && tile.object.id === action.townId);
+
+        if (mapTownTile) {
+          const { data: neutralTown } = await supabase
+            .from("towns")
+            .select("id,x,y,town_type,buildings,neutral_garrison,is_neutral")
+            .eq("game_id", id)
+            .eq("x", mapTownTile.x)
+            .eq("y", mapTownTile.y)
+            .eq("is_neutral", true)
+            .maybeSingle();
+
+          if (neutralTown) {
+            town = {
+              id: neutralTown.id,
+              x: neutralTown.x,
+              y: neutralTown.y,
+              townType: neutralTown.town_type,
+              buildings: neutralTown.buildings ?? [],
+              isNeutral: neutralTown.is_neutral,
+              neutralGarrison: neutralTown.neutral_garrison ?? [],
+            };
+          }
+        }
+      }
       if (!hero || !town) return NextResponse.json({ error: "Chateau invalide" }, { status: 400 });
-      await supabase.from("towns").update({ game_player_id: gamePlayer.id }).eq("id", town.id);
+      if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
+        return NextResponse.json({ error: "Ce chateau neutre est garde" }, { status: 400 });
+      }
+      await supabase
+        .from("towns")
+        .update({ game_player_id: gamePlayer.id, is_neutral: false, neutral_garrison: [] })
+        .eq("id", town.id);
       await supabase.from("heroes").update({ x: town.x, y: town.y, experience: hero.experience + 250 }).eq("id", hero.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }

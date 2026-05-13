@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
 import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
+import { generateMap } from "@/lib/game/engine";
+import { listTemplatesForPlayers } from "@/lib/game/engine/template";
+import { GameMap, TerrainType } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   CornerOrnaments,
@@ -120,8 +124,22 @@ const ALIGNMENT_GROUPS: { key: FactionAlignment; label: string; accent: string }
   { key: "barbarian", label: "Les barbares", accent: "text-orange-200" },
 ];
 
+const MAP_SIZES = {
+  S: 36,
+  M: 72,
+  L: 108,
+  XL: 144,
+} as const;
+
 function factionLabel(faction: string) {
   return FACTION_META[faction]?.label ?? faction;
+}
+
+function randomSeedValue() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let value = "";
+  for (let i = 0; i < 8; i++) value += chars[Math.floor(Math.random() * chars.length)];
+  return value;
 }
 
 export default function DashboardPage() {
@@ -131,19 +149,43 @@ export default function DashboardPage() {
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
+  const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [selectedFaction, setSelectedFaction] = useState<string>("castle");
   const [gameName, setGameName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
+  const [mapSize, setMapSize] = useState<"S" | "M" | "L" | "XL">("M");
+  const [seed, setSeed] = useState(() => randomSeedValue());
+  const [templateId, setTemplateId] = useState<string>("auto");
   const router = useRouter();
+  const templateOptions = useMemo(() => listTemplatesForPlayers(maxPlayers), [maxPlayers]);
+  const selectedTemplateId = templateId !== "auto" && templateOptions.some((template) => template.id === templateId)
+    ? templateId
+    : "auto";
+  const effectiveTemplateId = selectedTemplateId === "auto" ? undefined : selectedTemplateId;
+  const previewMap = useMemo(
+    () =>
+      generateMap({
+        width: MAP_SIZES[mapSize],
+        height: MAP_SIZES[mapSize],
+        seed,
+        playerCount: maxPlayers,
+        templateId: effectiveTemplateId,
+      }),
+    [effectiveTemplateId, mapSize, maxPlayers, seed],
+  );
+  const previewStats = useMemo(() => summarizeMap(previewMap), [previewMap]);
+  const generateRandomSeed = () => {
+    setSeed(randomSeedValue());
+  };
 
-  const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+  const fetchWithAuth = useCallback(async (input: RequestInfo, init?: RequestInit) => {
     const token = await getSupabaseAccessToken();
     const headers = new Headers(init?.headers);
     if (token) headers.set("Authorization", `Bearer ${token}`);
     return fetch(input, { ...init, headers, credentials: "include" });
-  };
+  }, []);
 
-  const parseJsonResponse = async (response: Response) => {
+  const parseJsonResponse = useCallback(async (response: Response) => {
     const text = await response.text();
     if (!text) return null;
     try {
@@ -152,9 +194,9 @@ export default function DashboardPage() {
       console.error("Failed to parse JSON response:", text, error);
       return null;
     }
-  };
+  }, []);
 
-  const loadMyGames = async () => {
+  const loadMyGames = useCallback(async () => {
     const response = await fetchWithAuth("/api/games", { cache: "no-store" });
     if (!response.ok) {
       console.warn("loadMyGames failed", response.status);
@@ -164,9 +206,9 @@ export default function DashboardPage() {
 
     const data = await parseJsonResponse(response);
     setGames(Array.isArray(data) ? data : []);
-  };
+  }, [fetchWithAuth, parseJsonResponse]);
 
-  const loadOpenGames = async () => {
+  const loadOpenGames = useCallback(async () => {
     const response = await fetchWithAuth("/api/games/open", { cache: "no-store" });
     if (!response.ok) {
       console.warn("loadOpenGames failed", response.status);
@@ -176,7 +218,7 @@ export default function DashboardPage() {
 
     const data = await parseJsonResponse(response);
     setOpenGames(Array.isArray(data) ? data : []);
-  };
+  }, [fetchWithAuth, parseJsonResponse]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
@@ -186,7 +228,7 @@ export default function DashboardPage() {
     if (status !== "authenticated") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMyGames().catch(console.error);
-  }, [status]);
+  }, [loadMyGames, status]);
 
   useEffect(() => {
     if (!showJoin) return;
@@ -196,7 +238,7 @@ export default function DashboardPage() {
       loadOpenGames().catch(() => setOpenGames([]));
     }, 3000);
     return () => clearInterval(interval);
-  }, [showJoin]);
+  }, [loadOpenGames, showJoin]);
 
   const createGame = async () => {
     setCreating(true);
@@ -207,8 +249,9 @@ export default function DashboardPage() {
       body: JSON.stringify({
         name: gameName || `Partie de ${session?.user?.name}`,
         maxPlayers,
-        mapWidth: 36,
-        mapHeight: 36,
+        mapSize,
+        seed,
+        templateId: effectiveTemplateId,
         faction: selectedFaction,
       }),
     });
@@ -303,13 +346,13 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => { setShowCreate(true); setShowJoin(false); }}
+              onClick={() => { setShowCreate(true); setShowJoin(false); setShowRmgPreview(false); }}
               className="rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700"
             >
               Nouvelle partie
             </button>
             <button
-              onClick={() => { setShowJoin(true); setShowCreate(false); loadOpenGames().catch(() => setOpenGames([])); }}
+              onClick={() => { setShowJoin(true); setShowCreate(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
               className="rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
             >
               Rejoindre
@@ -319,7 +362,14 @@ export default function DashboardPage() {
 
         {/* Dialogue de création */}
         {showCreate && (
-          <div className={`relative ${ornateFramePolished} mb-6 p-6`}>
+          <div
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-sm"
+            onClick={() => { setShowCreate(false); setShowRmgPreview(false); }}
+          >
+          <div
+            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-6`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <CornerOrnaments />
             <ParchmentBackground />
             <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Créer une partie</h2>
@@ -343,11 +393,100 @@ export default function DashboardPage() {
                   onChange={(e) => setMaxPlayers(Number(e.target.value))}
                   className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
                 >
-                  {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  {[2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>{n} joueurs</option>
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Taille de carte</label>
+              <div className="grid grid-cols-4 gap-2">
+                {(["S", "M", "L", "XL"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setMapSize(s)}
+                    className={`rounded-lg border p-3 text-center transition ${
+                      mapSize === s
+                        ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                        : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50"
+                    }`}
+                  >
+                    <div className="text-lg font-black text-amber-100">{s}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-amber-200/70">
+                      {s === "S" ? "36×36" : s === "M" ? "72×72" : s === "L" ? "108×108" : "144×144"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Modèle</label>
+                <select
+                  id="template"
+                  value={selectedTemplateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                >
+                  <option value="auto">Auto</option>
+                  {templateOptions.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({template.minPlayers}-{template.maxPlayers} joueurs)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Seed</label>
+                <div className="flex gap-2">
+                  <input
+                    id="seed"
+                    type="text"
+                    value={seed}
+                    onChange={(e) => setSeed(e.target.value.toUpperCase() || randomSeedValue())}
+                    placeholder="Seed"
+                    maxLength={32}
+                    className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={generateRandomSeed}
+                    title="Seed aléatoire"
+                    className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 text-amber-100 hover:border-amber-400"
+                  >
+                    🎲
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Apercu de la carte</div>
+                  <div className="text-[11px] uppercase tracking-wider text-amber-200/50">
+                    Seed {previewMap.seed} - {previewMap.width}x{previewMap.height}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRmgPreview(true)}
+                  className="shrink-0 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-100 transition hover:bg-amber-500/25"
+                >
+                  Grand apercu
+                </button>
+              </div>
+              <RmgMapPreview
+                map={previewMap}
+                minSize={260}
+                maxSize={360}
+                cellScale={4}
+                className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
+              />
             </div>
 
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
@@ -392,18 +531,134 @@ export default function DashboardPage() {
                 {creating ? "Création..." : "Créer"}
               </button>
               <button
-                onClick={() => setShowCreate(false)}
+                onClick={() => { setShowCreate(false); setShowRmgPreview(false); }}
                 className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100"
               >
                 Annuler
               </button>
             </div>
           </div>
+          {showRmgPreview && (
+            <div
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowRmgPreview(false);
+              }}
+            >
+              <div
+                className="my-auto flex h-[calc(100vh-2rem)] w-full max-w-[1500px] flex-col gap-4 border border-amber-700/40 bg-stone-950 p-4 text-stone-100 shadow-2xl shadow-black/60"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
+                  <div>
+                    <h3 className="text-xl font-semibold tracking-normal">Apercu RMG</h3>
+                    <p className="text-sm text-stone-400">
+                      Seed {previewMap.seed} - Template {previewMap.templateId}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={generateRandomSeed}
+                      className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
+                    >
+                      Nouvelle seed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRmgPreview(false)}
+                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm font-semibold text-stone-200 hover:border-amber-500/60 hover:text-amber-100"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </header>
+
+                <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-stone-400">Seed</span>
+                    <input
+                      value={seed}
+                      onChange={(event) => setSeed(event.target.value.toUpperCase() || randomSeedValue())}
+                      maxLength={32}
+                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 font-mono text-sm outline-none focus:border-amber-400"
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-stone-400">Taille</span>
+                    <select
+                      value={mapSize}
+                      onChange={(event) => setMapSize(event.target.value as keyof typeof MAP_SIZES)}
+                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                    >
+                      {Object.entries(MAP_SIZES).map(([key, value]) => (
+                        <option key={key} value={key}>
+                          {key} - {value}x{value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-stone-400">Joueurs</span>
+                    <select
+                      value={maxPlayers}
+                      onChange={(event) => setMaxPlayers(Number(event.target.value))}
+                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                    >
+                      {[2, 3, 4, 5, 6].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-stone-400">Template</span>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(event) => setTemplateId(event.target.value)}
+                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                    >
+                      <option value="auto">auto</option>
+                      {templateOptions.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </section>
+
+                <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <RmgMapPreview map={previewMap} minSize={420} maxSize={1120} cellScale={8} />
+
+                  <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
+                    <RmgLegend />
+                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={previewMap.width * previewMap.height} />
+                    <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
+                    <RmgStatBlock title="Details" values={previewStats.details} />
+                  </aside>
+                </section>
+              </div>
+            </div>
+          )}
+          </div>
         )}
 
         {/* Dialogue pour rejoindre une partie */}
         {showJoin && (
-          <div className={`relative ${ornateFramePolished} mb-6 p-6`}>
+          <div
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-sm"
+            onClick={() => setShowJoin(false)}
+          >
+          <div
+            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-6`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <CornerOrnaments />
             <ParchmentBackground />
             <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Rejoindre une partie</h2>
@@ -488,6 +743,7 @@ export default function DashboardPage() {
             >
               Fermer
             </button>
+          </div>
           </div>
         )}
 
@@ -584,4 +840,131 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function RmgLegend() {
+  const terrainItems = [
+    ["Eau", TERRAIN_COLOR.water],
+    ["Plage", TERRAIN_COLOR.sand],
+    ["Prairie", TERRAIN_COLOR.grass],
+    ["Foret", TERRAIN_COLOR.forest],
+    ["Montagne", TERRAIN_COLOR.mountain],
+    ["Marais", TERRAIN_COLOR.swamp],
+    ["Pont", "#8b5a2b"],
+  ];
+
+  const objectItems = [
+    ["Ville", OBJECT_COLOR.town],
+    ["Mine", OBJECT_COLOR.building],
+    ["Monstre", OBJECT_COLOR.monster],
+    ["Ressource", OBJECT_COLOR.resource],
+    ["Mur", OBJECT_COLOR.wall],
+  ];
+
+  return (
+    <div className="border border-stone-800 bg-stone-900/80 p-3">
+      <h4 className="mb-2 text-sm font-semibold text-amber-100">Legende</h4>
+      <div className="grid gap-3">
+        <div className="grid grid-cols-2 gap-1.5">
+          {terrainItems.map(([label, color]) => (
+            <RmgLegendItem key={label} label={label} color={color} />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 border-t border-stone-800 pt-2">
+          {objectItems.map(([label, color]) => (
+            <RmgLegendItem key={label} label={label} color={color} round />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RmgLegendItem({ label, color, round = false }: { label: string; color: string; round?: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs text-stone-300">
+      <span
+        className={round ? "h-3 w-3 shrink-0 rounded-full" : "h-3 w-3 shrink-0 rounded-sm"}
+        style={{ backgroundColor: color }}
+      />
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+function RmgStatBlock({
+  title,
+  values,
+  total,
+}: {
+  title: string;
+  values: Record<string, number>;
+  total?: number;
+}) {
+  const entries = Object.entries(values).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="border border-stone-800 bg-stone-900/80 p-3">
+      <h4 className="mb-2 text-sm font-semibold text-amber-100">{title}</h4>
+      <div className="grid gap-1.5">
+        {entries.map(([key, value]) => {
+          const pct = total && total > 0 ? Math.round((value / total) * 100) : null;
+          return (
+            <div key={key} className="grid grid-cols-[1fr_auto] gap-3 text-xs">
+              <span className="truncate text-stone-300">{key}</span>
+              <span className="font-mono text-stone-100">{pct === null ? value : `${value} - ${pct}%`}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function summarizeMap(map: GameMap) {
+  const terrain: Record<string, number> = {};
+  const objects: Record<string, number> = {};
+  let objectTotal = 0;
+  let roads = 0;
+  let bridges = 0;
+  let decor = 0;
+  let blockingDecor = 0;
+  let towns = 0;
+  let neutralTowns = 0;
+
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      terrain[tile.terrain] = (terrain[tile.terrain] ?? 0) + 1;
+      if (tile.road) {
+        roads++;
+        if (tile.terrain === TerrainType.WATER) bridges++;
+      }
+      if (tile.decor) {
+        decor++;
+        if (tile.decor.blocking) blockingDecor++;
+      }
+      if (tile.object) {
+        objectTotal++;
+        objects[tile.object.type] = (objects[tile.object.type] ?? 0) + 1;
+        if (tile.object.type === "town") {
+          towns++;
+          if (tile.object.subtype === "neutral") neutralTowns++;
+        }
+      }
+    }
+  }
+
+  return {
+    terrain,
+    objects,
+    objectTotal,
+    details: {
+      zones: map.zones?.length ?? 0,
+      roads,
+      bridges,
+      decor,
+      blockingDecor,
+      towns,
+      neutralTowns,
+    },
+  };
 }

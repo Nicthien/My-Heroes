@@ -267,12 +267,15 @@ async function persistResolvedCombat(
     if (combat.neutral_army_id) {
       await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", combat.neutral_army_id);
     } else if (!combat.defender_player_id) {
-      await supabase
-        .from("resource_buildings")
-        .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
-        .eq("game_id", combat.game_id)
-        .eq("x", combat.x)
-        .eq("y", combat.y);
+      const capturedTown = await captureNeutralTownAt(supabase, combat);
+      if (!capturedTown) {
+        await supabase
+          .from("resource_buildings")
+          .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
+          .eq("game_id", combat.game_id)
+          .eq("x", combat.x)
+          .eq("y", combat.y);
+      }
     }
     if (combat.defender_hero_id && combat.defender_player_id) {
       await supabase.from("armies").delete().eq("hero_id", combat.defender_hero_id);
@@ -282,4 +285,36 @@ async function persistResolvedCombat(
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
   }
+}
+
+async function captureNeutralTownAt(
+  supabase: ReturnType<typeof createAdminClient>,
+  combat: {
+    game_id: string;
+    attacker_player_id: string;
+    x: number;
+    y: number;
+  }
+) {
+  const { data: town } = await supabase
+    .from("towns")
+    .select("id")
+    .eq("game_id", combat.game_id)
+    .eq("x", combat.x)
+    .eq("y", combat.y)
+    .eq("is_neutral", true)
+    .maybeSingle();
+
+  if (!town) return false;
+
+  await supabase
+    .from("towns")
+    .update({
+      game_player_id: combat.attacker_player_id,
+      is_neutral: false,
+      neutral_garrison: [],
+    })
+    .eq("id", town.id);
+
+  return true;
 }

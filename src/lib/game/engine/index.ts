@@ -1,4 +1,3 @@
-import { createNoise2D } from "simplex-noise";
 import {
   GameState,
   GameAction,
@@ -9,11 +8,19 @@ import {
   TerrainType,
   BuildingType,
   Position,
-  MapObject,
-  ResourceBuildingType,
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES } from "../economy";
+import { makeRng, randomSeed, type RNG } from "./rng";
+import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
+import { buildZoneGrid, generateZoneTerrain } from "./zones";
+import { buildConnectionsAndWalls } from "./connections";
+import { applyChokepointGuards, fillZone, placeTownInZone } from "./placement";
+import { buildRoads, buildSecondaryRoads } from "./roads";
+import { placeDecor } from "./decor";
+import { NEUTRAL_CASTLE_VALUE } from "./value";
+import { generateLandmass } from "./landmass";
+import { carveHydrology } from "./hydrology";
 
 function isPassable(terrain: TerrainType): boolean {
   return terrain !== TerrainType.LAVA;
@@ -38,6 +45,13 @@ function getMovementCost(terrain: TerrainType): number {
   }
 }
 
+/** Coût de déplacement effectif d'une tile : les routes priment sur le terrain. */
+export function effectiveMovementCost(tile: MapTile): number {
+  if (tile.road === "paved") return 0.75;
+  if (tile.road === "dirt") return 1.0;
+  return tile.movementCost;
+}
+
 export function normalizeMapMovement(map: GameMap): GameMap {
   for (const row of map.tiles) {
     for (const tile of row) {
@@ -49,268 +63,158 @@ export function normalizeMapMovement(map: GameMap): GameMap {
   return map;
 }
 
-export function generateMap(width: number, height: number): GameMap {
-  const noise2D = createNoise2D(() => Math.random());
-  const elevationNoise = (x: number, y: number) => (noise2D(x, y) + 1) / 2;
-  const moistureNoise = (x: number, y: number) => (noise2D(x + 1000, y + 1000) + 1) / 2;
-  const riverNoise = (x: number, y: number) => (noise2D(x * 2 + 500, y * 2 + 500) + 1) / 2;
+export interface GenerateMapOptions {
+  width: number;
+  height: number;
+  seed?: string;
+  templateId?: string;
+  playerCount: number;
+}
 
-  const scale = 0.04; // Fréquence des biomes
+export function generateMap(opts: GenerateMapOptions): GameMap;
+/** @deprecated forme legacy (width, height) — utilise GenerateMapOptions */
+export function generateMap(width: number, height: number): GameMap;
+export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): GameMap {
+  let opts: GenerateMapOptions;
+  if (typeof arg1 === "number") {
+    opts = { width: arg1, height: arg2 ?? arg1, playerCount: 4 };
+  } else {
+    opts = arg1;
+  }
+  const { width, height, playerCount } = opts;
+  const seed = opts.seed && opts.seed.length > 0 ? opts.seed : randomSeed();
+  const rng = makeRng(seed);
 
+  // Choix du template
+  const templateId =
+    opts.templateId ?? pickDefaultTemplate(playerCount, rng);
+  const fullTemplate = getTemplate(templateId);
+  const template = resolveTemplate(fullTemplate, playerCount);
+
+  // 1) Zones + terrain
   const tiles: MapTile[][] = [];
-
   for (let y = 0; y < height; y++) {
     tiles[y] = [];
     for (let x = 0; x < width; x++) {
-      const e =
-        elevationNoise(x * scale, y * scale) * 0.6 +
-        elevationNoise(x * scale * 2, y * scale * 2) * 0.3 +
-        elevationNoise(x * scale * 4, y * scale * 4) * 0.1;
-
-      const m =
-        moistureNoise(x * scale * 1.2, y * scale * 1.2) * 0.6 +
-        moistureNoise(x * scale * 3, y * scale * 3) * 0.4;
-
-      const river = Math.abs(riverNoise(x * scale * 3, y * scale * 3) - 0.5);
-
-      let terrain: TerrainType;
-      let elevation = 0;
-
-      if (river < 0.02 && e > 0.25) {
-        terrain = TerrainType.WATER;
-        elevation = -1;
-      } else if (e < 0.30) {
-        terrain = TerrainType.WATER;
-        elevation = -2;
-      } else if (e < 0.36) {
-        terrain = TerrainType.SAND;
-        elevation = 0;
-      } else if (e < 0.65) {
-        if (m < 0.25) {
-          terrain = TerrainType.DIRT;
-          elevation = 0;
-        } else if (m > 0.7) {
-          terrain = TerrainType.SWAMP;
-          elevation = 0;
-        } else {
-          terrain = TerrainType.GRASS;
-          elevation = 0;
-        }
-      } else if (e < 0.78) {
-        if (m > 0.6) {
-          terrain = TerrainType.FOREST;
-          elevation = 1;
-        } else {
-          terrain = TerrainType.GRASS;
-          elevation = 1;
-        }
-      } else if (e < 0.88) {
-        terrain = TerrainType.MOUNTAIN;
-        elevation = 3;
-      } else if (e < 0.95) {
-        terrain = TerrainType.SNOW;
-        elevation = 4;
-      } else {
-        terrain = TerrainType.LAVA;
-        elevation = 2;
-      }
-
       tiles[y][x] = {
         x,
         y,
-        terrain,
-        elevation,
-        isPassable: isPassable(terrain),
-        movementCost: getMovementCost(terrain),
+        terrain: TerrainType.GRASS,
+        elevation: 0,
+        isPassable: true,
+        movementCost: 1,
       };
     }
   }
 
-  ensureLandCorners(tiles, width, height);
-  placeResources(tiles, width, height, noise2D);
+  const landmass = generateLandmass(width, height, rng, fullTemplate.landStyle);
+  const zoneGrid = buildZoneGrid(template, width, height, rng, landmass);
+  generateZoneTerrain(tiles, zoneGrid, width, height, rng, landmass);
+  carveHydrology(tiles, width, height, rng);
 
-  return { width, height, tiles };
+  // 2) Murs + chokepoints
+  const chokepoints = buildConnectionsAndWalls(tiles, zoneGrid, template, width, height);
+
+  // 3) Châteaux (joueurs + neutres) puis remplissage value-system
+  const townPositions: Position[] = [];
+  for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
+    const meta = zoneGrid.meta[zoneId];
+    if (!meta.hasTown) continue;
+    const placed = placeTownInZone(
+      { tiles, zoneGrid, width, height, rng },
+      zoneId,
+      !!meta.townIsNeutral,
+      meta.ownerIndex,
+    );
+    if (placed) townPositions.push({ x: placed.x, y: placed.y });
+  }
+
+  const miningPositions: Position[] = [];
+  for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
+    const meta = zoneGrid.meta[zoneId];
+    const tplZone = template.zones.find((z) => z.id === meta.templateZoneId)!;
+    // Deduit une partie de la valeur du chateau neutre sans vider le budget de zone.
+    const budgetMeta = { ...meta };
+    if (meta.hasTown && meta.townIsNeutral) {
+      const castleBudgetShare = Math.min(NEUTRAL_CASTLE_VALUE, Math.floor(meta.value * 0.35));
+      budgetMeta.value = Math.max(2000, meta.value - castleBudgetShare);
+    }
+    zoneGrid.meta[zoneId] = budgetMeta;
+    const r = fillZone(
+      { tiles, zoneGrid, width, height, rng },
+      zoneId,
+      tplZone.monsterStrength,
+    );
+    for (const b of r.placedBuildings) miningPositions.push({ x: b.x, y: b.y });
+  }
+
+  // 4) Gardes des chokepoints
+  applyChokepointGuards({ tiles, zoneGrid, width, height, rng }, chokepoints);
+
+  // 5) Routes : pavées entre châteaux, dirt vers les mines
+  buildRoads(tiles, width, height, townPositions, "paved");
+  buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10);
+
+  // 6) Décor (passe finale)
+  placeDecor(tiles, width, height, rng);
+
+  // 7) Garantir que chaque chokepoint reste praticable même après décor
+  for (const cp of chokepoints) {
+    const t = tiles[cp.y][cp.x];
+    if (t.decor?.blocking) t.decor = undefined;
+    t.isPassable = true;
+    t.movementCost = getMovementCost(t.terrain);
+  }
+
+  return {
+    width,
+    height,
+    tiles,
+    seed,
+    templateId,
+    zones: zoneGrid.meta,
+  };
 }
 
-function ensureLandCorners(tiles: MapTile[][], width: number, height: number) {
-  const cornerSize = 7;
-  const corners = [
-    { sx: 0, sy: 0 },
-    { sx: width - cornerSize, sy: 0 },
-    { sx: 0, sy: height - cornerSize },
-    { sx: width - cornerSize, sy: height - cornerSize },
-  ];
+function pickDefaultTemplate(playerCount: number, rng: RNG): string {
+  const compatible = listTemplatesForPlayers(playerCount);
+  if (compatible.length === 0) {
+    // fallback à JEBUS_CROSS si rien ne matche
+    return "jebus-cross";
+  }
+  return compatible[Math.floor(rng() * compatible.length)].id;
+}
 
-  for (const corner of corners) {
-    for (let y = corner.sy; y < corner.sy + cornerSize && y < height; y++) {
-      for (let x = corner.sx; x < corner.sx + cornerSize && x < width; x++) {
-        if (tiles[y][x].terrain === TerrainType.WATER) {
-          tiles[y][x] = {
-            ...tiles[y][x],
-            terrain: TerrainType.GRASS,
-            elevation: 0,
-            isPassable: true,
-            movementCost: 1,
-          };
+export function placePlayerStart(
+  mapData: GameMap | Record<string, unknown>,
+  playerIndex: number,
+): Position {
+  const map = mapData as GameMap;
+  const width = map.width ?? 36;
+  const height = map.height ?? 36;
+
+  // 1) Si la map a des zones avec un ownerIndex correspondant, utiliser le château de cette zone
+  if (map.zones && map.tiles) {
+    const zone = map.zones.find((z) => z.ownerIndex === playerIndex && z.hasTown);
+    if (zone) {
+      // Trouver la tile town dans la zone (parcours autour du centre)
+      for (let r = 0; r < 6; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const x = zone.centerX + dx;
+            const y = zone.centerY + dy;
+            if (x < 0 || x >= width || y < 0 || y >= height) continue;
+            const t = map.tiles[y]?.[x];
+            if (t?.object?.type === "town") return { x, y };
+          }
         }
       }
-    }
-  }
-}
-
-function placeResources(
-  tiles: MapTile[][],
-  width: number,
-  height: number,
-  noise2D: (x: number, y: number) => number
-) {
-  const resourceNoise = (x: number, y: number) =>
-    (noise2D(x * 0.08 + 2000, y * 0.08 + 2000) + 1) / 2;
-
-  const resourceTypes: MapObject["subtype"][] = [
-    "gold",
-    "wood",
-    "ore",
-    "mercury",
-    "crystals",
-    "sulfur",
-  ];
-
-  const buildingTypes: { type: ResourceBuildingType; preferredTerrain: TerrainType[] }[] = [
-    { type: ResourceBuildingType.GOLD_MINE, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS] },
-    { type: ResourceBuildingType.SAWMILL, preferredTerrain: [TerrainType.FOREST, TerrainType.GRASS] },
-    { type: ResourceBuildingType.ORE_PIT, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS] },
-    { type: ResourceBuildingType.ALCHEMIST_LAB, preferredTerrain: [TerrainType.SNOW, TerrainType.MOUNTAIN, TerrainType.GRASS] },
-    { type: ResourceBuildingType.CRYSTAL_CAVERN, preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.GRASS] },
-    { type: ResourceBuildingType.SULFUR_DUNE, preferredTerrain: [TerrainType.SAND, TerrainType.GRASS, TerrainType.LAVA] },
-  ];
-
-  const cornerSize = 7;
-  const margin = 5;
-  const startAnchors: Position[] = [
-    { x: 3, y: 3 },
-    { x: width - 4, y: 3 },
-    { x: 3, y: height - 4 },
-    { x: width - 4, y: height - 4 },
-  ];
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const tile = tiles[y][x];
-      if (!tile.isPassable) continue;
-      if (tile.object) continue;
-
-      const val = resourceNoise(x, y);
-      if (val > 0.88) {
-        const subtype = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
-        tile.object = {
-          type: "resource",
-          id: `res-${x}-${y}`,
-          subtype,
-        };
-      } else if (val > 0.84 && Math.random() > 0.7) {
-        tile.object = {
-          type: "monster",
-          id: `mon-${x}-${y}`,
-          subtype: "neutral",
-        };
-      }
+      return { x: zone.centerX, y: zone.centerY };
     }
   }
 
-  for (const buildingDef of buildingTypes) {
-    const count = 2 + Math.floor(Math.random() * 2);
-    const candidates: { x: number; y: number; startDistance: number; terrainPenalty: number }[] = [];
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const tile = tiles[y][x];
-        if (!tile.isPassable || tile.object) continue;
-        if (x < margin || x >= width - margin || y < margin || y >= height - margin) continue;
-
-        const inCorner =
-          (x < cornerSize && y < cornerSize) ||
-          (x >= width - cornerSize && y < cornerSize) ||
-          (x < cornerSize && y >= height - cornerSize) ||
-          (x >= width - cornerSize && y >= height - cornerSize);
-        if (inCorner) continue;
-
-        const terrainPenalty = buildingDef.preferredTerrain.includes(tile.terrain) ? 0 : 6;
-        const startDistance = Math.min(
-          ...startAnchors.map((start) => Math.abs(x - start.x) + Math.abs(y - start.y))
-        );
-        candidates.push({ x, y, startDistance, terrainPenalty });
-      }
-    }
-
-    const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === buildingDef.type);
-    const basePower = rule?.guardianBasePower ?? 200;
-    const maxStartDistance = Math.max(1, Math.floor((width + height) / 2));
-
-    let placed = 0;
-    for (let targetIndex = 0; targetIndex < count; targetIndex++) {
-      if (placed >= count) break;
-
-      const targetDistance = count === 1
-        ? maxStartDistance * 0.45
-        : maxStartDistance * (0.22 + (targetIndex / Math.max(1, count - 1)) * 0.56);
-
-      const orderedCandidates = [...candidates].sort((a, b) => {
-        const aScore = Math.abs(a.startDistance - targetDistance) + a.terrainPenalty;
-        const bScore = Math.abs(b.startDistance - targetDistance) + b.terrainPenalty;
-        return aScore - bScore;
-      });
-
-      for (const candidate of orderedCandidates) {
-        if (placed > targetIndex) break;
-
-        const tile = tiles[candidate.y][candidate.x];
-        if (tile.object) continue;
-
-        const tooClose = checkBuildingProximity(tiles, width, height, candidate.x, candidate.y, 5);
-        if (tooClose) continue;
-
-        const distFactor = Math.min(1, candidate.startDistance / maxStartDistance);
-        // Near starts: ~10% of base power (weak); far from starts: ~200% (very strong)
-        const guardianPower = Math.max(30, Math.floor(basePower * (0.1 + distFactor * 1.9)));
-
-        tile.object = {
-          type: "building",
-          id: `bld-${buildingDef.type}-${candidate.x}-${candidate.y}`,
-          subtype: buildingDef.type,
-          guardianPower,
-        };
-        placed++;
-      }
-    }
-  }
-}
-
-function checkBuildingProximity(
-  tiles: MapTile[][],
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  radius: number
-): boolean {
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-      const tile = tiles[ny][nx];
-      if (tile.object?.type === "building") return true;
-    }
-  }
-  return false;
-}
-
-export function placePlayerStart(mapData: GameMap | Record<string, unknown>, playerIndex: number): Position {
-  const width = (mapData as GameMap).width || (mapData as Record<string, unknown>).width as number || 36;
-  const height = (mapData as GameMap).height || (mapData as Record<string, unknown>).height as number || 36;
+  // 2) Fallback legacy : coins
   const margin = 3;
-
   const corners: Position[] = [
     { x: margin, y: margin },
     { x: width - margin - 1, y: margin },
@@ -321,7 +225,6 @@ export function placePlayerStart(mapData: GameMap | Record<string, unknown>, pla
     { x: margin, y: Math.floor(height / 2) },
     { x: width - margin - 1, y: Math.floor(height / 2) },
   ];
-
   return corners[playerIndex % corners.length];
 }
 
@@ -378,7 +281,7 @@ export function findPath(
       const nKey = `${neighbor.x},${neighbor.y}`;
       if (closedSet.has(nKey)) continue;
 
-      const g = current.g + tile.movementCost;
+      const g = current.g + effectiveMovementCost(tile);
       if (g > maxMovement) continue;
 
       const f = g + heuristic(neighbor, end);
@@ -430,7 +333,7 @@ export function computeReachableTiles(
       const tile = map.tiles[neighbor.y]?.[neighbor.x];
       if (!tile?.isPassable) continue;
 
-      const nextCost = current.cost + tile.movementCost;
+      const nextCost = current.cost + effectiveMovementCost(tile);
       if (nextCost > maxMovement) continue;
 
       const neighborKey = `${neighbor.x},${neighbor.y}`;

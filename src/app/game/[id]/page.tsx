@@ -23,7 +23,7 @@ export default function GamePage() {
   const gameId = params?.id as string;
   const { data: session } = useSession();
   const userId = session?.user?.id;
-  const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat } = useGameStore();
+  const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat, devRevealMap } = useGameStore();
   const [error, setError] = useState("");
   const loadRequestIdRef = useRef(0);
 
@@ -51,7 +51,7 @@ export default function GamePage() {
             const { generateMap } = await import("@/lib/game/engine");
             data.mapData = generateMap(data.mapWidth, data.mapHeight);
           }
-          const nextGameState = mapApiToGameState(data, userId);
+          const nextGameState = mapApiToGameState(data, userId, { revealMap: devRevealMap });
           if (nextGameState.id === gameId) {
             setGameState(nextGameState);
           }
@@ -89,7 +89,7 @@ export default function GamePage() {
       clearInterval(interval);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [gameId, setGameState, userId]);
+  }, [gameId, setGameState, userId, devRevealMap]);
 
   useEffect(() => {
     if (!gameState || activeCombat) return;

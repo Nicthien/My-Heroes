@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GameMap, MapObject, MapTile, Position, TerrainType } from "@/lib/game/types";
+import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
 import { MAP_SPRITES, MAP_SPRITE_PATHS } from "@/lib/rendering/phaser/assets";
@@ -49,16 +49,43 @@ const RESOURCE_LABELS: Record<string, string> = {
   sulfur: "SOU",
 };
 
+const MIN_CAMERA_ZOOM = 0.65;
+const MAX_CAMERA_ZOOM = 1.85;
+const CAMERA_ZOOM_STEP = 1.15;
+const BOARD_BORDER_WIDTH = 42;
+const BOARD_THICKNESS = 34;
+
+type WaterTileEffect = {
+  graphics: Phaser.GameObjects.Graphics;
+  x: number;
+  y: number;
+  seed: number;
+};
+
+type LavaTileEffect = {
+  graphics: Phaser.GameObjects.Graphics;
+  x: number;
+  y: number;
+  seed: number;
+};
+
+type FogEdgeSide = "northWest" | "northEast" | "southEast" | "southWest";
+
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
   objects: MapObjectData[] = [];
   readyCallback?: () => void;
 
+  private boardLayer!: Phaser.GameObjects.Container;
   private mapLayer!: Phaser.GameObjects.Container;
+  private decorLayer!: Phaser.GameObjects.Container;
+  private mapObjectLayer!: Phaser.GameObjects.Container;
   private reachableLayer!: Phaser.GameObjects.Container;
   private highlightLayer!: Phaser.GameObjects.Container;
   private objectLayer!: Phaser.GameObjects.Container;
   private fogLayer!: Phaser.GameObjects.Container;
+  private waterTiles: WaterTileEffect[] = [];
+  private lavaTiles: LavaTileEffect[] = [];
 
   constructor() {
     super("MapScene");
@@ -72,15 +99,21 @@ class PhaserMapScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x1a1a2e);
+    this.boardLayer = this.add.container(0, 0);
     this.mapLayer = this.add.container(0, 0);
+    this.decorLayer = this.add.container(0, 0);
+    this.mapObjectLayer = this.add.container(0, 0);
     this.reachableLayer = this.add.container(0, 0);
     this.highlightLayer = this.add.container(0, 0);
     this.objectLayer = this.add.container(0, 0);
     this.fogLayer = this.add.container(0, 0);
 
+    this.boardLayer.setDepth(-2);
     this.mapLayer.setDepth(0);
-    this.reachableLayer.setDepth(4);
-    this.highlightLayer.setDepth(5);
+    this.reachableLayer.setDepth(2);
+    this.highlightLayer.setDepth(2);
+    this.decorLayer.setDepth(3);
+    this.mapObjectLayer.setDepth(4);
     this.objectLayer.setDepth(10);
     this.fogLayer.setDepth(20);
     this.readyCallback?.();
@@ -88,17 +121,307 @@ class PhaserMapScene extends Phaser.Scene {
 
   renderMap(map: GameMap) {
     this.map = map;
+    this.waterTiles = [];
+    this.lavaTiles = [];
+    this.boardLayer.removeAll(true);
     this.mapLayer.removeAll(true);
+    this.decorLayer.removeAll(true);
+    this.mapObjectLayer.removeAll(true);
+    this.renderBoardFrame(map);
 
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
         const tile = map.tiles[y][x];
         const iso = cartToIso(x, y);
         this.renderTile(tile, iso.x, iso.y);
+        const depth = getTileDepth(tile);
+        if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth);
       }
     }
 
+    this.decorLayer.sort("depth");
+    this.mapObjectLayer.sort("depth");
     this.renderObjects();
+  }
+
+  update(time: number) {
+    for (const water of this.waterTiles) {
+      drawWaterAnimation(water.graphics, water.x, water.y, water.seed, time);
+    }
+
+    for (const lava of this.lavaTiles) {
+      drawLavaAnimation(lava.graphics, lava.x, lava.y, lava.seed, time);
+    }
+  }
+
+  private renderBoardFrame(map: GameMap) {
+    const corners = getMapOuterCorners(map);
+    const outer = expandPolygon(corners, BOARD_BORDER_WIDTH);
+    const side = outer.map((point) => ({ x: point.x, y: point.y + BOARD_THICKNESS }));
+
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x050307, 0.32);
+    drawPolygonPath(shadow, side);
+    shadow.fillPath();
+    this.boardLayer.add(shadow);
+
+    const base = this.add.graphics();
+    base.fillStyle(0x3a2112, 1);
+    base.lineStyle(2, 0x170b05, 0.85);
+    for (let i = 0; i < outer.length; i++) {
+      const next = (i + 1) % outer.length;
+      base.beginPath();
+      base.moveTo(outer[i].x, outer[i].y);
+      base.lineTo(outer[next].x, outer[next].y);
+      base.lineTo(side[next].x, side[next].y);
+      base.lineTo(side[i].x, side[i].y);
+      base.closePath();
+      base.fillPath();
+      base.strokePath();
+    }
+    this.boardLayer.add(base);
+
+    const top = this.add.graphics();
+    top.fillStyle(0x7a4a25, 1);
+    top.lineStyle(3, 0x261308, 1);
+    drawPolygonPath(top, outer);
+    top.fillPath();
+    top.strokePath();
+
+    top.fillStyle(0x2a180c, 1);
+    drawPolygonPath(top, corners);
+    top.fillPath();
+
+    top.lineStyle(2, 0xb77a3b, 0.55);
+    drawPolygonPath(top, corners);
+    top.strokePath();
+
+    this.drawWoodGrain(top, outer, corners);
+    this.drawCornerBolts(top, outer);
+    this.boardLayer.add(top);
+  }
+
+  private drawWoodGrain(graphics: Phaser.GameObjects.Graphics, outer: Position[], inner: Position[]) {
+    const grainColor = 0x2d1709;
+    const highlightColor = 0xb98245;
+
+    for (let i = 0; i < outer.length; i++) {
+      const next = (i + 1) % outer.length;
+      const edgeLength = Phaser.Math.Distance.Between(outer[i].x, outer[i].y, outer[next].x, outer[next].y);
+      const plankCount = Math.max(3, Math.floor(edgeLength / 72));
+
+      for (let p = 1; p < plankCount; p++) {
+        const t = p / plankCount;
+        const outside = lerpPoint(outer[i], outer[next], t);
+        const inside = lerpPoint(inner[i], inner[next], t);
+        graphics.lineStyle(1, grainColor, 0.34);
+        graphics.beginPath();
+        graphics.moveTo(outside.x, outside.y);
+        graphics.lineTo(inside.x, inside.y);
+        graphics.strokePath();
+      }
+
+      const grainLines = Math.max(4, Math.floor(edgeLength / 46));
+      for (let g = 0; g < grainLines; g++) {
+        const t = (g + 0.5) / grainLines;
+        const outside = lerpPoint(outer[i], outer[next], t);
+        const inside = lerpPoint(inner[i], inner[next], t);
+        const start = lerpPoint(outside, inside, 0.24 + hashTile(i, g) * 0.14);
+        const end = lerpPoint(outside, inside, 0.66 + hashTile(g, i) * 0.14);
+        const bow = (hashTile(i + 9, g + 3) - 0.5) * 8;
+
+        graphics.lineStyle(1, g % 3 === 0 ? highlightColor : grainColor, g % 3 === 0 ? 0.2 : 0.3);
+        graphics.beginPath();
+        graphics.moveTo(start.x, start.y);
+        graphics.lineTo((start.x + end.x) / 2 + bow, (start.y + end.y) / 2 - bow * 0.35);
+        graphics.lineTo(end.x, end.y);
+        graphics.strokePath();
+      }
+    }
+  }
+
+  private drawCornerBolts(graphics: Phaser.GameObjects.Graphics, outer: Position[]) {
+    const center = getPolygonCenter(outer);
+    for (const corner of outer) {
+      const bolt = lerpPoint(corner, center, 0.12);
+      graphics.fillStyle(0x2b1a10, 0.9);
+      graphics.fillCircle(bolt.x, bolt.y, 4);
+      graphics.fillStyle(0xd0a66d, 0.35);
+      graphics.fillCircle(bolt.x - 1, bolt.y - 1, 1.5);
+    }
+  }
+
+  private drawRoad(graphics: Phaser.GameObjects.Graphics, tile: MapTile, isoX: number, isoY: number) {
+    const road = tile.road;
+    if (!road) return;
+    const isBridge = tile.terrain === TerrainType.WATER;
+    const color = isBridge ? 0x8b5a2b : road === "paved" ? 0xa39280 : 0x7d6a4a;
+    graphics.fillStyle(color, isBridge ? 0.95 : 0.85);
+    drawDiamondPath(graphics, isoX, isoY);
+    graphics.fillPath();
+    if (isBridge) {
+      graphics.lineStyle(2, 0x4a2f18, 0.85);
+      graphics.beginPath();
+      graphics.moveTo(isoX - TILE_WIDTH / 2 + 8, isoY);
+      graphics.lineTo(isoX + TILE_WIDTH / 2 - 8, isoY);
+      graphics.moveTo(isoX, isoY - TILE_HEIGHT / 2 + 5);
+      graphics.lineTo(isoX, isoY + TILE_HEIGHT / 2 - 5);
+      graphics.strokePath();
+    }
+  }
+
+  private renderDecor(decor: DecorItem, isoX: number, isoY: number) {
+    const { type: kind, variant = 0 } = decor;
+    if (!isAllowedDecor(kind)) return;
+
+    const g = this.add.graphics();
+    const baseY = isoY + 2;
+    const scale = 0.92 + variant * 0.08;
+
+    this.drawDecorShadow(g, isoX, baseY, kind);
+
+    switch (kind) {
+      case "tree-pine":
+        this.drawPineTree(g, isoX, baseY, scale);
+        break;
+      case "tree-oak":
+        this.drawOakTree(g, isoX, baseY, scale);
+        break;
+      case "tree-dead":
+        this.drawDeadTree(g, isoX, baseY, scale);
+        break;
+      case "rock-large":
+        this.drawRockCluster(g, isoX, baseY, scale);
+        break;
+      case "rock-small":
+        this.drawSmallRock(g, isoX, baseY, scale);
+        break;
+      case "bush":
+        this.drawBush(g, isoX, baseY, scale);
+        break;
+      case "flower":
+        this.drawFlowers(g, isoX, baseY, scale, variant);
+        break;
+      case "grass-tuft":
+        this.drawGrassTuft(g, isoX, baseY, scale, variant);
+        break;
+    }
+    g.setDepth(baseY);
+    this.decorLayer.add(g);
+  }
+
+  private drawDecorShadow(graphics: Phaser.GameObjects.Graphics, x: number, y: number, kind: DecorKind) {
+    const width = kind.includes("tree") ? 18 : kind === "rock-large" ? 20 : 14;
+    const alpha = kind === "flower" || kind === "grass-tuft" ? 0.1 : 0.18;
+    graphics.fillStyle(0x16210f, alpha);
+    graphics.fillEllipse(x, y - 1, width, 7);
+  }
+
+  private drawPineTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    graphics.fillStyle(0x5d3a1f, 1);
+    graphics.fillRect(x - 2, y - 8 * scale, 4, 8 * scale);
+
+    this.drawPineTier(graphics, x, y - 23 * scale, 10 * scale, 0x1f5a2d, 0x2f7a3b);
+    this.drawPineTier(graphics, x, y - 16 * scale, 13 * scale, 0x246a32, 0x3f9148);
+    this.drawPineTier(graphics, x, y - 9 * scale, 16 * scale, 0x2b7a3a, 0x4aa653);
+  }
+
+  private drawPineTier(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number, dark: number, light: number) {
+    graphics.fillStyle(dark, 1);
+    graphics.fillTriangle(x, y - size, x - size, y + size * 0.45, x + size, y + size * 0.45);
+    graphics.fillStyle(light, 0.45);
+    graphics.fillTriangle(x - 1, y - size * 0.7, x - size * 0.55, y + size * 0.25, x + 2, y + size * 0.2);
+  }
+
+  private drawOakTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    graphics.fillStyle(0x6d4523, 1);
+    graphics.fillRect(x - 2, y - 11 * scale, 4, 11 * scale);
+    graphics.fillStyle(0x2f6f32, 1);
+    graphics.fillCircle(x - 7 * scale, y - 14 * scale, 7 * scale);
+    graphics.fillCircle(x + 6 * scale, y - 15 * scale, 8 * scale);
+    graphics.fillCircle(x, y - 20 * scale, 8 * scale);
+    graphics.fillStyle(0x4ca64f, 0.55);
+    graphics.fillCircle(x - 4 * scale, y - 19 * scale, 4 * scale);
+    graphics.fillCircle(x + 4 * scale, y - 17 * scale, 4 * scale);
+  }
+
+  private drawDeadTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    graphics.lineStyle(4, 0x4a2e1b, 1);
+    graphics.beginPath();
+    graphics.moveTo(x, y);
+    graphics.lineTo(x, y - 20 * scale);
+    graphics.strokePath();
+    graphics.lineStyle(2, 0x6c4628, 1);
+    graphics.beginPath();
+    graphics.moveTo(x, y - 10 * scale);
+    graphics.lineTo(x - 8 * scale, y - 17 * scale);
+    graphics.moveTo(x, y - 13 * scale);
+    graphics.lineTo(x + 9 * scale, y - 22 * scale);
+    graphics.moveTo(x + 1, y - 7 * scale);
+    graphics.lineTo(x + 6 * scale, y - 11 * scale);
+    graphics.strokePath();
+  }
+
+  private drawRockCluster(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawRock(graphics, x - 6 * scale, y - 4 * scale, 7 * scale, 5 * scale, 0x767d80);
+    this.drawRock(graphics, x + 3 * scale, y - 6 * scale, 9 * scale, 7 * scale, 0x8b9294);
+    this.drawRock(graphics, x + 9 * scale, y - 3 * scale, 5 * scale, 4 * scale, 0x686f72);
+  }
+
+  private drawSmallRock(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawRock(graphics, x, y - 4 * scale, 6 * scale, 4 * scale, 0x868d8f);
+  }
+
+  private drawRock(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, color: number) {
+    graphics.fillStyle(color, 1);
+    graphics.fillEllipse(x, y, width * 2, height * 2);
+    graphics.fillStyle(0xb7bec0, 0.38);
+    graphics.fillEllipse(x - width * 0.28, y - height * 0.35, width * 0.72, height * 0.5);
+    graphics.lineStyle(1, 0x4f5759, 0.45);
+    graphics.strokeEllipse(x, y, width * 2, height * 2);
+  }
+
+  private drawBush(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    graphics.fillStyle(0x2e682f, 1);
+    graphics.fillCircle(x - 6 * scale, y - 5 * scale, 5 * scale);
+    graphics.fillCircle(x, y - 8 * scale, 6 * scale);
+    graphics.fillCircle(x + 6 * scale, y - 5 * scale, 5 * scale);
+    graphics.fillStyle(0x55a34e, 0.45);
+    graphics.fillCircle(x - 2 * scale, y - 10 * scale, 3 * scale);
+    graphics.fillCircle(x + 5 * scale, y - 7 * scale, 2.5 * scale);
+  }
+
+  private drawFlowers(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number, variant: number) {
+    this.drawGrassTuft(graphics, x, y, scale * 0.85, variant);
+    const colors = [0xff6f91, 0xffd166, 0xf6f7a8];
+    for (let i = 0; i < 3; i++) {
+      const px = x + (i - 1) * 4 * scale + (variant - 1);
+      const py = y - (5 + (i % 2) * 2) * scale;
+      graphics.fillStyle(colors[(variant + i) % colors.length], 1);
+      graphics.fillCircle(px, py, 1.6 * scale);
+      graphics.fillStyle(0xfff4b8, 0.7);
+      graphics.fillCircle(px - 0.4, py - 0.4, 0.6 * scale);
+    }
+  }
+
+  private drawGrassTuft(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number, variant: number) {
+    const blades = 5 + variant;
+    graphics.lineStyle(1.5, 0x356f2f, 1);
+    graphics.beginPath();
+    for (let i = 0; i < blades; i++) {
+      const offset = (i - (blades - 1) / 2) * 2.2 * scale;
+      const lean = (i % 2 === 0 ? -1 : 1) * (1.4 + variant * 0.2) * scale;
+      graphics.moveTo(x + offset, y);
+      graphics.lineTo(x + offset + lean, y - (5 + (i % 3)) * scale);
+    }
+    graphics.strokePath();
+    graphics.lineStyle(1, 0x6fbf5a, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(x - 3 * scale, y - 1);
+    graphics.lineTo(x - 4 * scale, y - 5 * scale);
+    graphics.moveTo(x + 2 * scale, y - 1);
+    graphics.lineTo(x + 3 * scale, y - 6 * scale);
+    graphics.strokePath();
   }
 
   setObjects(objects: MapObjectData[]) {
@@ -115,11 +438,23 @@ class PhaserMapScene extends Phaser.Scene {
         const key = `${x},${y}`;
         if (visibleTiles.has(key)) continue;
 
-        const color = exploredTiles.has(key) ? 0x1a1a2e : 0x0a0a14;
-        const alpha = exploredTiles.has(key) ? 0.6 : 1;
-        this.drawDiamond(this.fogLayer, x, y, color, alpha);
+        this.drawFogTile(this.fogLayer, x, y, exploredTiles.has(key));
       }
     }
+
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const key = `${x},${y}`;
+        if (!visibleTiles.has(key)) continue;
+
+        if (x > 0 && !visibleTiles.has(`${x - 1},${y}`)) this.drawFogFrontierEdge(this.fogLayer, x, y, "northWest");
+        if (y > 0 && !visibleTiles.has(`${x},${y - 1}`)) this.drawFogFrontierEdge(this.fogLayer, x, y, "northEast");
+        if (x < this.map.width - 1 && !visibleTiles.has(`${x + 1},${y}`)) this.drawFogFrontierEdge(this.fogLayer, x, y, "southEast");
+        if (y < this.map.height - 1 && !visibleTiles.has(`${x},${y + 1}`)) this.drawFogFrontierEdge(this.fogLayer, x, y, "southWest");
+      }
+    }
+
+    this.fogLayer.sort("depth");
   }
 
   highlightPath(path: Position[]) {
@@ -141,10 +476,20 @@ class PhaserMapScene extends Phaser.Scene {
     const labelTile = unreachable.at(-1) ?? reachable.at(-1);
     if (labelTile && turnsLabel) {
       const iso = cartToIso(labelTile.x, labelTile.y);
-      const text = this.add.text(iso.x, this.getSurfaceY(labelTile.x, labelTile.y) - 30, turnsLabel, {
+      const centerY = this.getSurfaceY(labelTile.x, labelTile.y);
+      const badge = this.add.graphics();
+      badge.fillStyle(0x1f1406, 0.82);
+      badge.lineStyle(2, 0xffd166, 0.95);
+      badge.fillCircle(iso.x, centerY, 12);
+      badge.strokeCircle(iso.x, centerY, 12);
+      this.highlightLayer.add(badge);
+
+      const text = this.add.text(iso.x, centerY, turnsLabel, {
         color: "#ffffff",
         fontSize: "12px",
         fontStyle: "bold",
+        stroke: "#1f1406",
+        strokeThickness: 2,
       });
       text.setOrigin(0.5);
       this.highlightLayer.add(text);
@@ -180,8 +525,22 @@ class PhaserMapScene extends Phaser.Scene {
 
   panCamera(dx: number, dy: number) {
     const camera = this.cameras.main;
-    camera.scrollX -= dx;
-    camera.scrollY -= dy;
+    camera.scrollX -= dx / camera.zoom;
+    camera.scrollY -= dy / camera.zoom;
+  }
+
+  zoomCamera(direction: number, screenX = this.cameras.main.width / 2, screenY = this.cameras.main.height / 2) {
+    const camera = this.cameras.main;
+    const before = camera.getWorldPoint(screenX, screenY);
+    const factor = direction > 0 ? CAMERA_ZOOM_STEP : 1 / CAMERA_ZOOM_STEP;
+    const nextZoom = Phaser.Math.Clamp(camera.zoom * factor, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+
+    if (nextZoom === camera.zoom) return;
+
+    camera.setZoom(nextZoom);
+    const after = camera.getWorldPoint(screenX, screenY);
+    camera.scrollX += before.x - after.x;
+    camera.scrollY += before.y - after.y;
   }
 
   getTileAtScreen(screenX: number, screenY: number): Position | null {
@@ -296,12 +655,46 @@ class PhaserMapScene extends Phaser.Scene {
     top.lineStyle(tile.terrain === TerrainType.WATER ? 0 : 1, 0x000000, 1);
     drawDiamondPath(top, isoX, isoY - depth);
     top.fillPath();
-    if (tile.terrain !== TerrainType.WATER) top.strokePath();
-    this.mapLayer.add(top);
+    if (tile.terrain === TerrainType.WATER) {
+      this.mapLayer.add(top);
+      this.addWaterAnimation(tile, isoX, isoY - depth);
+    } else if (tile.terrain === TerrainType.LAVA) {
+      drawTileTexture(top, tile, isoX, isoY - depth);
+      this.mapLayer.add(top);
+      this.addLavaAnimation(tile, isoX, isoY - depth);
+    } else {
+      drawTileTexture(top, tile, isoX, isoY - depth);
+      this.drawRoad(top, tile, isoX, isoY - depth);
+      top.lineStyle(1, 0x000000, 1);
+      drawDiamondPath(top, isoX, isoY - depth);
+      top.strokePath();
+      this.mapLayer.add(top);
+    }
+
+    if (tile.terrain === TerrainType.WATER && tile.road) {
+      const road = this.add.graphics();
+      this.drawRoad(road, tile, isoX, isoY - depth);
+      this.mapLayer.add(road);
+    }
 
     if (tile.object) {
       this.renderMapObject(tile.object, isoX, isoY - depth);
     }
+  }
+
+  private addWaterAnimation(tile: MapTile, isoX: number, isoY: number) {
+    const water = this.add.graphics();
+    drawWaterAnimation(water, isoX, isoY, hashTile(tile.x, tile.y), 0);
+    this.waterTiles.push({ graphics: water, x: isoX, y: isoY, seed: hashTile(tile.x, tile.y) });
+    this.mapLayer.add(water);
+  }
+
+  private addLavaAnimation(tile: MapTile, isoX: number, isoY: number) {
+    const lava = this.add.graphics();
+    const seed = hashTile(tile.x, tile.y);
+    drawLavaAnimation(lava, isoX, isoY, seed, 0);
+    this.lavaTiles.push({ graphics: lava, x: isoX, y: isoY, seed });
+    this.mapLayer.add(lava);
   }
 
   private renderMapObject(object: MapObject, isoX: number, isoY: number) {
@@ -309,14 +702,31 @@ class PhaserMapScene extends Phaser.Scene {
       const sprite = this.add.image(isoX, isoY + 4, MAP_SPRITES.resources[object.subtype]);
       sprite.setOrigin(0.5, 1);
       sprite.setDisplaySize(38, 38);
-      this.mapLayer.add(sprite);
-      this.addSmallLabel(this.mapLayer, isoX, isoY + 5, RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase());
+      sprite.setDepth(isoY + 4);
+      this.mapObjectLayer.add(sprite);
+      this.addSmallLabel(this.mapObjectLayer, isoX, isoY + 5, RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase());
     } else if (object.type === "monster") {
       const sprite = this.add.image(isoX, isoY + 3, MAP_SPRITES.monster);
       sprite.setOrigin(0.5, 1);
       sprite.setDisplaySize(44, 44);
-      this.mapLayer.add(sprite);
+      sprite.setDepth(isoY + 3);
+      this.mapObjectLayer.add(sprite);
+    } else if (object.type === "wall" && object.subtype === "brick") {
+      // Mur de briques : pavé surélevé
+      const g = this.add.graphics();
+      g.fillStyle(0x8a5a3a, 1);
+      g.lineStyle(1, 0x4a2a1a, 1);
+      drawDiamondPath(g, isoX, isoY - 8);
+      g.fillPath();
+      g.strokePath();
+      // crénelures
+      g.fillStyle(0x6b3f24, 1);
+      g.fillRect(isoX - 10, isoY - 12, 6, 4);
+      g.fillRect(isoX + 4, isoY - 12, 6, 4);
+      g.setDepth(isoY);
+      this.mapObjectLayer.add(g);
     }
+    // Note : les murs naturels sont rendus via decorLayer (gros rochers/arbres morts placés par decor.ts)
   }
 
   private renderObjects() {
@@ -448,6 +858,54 @@ class PhaserMapScene extends Phaser.Scene {
     layer.add(graphics);
   }
 
+  private drawFogTile(layer: Phaser.GameObjects.Container, x: number, y: number, explored: boolean) {
+    const iso = cartToIso(x, y);
+    const ySurface = this.getSurfaceY(x, y);
+    const jitter = hashTile(x, y);
+    const graphics = this.add.graphics();
+
+    if (explored) {
+      graphics.fillStyle(0x0d1220, 0.68);
+      drawFogDiamondPath(graphics, iso.x, ySurface, 1);
+      graphics.fillPath();
+
+      graphics.fillStyle(0x1d2741, 0.18);
+      graphics.fillEllipse(iso.x - 10 + jitter * 20, ySurface - 1, 34, 13);
+      graphics.fillEllipse(iso.x + 8 - jitter * 16, ySurface + 5, 28, 10);
+    } else {
+      graphics.fillStyle(0x02040c, 1);
+      drawFogDiamondPath(graphics, iso.x, ySurface, 1.5);
+      graphics.fillPath();
+
+      graphics.fillStyle(0x070b18, 0.95);
+      graphics.fillEllipse(iso.x - 12 + jitter * 18, ySurface - 4, 44, 17);
+      graphics.fillEllipse(iso.x + 10 - jitter * 16, ySurface + 5, 36, 13);
+    }
+
+    graphics.setDepth(ySurface);
+    layer.add(graphics);
+  }
+
+  private drawFogFrontierEdge(layer: Phaser.GameObjects.Container, x: number, y: number, side: FogEdgeSide) {
+    const iso = cartToIso(x, y);
+    const ySurface = this.getSurfaceY(x, y);
+    const points = getDiamondPoints(iso.x, ySurface);
+    const edge = getFogEdge(points, side);
+    const graphics = this.add.graphics();
+
+    fillEdgeStrip(graphics, edge.a, edge.b, { x: iso.x, y: ySurface }, 0.34, 0x02040c, 0.44);
+    fillEdgeStrip(graphics, edge.a, edge.b, { x: iso.x, y: ySurface }, 0.18, 0x10172a, 0.26);
+
+    graphics.lineStyle(1, 0xaab4dd, 0.18);
+    graphics.beginPath();
+    graphics.moveTo(edge.a.x, edge.a.y);
+    graphics.lineTo(edge.b.x, edge.b.y);
+    graphics.strokePath();
+
+    graphics.setDepth(ySurface + 0.5);
+    layer.add(graphics);
+  }
+
   getSurfaceY(x: number, y: number): number {
     const iso = cartToIso(x, y);
     if (!this.map) return iso.y;
@@ -548,6 +1006,10 @@ export class PhaserMapRenderer implements MapRenderer {
     if (this.isReady()) this.scene?.panCamera(dx, dy);
   }
 
+  zoomCamera(direction: number, screenX?: number, screenY?: number) {
+    if (this.isReady()) this.scene?.zoomCamera(direction, screenX, screenY);
+  }
+
   getTileAtScreen(screenX: number, screenY: number) {
     return this.isReady() ? this.scene?.getTileAtScreen(screenX, screenY) ?? null : null;
   }
@@ -580,6 +1042,112 @@ function drawDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: nu
   graphics.closePath();
 }
 
+function drawFogDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number, padding: number) {
+  graphics.beginPath();
+  graphics.moveTo(x, y - TILE_HEIGHT / 2 - padding * 0.5);
+  graphics.lineTo(x + TILE_WIDTH / 2 + padding, y);
+  graphics.lineTo(x, y + TILE_HEIGHT / 2 + padding * 0.5);
+  graphics.lineTo(x - TILE_WIDTH / 2 - padding, y);
+  graphics.closePath();
+}
+
+function getDiamondPoints(x: number, y: number) {
+  return {
+    north: { x, y: y - TILE_HEIGHT / 2 },
+    east: { x: x + TILE_WIDTH / 2, y },
+    south: { x, y: y + TILE_HEIGHT / 2 },
+    west: { x: x - TILE_WIDTH / 2, y },
+  };
+}
+
+function getFogEdge(points: ReturnType<typeof getDiamondPoints>, side: FogEdgeSide) {
+  switch (side) {
+    case "northWest":
+      return { a: points.north, b: points.west };
+    case "northEast":
+      return { a: points.north, b: points.east };
+    case "southEast":
+      return { a: points.east, b: points.south };
+    case "southWest":
+      return { a: points.south, b: points.west };
+  }
+}
+
+function fillEdgeStrip(
+  graphics: Phaser.GameObjects.Graphics,
+  a: Position,
+  b: Position,
+  center: Position,
+  amount: number,
+  color: number,
+  alpha: number
+) {
+  const innerA = lerpPoint(a, center, amount);
+  const innerB = lerpPoint(b, center, amount);
+
+  graphics.fillStyle(color, alpha);
+  graphics.beginPath();
+  graphics.moveTo(a.x, a.y);
+  graphics.lineTo(b.x, b.y);
+  graphics.lineTo(innerB.x, innerB.y);
+  graphics.lineTo(innerA.x, innerA.y);
+  graphics.closePath();
+  graphics.fillPath();
+}
+
+function drawPolygonPath(graphics: Phaser.GameObjects.Graphics, points: Position[]) {
+  graphics.beginPath();
+  graphics.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    graphics.lineTo(points[i].x, points[i].y);
+  }
+  graphics.closePath();
+}
+
+function getMapOuterCorners(map: GameMap): Position[] {
+  const top = cartToIso(0, 0);
+  const right = cartToIso(map.width - 1, 0);
+  const bottom = cartToIso(map.width - 1, map.height - 1);
+  const left = cartToIso(0, map.height - 1);
+
+  return [
+    { x: top.x, y: top.y - TILE_HEIGHT / 2 },
+    { x: right.x + TILE_WIDTH / 2, y: right.y },
+    { x: bottom.x, y: bottom.y + TILE_HEIGHT / 2 },
+    { x: left.x - TILE_WIDTH / 2, y: left.y },
+  ];
+}
+
+function expandPolygon(points: Position[], amount: number): Position[] {
+  const center = getPolygonCenter(points);
+  return points.map((point) => {
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return {
+      x: point.x + (dx / length) * amount,
+      y: point.y + (dy / length) * amount,
+    };
+  });
+}
+
+function getPolygonCenter(points: Position[]): Position {
+  return points.reduce(
+    (center, point) => ({
+      x: center.x + point.x / points.length,
+      y: center.y + point.y / points.length,
+    }),
+    { x: 0, y: 0 }
+  );
+}
+
+function lerpPoint(from: Position, to: Position, amount: number): Position {
+  return {
+    x: Phaser.Math.Linear(from.x, to.x, amount),
+    y: Phaser.Math.Linear(from.y, to.y, amount),
+  };
+}
+
 function parseHexColor(color: string): number | null {
   const normalized = color.trim().replace(/^#/, "");
   const hex = normalized.length === 3
@@ -588,6 +1156,132 @@ function parseHexColor(color: string): number | null {
 
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
   return Number.parseInt(hex, 16);
+}
+
+function drawTileTexture(graphics: Phaser.GameObjects.Graphics, tile: MapTile, isoX: number, isoY: number) {
+  const jitter = hashTile(tile.x, tile.y);
+  if (tile.terrain === TerrainType.WATER) {
+    graphics.lineStyle(1, 0x6fb7d8, 0.22);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 13, isoY - 1 + jitter * 2);
+    graphics.lineTo(isoX + 13, isoY - 1 + jitter * 2);
+    graphics.moveTo(isoX - 8, isoY + 5 - jitter * 2);
+    graphics.lineTo(isoX + 8, isoY + 5 - jitter * 2);
+    graphics.strokePath();
+    return;
+  }
+
+  if (tile.terrain === TerrainType.SAND) {
+    graphics.fillStyle(0x7b5b37, 0.18);
+    graphics.fillCircle(isoX - 8 + jitter * 4, isoY + 3, 1.5);
+    graphics.fillCircle(isoX + 7, isoY - 4 + jitter * 3, 1.2);
+    return;
+  }
+
+  if (tile.terrain === TerrainType.MOUNTAIN) {
+    graphics.lineStyle(1, 0x3f3f3f, 0.32);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 12, isoY + 3);
+    graphics.lineTo(isoX - 2, isoY - 7);
+    graphics.lineTo(isoX + 10, isoY + 4);
+    graphics.strokePath();
+    return;
+  }
+
+  if (tile.terrain === TerrainType.FOREST) {
+    graphics.fillStyle(0x17461f, 0.24);
+    graphics.fillCircle(isoX - 7, isoY, 3);
+    graphics.fillCircle(isoX + 4, isoY - 3, 2.5);
+    return;
+  }
+
+  if (tile.terrain === TerrainType.LAVA) {
+    graphics.lineStyle(2, 0xff5a1f, 0.35);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 11, isoY + 2);
+    graphics.lineTo(isoX - 2, isoY - 2);
+    graphics.lineTo(isoX + 9, isoY + 3);
+    graphics.strokePath();
+  }
+}
+
+function drawWaterAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {
+  const phase = time * 0.0012 + seed * Math.PI * 2;
+  const pulse = (Math.sin(phase * 1.4) + 1) / 2;
+  const drift = ((phase * 9) % 18) - 9;
+
+  graphics.clear();
+  graphics.fillStyle(0x6cc9ee, 0.08 + pulse * 0.05);
+  drawDiamondPath(graphics, isoX, isoY);
+  graphics.fillPath();
+
+  graphics.lineStyle(1, 0xb8ecff, 0.18 + pulse * 0.14);
+  graphics.beginPath();
+  graphics.moveTo(isoX - 20 + drift * 0.45, isoY - 7 + Math.sin(phase) * 1.5);
+  graphics.lineTo(isoX - 5 + drift * 0.45, isoY - 12 + Math.cos(phase) * 1.1);
+  graphics.lineTo(isoX + 16 + drift * 0.45, isoY - 7 + Math.sin(phase + 1.2) * 1.4);
+  graphics.moveTo(isoX - 14 - drift * 0.35, isoY + 4 + Math.cos(phase * 1.2) * 1.2);
+  graphics.lineTo(isoX + 2 - drift * 0.35, isoY + 8 + Math.sin(phase + 0.7) * 1.2);
+  graphics.lineTo(isoX + 18 - drift * 0.35, isoY + 4 + Math.cos(phase + 1.6) * 1.2);
+  graphics.strokePath();
+
+  graphics.lineStyle(1, 0x104b74, 0.14);
+  graphics.beginPath();
+  graphics.moveTo(isoX - 24, isoY + 12 + Math.sin(phase + 2.1) * 1.2);
+  graphics.lineTo(isoX - 6, isoY + 15 + Math.cos(phase + 1.3) * 0.9);
+  graphics.lineTo(isoX + 24, isoY + 11 + Math.sin(phase + 0.4) * 1.2);
+  graphics.strokePath();
+}
+
+function drawLavaAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {
+  const phase = time * 0.0017 + seed * Math.PI * 2;
+  const pulse = (Math.sin(phase * 2.1) + 1) / 2;
+  const ember = (Math.sin(phase * 3.4 + seed * 5) + 1) / 2;
+
+  graphics.clear();
+  graphics.fillStyle(0xff7a1f, 0.08 + pulse * 0.1);
+  drawDiamondPath(graphics, isoX, isoY);
+  graphics.fillPath();
+
+  graphics.lineStyle(2, 0xffd15c, 0.32 + pulse * 0.28);
+  graphics.beginPath();
+  graphics.moveTo(isoX - 24, isoY - 1 + Math.sin(phase) * 2);
+  graphics.lineTo(isoX - 12, isoY - 6 + Math.cos(phase * 0.9) * 2);
+  graphics.lineTo(isoX + 1, isoY - 2 + Math.sin(phase + 1.1) * 2);
+  graphics.lineTo(isoX + 20, isoY - 8 + Math.cos(phase + 0.8) * 2);
+  graphics.moveTo(isoX - 15, isoY + 8 + Math.cos(phase + 1.7) * 2);
+  graphics.lineTo(isoX - 2, isoY + 3 + Math.sin(phase * 1.1) * 2);
+  graphics.lineTo(isoX + 15, isoY + 9 + Math.cos(phase + 2.4) * 2);
+  graphics.strokePath();
+
+  graphics.lineStyle(1, 0x6f170f, 0.3);
+  graphics.beginPath();
+  graphics.moveTo(isoX - 28, isoY + 11 + Math.sin(phase + 0.5));
+  graphics.lineTo(isoX - 8, isoY + 15 + Math.cos(phase + 0.2));
+  graphics.lineTo(isoX + 24, isoY + 10 + Math.sin(phase + 1.8));
+  graphics.strokePath();
+
+  graphics.fillStyle(0xfff0a3, 0.2 + ember * 0.28);
+  graphics.fillCircle(isoX - 9 + Math.sin(phase * 1.6) * 3, isoY - 3 + Math.cos(phase) * 2, 1.4);
+  graphics.fillCircle(isoX + 10 + Math.cos(phase * 1.2) * 3, isoY + 4 + Math.sin(phase * 1.3) * 2, 1.1);
+}
+
+function hashTile(x: number, y: number): number {
+  const n = Math.imul(x + 17, 374761393) ^ Math.imul(y + 31, 668265263);
+  return ((n ^ (n >>> 13)) >>> 0) / 4294967295;
+}
+
+function isAllowedDecor(kind: DecorKind) {
+  return (
+    kind === "tree-pine" ||
+    kind === "tree-oak" ||
+    kind === "tree-dead" ||
+    kind === "rock-large" ||
+    kind === "rock-small" ||
+    kind === "bush" ||
+    kind === "flower" ||
+    kind === "grass-tuft"
+  );
 }
 
 function getObjectMetrics(object: MapObjectData) {

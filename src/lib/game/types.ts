@@ -193,6 +193,8 @@ export interface Town {
   availableRecruits: Partial<Record<UnitType, number>>;
   tavernOffer?: TavernHeroOffer[];
   lastBuiltTurn?: number | null;
+  isNeutral?: boolean;
+  neutralGarrison?: UnitStack[];
 }
 
 export interface GameCalendar {
@@ -213,7 +215,38 @@ export interface MapTile {
   isPassable: boolean;
   movementCost: number;
   object?: MapObject;
+  zoneId?: number;
+  decor?: DecorItem;
+  road?: RoadType;
 }
+
+export type RoadType = "paved" | "dirt";
+
+export interface DecorItem {
+  type: DecorKind;
+  blocking: boolean;
+  variant?: number;
+}
+
+export type DecorKind =
+  | "tree-pine"
+  | "tree-oak"
+  | "tree-dead"
+  | "rock-large"
+  | "rock-small"
+  | "bush"
+  | "flower"
+  | "cactus"
+  | "skull"
+  | "log"
+  | "grass-tuft"
+  | "reef"
+  | "kelp"
+  | "driftwood"
+  | "crystal-spire"
+  | "obelisk"
+  | "ruins"
+  | "campfire";
 
 export enum ResourceBuildingType {
   GOLD_MINE = "gold_mine",
@@ -233,10 +266,20 @@ export interface ResourceBuilding {
 }
 
 export interface MapObject {
-  type: "town" | "hero" | "resource" | "artifact" | "monster" | "building" | "combat";
+  type:
+    | "town"
+    | "hero"
+    | "resource"
+    | "artifact"
+    | "monster"
+    | "building"
+    | "combat"
+    | "wall"
+    | "gate";
   id: string;
   subtype?: string;
   guardianPower?: number;
+  amount?: number;
 }
 
 export type CombatMode = "AUTO" | "MANUAL";
@@ -317,6 +360,22 @@ export interface GameMap {
   width: number;
   height: number;
   tiles: MapTile[][];
+  seed?: string;
+  templateId?: string;
+  zones?: ZoneMeta[];
+}
+
+export interface ZoneMeta {
+  id: number;
+  templateZoneId: string;
+  type: "player" | "treasure" | "junction";
+  ownerIndex?: number;
+  centerX: number;
+  centerY: number;
+  baseTerrain: TerrainType;
+  value: number;
+  hasTown?: boolean;
+  townIsNeutral?: boolean;
 }
 
 export interface Player {

@@ -14,6 +14,16 @@ async function createMapRenderer(): Promise<MapRenderer> {
   return new PhaserMapRenderer();
 }
 
+function getAllTileKeys(width: number, height: number) {
+  const allTiles = new Set<string>();
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      allTiles.add(`${x},${y}`);
+    }
+  }
+  return allTiles;
+}
+
 export default function GameMapComponent() {
   const { data: session } = useSession();
   const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
@@ -38,7 +48,7 @@ export default function GameMapComponent() {
   const isSyncingMoveRef = useRef(false);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
-  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget } = useGameStore();
+  const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget, devRevealMap } = useGameStore();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -91,16 +101,11 @@ export default function GameMapComponent() {
         renderer.renderMap(gameState.map);
         renderedMapKeyRef.current = mapKey;
       }
-      renderer.setObjects(buildObjects(gameState, currentPlayer));
+      renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap));
 
       // Fog of war
-      if (activeCombat) {
-        const allTiles = new Set<string>();
-        for (let y = 0; y < gameState.map.height; y++) {
-          for (let x = 0; x < gameState.map.width; x++) {
-            allTiles.add(`${x},${y}`);
-          }
-        }
+      if (activeCombat || devRevealMap) {
+        const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
         renderer.setFog(allTiles, allTiles);
       } else if (currentPlayer) {
         const visibleTiles = computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5);
@@ -111,12 +116,7 @@ export default function GameMapComponent() {
         renderer.setFog(visibleTiles, exploredSet);
       } else {
         // No current player (spectator?) - no fog
-        const allTiles = new Set<string>();
-        for (let y = 0; y < gameState.map.height; y++) {
-          for (let x = 0; x < gameState.map.width; x++) {
-            allTiles.add(`${x},${y}`);
-          }
-        }
+        const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
         renderer.setFog(allTiles, allTiles);
       }
 
@@ -133,10 +133,14 @@ export default function GameMapComponent() {
         didInitialCenter.current = true;
       }
     });
-  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion]);
+  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion, devRevealMap]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;
+    if (devRevealMap) {
+      rendererRef.current.clearReachable();
+      return;
+    }
     if (!selectedHeroId) {
       rendererRef.current.clearReachable();
       return;
@@ -159,7 +163,7 @@ export default function GameMapComponent() {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState, rendererReadyVersion]);
+  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap]);
 
   useEffect(() => {
     if (!cameraTarget) return;
@@ -293,6 +297,24 @@ export default function GameMapComponent() {
     isDragging.current = false;
   }, []);
 
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!rendererRef.current) return;
+    e.preventDefault();
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    rendererRef.current.zoomCamera(
+      e.deltaY < 0 ? 1 : -1,
+      e.clientX - rect.left,
+      e.clientY - rect.top
+    );
+  }, []);
+
+  const handleZoomButton = useCallback((direction: number) => {
+    rendererRef.current?.zoomCamera(direction);
+  }, []);
+
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (!rendererRef.current || !gameState) return;
     if (gameState.status === "PENDING") {
@@ -412,7 +434,6 @@ export default function GameMapComponent() {
         return "handled";
       }
 
-      const moveDestination = partialDestination;
       const movePath = reachable;
       isSyncingMoveRef.current = true;
       useGameStore.getState().setMovePending(true);
@@ -438,25 +459,7 @@ export default function GameMapComponent() {
           if (!data) return;
           pendingMoveRef.current = null;
           rendererRef.current?.clearHighlights();
-          const snapshot = useGameStore.getState().gameState;
-          if (snapshot) {
-            const usedMovement = movePath.slice(1).reduce((total, p) => {
-              const t = snapshot.map.tiles[p.y]?.[p.x];
-              return total + (t?.movementCost ?? 1);
-            }, 0);
-            useGameStore.getState().setGameState({
-              ...snapshot,
-              players: snapshot.players.map((player) => ({
-                ...player,
-                heroes: player.heroes.map((h) =>
-                  h.id === heroSrc.id
-                    ? { ...h, position: moveDestination, movement: Math.max(0, h.movement - usedMovement) }
-                    : h
-                ),
-              })),
-            });
-          }
-          refreshGameState(gameState.id, session?.user?.id)
+          refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
             .then((state) => {
               if (state) useGameStore.getState().setGameState(state);
             })
@@ -631,7 +634,14 @@ export default function GameMapComponent() {
         })
           .then(async (response) => {
             if (!response.ok) {
-              setCombatMessage(await getApiErrorMessage(response));
+              const message = await getApiErrorMessage(response);
+              if (message.toLowerCase().includes("garde")) {
+                pendingAttackRef.current = null;
+                rendererRef.current?.clearHighlights();
+                setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "town", destination, path });
+              } else {
+                setCombatMessage(message);
+              }
               return null;
             }
             return response.json();
@@ -641,7 +651,7 @@ export default function GameMapComponent() {
             pendingAttackRef.current = null;
             rendererRef.current?.clearHighlights();
 
-            refreshGameState(gameState.id, session?.user?.id).then((state) => {
+            refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((state) => {
               if (state) useGameStore.getState().setGameState(state);
             });
 
@@ -707,7 +717,7 @@ export default function GameMapComponent() {
           .then(async (r) => (r.ok ? r.json() : null))
           .then((data) => {
             if (!data) return;
-            refreshGameState(gameState.id, session?.user?.id).then((s) => {
+            refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((s) => {
               if (s) useGameStore.getState().setGameState(s);
             });
             setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
@@ -814,7 +824,7 @@ export default function GameMapComponent() {
               })
               .then((data) => {
                 if (!data) return;
-                refreshGameState(gameState.id, session?.user?.id).then((state) => {
+                refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((state) => {
                   if (state) useGameStore.getState().setGameState(state);
                 });
                 setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
@@ -849,7 +859,6 @@ export default function GameMapComponent() {
           return;
         }
 
-        const moveDestination = tile;
         rendererRef.current.highlightPath(path);
         isSyncingMoveRef.current = true;
         useGameStore.getState().setMovePending(true);
@@ -876,28 +885,7 @@ export default function GameMapComponent() {
             pendingMoveRef.current = null;
             rendererRef.current?.clearHighlights();
 
-            // Mise à jour optimiste : déplacer le héros immédiatement côté client
-            // La synchronisation complète (brouillard, mouvement restant) arrive via le realtime Supabase
-            const snapshot = useGameStore.getState().gameState;
-            if (snapshot && moveDestination) {
-              const usedMovement = path.slice(1).reduce((total, p) => {
-                const t = snapshot.map.tiles[p.y]?.[p.x];
-                return total + (t?.movementCost ?? 1);
-              }, 0);
-              useGameStore.getState().setGameState({
-                ...snapshot,
-                players: snapshot.players.map((player) => ({
-                  ...player,
-                  heroes: player.heroes.map((hero) =>
-                    hero.id === selectedHeroId
-                      ? { ...hero, position: moveDestination, movement: Math.max(0, hero.movement - usedMovement) }
-                      : hero
-                  ),
-                })),
-              });
-            }
-
-            refreshGameState(gameState.id, session?.user?.id)
+            refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {
                 if (state) useGameStore.getState().setGameState(state);
               })
@@ -935,18 +923,46 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, session?.user?.id]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, session?.user?.id, devRevealMap]);
 
   return (
     <div
       ref={containerRef}
-      className="w-full h-full"
+      className="relative h-full w-full"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
       onClick={handleClick}
       onContextMenu={(e) => e.preventDefault()}
-    />
+    >
+      <div
+        className="pointer-events-auto absolute right-4 top-24 z-20 grid overflow-hidden rounded-md border border-amber-700/60 bg-stone-950/85 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          aria-label="Zoomer"
+          title="Zoomer"
+          className="grid h-9 w-9 place-items-center border-b border-amber-800/60 text-xl font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+          onClick={() => handleZoomButton(1)}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label="Dezoomer"
+          title="Dezoomer"
+          className="grid h-9 w-9 place-items-center text-xl font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+          onClick={() => handleZoomButton(-1)}
+        >
+          -
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1002,7 +1018,11 @@ function getMapRenderKey(map: NonNullable<ReturnType<typeof useGameStore.getStat
   return parts.join("|");
 }
 
-function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>, currentPlayer: { id: string; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined): MapObjectData[] {
+function buildObjects(
+  gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
+  currentPlayer: { id: string; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined,
+  revealMap = false
+): MapObjectData[] {
   const objects: MapObjectData[] = [];
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
   const visiblePositions = new Set<string>();
@@ -1014,7 +1034,15 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
     }
   }
 
-  if (currentPlayer) {
+  if (revealMap) {
+    for (let y = 0; y < gameState.map.height; y++) {
+      for (let x = 0; x < gameState.map.width; x++) {
+        const key = `${x},${y}`;
+        exploredSet.add(key);
+        visiblePositions.add(key);
+      }
+    }
+  } else if (currentPlayer) {
     for (const center of getPlayerVisionCenters(currentPlayer)) {
       for (let dy = -5; dy <= 5; dy++) {
         for (let dx = -5; dx <= 5; dx++) {
@@ -1060,6 +1088,35 @@ function buildObjects(gameState: NonNullable<ReturnType<typeof useGameStore.getS
         color: player.color,
         name: town.name,
       });
+    }
+  }
+
+  const knownTownPositions = new Set(
+    gameState.players
+      .flatMap((player) => player.towns)
+      .map((town) => `${town.position.x},${town.position.y}`)
+  );
+
+  if (gameState.map?.tiles) {
+    for (let y = 0; y < gameState.map.height; y++) {
+      for (let x = 0; x < gameState.map.width; x++) {
+        const tile = gameState.map.tiles[y]?.[x];
+        if (!tile?.object || tile.object.type !== "town") continue;
+        const key = `${x},${y}`;
+        if (knownTownPositions.has(key)) continue;
+        if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+
+        objects.push({
+          type: "town",
+          id: tile.object.id,
+          playerId: null,
+          x,
+          y,
+          faction: tile.object.subtype ?? "neutral",
+          color: "#a8a29e",
+          name: "Chateau neutre",
+        });
+      }
     }
   }
 

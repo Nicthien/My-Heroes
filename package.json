@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "eslint-config-next": "16.2.6",
     "supabase": "^2.98.2",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

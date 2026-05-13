@@ -49,6 +49,18 @@ const RESOURCE_LABELS: Record<string, string> = {
   sulfur: "SOU",
 };
 
+function getMapObjectHoverText(object: MapObject) {
+  if (object.type === "resource" && object.subtype) {
+    return RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase();
+  }
+
+  if (object.type === "monster") return "Armee neutre";
+  if (object.type === "building" && object.subtype) return object.subtype;
+  if (object.type === "artifact") return "Artefact";
+
+  return null;
+}
+
 const MIN_CAMERA_ZOOM = 0.65;
 const MAX_CAMERA_ZOOM = 1.85;
 const CAMERA_ZOOM_STEP = 1.15;
@@ -84,6 +96,11 @@ class PhaserMapScene extends Phaser.Scene {
   private highlightLayer!: Phaser.GameObjects.Container;
   private objectLayer!: Phaser.GameObjects.Container;
   private fogLayer!: Phaser.GameObjects.Container;
+  private hoverLabelLayer!: Phaser.GameObjects.Container;
+  private hoverLabelBackground?: Phaser.GameObjects.Graphics;
+  private hoverLabelText?: Phaser.GameObjects.Text;
+  private hoverLabelKey: string | null = null;
+  private visibleTiles: Set<string> | null = null;
   private waterTiles: WaterTileEffect[] = [];
   private lavaTiles: LavaTileEffect[] = [];
 
@@ -107,6 +124,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.highlightLayer = this.add.container(0, 0);
     this.objectLayer = this.add.container(0, 0);
     this.fogLayer = this.add.container(0, 0);
+    this.hoverLabelLayer = this.add.container(0, 0);
 
     this.boardLayer.setDepth(-2);
     this.mapLayer.setDepth(0);
@@ -116,6 +134,10 @@ class PhaserMapScene extends Phaser.Scene {
     this.mapObjectLayer.setDepth(4);
     this.objectLayer.setDepth(10);
     this.fogLayer.setDepth(20);
+    this.hoverLabelLayer.setDepth(30);
+    this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      this.updateHoverLabel(pointer.x, pointer.y);
+    });
     this.readyCallback?.();
   }
 
@@ -127,6 +149,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.mapLayer.removeAll(true);
     this.decorLayer.removeAll(true);
     this.mapObjectLayer.removeAll(true);
+    this.clearHoverLabel();
     this.renderBoardFrame(map);
 
     for (let y = 0; y < map.height; y++) {
@@ -431,6 +454,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
     if (!this.map) return;
+    this.visibleTiles = new Set(visibleTiles);
     this.fogLayer.removeAll(true);
 
     for (let y = 0; y < this.map.height; y++) {
@@ -704,7 +728,6 @@ class PhaserMapScene extends Phaser.Scene {
       sprite.setDisplaySize(38, 38);
       sprite.setDepth(isoY + 4);
       this.mapObjectLayer.add(sprite);
-      this.addSmallLabel(this.mapObjectLayer, isoX, isoY + 5, RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase());
     } else if (object.type === "monster") {
       const sprite = this.add.image(isoX, isoY + 3, MAP_SPRITES.monster);
       sprite.setOrigin(0.5, 1);
@@ -732,6 +755,7 @@ class PhaserMapScene extends Phaser.Scene {
   private renderObjects() {
     if (!this.map || !this.objectLayer) return;
     this.objectLayer.removeAll(true);
+    this.clearHoverLabel();
 
     for (const object of this.objects) {
       const iso = cartToIso(object.x, object.y);
@@ -780,20 +804,93 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDisplaySize(width, height);
     sprite.setDepth(y);
     this.objectLayer.add(sprite);
-    this.addSmallLabel(this.objectLayer, x, y + 5, object.name);
   }
 
-  private addSmallLabel(layer: Phaser.GameObjects.Container, x: number, y: number, textValue: string) {
-    const text = this.add.text(x, y, textValue, {
-      color: "#ffffff",
-      fontSize: "9px",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: 3,
-    });
-    text.setOrigin(0.5);
-    text.setDepth(y + 1);
-    layer.add(text);
+  private updateHoverLabel(screenX: number, screenY: number) {
+    const hover = this.getHoverLabel(screenX, screenY);
+    if (!hover) {
+      this.clearHoverLabel();
+      return;
+    }
+
+    if (!this.hoverLabelText || !this.hoverLabelBackground) {
+      this.hoverLabelBackground = this.add.graphics();
+      this.hoverLabelText = this.add.text(0, 0, "", {
+        color: "#ffffff",
+        fontSize: "10px",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 3,
+      });
+      this.hoverLabelText.setOrigin(0.5);
+      this.hoverLabelLayer.add(this.hoverLabelBackground);
+      this.hoverLabelLayer.add(this.hoverLabelText);
+    }
+
+    if (this.hoverLabelKey !== hover.key) {
+      this.hoverLabelText.setText(hover.text);
+      this.hoverLabelKey = hover.key;
+    }
+
+    this.hoverLabelText.setPosition(hover.x, hover.y);
+    this.hoverLabelText.setDepth(hover.y + 2);
+    this.hoverLabelBackground.clear();
+    this.hoverLabelBackground.fillStyle(0x0b0a08, 0.76);
+    this.hoverLabelBackground.lineStyle(1, 0xffd166, 0.78);
+    this.hoverLabelBackground.fillRoundedRect(
+      hover.x - this.hoverLabelText.width / 2 - 5,
+      hover.y - this.hoverLabelText.height / 2 - 3,
+      this.hoverLabelText.width + 10,
+      this.hoverLabelText.height + 6,
+      4
+    );
+    this.hoverLabelBackground.strokeRoundedRect(
+      hover.x - this.hoverLabelText.width / 2 - 5,
+      hover.y - this.hoverLabelText.height / 2 - 3,
+      this.hoverLabelText.width + 10,
+      this.hoverLabelText.height + 6,
+      4
+    );
+    this.hoverLabelBackground.setDepth(hover.y + 1);
+  }
+
+  private getHoverLabel(screenX: number, screenY: number) {
+    const objects = this.getObjectsAtScreen(screenX, screenY);
+    const object = objects.find((item) => item.name.trim().length > 0);
+    if (object) {
+      const bounds = this.getObjectBounds(object);
+      if (!bounds) return null;
+      const iso = cartToIso(object.x, object.y);
+      return {
+        key: `object:${object.id}`,
+        text: object.name,
+        x: iso.x,
+        y: bounds.top - 8,
+      };
+    }
+
+    const tile = this.getTileAtScreen(screenX, screenY);
+    const mapObject = tile ? this.map?.tiles[tile.y]?.[tile.x]?.object : undefined;
+    if (!tile || !mapObject) return null;
+    if (this.visibleTiles && !this.visibleTiles.has(`${tile.x},${tile.y}`)) return null;
+
+    const text = getMapObjectHoverText(mapObject);
+    if (!text) return null;
+
+    const iso = cartToIso(tile.x, tile.y);
+    const surfaceY = this.getSurfaceY(tile.x, tile.y);
+    return {
+      key: `map:${mapObject.id}`,
+      text,
+      x: iso.x,
+      y: surfaceY - 34,
+    };
+  }
+
+  private clearHoverLabel() {
+    this.hoverLabelKey = null;
+    this.hoverLabelBackground?.clear();
+    this.hoverLabelText?.setText("");
   }
 
   private addBanner(

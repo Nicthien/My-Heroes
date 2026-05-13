@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import HUD from "@/components/game/hud/HUD";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
@@ -11,7 +11,7 @@ import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import { mapApiToGameState } from "@/lib/game/api";
-import { createClient } from "@/lib/supabase/browser";
+import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
 
 const GameMapComponent = dynamic(
   () => import("@/components/game/map/GameMap"),
@@ -36,20 +36,13 @@ export default function GamePage() {
       useGameStore.getState().resetGame();
       useGameStore.getState().setLoading(true);
     }
-    const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
-      const token = await getSupabaseAccessToken();
-      const headers = new Headers(init?.headers);
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      return fetch(input, { ...init, headers, credentials: "include" });
-    };
-
     const loadGame = async () => {
       if (!gameId) return;
       if (useGameStore.getState().isMovePending) return;
       setError("");
       const requestId = ++loadRequestIdRef.current;
       try {
-        const res = await fetchWithAuth(`/api/games/${gameId}`, { cache: "no-store" });
+        const res = await fetchWithSupabaseAuth(`/api/games/${gameId}`, { cache: "no-store" });
         if (cancelled) return;
         if (requestId !== loadRequestIdRef.current) return;
         if (res.ok) {
@@ -76,23 +69,25 @@ export default function GamePage() {
     };
 
     loadGame();
-    const channel = supabase
-      .channel(`game:${gameId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, loadGame)
-      .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, loadGame)
-      .subscribe();
+    const channel = isUsingSupabaseProxy()
+      ? null
+      : supabase
+          .channel(`game:${gameId}`)
+          .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, loadGame)
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, loadGame)
+          .subscribe();
 
     const interval = setInterval(loadGame, 2000);
     return () => {
       cancelled = true;
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [gameId, setGameState, userId]);
 

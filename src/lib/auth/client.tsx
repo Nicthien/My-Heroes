@@ -10,6 +10,14 @@ export async function getSupabaseAccessToken() {
   return data.session?.access_token ?? null;
 }
 
+export async function fetchWithSupabaseAuth(input: RequestInfo | URL, init?: RequestInit) {
+  const token = await getSupabaseAccessToken();
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  return fetch(input, { ...init, headers, credentials: init?.credentials ?? "include" });
+}
+
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthSession {

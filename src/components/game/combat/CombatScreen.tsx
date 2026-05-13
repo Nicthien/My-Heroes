@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { COMBAT_COLS, COMBAT_ROWS, getHexDistance } from "@/lib/game/combat/persistent";
@@ -23,7 +23,7 @@ export default function CombatScreen() {
   useEffect(() => {
     if (!activeCombat) return;
     const interval = setInterval(async () => {
-      const response = await fetch(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}`);
+      const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}`);
       if (!response.ok) return;
       const data = await response.json();
       const mapped = mapCombat(data);
@@ -46,7 +46,7 @@ export default function CombatScreen() {
   const isMyAction = Boolean(myPlayer && activeCombat.currentPlayerId === myPlayer.id);
 
   const submitAction = async (action: Record<string, unknown>) => {
-    const response = await fetch(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(action),

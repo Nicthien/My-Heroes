@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 
 export default function CombatChoiceModal() {
@@ -31,7 +32,7 @@ export default function CombatChoiceModal() {
       });
     }
 
-    const response = await fetch(`/api/games/${gameState.id}/combats`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/combats`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

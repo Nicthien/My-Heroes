@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { Resources, Faction, BuildingType, UnitType } from "@/lib/game/types";
@@ -186,7 +186,7 @@ function HUDContent() {
     }
 
     if (!window.confirm("Voulez-vous vraiment quitter cette partie ?")) return;
-    const response = await fetch(`/api/games/${gameState.id}/leave`, { method: "POST" });
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/leave`, { method: "POST" });
     if (response.ok) {
       useGameStore.getState().resetGame();
       router.push("/dashboard");
@@ -195,7 +195,7 @@ function HUDContent() {
 
   const handleEndTurn = async () => {
     if (!canAct) return;
-    const response = await fetch(`/api/games/${gameState.id}/action`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "END_TURN" }),
@@ -211,7 +211,7 @@ function HUDContent() {
   };
 
   const handleStartGame = async () => {
-    const response = await fetch(`/api/games/${gameState.id}/start`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/start`, {
       method: "POST",
     });
 
@@ -235,7 +235,7 @@ function HUDContent() {
     const rule = BUILDING_RULES.find((item) => item.type === building);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
 
-    const response = await fetch(`/api/games/${gameState.id}/action`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "BUILD", townId: selectedTown.id, building }),
@@ -283,7 +283,7 @@ function HUDContent() {
       setCombatMessage(`Maximum ${MAX_HEROES_PER_PLAYER} héros atteint.`);
       return;
     }
-    const response = await fetch(`/api/games/${gameState.id}/action`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "RECRUIT_HERO", townId: selectedTown.id, templateId }),
@@ -302,7 +302,7 @@ function HUDContent() {
     const rule = UNIT_RULES[unitType];
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
 
-    const response = await fetch(`/api/games/${gameState.id}/action`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

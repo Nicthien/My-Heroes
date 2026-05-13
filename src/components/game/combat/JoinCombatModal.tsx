@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 
@@ -12,7 +12,7 @@ export default function JoinCombatModal() {
 
   const join = useCallback(async (side: "attacker" | "defender") => {
     if (!gameState || !pendingJoinCombat) return;
-    const response = await fetch(`/api/games/${gameState.id}/combats/${pendingJoinCombat.combatId}/join`, {
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/combats/${pendingJoinCombat.combatId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ heroId: pendingJoinCombat.heroId, side }),

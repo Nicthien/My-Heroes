@@ -1,7 +1,8 @@
 import { mapApiToGameState } from "./api";
+import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 
 export async function refreshGameState(gameId: string, userId?: string) {
-  const res = await fetch(`/api/games/${gameId}`, { cache: "no-store" });
+  const res = await fetchWithSupabaseAuth(`/api/games/${gameId}`, { cache: "no-store" });
   if (!res.ok) return null;
   const data = await res.json();
   if (!data.mapData) {

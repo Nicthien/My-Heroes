@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
 import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
@@ -416,7 +416,7 @@ export default function GameMapComponent() {
       const movePath = reachable;
       isSyncingMoveRef.current = true;
       useGameStore.getState().setMovePending(true);
-      fetch(`/api/games/${gameState.id}/action`, {
+      fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -620,7 +620,7 @@ export default function GameMapComponent() {
           return;
         }
 
-        fetch(`/api/games/${gameState.id}/action`, {
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -699,7 +699,7 @@ export default function GameMapComponent() {
 
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
-        fetch(`/api/games/${gameState.id}/action`, {
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: obj.id }),
@@ -797,7 +797,7 @@ export default function GameMapComponent() {
 
             pendingAttackRef.current = null;
             rendererRef.current.clearHighlights();
-            fetch(`/api/games/${gameState.id}/action`, {
+            fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: targetTile.object.id }),
@@ -853,7 +853,7 @@ export default function GameMapComponent() {
         rendererRef.current.highlightPath(path);
         isSyncingMoveRef.current = true;
         useGameStore.getState().setMovePending(true);
-        fetch(`/api/games/${gameState.id}/action`, {
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

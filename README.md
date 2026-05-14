@@ -42,6 +42,29 @@ Le schema local est versionne dans [`supabase/migrations`](supabase/migrations).
 [`supabase/schema.sql`](supabase/schema.sql) reste utile pour appliquer le schema dans un projet
 Supabase cloud via le SQL Editor.
 
+## Déploiement Docker sur Unraid (un conteneur)
+
+1. Depuis le dossier `docker`, crée un fichier `.env` (non versionné) basé sur `.env.example`.
+2. Remplis les variables Supabase de production.
+3. Lance le conteneur :
+
+```bash
+cd docker
+docker compose up -d --build
+```
+
+4. L'application est accessible sur `http://<IP_UNRAID>:3000`.
+
+Notes importantes:
+- Le conteneur lance uniquement le frontend Next.js. Un backend Supabase doit être déjà opérationnel.
+- `SUPABASE_INTERNAL_URL` n'est utile que si le client doit passer par le proxy `/api/supabase`; sinon, laisser vide.
+
+Variables minimales:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SITE_URL`
+
 ## Variables d'environnement
 
 Voir [`.env.example`](.env.example) pour la liste des variables requises :

@@ -733,7 +733,7 @@ export default function GameMapComponent() {
           pendingMoveRef.current = null;
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
-          setCombatMessage("Ce heros est deja dans ce chateau.");
+          setCombatMessage("Ce héros est déjà dans ce château.");
           return;
         }
 
@@ -761,7 +761,7 @@ export default function GameMapComponent() {
           };
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x32d583);
-          setCombatMessage("Cliquez a nouveau pour entrer dans ce chateau.");
+          setCombatMessage("Cliquez à nouveau pour entrer dans ce château.");
           return;
         }
 
@@ -797,7 +797,7 @@ export default function GameMapComponent() {
             if (!data) return;
             pendingMoveRef.current = null;
             rendererRef.current?.clearHighlights();
-            setCombatMessage("Heros entre dans le chateau.");
+            setCombatMessage("Héros entré dans le château.");
 
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {

@@ -1,36 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
-  <!-- Rocky ground mound -->
-  <ellipse cx="32" cy="54" rx="26" ry="8" fill="#2a4a52" stroke="#1a3040" stroke-width="1.2"/>
-  <polygon points="10,54 32,26 54,54" fill="#2a4050" stroke="#1a3040" stroke-width="1"/>
-  <polygon points="10,54 32,26 22,54" fill="#3a5060" stroke="none"/>
-  <!-- Cave entrance (dark opening) -->
-  <path d="M20,56 L20,44 Q32,30 44,44 L44,56 Z" fill="#0a1418"/>
-  <path d="M20,44 Q32,30 44,44" fill="none" stroke="#1a3040" stroke-width="1.5"/>
-  <!-- Cyan glow from inside cave -->
-  <ellipse cx="32" cy="52" rx="10" ry="5" fill="#00e8ff" opacity="0.25"/>
-  <ellipse cx="32" cy="52" rx="6" ry="3" fill="#80ffff" opacity="0.3"/>
-  <!-- CRYSTAL FORMATIONS (main icon) -->
-  <!-- Left crystal cluster -->
-  <polygon points="14,44 11,58 17,58" fill="#00c8d8" stroke="#00a0b8" stroke-width="0.8"/>
-  <polygon points="14,44 11,58 14,58" fill="#40e8f8" opacity="0.6"/>
-  <polygon points="10,46 7,57 13,57" fill="#00b8cc" stroke="#008090" stroke-width="0.8"/>
-  <polygon points="18,42 15,55 21,55" fill="#00d8e8" stroke="#00a0b8" stroke-width="0.8"/>
-  <!-- Center crystal (tall, prominent) -->
-  <polygon points="32,12 27,44 37,44" fill="#00e0ff" stroke="#00b0d0" stroke-width="1"/>
-  <polygon points="32,12 27,44 32,44" fill="#80ffff" opacity="0.5"/>
-  <!-- Inner sparkle on tall crystal -->
-  <line x1="30" y1="18" x2="34" y2="40" stroke="#ffffff" stroke-width="0.8" opacity="0.5"/>
-  <!-- Right crystal cluster -->
-  <polygon points="50,44 47,57 53,57" fill="#00c8d8" stroke="#00a0b8" stroke-width="0.8"/>
-  <polygon points="50,44 47,57 50,57" fill="#40e8f8" opacity="0.6"/>
-  <polygon points="54,46 51,58 57,58" fill="#00b0c0" stroke="#008090" stroke-width="0.8"/>
-  <polygon points="46,42 43,55 49,55" fill="#00d0e0" stroke="#00a0b8" stroke-width="0.8"/>
-  <!-- Crystal sparkles/glints -->
-  <circle cx="32" cy="14" r="2" fill="#ffffff" opacity="0.9"/>
-  <line x1="32" y1="10" x2="32" y2="18" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
-  <line x1="28" y1="14" x2="36" y2="14" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
-  <circle cx="14" cy="45" r="1.5" fill="#80ffff" opacity="0.8"/>
-  <circle cx="50" cy="45" r="1.5" fill="#80ffff" opacity="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="crystal-cavern-title crystal-cavern-desc">
+  <title id="crystal-cavern-title">Caverne de cristaux</title>
+  <desc id="crystal-cavern-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Caverne de cristaux.</desc>
+  
+  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#2a4050" stroke="#1a3040" stroke-width="1.2"/><path d="M10 54 L32 26 L54 54 Z" fill="#2a4050" stroke="#1a3040" stroke-width="1.2"/><path d="M20 56 V44 Q32 30 44 44 V56 Z" fill="#0a1418"/><ellipse cx="32" cy="52" rx="10" ry="5" fill="#00e8ff" opacity=".25"/><path d="M32 12 L27 44 H37 Z M14 44 L10 58 H18 Z M50 44 L46 58 H54 Z M45 42 L42 55 H49 Z M18 42 L15 55 H22 Z" fill="#00e8ff" stroke="#00a0b8" stroke-width="1"/><path d="M32 12 V44 M14 44 V58 M50 44 V58" stroke="#80ffff" stroke-width="1" opacity=".55"/><circle cx="32" cy="14" r="2" fill="#fff" opacity=".85"/>
 </svg>

@@ -1,12 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="48" cy="80" rx="38" ry="11" fill="#000" opacity=".25"/>
-  <path d="M21 48h54v28H21z" fill="#596a3d" stroke="#202815" stroke-width="3"/>
-  <path d="M16 39h17v37H16zM63 39h17v37H63z" fill="#6d7d4a" stroke="#202815" stroke-width="3"/>
-  <path d="M35 31h26v45H35z" fill="#4f6138" stroke="#202815" stroke-width="3"/>
-  <path d="M14 39l10-18 10 18zM62 39l10-18 10 18zM33 31 48 8l15 23z" fill="#47682f" stroke="#92b36a" stroke-width="3"/>
-  <path d="M22 48v-8h8v8h8v-8h8v8h8v-8h8v8h8v-8h7v8" fill="none" stroke="#202815" stroke-width="3"/>
-  <path d="M26 55h7M41 46h7M55 48h7M65 57h9M24 65h10M51 62h12" stroke="#b8d684" stroke-width="3" stroke-linecap="round"/>
-  <path d="M39 76V62c0-8 18-8 18 0v14z" fill="#1b2115" stroke="#090d07" stroke-width="3"/>
-  <path d="M28 33c-7 8-9 18-7 30M68 33c7 8 9 18 7 30" fill="none" stroke="#355922" stroke-width="4" stroke-linecap="round"/>
-  <path d="M48 43c6 5 6 12 0 17-6-5-6-12 0-17z" fill="#d1e68a" stroke="#2d481f" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="town-fortress-title town-fortress-desc">
+  <title id="town-fortress-title">Ville forteresse</title>
+  <desc id="town-fortress-desc">Sprite de ville sur la carte, avec silhouette et détails propres à sa faction : Ville forteresse.</desc>
+  
+  <ellipse cx="48" cy="82" rx="38" ry="10" fill="#000" opacity=".28"/>
+  <path d="M29 34 C18 48 20 62 25 74 M68 34 C79 48 77 62 72 74" fill="none" stroke="#47682f" stroke-width="4" stroke-linecap="round"/><path d="M48 45 C56 52 55 62 48 69 C41 62 40 52 48 45 Z" fill="#d1e68a" stroke="#202815" stroke-width="2"/>
+  <path d="M19 48 H77 V78 H19 Z" fill="#596a3d" stroke="#202815" stroke-width="3"/>
+  <path d="M14 39 H33 V78 H14 Z M63 39 H82 V78 H63 Z" fill="#bef264" stroke="#202815" stroke-width="3" opacity=".82"/>
+  <path d="M34 31 H62 V78 H34 Z" fill="#47682f" stroke="#202815" stroke-width="3"/>
+  <path d="M13 39 L24 17 L35 39 Z M61 39 L72 17 L83 39 Z M32 31 L48 5 L64 31 Z" fill="#d1e68a" stroke="#202815" stroke-width="3"/>
+  <path d="M20 48 V39 H28 V48 H36 V39 H44 V48 H52 V39 H60 V48 H68 V39 H76 V48" fill="none" stroke="#202815" stroke-width="3"/>
+  <path d="M26 56 H34 M42 47 H51 M57 49 H66 M65 59 H75 M24 67 H35 M51 64 H64" stroke="#bef264" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+  <path d="M39 78 V62 C39 53 57 53 57 62 V78 Z" fill="#18110d" stroke="#090706" stroke-width="3"/>
+  <path d="M44 65 V78 M52 65 V78 M39 70 H57" stroke="#47682f" stroke-width="1.8"/>
 </svg>

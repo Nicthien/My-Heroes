@@ -1,29 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
-  <!-- Rocky hill -->
-  <polygon points="8,52 32,14 56,52" fill="#7a6a52" stroke="#5a4a38" stroke-width="1.2"/>
-  <polygon points="8,52 32,14 20,52" fill="#9a8a6a" stroke="none"/>
-  <ellipse cx="32" cy="52" rx="24" ry="6" fill="#7a6a52" stroke="#5a4a38" stroke-width="1"/>
-  <!-- Rock texture highlights -->
-  <polygon points="16,44 26,26 30,44" fill="#8a7a60" stroke="none" opacity="0.5"/>
-  <polygon points="38,28 48,42 42,42" fill="#6a5a42" stroke="none" opacity="0.5"/>
-  <!-- Mine entrance dark tunnel -->
-  <path d="M21,54 L21,42 Q32,28 43,42 L43,54 Z" fill="#120e06"/>
-  <!-- Wooden support frame -->
-  <rect x="19" y="40" width="26" height="3" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
-  <rect x="19" y="40" width="3" height="14" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
-  <rect x="42" y="40" width="3" height="14" rx="1.5" fill="#7a5220" stroke="#4a3010" stroke-width="0.8"/>
-  <!-- Gold glow deep in mine -->
-  <ellipse cx="32" cy="50" rx="8" ry="4" fill="#ffd700" opacity="0.6"/>
-  <ellipse cx="32" cy="50" rx="5" ry="2.5" fill="#fff8a0" opacity="0.8"/>
-  <!-- Gold nuggets scattered -->
-  <circle cx="13" cy="49" r="3.5" fill="#ffd700" stroke="#c8900a" stroke-width="1"/>
-  <circle cx="11" cy="47" r="1.5" fill="#ffe880"/>
-  <circle cx="51" cy="48" r="3" fill="#ffc800" stroke="#c8900a" stroke-width="1"/>
-  <circle cx="32" cy="18" r="2.5" fill="#ffd700" stroke="#c8900a" stroke-width="0.8"/>
-  <!-- Pickaxe icon -->
-  <line x1="46" y1="28" x2="55" y2="19" stroke="#5a4a38" stroke-width="2.2"/>
-  <polygon points="55,19 60,12 63,17 58,22" fill="#b0a090" stroke="#5a4a38" stroke-width="1"/>
-  <polygon points="55,19 50,14 55,9 60,12" fill="#d0c0b0" stroke="#5a4a38" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="gold-mine-title gold-mine-desc">
+  <title id="gold-mine-title">Mine d'or</title>
+  <desc id="gold-mine-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Mine d'or.</desc>
+  
+  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#7a6a52" stroke="#5a4a38" stroke-width="1.2"/><path d="M21 54 V42 Q32 28 43 42 V54 Z" fill="#120e06"/><path d="M19 41 H45 M20 41 V55 M44 41 V55" stroke="#7a5220" stroke-width="3" stroke-linecap="round"/><ellipse cx="32" cy="51" rx="8" ry="4" fill="#ffd700" opacity=".65"/><circle cx="13" cy="50" r="4" fill="#ffd700" stroke="#c8900a" stroke-width="1"/><path d="M47 28 L56 18 M55 18 L62 12 M55 18 L49 13" stroke="#5a4a38" stroke-width="2.3" stroke-linecap="round"/>
 </svg>

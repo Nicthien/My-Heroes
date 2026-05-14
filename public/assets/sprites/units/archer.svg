@@ -1,6 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M28 76 L36 36 L52 24 L68 36 L72 76 Z" fill="#d9b66f" stroke="#1f1a12" stroke-width="4"/><path d="M69 25 C84 42 83 59 68 76" fill="none" stroke="#f8e7a6" stroke-width="5"/><path d="M37 52 H78" stroke="#f8f0c8" stroke-width="4"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">A</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-archer-title unit-archer-desc">
+  <title id="unit-archer-title">Archer</title>
+  <desc id="unit-archer-desc">Sprite d'unité Archer. Le dessin reprend la silhouette de archer.</desc>
+  <defs>
+    <linearGradient id="unit-archer-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="48%" stop-color="#315aaa"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+    <linearGradient id="unit-archer-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4c95d"/>
+      <stop offset="100%" stop-color="#8b1e2d"/>
+    </linearGradient>
+    <linearGradient id="unit-archer-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-archer-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#f4c95d" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#f4c95d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(0 0) scale(1 1)">
+    
+    
+    
+    <path d="M35 71 L31 88 H42 L45 72 Z M53 72 L56 88 H67 L61 71 Z" fill="#172554" stroke="#172554" stroke-width="1"/><path d="M29 88 H43 M54 88 H69" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+    
+    <path d="M30 37 Q33 28 48 27 Q63 28 66 37 L64 71 Q56 78 48 78 Q40 78 32 71 Z" fill="url(#unit-archer-body)" stroke="#172554" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#f4c95d" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#dbeafe" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <path d="M57 37 L65 61" stroke="#8b1e2d" stroke-width="4" stroke-linecap="round"/><path d="M52 35 L61 42 M56 33 L64 40" stroke="#f4c95d" stroke-width="1.5"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-archer-body)" stroke="#172554" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-archer-body)" stroke="#172554" stroke-width="1.5"/>
+    
+    <path d="M59 24 C82 36 82 68 59 80" fill="none" stroke="#8b5a28" stroke-width="4" stroke-linecap="round"/><path d="M59 24 Q72 52 59 80 M45 55 H81" stroke="#f8ead1" stroke-width="1.5"/><path d="M81 55 L75 51 M81 55 L75 59" stroke="#f4c95d" stroke-width="1.5"/>
+    <path d="M37 17 Q48 9 59 17 L57 29 Q48 35 39 29 Z" fill="url(#unit-archer-steel)" stroke="#172554" stroke-width="1.6"/><path d="M40 22 H46 M50 22 H56" stroke="#0f172a" stroke-width="1.9" stroke-linecap="round"/><path d="M42 28 H54" stroke="#172554" stroke-width="1.1" opacity=".65"/>
+    
+    <path d="M35 14 Q48 3 61 14 L57 18 Q48 14 39 18 Z" fill="#8b1e2d" stroke="#172554" stroke-width="1.5"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#dbeafe" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
 </svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-enchanter-title unit-enchanter-desc">
+  <title id="unit-enchanter-title">Enchanteur</title>
+  <desc id="unit-enchanter-desc">Sprite d'unité Enchanteur. Le dessin reprend la silhouette de enchanter.</desc>
+  <defs>
+    <linearGradient id="unit-enchanter-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="48%" stop-color="#7f1d1d"/>
+      <stop offset="100%" stop-color="#2a0b0b"/>
+    </linearGradient>
+    <linearGradient id="unit-enchanter-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#3f1d1d"/>
+    </linearGradient>
+    <linearGradient id="unit-enchanter-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-enchanter-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(0 0) scale(1 1)">
+    
+    
+    
+    
+    
+    <path d="M30 34 Q34 25 48 24 Q62 25 66 34 L75 84 Q48 90 21 84 Z" fill="url(#unit-enchanter-body)" stroke="#2a0b0b" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#fef3c7" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#f8fafc" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <path d="M36 47 H60 M39 53 H57 M42 59 H54" stroke="#fef3c7" stroke-width="1.8" stroke-linecap="round"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-enchanter-body)" stroke="#2a0b0b" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-enchanter-body)" stroke="#2a0b0b" stroke-width="1.5"/>
+    
+    <path d="M43 47 H80 M49 36 Q63 48 49 60 M62 48 L80 66" stroke="#d8c29a" stroke-width="3" stroke-linecap="round"/><path d="M79 47 H90" stroke="url(#unit-enchanter-steel)" stroke-width="2"/>
+    <path d="M38 18 Q48 10 58 18 L56 30 Q48 35 40 30 Z" fill="#2a0b0b" stroke="#3f1d1d" stroke-width="1.4"/><path d="M43 23 H46 M50 23 H53" stroke="#fef3c7" stroke-width="1.8" stroke-linecap="round"/>
+    
+    <path d="M33 21 Q48 -1 63 21 Q48 12 33 21 Z" fill="#2a0b0b" stroke="#3f1d1d" stroke-width="1.3"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#f8fafc" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
+</svg>

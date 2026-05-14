@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-ancient-behemoth-title unit-ancient-behemoth-desc">
+  <title id="unit-ancient-behemoth-title">Béhémoth ancien</title>
+  <desc id="unit-ancient-behemoth-desc">Sprite d'unité Béhémoth ancien. Le dessin reprend la silhouette de ancient behemoth.</desc>
+  <defs>
+    <linearGradient id="unit-ancient-behemoth-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="48%" stop-color="#c96a2c"/>
+      <stop offset="100%" stop-color="#30170c"/>
+    </linearGradient>
+    <linearGradient id="unit-ancient-behemoth-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0c06d"/>
+      <stop offset="100%" stop-color="#774127"/>
+    </linearGradient>
+    <linearGradient id="unit-ancient-behemoth-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-ancient-behemoth-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#f0c06d" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#f0c06d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#cbd5e1" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M30 77 L25 92 H39 L42 78 Z M57 78 L62 92 H76 L68 77 Z" fill="#30170c" stroke="#090909" stroke-width="1"/>
+    <path d="M20 42 Q25 24 47 22 Q73 25 78 47 L73 78 Q49 88 23 78 Z" fill="url(#unit-ancient-behemoth-body)" stroke="#30170c" stroke-width="2.4"/>
+    <path d="M28 47 C41 39 61 40 73 51" fill="none" stroke="#f0c06d" stroke-width="2" opacity=".7"/>
+    <path d="M31 25 Q29 11 47 9 Q66 11 64 27 Q48 37 31 25 Z" fill="#fed7aa" stroke="#30170c" stroke-width="2"/>
+    <path d="M33 20 Q22 7 28 1 Q34 11 39 20 M60 20 Q73 7 67 1 Q61 11 55 20" fill="#f0c06d" stroke="#30170c" stroke-width="1"/>
+    <circle cx="41" cy="24" r="2" fill="#111827"/><circle cx="54" cy="24" r="2" fill="#111827"/>
+    <path d="M18 48 Q5 65 15 82 L27 77 Q24 62 31 49 Z M79 48 Q94 65 82 82 L70 77 Q74 62 66 49 Z" fill="#c96a2c" stroke="#30170c" stroke-width="2"/>
+    <path d="M12 83 Q17 74 24 81 M75 82 Q82 73 89 81" fill="none" stroke="#f8fafc" stroke-width="3" stroke-linecap="round"/>
+    <path d="M38 63 L44 48 M49 65 V46 M60 63 L54 48" stroke="#f0c06d" stroke-width="2.1" stroke-linecap="round"/>
+  </g>
+</svg>

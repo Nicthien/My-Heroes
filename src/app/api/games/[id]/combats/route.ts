@@ -76,7 +76,7 @@ export async function POST(
   }
 
   const attacker = gamePlayer.heroes.find((hero) => hero.id === body.attackerHeroId);
-  if (!attacker) return NextResponse.json({ error: "Heros attaquant invalide" }, { status: 400 });
+  if (!attacker) return NextResponse.json({ error: "Héros attaquant invalide" }, { status: 400 });
   if (body.mode === "AUTO" && body.targetType === "hero") {
     return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
   }

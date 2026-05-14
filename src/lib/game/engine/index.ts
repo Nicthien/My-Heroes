@@ -140,7 +140,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
     const meta = zoneGrid.meta[zoneId];
     const tplZone = template.zones.find((z) => z.id === meta.templateZoneId)!;
-    // Deduit une partie de la valeur du chateau neutre sans vider le budget de zone.
+    // Déduit une partie de la valeur du château neutre sans vider le budget de zone.
     const budgetMeta = { ...meta };
     if (meta.hasTown && meta.townIsNeutral) {
       const castleBudgetShare = Math.min(NEUTRAL_CASTLE_VALUE, Math.floor(meta.value * 0.35));

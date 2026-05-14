@@ -1,25 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-  <ellipse cx="39" cy="64" rx="29" ry="8" fill="#000" opacity=".28"/>
-  <path d="M18 42 8 35l3 15 10 6z" fill="#24130c" stroke="#130906" stroke-width="2"/>
-  <path d="M18 36c7-12 34-12 43-1 6 7 0 19-16 20-18 1-33-7-27-19z" fill="#7b5138" stroke="#2f1b12" stroke-width="3"/>
-  <path d="M26 33c9-5 24-4 31 2-9 2-22 2-31-2z" fill="#b4865f" opacity=".65"/>
-  <path d="M55 28c6-10 19-2 15 8-2 5-9 5-15 1z" fill="#7b5138" stroke="#2f1b12" stroke-width="3"/>
-  <path d="M61 25l4-11 4 12z" fill="#7b5138" stroke="#2f1b12" stroke-width="2"/>
-  <path d="M52 26c5 0 10 2 14 5-5 1-10 1-16 0z" fill="#1f120c"/>
-  <path d="M65 31h8M67 25l-2 17" stroke="#f4c95d" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="67" cy="29" r="1.7" fill="#080808"/>
-  <path d="M30 53l-6 16M39 53l2 16M52 52l9 15M59 50l-3 18" stroke="#7b5138" stroke-width="5" stroke-linecap="round"/>
-  <path d="M21 69h9M38 69h8M57 68h9M52 68h8" stroke="#111" stroke-width="3" stroke-linecap="round"/>
-  <path d="M29 30h24l-2 14H27z" fill="#315aaa" stroke="#f4c95d" stroke-width="2"/>
-  <path d="M34 28c-8 2-15 9-17 19l16-5z" fill="#b92932" stroke="#64131b" stroke-width="2"/>
-  <path d="M36 14h14l4 25H30z" fill="#d8e1e8" stroke="#687987" stroke-width="3"/>
-  <path d="M35 21h16M36 29h17" stroke="#fff" stroke-width="2" opacity=".8"/>
-  <circle cx="43" cy="9" r="7" fill="#f0b875" stroke="#f6e6c8" stroke-width="2"/>
-  <path d="M35 9c2-8 15-8 17 0z" fill="#315aaa" stroke="#e9f2ff" stroke-width="2"/>
-  <path d="M43 2c2-8 8-8 11-15-1 9-3 14-11 17z" fill="#ffd166" stroke="#9a6b00" stroke-width="2"/>
-  <path d="M52 22 76 2" stroke="#b8c2cc" stroke-width="3" stroke-linecap="round"/>
-  <path d="M74 3 80 0l-3 7z" fill="#edf2f7" stroke="#8b98a5" stroke-width="1"/>
-  <path d="M60 14 74 12l-8 10z" fill="#b92932" stroke="#f4c95d" stroke-width="2"/>
-  <path d="M30 18 21 24l1 16 9 6 9-6 1-16z" fill="#315aaa" stroke="#ffd166" stroke-width="3"/>
-  <path d="M31 22v19M24 31h14" stroke="#fff" stroke-width="2" opacity=".9"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-labelledby="hero-cavalier-title hero-cavalier-desc">
+  <title id="hero-cavalier-title">Héros cavalier</title>
+  <desc id="hero-cavalier-desc">Sprite de héros sur la carte, avec monture et équipement de faction : Héros cavalier.</desc>
+  <defs>
+    <linearGradient id="hero-cavalier-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="48%" stop-color="#315aaa"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+    <linearGradient id="hero-cavalier-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4c95d"/>
+      <stop offset="100%" stop-color="#8b1e2d"/>
+    </linearGradient>
+    <linearGradient id="hero-cavalier-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="hero-cavalier-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#f4c95d" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#f4c95d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(-8 -13) scale(.98)">
+      <g>
+    
+    <ellipse cx="48" cy="87" rx="34" ry="5" fill="#000" opacity=".25"/>
+    <path d="M17 68 L14 88 M30 72 L29 89 M58 72 L61 89 M72 66 L78 87" stroke="#172554" stroke-width="5" stroke-linecap="round"/>
+    <path d="M12 61 Q13 49 29 47 L67 48 Q79 51 77 63 Q75 75 59 76 L26 75 Q12 73 12 61 Z" fill="#7b5138" stroke="#172554" stroke-width="2"/>
+    <path d="M24 53 H63 Q73 55 76 61" fill="none" stroke="#f4c95d" stroke-width="2" opacity=".65"/>
+    <path d="M65 46 Q78 42 83 52 L80 65 L70 67 Q64 60 65 52 Z" fill="#7b5138" stroke="#172554" stroke-width="1.6"/>
+    
+    <circle cx="76" cy="54" r="1.6" fill="#111827"/>
+    <path d="M13 57 Q3 61 8 73 L14 73 Q16 64 20 61 Z" fill="#172554" stroke="#172554" stroke-width="1"/>
+    <path d="M36 28 Q37 18 48 17 Q59 18 60 29 L59 52 Q48 58 37 52 Z" fill="url(#hero-cavalier-body)" stroke="#172554" stroke-width="1.8"/>
+    <path d="M38 34 H58 L56 48 H40 Z" fill="#f4c95d" opacity=".25"/>
+    <path d="M48 34.8 V49.2 M42.24 40.56 H53.76" stroke="#f4c95d" stroke-width="1.728" stroke-linecap="round"/>
+    <path d="M39 9 Q48 2 57 9 L55 20 Q48 25 41 20 Z" fill="url(#hero-cavalier-steel)" stroke="#172554" stroke-width="1.5"/>
+    <path d="M42 14 H47 M50 14 H55" stroke="#0f172a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M42 2 Q48 -11 55 2" fill="none" stroke="#f4c95d" stroke-width="4" stroke-linecap="round"/>
+    <path d="M36 21 L49 31 L46 60 L36 71 L26 60 L23 31 Z" fill="url(#hero-cavalier-body)" stroke="#f4c95d" stroke-width="2"/><path d="M36 27 V62 M28 43 H44" stroke="#dbeafe" stroke-width="1.8"/>
+    <path d="M80 73 L35 15" stroke="#d8c29a" stroke-width="4" stroke-linecap="round"/><path d="M32 12 L25 23 L39 20 Z" fill="url(#hero-cavalier-steel)" stroke="#475569" stroke-width="1"/><path d="M47 27 L62 30 L53 44 Z" fill="#8b1e2d" stroke="#f4c95d" stroke-width="1"/>
+  </g>
+    </g>
 </svg>

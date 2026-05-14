@@ -1,12 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="48" cy="80" rx="38" ry="11" fill="#000" opacity=".32"/>
-  <path d="M20 45h56v31H20z" fill="#382329" stroke="#140b0e" stroke-width="3"/>
-  <path d="M16 37h17v39H16zM63 37h17v39H63z" fill="#4a2a2f" stroke="#140b0e" stroke-width="3"/>
-  <path d="M35 29h27v47H35z" fill="#2e2027" stroke="#140b0e" stroke-width="3"/>
-  <path d="M14 37l9-24 9 24zM62 37l9-24 10 24zM33 29 48 1l16 28z" fill="#8b1015" stroke="#ff7a1f" stroke-width="3"/>
-  <path d="M21 45v-8h8v8h8v-8h8v8h8v-8h8v8h8v-8h8v8" fill="none" stroke="#140b0e" stroke-width="3"/>
-  <path d="M27 51h7M40 43h8M56 45h8M64 55h10M23 63h10M50 61h12" stroke="#ff9248" stroke-width="3" stroke-linecap="round"/>
-  <path d="M40 76V60c0-8 16-8 16 0v16z" fill="#12080a" stroke="#050203" stroke-width="3"/>
-  <path d="M44 76c0-8 4-13 4-21 0 8 5 13 5 21z" fill="#ff6b1a" opacity=".75"/>
-  <path d="M48 42l5 7-5 7-5-7z" fill="#ffca5f" stroke="#8b1015" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="town-inferno-title town-inferno-desc">
+  <title id="town-inferno-title">Ville Hadès</title>
+  <desc id="town-inferno-desc">Sprite de ville sur la carte, avec silhouette et détails propres à sa faction : Ville Hadès.</desc>
+  
+  <ellipse cx="48" cy="82" rx="38" ry="10" fill="#000" opacity=".28"/>
+  <path d="M39 78 C38 66 48 60 45 49 C57 60 53 69 58 78 Z" fill="#ff6b1a" opacity=".8"/><path d="M28 42 L22 19 L34 38 M65 42 L73 19 L62 38" fill="#ff6b1a" stroke="#ffca5f" stroke-width="1.5"/>
+  <path d="M19 48 H77 V78 H19 Z" fill="#9f1239" stroke="#2a0608" stroke-width="3"/>
+  <path d="M14 39 H33 V78 H14 Z M63 39 H82 V78 H63 Z" fill="#fecaca" stroke="#2a0608" stroke-width="3" opacity=".82"/>
+  <path d="M34 31 H62 V78 H34 Z" fill="#ff6b1a" stroke="#2a0608" stroke-width="3"/>
+  <path d="M13 39 L24 17 L35 39 Z M61 39 L72 17 L83 39 Z M32 31 L48 5 L64 31 Z" fill="#ffca5f" stroke="#2a0608" stroke-width="3"/>
+  <path d="M20 48 V39 H28 V48 H36 V39 H44 V48 H52 V39 H60 V48 H68 V39 H76 V48" fill="none" stroke="#2a0608" stroke-width="3"/>
+  <path d="M26 56 H34 M42 47 H51 M57 49 H66 M65 59 H75 M24 67 H35 M51 64 H64" stroke="#fecaca" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+  <path d="M39 78 V62 C39 53 57 53 57 62 V78 Z" fill="#18110d" stroke="#090706" stroke-width="3"/>
+  <path d="M44 65 V78 M52 65 V78 M39 70 H57" stroke="#ff6b1a" stroke-width="1.8"/>
 </svg>

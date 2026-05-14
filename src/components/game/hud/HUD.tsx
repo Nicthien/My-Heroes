@@ -948,7 +948,7 @@ function HUDContent() {
                 className="w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
                 onClick={() => useGameStore.getState().selectTown(townAtSelectedHero.id)}
               >
-                Au chateau : <span className="font-black">{townAtSelectedHero.name}</span>
+                Au château : <span className="font-black">{townAtSelectedHero.name}</span>
               </button>
             )}
             <div className={goldDivider} />
@@ -1069,7 +1069,7 @@ function HUDContent() {
                 {heroesAtSelectedTown.length > 0 && (
                   <div className="rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-sm text-sky-100">
                     <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-sky-200/70">
-                      Heros au chateau
+                      Héros au château
                     </div>
                     <div className="space-y-1">
                       {heroesAtSelectedTown.map((hero) => (
@@ -1140,8 +1140,8 @@ function HUDContent() {
                             }`}
                             disabled={disabled}
                             onClick={() => handleTransferGarrisonToHero(unit.unitType)}
-                            aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "heros"}`}
-                            title={`Envoyer vers ${garrisonTargetHero?.name ?? "heros"}`}
+                            aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                            title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
                           >
                             <TransferToHeroIcon className="h-5 w-5" />
                             <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-sky-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-sky-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">

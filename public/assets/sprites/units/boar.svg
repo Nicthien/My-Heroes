@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-boar-title unit-boar-desc">
+  <title id="unit-boar-title">Sanglier</title>
+  <desc id="unit-boar-desc">Sprite d'unité Sanglier. Le dessin reprend la silhouette de boar.</desc>
+  <defs>
+    <linearGradient id="unit-boar-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="48%" stop-color="#7f1d1d"/>
+      <stop offset="100%" stop-color="#2a0b0b"/>
+    </linearGradient>
+    <linearGradient id="unit-boar-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#3f1d1d"/>
+    </linearGradient>
+    <linearGradient id="unit-boar-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-boar-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    
+    
+    <path d="M14 67 C18 54 35 48 57 52 C73 55 81 66 74 78 C66 91 42 92 23 81 C16 77 12 72 14 67 Z" fill="#eef2ff" stroke="#2a0b0b" stroke-width="2"/>
+    <path d="M57 52 C61 39 73 34 82 42 C87 47 83 55 71 57 C66 53 62 52 57 52 Z" fill="#eef2ff" stroke="#2a0b0b" stroke-width="1.6"/>
+    
+    <circle cx="75" cy="45" r="1.6" fill="#111827"/>
+    <path d="M23 75 L19 90 M40 79 L38 91 M62 77 L60 91 M73 72 L78 90" stroke="#d1d5db" stroke-width="4" stroke-linecap="round"/>
+    <path d="M15 91 H25 M34 92 H44 M56 92 H66 M74 91 H84" stroke="#111827" stroke-width="2" stroke-linecap="round"/>
+    <path d="M17 67 C5 62 8 50 19 48" fill="none" stroke="#c7d2fe" stroke-width="4" stroke-linecap="round"/>
+    <path d="M25 55 C39 44 56 46 68 55" fill="none" stroke="#fef3c7" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

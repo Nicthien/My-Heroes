@@ -1,5 +1,7 @@
 import { MapTile, TerrainType, UnitType } from "./types";
 import { UNIT_RULES } from "./units";
+import { CREATURE_GROUPS } from "./creature-catalog";
+import type { CreatureGroupKey } from "./creature-catalog";
 
 export interface NeutralArmyStackInput {
   unitType: UnitType;
@@ -15,84 +17,22 @@ type CountedUnit = {
   position?: number;
 };
 
+function groupUnits(group: CreatureGroupKey): UnitType[] {
+  return CREATURE_GROUPS.find((entry) => entry.key === group)?.units ?? [];
+}
+
+const NEUTRAL_UNITS = groupUnits("neutral");
+
 const TERRAIN_UNIT_POOLS: Record<TerrainType, UnitType[]> = {
-  [TerrainType.GRASS]: [
-    UnitType.PIKEMAN,
-    UnitType.ARCHER,
-    UnitType.GRIFFIN,
-    UnitType.SWORDSMAN,
-    UnitType.CAVALIER,
-    UnitType.ANGEL,
-  ],
-  [TerrainType.DIRT]: [
-    UnitType.GOBLIN,
-    UnitType.WOLF_RIDER,
-    UnitType.ORC,
-    UnitType.OGRE,
-    UnitType.ROC,
-    UnitType.CYCLOPS,
-    UnitType.BEHEMOTH,
-  ],
-  [TerrainType.FOREST]: [
-    UnitType.CENTAUR,
-    UnitType.DWARF,
-    UnitType.WOOD_ELF,
-    UnitType.PEGASUS,
-    UnitType.DENDROID,
-    UnitType.UNICORN,
-    UnitType.GREEN_DRAGON,
-  ],
-  [TerrainType.SAND]: [
-    UnitType.TROGLODYTE,
-    UnitType.HARPY,
-    UnitType.BEHOLDER,
-    UnitType.MEDUSA,
-    UnitType.MINOTAUR,
-    UnitType.MANTICORE,
-    UnitType.RED_DRAGON,
-  ],
-  [TerrainType.SNOW]: [
-    UnitType.GREMLIN,
-    UnitType.GARGOYLE,
-    UnitType.GOLEM,
-    UnitType.MAGE,
-    UnitType.GENIE,
-    UnitType.NAGA,
-    UnitType.GIANT,
-  ],
-  [TerrainType.SWAMP]: [
-    UnitType.GNOLL,
-    UnitType.LIZARDMAN,
-    UnitType.SERPENT_FLY,
-    UnitType.BASILISK,
-    UnitType.GORGON,
-    UnitType.WYVERN,
-    UnitType.HYDRA,
-  ],
-  [TerrainType.MOUNTAIN]: [
-    UnitType.GARGOYLE,
-    UnitType.GOLEM,
-    UnitType.HARPY,
-    UnitType.MINOTAUR,
-    UnitType.ROC,
-    UnitType.GIANT,
-    UnitType.RED_DRAGON,
-  ],
-  [TerrainType.LAVA]: [
-    UnitType.IMP,
-    UnitType.GOG,
-    UnitType.HELL_HOUND,
-    UnitType.DEMON,
-    UnitType.PIT_FIEND,
-    UnitType.EFREET,
-    UnitType.DEVIL,
-  ],
-  [TerrainType.WATER]: [
-    UnitType.LIZARDMAN,
-    UnitType.SERPENT_FLY,
-    UnitType.WYVERN,
-    UnitType.HYDRA,
-  ],
+  [TerrainType.GRASS]: [...groupUnits("castle"), ...groupUnits("conflux"), ...NEUTRAL_UNITS.slice(0, 8)],
+  [TerrainType.DIRT]: [...groupUnits("stronghold"), ...groupUnits("factory"), ...NEUTRAL_UNITS.slice(0, 8)],
+  [TerrainType.FOREST]: [...groupUnits("rampart"), ...groupUnits("bulwark"), ...NEUTRAL_UNITS.slice(4, 12)],
+  [TerrainType.SAND]: [...groupUnits("dungeon"), ...groupUnits("cove"), ...groupUnits("factory"), ...NEUTRAL_UNITS.slice(6, 14)],
+  [TerrainType.SNOW]: [...groupUnits("tower"), ...groupUnits("bulwark"), ...NEUTRAL_UNITS.slice(8, 16)],
+  [TerrainType.SWAMP]: [...groupUnits("fortress"), ...groupUnits("cove"), ...NEUTRAL_UNITS.slice(4, 13)],
+  [TerrainType.MOUNTAIN]: [...groupUnits("tower"), ...groupUnits("dungeon"), ...groupUnits("stronghold"), ...groupUnits("bulwark"), ...NEUTRAL_UNITS.slice(8)],
+  [TerrainType.LAVA]: [...groupUnits("inferno"), UnitType.FIRE_ELEMENTAL, UnitType.ENERGY_ELEMENTAL, UnitType.FIREBIRD, UnitType.PHOENIX],
+  [TerrainType.WATER]: [...groupUnits("cove"), UnitType.NYMPH, UnitType.OCEANID, UnitType.WATER_ELEMENTAL, UnitType.ICE_ELEMENTAL],
 };
 
 export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined): UnitType[] {

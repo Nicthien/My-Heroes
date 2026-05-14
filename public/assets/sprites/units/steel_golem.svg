@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-steel-golem-title unit-steel-golem-desc">
+  <title id="unit-steel-golem-title">Golem d'acier</title>
+  <desc id="unit-steel-golem-desc">Sprite d'unité Golem d'acier. Le dessin reprend la silhouette de steel golem.</desc>
+  <defs>
+    <linearGradient id="unit-steel-golem-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="48%" stop-color="#7f1d1d"/>
+      <stop offset="100%" stop-color="#2a0b0b"/>
+    </linearGradient>
+    <linearGradient id="unit-steel-golem-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#3f1d1d"/>
+    </linearGradient>
+    <linearGradient id="unit-steel-golem-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-steel-golem-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#cbd5e1" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M27 73 L24 90 H40 L42 73 Z M55 73 L57 90 H73 L69 73 Z" fill="#475569" stroke="#2a0b0b" stroke-width="1"/>
+    <path d="M22 38 L32 24 H64 L75 40 L70 75 Q48 84 25 75 Z" fill="#94a3b8" stroke="#2a0b0b" stroke-width="2"/>
+    <path d="M35 35 H61 L58 60 H38 Z" fill="url(#unit-steel-golem-body)" opacity=".35"/>
+    <path d="M49 40.1 L58 50 L49 59.9 L40 50 Z" fill="#fef3c7" stroke="#3f1d1d" stroke-width="0.9"/><path d="M44.5 50 H53.5 M49 44.6 V55.4" stroke="#2a0b0b" stroke-width="1.1700000000000002"/>
+    <path d="M32 24 L38 11 H58 L64 24 Z" fill="#cbd5e1" stroke="#2a0b0b" stroke-width="2"/>
+    <circle cx="42" cy="22" r="2" fill="#fef3c7"/><circle cx="54" cy="22" r="2" fill="#fef3c7"/>
+    <path d="M22 42 Q9 55 16 76 L28 71 Q25 58 32 45 Z M74 42 Q88 55 80 76 L68 71 Q72 58 64 45 Z" fill="#64748b" stroke="#2a0b0b" stroke-width="2"/>
+    <path d="M74 83 L65 31" stroke="#7a4e20" stroke-width="5" stroke-linecap="round"/><path d="M52 20 H79 V33 H52 Z" fill="url(#unit-steel-golem-steel)" stroke="#475569" stroke-width="1.4"/>
+  </g>
+</svg>

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-evil-eye-title unit-evil-eye-desc">
+  <title id="unit-evil-eye-title">Mauvais œil</title>
+  <desc id="unit-evil-eye-desc">Sprite d'unité Mauvais œil. Le dessin reprend la silhouette de evil eye.</desc>
+  <defs>
+    <linearGradient id="unit-evil-eye-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d8b4fe"/>
+      <stop offset="48%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#17101f"/>
+    </linearGradient>
+    <linearGradient id="unit-evil-eye-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#84e6ff"/>
+      <stop offset="100%" stop-color="#2d7a8b"/>
+    </linearGradient>
+    <linearGradient id="unit-evil-eye-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-evil-eye-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#84e6ff" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#84e6ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#a78bfa" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M29 30 Q22 12 15 14" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/><circle cx="15" cy="14" r="6" fill="#f8fafc" stroke="#17101f" stroke-width="1.2"/><circle cx="15" cy="14" r="2.3" fill="#84e6ff"/>
+<path d="M39 26 Q36.5 8 34 7" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/><circle cx="34" cy="7" r="6" fill="#f8fafc" stroke="#17101f" stroke-width="1.2"/><circle cx="34" cy="7" r="2.3" fill="#84e6ff"/>
+<path d="M49 25 Q50 7 51 6" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/><circle cx="51" cy="6" r="6" fill="#f8fafc" stroke="#17101f" stroke-width="1.2"/><circle cx="51" cy="6" r="2.3" fill="#84e6ff"/>
+<path d="M58 29 Q65 11 72 13" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/><circle cx="72" cy="13" r="6" fill="#f8fafc" stroke="#17101f" stroke-width="1.2"/><circle cx="72" cy="13" r="2.3" fill="#84e6ff"/>
+<path d="M64 37 Q74 19 84 27" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/><circle cx="84" cy="27" r="6" fill="#f8fafc" stroke="#17101f" stroke-width="1.2"/><circle cx="84" cy="27" r="2.3" fill="#84e6ff"/>
+    <ellipse cx="48" cy="56" rx="30" ry="32" fill="#6d28d9" stroke="#17101f" stroke-width="2"/>
+    <ellipse cx="48" cy="51" rx="16" ry="13" fill="#f8fafc" stroke="#17101f" stroke-width="1.5"/>
+    <circle cx="48" cy="51" r="6.5" fill="#84e6ff"/><circle cx="48" cy="51" r="2.7" fill="#111827"/>
+    <path d="M35 72 Q48 81 64 72" fill="none" stroke="#111827" stroke-width="2"/>
+    <path d="M27 60 C11 54 12 41 28 37 M68 60 C85 54 84 41 68 37" fill="none" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

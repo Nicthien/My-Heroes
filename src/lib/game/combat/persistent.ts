@@ -144,7 +144,7 @@ export function executeManualCombatAction(params: {
         actor.q = q;
         actor.r = r;
         didAct = true;
-        log.push(`${getUnitRule(actor.unitType).label} se deplace.`);
+        log.push(`${getUnitRule(actor.unitType).label} se déplace.`);
       }
     }
   } else if (params.action.type === "ATTACK" || params.action.type === "SHOOT") {
@@ -171,7 +171,7 @@ export function executeManualCombatAction(params: {
   } else if (params.action.type === "DEFEND") {
     actor.defended = true;
     didAct = true;
-    log.push(`${getUnitRule(actor.unitType).label} se defend.`);
+    log.push(`${getUnitRule(actor.unitType).label} se défend.`);
   } else if (params.action.type === "WAIT") {
     actor.waited = true;
     didAct = true;
@@ -326,7 +326,7 @@ export function resolveAutomaticCombat(attacker: CombatParticipantSnapshot, defe
     attackerLosses: getLosses(attacker.armies, attackerNext),
     defenderLosses: getLosses(defender.armies, defenderNext),
     experienceGained: 500,
-    log: [`Puissance attaquant ${result.attackerPower}`, `Puissance defenseur ${result.defenderPower}`],
+    log: [`Puissance attaquant ${result.attackerPower}`, `Puissance défenseur ${result.defenderPower}`],
   };
 }
 

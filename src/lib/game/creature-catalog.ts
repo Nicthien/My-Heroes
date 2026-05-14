@@ -1,0 +1,65 @@
+import catalogJson from "./creature-catalog.json";
+import { UnitType } from "./types";
+import type { Resources } from "./types";
+
+export type CreatureGroupKey =
+  | "castle"
+  | "rampart"
+  | "tower"
+  | "inferno"
+  | "necropolis"
+  | "dungeon"
+  | "stronghold"
+  | "fortress"
+  | "conflux"
+  | "cove"
+  | "factory"
+  | "bulwark"
+  | "neutral";
+
+export interface CreatureCatalogEntry {
+  type: UnitType;
+  label: string;
+  group: CreatureGroupKey;
+  tier: number;
+  upgradeLevel: number;
+  attack: number;
+  defense: number;
+  minDamage: number;
+  maxDamage: number;
+  health: number;
+  speed: number;
+  growth: number;
+  aiValue: number;
+  cost: Partial<Resources>;
+  ranged: boolean;
+  shots: number;
+  abilities: string[];
+  special: string;
+}
+
+export interface CreatureCatalogGroup {
+  key: CreatureGroupKey;
+  label: string;
+  units: UnitType[];
+}
+
+const catalog = catalogJson as {
+  source: string;
+  sourceRetrievedAt: string;
+  groups: CreatureCatalogGroup[];
+  creatures: CreatureCatalogEntry[];
+};
+
+export const CREATURE_CATALOG_SOURCE = catalog.source;
+export const CREATURE_CATALOG_SOURCE_RETRIEVED_AT = catalog.sourceRetrievedAt;
+export const CREATURE_GROUPS = catalog.groups;
+export const CREATURES = catalog.creatures;
+
+export const CREATURE_BY_TYPE = Object.fromEntries(
+  CREATURES.map((creature) => [creature.type, creature]),
+) as Record<UnitType, CreatureCatalogEntry>;
+
+export function getCreature(unitType: UnitType | string): CreatureCatalogEntry {
+  return CREATURE_BY_TYPE[unitType as UnitType] ?? CREATURE_BY_TYPE[UnitType.PIKEMAN];
+}

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-scorpicore-title unit-scorpicore-desc">
+  <title id="unit-scorpicore-title">Scorpicore</title>
+  <desc id="unit-scorpicore-desc">Sprite d'unité Scorpicore. Le dessin reprend la silhouette de scorpicore.</desc>
+  <defs>
+    <linearGradient id="unit-scorpicore-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d8b4fe"/>
+      <stop offset="48%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#17101f"/>
+    </linearGradient>
+    <linearGradient id="unit-scorpicore-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#84e6ff"/>
+      <stop offset="100%" stop-color="#2d7a8b"/>
+    </linearGradient>
+    <linearGradient id="unit-scorpicore-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-scorpicore-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#84e6ff" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#84e6ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#a78bfa" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M40 47 C23 17 9 25 10 54 C23 48 32 54 42 70 Z M55 47 C72 17 86 25 86 54 C73 48 64 54 54 70 Z" fill="#2d7a8b" stroke="#17101f" stroke-width="2"/>
+    <path d="M14 67 C16 51 35 44 57 48 C75 52 82 66 74 80 C64 93 38 92 20 80 C15 76 12 72 14 67 Z" fill="url(#unit-scorpicore-body)" stroke="#17101f" stroke-width="2"/>
+    <path d="M58 48 C63 35 76 31 86 42 C90 48 84 56 72 58 C66 52 62 49 58 48 Z" fill="#84e6ff" stroke="#17101f" stroke-width="1.5"/>
+    <path d="M73 40 L78 27 M84 44 L93 35" stroke="#f8fafc" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="75" cy="46" r="1.8" fill="#111827"/>
+    <path d="M22 77 L16 91 M42 81 L39 93 M67 77 L74 91" stroke="#2d7a8b" stroke-width="4" stroke-linecap="round"/>
+    <path d="M73 73 C91 69 92 86 77 91 C78 82 72 78 63 79 Z" fill="#2d7a8b" stroke="#17101f" stroke-width="1.2"/>
+    <path d="M85 72 L93 64" stroke="#84e6ff" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>

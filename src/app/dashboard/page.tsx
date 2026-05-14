@@ -441,21 +441,21 @@ export default function DashboardPage() {
                 </select>
               </div>
               <div>
-                <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Seed</label>
+                <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Graine</label>
                 <div className="flex gap-2">
                   <input
                     id="seed"
                     type="text"
                     value={seed}
                     onChange={(e) => setSeed(e.target.value.toUpperCase() || randomSeedValue())}
-                    placeholder="Seed"
+                    placeholder="Graine"
                     maxLength={32}
                     className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={generateRandomSeed}
-                    title="Seed aléatoire"
+                    title="Graine aléatoire"
                     className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 text-amber-100 hover:border-amber-400"
                   >
                     🎲
@@ -467,9 +467,9 @@ export default function DashboardPage() {
             <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Apercu de la carte</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
                   <div className="text-[11px] uppercase tracking-wider text-amber-200/50">
-                    Seed {previewMap.seed} - {previewMap.width}x{previewMap.height}
+                    Graine {previewMap.seed} - {previewMap.width}x{previewMap.height}
                   </div>
                 </div>
                 <button
@@ -477,7 +477,7 @@ export default function DashboardPage() {
                   onClick={() => setShowRmgPreview(true)}
                   className="shrink-0 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-100 transition hover:bg-amber-500/25"
                 >
-                  Grand apercu
+                  Grand aperçu
                 </button>
               </div>
               <RmgMapPreview
@@ -552,9 +552,9 @@ export default function DashboardPage() {
               >
                 <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
                   <div>
-                    <h3 className="text-xl font-semibold tracking-normal">Apercu RMG</h3>
+                    <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
                     <p className="text-sm text-stone-400">
-                      Seed {previewMap.seed} - Template {previewMap.templateId}
+                      Graine {previewMap.seed} - Modèle {previewMap.templateId}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -563,7 +563,7 @@ export default function DashboardPage() {
                       onClick={generateRandomSeed}
                       className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
                     >
-                      Nouvelle seed
+                      Nouvelle graine
                     </button>
                     <button
                       type="button"
@@ -577,7 +577,7 @@ export default function DashboardPage() {
 
                 <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Seed</span>
+                    <span className="text-stone-400">Graine</span>
                     <input
                       value={seed}
                       onChange={(event) => setSeed(event.target.value.toUpperCase() || randomSeedValue())}
@@ -617,7 +617,7 @@ export default function DashboardPage() {
                   </label>
 
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Template</span>
+                    <span className="text-stone-400">Modèle</span>
                     <select
                       value={selectedTemplateId}
                       onChange={(event) => setTemplateId(event.target.value)}

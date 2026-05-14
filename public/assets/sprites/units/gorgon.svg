@@ -1,6 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M25 77 L31 39 L50 23 L69 39 L75 77 Z" fill="#4f8b78" stroke="#1f1a12" stroke-width="4"/><path d="M36 44 H64 L60 72 H40 Z" fill="#b8f3de" opacity=".75"/><path d="M72 30 L80 75" stroke="#f8f0c8" stroke-width="5"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">G</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-gorgon-title unit-gorgon-desc">
+  <title id="unit-gorgon-title">Gorgone</title>
+  <desc id="unit-gorgon-desc">Sprite d'unité Gorgone. Le dessin reprend la silhouette de gorgon.</desc>
+  <defs>
+    <linearGradient id="unit-gorgon-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bef264"/>
+      <stop offset="48%" stop-color="#596a3d"/>
+      <stop offset="100%" stop-color="#202815"/>
+    </linearGradient>
+    <linearGradient id="unit-gorgon-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d1e68a"/>
+      <stop offset="100%" stop-color="#47682f"/>
+    </linearGradient>
+    <linearGradient id="unit-gorgon-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-gorgon-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#d1e68a" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#d1e68a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#cbd5e1" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M13 68 C15 52 33 45 57 50 C75 53 83 66 75 79 C64 94 36 91 18 81 C13 77 11 72 13 68 Z" fill="#475569" stroke="#202815" stroke-width="2"/>
+    <path d="M56 49 C60 34 76 32 86 43 C91 49 84 59 70 59 C65 54 61 50 56 49 Z" fill="#64748b" stroke="#202815" stroke-width="1.7"/>
+    <path d="M66 41 Q62 27 72 22 M79 42 Q92 31 88 22" fill="none" stroke="#e5e7eb" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="74" cy="47" r="2" fill="#fef08a"/>
+    <path d="M28 50 C43 44 61 49 73 61" fill="none" stroke="#94a3b8" stroke-width="2"/>
+    <path d="M39.5 58.25 Q44.75 52.25 50 58.25 Q55.25 52.25 60.5 58.25 M41 65.75 Q46.25 59.75 51.5 65.75 Q56.75 59.75 62 65.75" fill="none" stroke="#d1e68a" stroke-width="1.35"/>
+    <path d="M24 77 L18 91 M44 81 L41 93 M67 77 L74 91" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+  </g>
 </svg>

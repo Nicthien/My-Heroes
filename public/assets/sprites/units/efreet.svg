@@ -1,6 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M16 57 C22 35 36 29 48 43 C61 28 75 35 80 58 C65 55 57 59 50 71 C42 59 31 55 16 57Z" fill="#c84f3d" stroke="#1f1a12" stroke-width="4"/><circle cx="48" cy="33" r="12" fill="#ffb36c" stroke="#1f1a12" stroke-width="4"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">E</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-efreet-title unit-efreet-desc">
+  <title id="unit-efreet-title">Efrit</title>
+  <desc id="unit-efreet-desc">Sprite d'unité Efrit. Le dessin reprend la silhouette de efreet.</desc>
+  <defs>
+    <linearGradient id="unit-efreet-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="48%" stop-color="#9f1239"/>
+      <stop offset="100%" stop-color="#2a0608"/>
+    </linearGradient>
+    <linearGradient id="unit-efreet-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffca5f"/>
+      <stop offset="100%" stop-color="#ff6b1a"/>
+    </linearGradient>
+    <linearGradient id="unit-efreet-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-efreet-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#ffca5f" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#ffca5f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#ff7a1f" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#ff7a1f" stroke-width="2" stroke-dasharray="2 4" opacity=".7"/>
+    <path d="M22 78 C16 64 28 58 23 44 C36 55 32 66 40 78 M74 78 C80 64 68 58 73 44 C60 55 64 66 56 78" fill="#ff7a1f" opacity=".25"/>
+  </g>
+    <g opacity=".9">
+    <path d="M38 38 C23 13 8 20 8 51 L22 46 L31 63 L40 53 Z" fill="#ff6b1a" stroke="#2a0608" stroke-width="2"/>
+    <path d="M58 38 C73 13 88 20 88 51 L74 46 L65 63 L56 53 Z" fill="#ff6b1a" stroke="#2a0608" stroke-width="2"/>
+    <path d="M14 43 Q25 40 38 50 M82 43 Q71 40 58 50" fill="none" stroke="#ffca5f" stroke-width="1.4" opacity=".65"/>
+    
+  </g>
+    <path d="M34 67 C47 69 61 68 71 78 C58 92 33 91 22 80 C32 79 41 74 34 67 Z" fill="#ff6b1a" opacity=".75"/>
+    <path d="M27 78 C37 65 42 56 38 43 C44 51 55 51 62 43 C57 57 59 66 70 78 C57 84 40 84 27 78 Z" fill="url(#unit-efreet-body)" stroke="#2a0608" stroke-width="1.8"/>
+    <path d="M36 34 Q39 24 50 23 Q61 24 64 34 L62 54 Q50 61 38 54 Z" fill="url(#unit-efreet-body)" stroke="#2a0608" stroke-width="1.7"/>
+    <path d="M50 53.25 C41 45 48.5 39.75 47.75 32.25 C56.75 39.75 60.5 46.5 50 53.25 Z" fill="#ffca5f"/>
+    <ellipse cx="50" cy="18" rx="9" ry="9" fill="#b86a45" stroke="#2a0608" stroke-width="1.4"/>
+    <path d="M42 9 Q28 -4 32 15 M58 9 Q72 -4 68 15" fill="none" stroke="#f8fafc" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M37 39 Q24 45 22 60 M63 39 Q76 45 78 60" fill="none" stroke="url(#unit-efreet-body)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M70 74 C62 52 67 27 84 16" fill="none" stroke="url(#unit-efreet-steel)" stroke-width="4" stroke-linecap="round"/><path d="M61 50 H77" stroke="#ffca5f" stroke-width="3"/>
+  </g>
 </svg>

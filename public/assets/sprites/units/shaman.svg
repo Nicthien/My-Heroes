@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-shaman-title unit-shaman-desc">
+  <title id="unit-shaman-title">Chamane</title>
+  <desc id="unit-shaman-desc">Sprite d'unité Chamane. Le dessin reprend la silhouette de shaman.</desc>
+  <defs>
+    <linearGradient id="unit-shaman-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="48%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="unit-shaman-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d9f99d"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="unit-shaman-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-shaman-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#d9f99d" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#d9f99d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(0 0) scale(1 1)">
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#cbd5e1" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    
+    
+    
+    
+    <path d="M30 34 Q34 25 48 24 Q62 25 66 34 L75 84 Q48 90 21 84 Z" fill="url(#unit-shaman-body)" stroke="#1e3a8a" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#d9f99d" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#e0f2fe" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <path d="M48 42 L59 53 L48 64 L37 53 Z" fill="#d9f99d" stroke="#475569" stroke-width="1"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-shaman-body)" stroke="#1e3a8a" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-shaman-body)" stroke="#1e3a8a" stroke-width="1.5"/>
+    
+    <path d="M59 24 C82 36 82 68 59 80" fill="none" stroke="#8b5a28" stroke-width="4" stroke-linecap="round"/><path d="M59 24 Q72 52 59 80 M45 55 H81" stroke="#f8ead1" stroke-width="1.5"/><path d="M81 55 L75 51 M81 55 L75 59" stroke="#d9f99d" stroke-width="1.5"/>
+    <path d="M38 18 Q48 10 58 18 L56 30 Q48 35 40 30 Z" fill="#1e3a8a" stroke="#475569" stroke-width="1.4"/><path d="M43 23 H46 M50 23 H53" stroke="#d9f99d" stroke-width="1.8" stroke-linecap="round"/>
+    
+    <path d="M33 21 Q48 -1 63 21 Q48 12 33 21 Z" fill="#1e3a8a" stroke="#475569" stroke-width="1.3"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#e0f2fe" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
+</svg>

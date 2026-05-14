@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="rock-large-title rock-large-desc">
+  <title id="rock-large-title">Grand rocher</title>
+  <desc id="rock-large-desc">Sprite de décor de carte : Grand rocher.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".24"/>
+  <path d="M10 48 L18 25 L34 14 L52 28 L56 49 L38 57 L18 56 Z" fill="#73716a" stroke="#302d29" stroke-width="2.3"/>
+  <path d="M18 25 L34 14 L31 37 L10 48 Z" fill="#9a978e" opacity=".75"/>
+  <path d="M34 14 L52 28 L39 38 L31 37 Z" fill="#85817a"/>
+  <path d="M31 37 L39 38 L38 57 L18 56 Z" fill="#5d5952"/>
+  <path d="M20 27 L31 20 M40 29 L50 30 M20 47 L35 47" stroke="#d0ccc2" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>
+</svg>

@@ -1,21 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-  <ellipse cx="39" cy="64" rx="28" ry="8" fill="#000" opacity=".25"/>
-  <path d="M17 42 8 35l3 15 10 6z" fill="#3a2415" stroke="#160c06" stroke-width="2"/>
-  <path d="M18 36c8-11 34-11 43-1 6 7 0 19-16 20-18 1-33-7-27-19z" fill="#8c633b" stroke="#2f1b12" stroke-width="3"/>
-  <path d="M27 33c9-5 22-4 30 2-10 2-21 1-30-2z" fill="#c08a55" opacity=".6"/>
-  <path d="M55 28c6-9 18-2 15 8-2 5-9 5-15 1z" fill="#8c633b" stroke="#2f1b12" stroke-width="3"/>
-  <circle cx="67" cy="29" r="1.7" fill="#080808"/>
-  <path d="M30 53l-6 16M39 53l2 16M52 52l9 15M58 50l-3 18" stroke="#8c633b" stroke-width="5" stroke-linecap="round"/>
-  <path d="M21 69h9M38 69h8M56 68h9M51 68h8" stroke="#111" stroke-width="3" stroke-linecap="round"/>
-  <path d="M28 31h25l-3 14H27z" fill="#2f6f3b" stroke="#d6e68b" stroke-width="2"/>
-  <path d="M35 27c-8 4-13 11-16 20l15-6z" fill="#245c31" stroke="#9ad36d" stroke-width="2"/>
-  <path d="M36 15h14l4 24H30z" fill="#49653a" stroke="#1d2e19" stroke-width="3"/>
-  <path d="M35 23h16M36 30h17" stroke="#b7df88" stroke-width="2" opacity=".75"/>
-  <circle cx="43" cy="10" r="7" fill="#f0b875" stroke="#f6e6c8" stroke-width="2"/>
-  <path d="M35 10c2-8 15-8 17 0z" fill="#245c31" stroke="#b7df88" stroke-width="2"/>
-  <path d="M53 22 76 8" stroke="#d3b47a" stroke-width="3" stroke-linecap="round"/>
-  <path d="M74 8h6l-5 5z" fill="#eef8c9" stroke="#5e6d32" stroke-width="1"/>
-  <path d="M58 16 72 17l-9 8z" fill="#2f6f3b" stroke="#d6e68b" stroke-width="2"/>
-  <path d="M31 18 22 25l1 15 8 6 8-6 1-15z" fill="#245c31" stroke="#d6e68b" stroke-width="3"/>
-  <path d="M31 22c5 5 5 12 0 18-5-6-5-13 0-18z" fill="#b7df88"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-labelledby="hero-rampart-title hero-rampart-desc">
+  <title id="hero-rampart-title">Héros rempart</title>
+  <desc id="hero-rampart-desc">Sprite de héros sur la carte, avec monture et équipement de faction : Héros rempart.</desc>
+  <defs>
+    <linearGradient id="hero-rampart-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="48%" stop-color="#2f6f3b"/>
+      <stop offset="100%" stop-color="#12391f"/>
+    </linearGradient>
+    <linearGradient id="hero-rampart-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d6e68b"/>
+      <stop offset="100%" stop-color="#7a4f25"/>
+    </linearGradient>
+    <linearGradient id="hero-rampart-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="hero-rampart-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#d6e68b" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#d6e68b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(-8 -13) scale(.98)">
+      <g>
+    
+    <ellipse cx="48" cy="87" rx="34" ry="5" fill="#000" opacity=".25"/>
+    <path d="M17 68 L14 88 M30 72 L29 89 M58 72 L61 89 M72 66 L78 87" stroke="#12391f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M12 61 Q13 49 29 47 L67 48 Q79 51 77 63 Q75 75 59 76 L26 75 Q12 73 12 61 Z" fill="#7b5138" stroke="#12391f" stroke-width="2"/>
+    <path d="M24 53 H63 Q73 55 76 61" fill="none" stroke="#d6e68b" stroke-width="2" opacity=".65"/>
+    <path d="M65 46 Q78 42 83 52 L80 65 L70 67 Q64 60 65 52 Z" fill="#7b5138" stroke="#12391f" stroke-width="1.6"/>
+    
+    <circle cx="76" cy="54" r="1.6" fill="#111827"/>
+    <path d="M13 57 Q3 61 8 73 L14 73 Q16 64 20 61 Z" fill="#12391f" stroke="#12391f" stroke-width="1"/>
+    <path d="M36 28 Q37 18 48 17 Q59 18 60 29 L59 52 Q48 58 37 52 Z" fill="url(#hero-rampart-body)" stroke="#12391f" stroke-width="1.8"/>
+    <path d="M38 34 H58 L56 48 H40 Z" fill="#d6e68b" opacity=".25"/>
+    <path d="M46.56 48.48 C37.2 40.56 45.12 31.92 55.2 35.52 C55.2 42.72 52.32 47.04 46.56 48.48 Z" fill="#d6e68b" stroke="#7a4f25" stroke-width="0.576"/>
+    <path d="M39 9 Q48 2 57 9 L55 20 Q48 25 41 20 Z" fill="url(#hero-rampart-steel)" stroke="#12391f" stroke-width="1.5"/>
+    <path d="M42 14 H47 M50 14 H55" stroke="#0f172a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M38 7 C32 -7 47 -7 53 2 C47 5 43 6 38 7 Z" fill="#d6e68b" stroke="#12391f" stroke-width="1"/>
+    
+    <path d="M60 16 C83 28 83 60 60 72" fill="none" stroke="#8b5a28" stroke-width="4" stroke-linecap="round"/><path d="M60 16 Q73 44 60 72 M46 47 H82" stroke="#f8ead1" stroke-width="1.5"/><path d="M82 47 L76 43 M82 47 L76 51" stroke="#d6e68b" stroke-width="1.5"/>
+  </g>
+    </g>
 </svg>

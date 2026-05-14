@@ -28,7 +28,6 @@ export const MAP_SPRITES = {
     stronghold: "/assets/sprites/map/town-stronghold.svg",
     fortress: "/assets/sprites/map/town-fortress.svg",
   } as Record<string, string>,
-  monster: "/assets/sprites/map/monster.svg",
   resources: {
     gold: "/assets/sprites/resources/gold.svg",
     wood: "/assets/sprites/resources/wood.svg",
@@ -45,6 +44,18 @@ export const MAP_SPRITES = {
     crystal_cavern: "/assets/sprites/map/crystal-cavern.svg",
     sulfur_dune: "/assets/sprites/map/sulfur-dune.svg",
   } as Record<string, string>,
+  decor: {
+    wall_brick: "/assets/sprites/map/wall-brick.svg",
+    wall_vegetal: "/assets/sprites/map/wall-vegetal.svg",
+    tree_pine: "/assets/sprites/map/tree-pine.svg",
+    tree_oak: "/assets/sprites/map/tree-oak.svg",
+    tree_dead: "/assets/sprites/map/tree-dead.svg",
+    rock_large: "/assets/sprites/map/rock-large.svg",
+    rock_small: "/assets/sprites/map/rock-small.svg",
+    bush: "/assets/sprites/map/bush.svg",
+    flower: "/assets/sprites/map/flower.svg",
+    grass_tuft: "/assets/sprites/map/grass-tuft.svg",
+  } as Record<string, string>,
 };
 
 export function getHeroSpritePath(faction: string) {
@@ -56,7 +67,7 @@ export function getTownSpritePath(faction: string) {
 }
 
 export function getMonsterSpritePath(unitType: string | undefined) {
-  return UNIT_SPRITES[unitType as UnitType] ?? MAP_SPRITES.monster;
+  return UNIT_SPRITES[unitType as UnitType] ?? UNIT_SPRITES[UnitType.PIKEMAN];
 }
 
 export const MAP_SPRITE_PATHS = Array.from(new Set([
@@ -64,8 +75,8 @@ export const MAP_SPRITE_PATHS = Array.from(new Set([
   MAP_SPRITES.town,
   ...Object.values(MAP_SPRITES.heroes),
   ...Object.values(MAP_SPRITES.towns),
-  MAP_SPRITES.monster,
   ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),
   ...Object.values(MAP_SPRITES.buildings),
+  ...Object.values(MAP_SPRITES.decor),
 ]));

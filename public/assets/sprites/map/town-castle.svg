@@ -1,16 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="48" cy="79" rx="38" ry="11" fill="#000" opacity=".25"/>
-  <path d="M20 42h56v34H20z" fill="#8f989f" stroke="#263139" stroke-width="3"/>
-  <path d="M15 35h17v41H15zM64 35h17v41H64z" fill="#a6afb6" stroke="#263139" stroke-width="3"/>
-  <path d="M34 28h28v48H34z" fill="#97a2aa" stroke="#263139" stroke-width="3"/>
-  <path d="M13 35l10-19 10 19zM63 35l10-19 10 19zM32 28 48 4l16 24z" fill="#b92932" stroke="#64131b" stroke-width="3"/>
-  <path d="M20 42v-8h8v8h8v-8h8v8h8v-8h8v8h8v-8h8v8" fill="none" stroke="#263139" stroke-width="3"/>
-  <path d="M25 47h6M40 42h7M56 42h7M66 50h8M21 59h9M51 56h11" stroke="#edf4f8" stroke-width="3" stroke-linecap="round"/>
-  <path d="M40 76V60c0-8 16-8 16 0v16z" fill="#2b1b12" stroke="#14100c" stroke-width="3"/>
-  <path d="M45 63v13M51 63v13M40 68h16" stroke="#7a4c28" stroke-width="2"/>
-  <path d="M48 5v-14" stroke="#2a2a2a" stroke-width="3"/>
-  <path d="M49-8 72 0 49 10z" fill="#315aaa" stroke="#f4c95d" stroke-width="3"/>
-  <path d="M24 76h48" stroke="#ffffff" stroke-width="2" opacity=".5"/>
-  <path d="M43 46h10v10H43z" fill="#315aaa" stroke="#f4c95d" stroke-width="2"/>
-  <path d="M48 47v8M44 51h8" stroke="#f7f3dc" stroke-width="2" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="town-castle-title town-castle-desc">
+  <title id="town-castle-title">Ville château</title>
+  <desc id="town-castle-desc">Sprite de ville sur la carte, avec silhouette et détails propres à sa faction : Ville château.</desc>
+  
+  <ellipse cx="48" cy="82" rx="38" ry="10" fill="#000" opacity=".28"/>
+  <path d="M43 47 H53 V58 H43 Z" fill="#315aaa" stroke="#f4c95d" stroke-width="2"/><path d="M48 49 V57 M44 53 H52" stroke="#fff7ad" stroke-width="1.8"/>
+  <path d="M19 48 H77 V78 H19 Z" fill="#315aaa" stroke="#172554" stroke-width="3"/>
+  <path d="M14 39 H33 V78 H14 Z M63 39 H82 V78 H63 Z" fill="#dbeafe" stroke="#172554" stroke-width="3" opacity=".82"/>
+  <path d="M34 31 H62 V78 H34 Z" fill="#8b1e2d" stroke="#172554" stroke-width="3"/>
+  <path d="M13 39 L24 17 L35 39 Z M61 39 L72 17 L83 39 Z M32 31 L48 5 L64 31 Z" fill="#f4c95d" stroke="#172554" stroke-width="3"/>
+  <path d="M20 48 V39 H28 V48 H36 V39 H44 V48 H52 V39 H60 V48 H68 V39 H76 V48" fill="none" stroke="#172554" stroke-width="3"/>
+  <path d="M26 56 H34 M42 47 H51 M57 49 H66 M65 59 H75 M24 67 H35 M51 64 H64" stroke="#dbeafe" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+  <path d="M39 78 V62 C39 53 57 53 57 62 V78 Z" fill="#18110d" stroke="#090706" stroke-width="3"/>
+  <path d="M44 65 V78 M52 65 V78 M39 70 H57" stroke="#8b1e2d" stroke-width="1.8"/>
 </svg>

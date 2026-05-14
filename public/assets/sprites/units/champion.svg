@@ -1,6 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M29 78 L34 40 L50 25 L66 40 L71 78 Z" fill="#d9b66f" stroke="#1f1a12" stroke-width="4"/><circle cx="50" cy="30" r="10" fill="#f8e7a6" stroke="#1f1a12" stroke-width="4"/><path d="M28 44 L18 75" stroke="#f8f0c8" stroke-width="5"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">C</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-champion-title unit-champion-desc">
+  <title id="unit-champion-title">Champion</title>
+  <desc id="unit-champion-desc">Sprite d'unité Champion. Le dessin reprend la silhouette de champion.</desc>
+  <defs>
+    <linearGradient id="unit-champion-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="48%" stop-color="#315aaa"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+    <linearGradient id="unit-champion-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4c95d"/>
+      <stop offset="100%" stop-color="#8b1e2d"/>
+    </linearGradient>
+    <linearGradient id="unit-champion-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-champion-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#f4c95d" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#f4c95d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#fff7ad" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#fff7ad" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <ellipse cx="48" cy="87" rx="34" ry="5" fill="#000" opacity=".25"/>
+    <path d="M17 68 L14 88 M30 72 L29 89 M58 72 L61 89 M72 66 L78 87" stroke="#172554" stroke-width="5" stroke-linecap="round"/>
+    <path d="M12 61 Q13 49 29 47 L67 48 Q79 51 77 63 Q75 75 59 76 L26 75 Q12 73 12 61 Z" fill="#7b5138" stroke="#172554" stroke-width="2"/>
+    <path d="M24 53 H63 Q73 55 76 61" fill="none" stroke="#f4c95d" stroke-width="2" opacity=".65"/>
+    <path d="M65 46 Q78 42 83 52 L80 65 L70 67 Q64 60 65 52 Z" fill="#7b5138" stroke="#172554" stroke-width="1.6"/>
+    <path d="M75 42 L82 29 L82 45 Z" fill="#f4c95d" stroke="#172554" stroke-width="1"/>
+    <circle cx="76" cy="54" r="1.6" fill="#111827"/>
+    <path d="M13 57 Q3 61 8 73 L14 73 Q16 64 20 61 Z" fill="#172554" stroke="#172554" stroke-width="1"/>
+    <path d="M36 28 Q37 18 48 17 Q59 18 60 29 L59 52 Q48 58 37 52 Z" fill="url(#unit-champion-body)" stroke="#172554" stroke-width="1.8"/>
+    <path d="M38 34 H58 L56 48 H40 Z" fill="#f4c95d" opacity=".25"/>
+    <path d="M56.64 27.6 V47.76" stroke="#172554" stroke-width="1.44"/><path d="M58.08 27.6 L70.32 30.48 L58.08 35.52 Z" fill="#f4c95d" stroke="#8b1e2d" stroke-width="0.864"/>
+    <path d="M39 9 Q48 2 57 9 L55 20 Q48 25 41 20 Z" fill="url(#unit-champion-steel)" stroke="#172554" stroke-width="1.5"/>
+    <path d="M42 14 H47 M50 14 H55" stroke="#0f172a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M36 2 L42 -9 L48 2 L54 -9 L60 2 L58 9 H38 Z" fill="#f4c95d" stroke="#8b1e2d" stroke-width="1.2"/>
+    <path d="M36 21 L49 31 L46 60 L36 71 L26 60 L23 31 Z" fill="url(#unit-champion-body)" stroke="#f4c95d" stroke-width="2"/><path d="M36 27 V62 M28 43 H44" stroke="#dbeafe" stroke-width="1.8"/>
+    <path d="M80 73 L35 15" stroke="#d8c29a" stroke-width="4" stroke-linecap="round"/><path d="M32 12 L25 23 L39 20 Z" fill="url(#unit-champion-steel)" stroke="#475569" stroke-width="1"/><path d="M47 27 L62 30 L53 44 Z" fill="#8b1e2d" stroke="#f4c95d" stroke-width="1"/>
+  </g>
 </svg>

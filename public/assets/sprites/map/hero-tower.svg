@@ -1,17 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-  <ellipse cx="40" cy="64" rx="27" ry="8" fill="#000" opacity=".23"/>
-  <path d="M18 41c9-11 33-10 42 0 4 5 0 15-15 16-16 1-31-6-27-16z" fill="#b8c5ca" stroke="#4f6673" stroke-width="3"/>
-  <path d="M56 33c6-8 17 0 13 8-2 4-8 4-14 0z" fill="#dce9ee" stroke="#4f6673" stroke-width="3"/>
-  <circle cx="66" cy="36" r="1.6" fill="#183040"/>
-  <path d="M29 55l-6 14M39 55l1 14M51 54l8 14M58 53l-4 15" stroke="#9fb0b8" stroke-width="5" stroke-linecap="round"/>
-  <path d="M21 69h8M37 69h8M55 68h9M50 68h8" stroke="#243142" stroke-width="3" stroke-linecap="round"/>
-  <path d="M29 31h24l-2 14H27z" fill="#5da8d8" stroke="#eefbff" stroke-width="2"/>
-  <path d="M36 14h14l5 26H30z" fill="#eef6f9" stroke="#4f6673" stroke-width="3"/>
-  <path d="M36 23h16M36 31h17" stroke="#7abfe8" stroke-width="2"/>
-  <circle cx="43" cy="9" r="7" fill="#f0b875" stroke="#f6e6c8" stroke-width="2"/>
-  <path d="M35 9c2-8 15-8 17 0z" fill="#5da8d8" stroke="#eefbff" stroke-width="2"/>
-  <path d="M53 21 71 1" stroke="#e8fbff" stroke-width="3" stroke-linecap="round"/>
-  <path d="M71 0 77 6 71 12 65 6z" fill="#88e8ff" stroke="#2d6c91" stroke-width="2"/>
-  <path d="M30 18 21 24l1 16 9 6 9-6 1-16z" fill="#eef6f9" stroke="#5da8d8" stroke-width="3"/>
-  <path d="M31 22 36 31 31 41 26 31z" fill="#88e8ff" stroke="#2d6c91" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-labelledby="hero-tower-title hero-tower-desc">
+  <title id="hero-tower-title">Héros tour</title>
+  <desc id="hero-tower-desc">Sprite de héros sur la carte, avec monture et équipement de faction : Héros tour.</desc>
+  <defs>
+    <linearGradient id="hero-tower-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e8fbff"/>
+      <stop offset="48%" stop-color="#5da8d8"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+    <linearGradient id="hero-tower-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#88e8ff"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="hero-tower-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="hero-tower-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#88e8ff" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#88e8ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(-8 -13) scale(.98)">
+      <g>
+    
+    <ellipse cx="48" cy="87" rx="34" ry="5" fill="#000" opacity=".25"/>
+    <path d="M17 68 L14 88 M30 72 L29 89 M58 72 L61 89 M72 66 L78 87" stroke="#1e3a5f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M12 61 Q13 49 29 47 L67 48 Q79 51 77 63 Q75 75 59 76 L26 75 Q12 73 12 61 Z" fill="#7b5138" stroke="#1e3a5f" stroke-width="2"/>
+    <path d="M24 53 H63 Q73 55 76 61" fill="none" stroke="#88e8ff" stroke-width="2" opacity=".65"/>
+    <path d="M65 46 Q78 42 83 52 L80 65 L70 67 Q64 60 65 52 Z" fill="#7b5138" stroke="#1e3a5f" stroke-width="1.6"/>
+    
+    <circle cx="76" cy="54" r="1.6" fill="#111827"/>
+    <path d="M13 57 Q3 61 8 73 L14 73 Q16 64 20 61 Z" fill="#1e3a5f" stroke="#1e3a5f" stroke-width="1"/>
+    <path d="M36 28 Q37 18 48 17 Q59 18 60 29 L59 52 Q48 58 37 52 Z" fill="url(#hero-tower-body)" stroke="#1e3a5f" stroke-width="1.8"/>
+    <path d="M38 34 H58 L56 48 H40 Z" fill="#88e8ff" opacity=".25"/>
+    <path d="M48 34.08 L55.2 42 L48 49.92 L40.8 42 Z" fill="#88e8ff" stroke="#cbd5e1" stroke-width="0.72"/><path d="M44.4 42 H51.6 M48 37.68 V46.32" stroke="#1e3a5f" stroke-width="0.9359999999999999"/>
+    <path d="M39 9 Q48 2 57 9 L55 20 Q48 25 41 20 Z" fill="url(#hero-tower-steel)" stroke="#1e3a5f" stroke-width="1.5"/>
+    <path d="M42 14 H47 M50 14 H55" stroke="#0f172a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M34 7 C38 -6 58 -6 62 7 C54 12 42 12 34 7 Z" fill="#e8fbff" stroke="#1e3a5f" stroke-width="1.5"/><circle cx="57" cy="6" r="3" fill="#88e8ff"/>
+    
+    <path d="M70 77 L59 9" stroke="#7a4e20" stroke-width="3.2" stroke-linecap="round"/><circle cx="58" cy="4" r="7" fill="#88e8ff" stroke="#e8fbff" stroke-width="2"/><path d="M51 4 H65 M58 -3 V11" stroke="#fff7ad" stroke-width="1" opacity=".7"/>
+  </g>
+    </g>
 </svg>

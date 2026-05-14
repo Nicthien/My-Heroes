@@ -1,44 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
-  <!-- Ground -->
-  <ellipse cx="32" cy="56" rx="26" ry="7" fill="#6a8a40" stroke="#4a6a28" stroke-width="1"/>
-  <!-- Sawdust pile -->
-  <ellipse cx="18" cy="54" rx="8" ry="3" fill="#c8a060" opacity="0.7"/>
-  <!-- Log building / shed structure -->
-  <rect x="10" y="30" width="28" height="22" rx="2" fill="#8b5a28" stroke="#5a3010" stroke-width="1.2"/>
-  <polygon points="8,30 24,16 44,30" fill="#a06830" stroke="#5a3010" stroke-width="1.2"/>
-  <!-- Shed roof detail -->
-  <line x1="16" y1="23" x2="36" y2="23" stroke="#7a4e20" stroke-width="1"/>
-  <!-- Door -->
-  <rect x="21" y="38" width="8" height="14" rx="1" fill="#3a2010" stroke="#5a3010" stroke-width="0.8"/>
-  <!-- Window -->
-  <rect x="13" y="33" width="6" height="5" rx="0.5" fill="#d4c090" stroke="#5a3010" stroke-width="0.6"/>
-  <!-- Chimney with smoke -->
-  <rect x="30" y="14" width="5" height="10" fill="#7a5030" stroke="#5a3010" stroke-width="0.8"/>
-  <path d="M30,14 Q32,8 34,14" fill="none" stroke="#c0c0c0" stroke-width="1.5" opacity="0.7"/>
-  <path d="M31,12 Q34,5 36,12" fill="none" stroke="#c0c0c0" stroke-width="1.2" opacity="0.5"/>
-  <!-- LOG STACK on right side -->
-  <ellipse cx="52" cy="50" rx="6" ry="3" fill="#8a5a28" stroke="#5a3010" stroke-width="0.8"/>
-  <rect x="46" y="42" width="12" height="8" rx="1" fill="#7a4a20" stroke="#5a3010" stroke-width="0.8"/>
-  <ellipse cx="52" cy="42" rx="6" ry="3" fill="#9a6a38" stroke="#5a3010" stroke-width="0.8"/>
-  <ellipse cx="52" cy="38" rx="6" ry="3" fill="#8a5a28" stroke="#5a3010" stroke-width="0.8"/>
-  <!-- Log end grain circles -->
-  <circle cx="52" cy="38" r="2" fill="#6a4018" stroke="#5a3010" stroke-width="0.5"/>
-  <circle cx="52" cy="42" r="2" fill="#5a3010" stroke="#4a2808" stroke-width="0.5"/>
-  <!-- CIRCULAR SAW BLADE (main icon) -->
-  <circle cx="38" cy="34" r="13" fill="#c0c8d0" stroke="#708090" stroke-width="1.5"/>
-  <circle cx="38" cy="34" r="9" fill="#d8e0e8" stroke="#708090" stroke-width="0.8"/>
-  <circle cx="38" cy="34" r="3" fill="#a0a8b0" stroke="#708090" stroke-width="1"/>
-  <!-- Saw teeth around blade edge -->
-  <polygon points="38,21 40,24 36,24" fill="#506070"/>
-  <polygon points="50,26 48,29 46,26" fill="#506070"/>
-  <polygon points="51,34 48,36 48,32" fill="#506070"/>
-  <polygon points="48,43 46,40 50,40" fill="#506070"/>
-  <polygon points="38,47 36,44 40,44" fill="#506070"/>
-  <polygon points="26,43 28,40 30,43" fill="#506070"/>
-  <polygon points="25,34 28,32 28,36" fill="#506070"/>
-  <polygon points="28,25 30,28 26,28" fill="#506070"/>
-  <!-- Blade shine -->
-  <line x1="33" y1="26" x2="43" y2="42" stroke="#ffffff" stroke-width="1" opacity="0.4"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="sawmill-title sawmill-desc">
+  <title id="sawmill-title">Scierie</title>
+  <desc id="sawmill-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Scierie.</desc>
+  
+  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#8b5a28" stroke="#5a3010" stroke-width="1.2"/><rect x="10" y="31" width="29" height="22" rx="2" fill="#8b5a28" stroke="#5a3010" stroke-width="1.5"/><path d="M8 31 L24 16 L44 31 Z" fill="#a06830" stroke="#5a3010" stroke-width="1.5"/><circle cx="39" cy="35" r="13" fill="#c0c8d0" stroke="#708090" stroke-width="1.6"/><circle cx="39" cy="35" r="4" fill="#a0a8b0"/><path d="M39 22 L42 28 L36 28 Z M52 35 L46 38 V32 Z M39 48 L36 42 H42 Z M26 35 L32 32 V38 Z" fill="#506070"/><path d="M48 44 H59 V54 H48 Z" fill="#7a4a20" stroke="#5a3010" stroke-width="1.2"/><ellipse cx="54" cy="44" rx="6" ry="3" fill="#9a6a38" stroke="#5a3010"/>
 </svg>

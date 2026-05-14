@@ -58,7 +58,7 @@ function getMapObjectHoverText(object: MapObject) {
 
   if (object.type === "monster") return object.subtype && object.subtype in UNIT_RULES
     ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
-    : "Armee neutre";
+    : "Armée neutre";
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
   if (object.type === "artifact") return "Artefact";
 

@@ -106,7 +106,7 @@ export default function CombatChoiceModal() {
         <section className="mt-5 rounded-lg border border-yellow-700/50 bg-black/30 p-4 shadow-[0_0_0_1px_rgba(250,204,21,0.08)_inset]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs uppercase tracking-[0.22em] text-yellow-500/80">Forces apercues</div>
+              <div className="text-xs uppercase tracking-[0.22em] text-yellow-500/80">Forces aperçues</div>
               <div className="mt-1 text-sm text-stone-300">{encounterInfo.sourceLabel}</div>
             </div>
             <div className={`rounded-md border px-3 py-1 text-sm font-bold ${encounterInfo.difficulty.className}`}>
@@ -121,7 +121,7 @@ export default function CombatChoiceModal() {
               </div>
             )) : (
               <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
-                Defense inconnue
+                Défense inconnue
               </div>
             )}
           </div>
@@ -250,24 +250,24 @@ function getDifficulty(ratio: number) {
   if (ratio <= 0.35) return { label: "Facile", className: "border-emerald-400/60 bg-emerald-950 text-emerald-100" };
   if (ratio <= 0.7) return { label: "Moyen", className: "border-lime-400/60 bg-lime-950 text-lime-100" };
   if (ratio <= 1.05) return { label: "Difficile", className: "border-yellow-400/60 bg-yellow-950 text-yellow-100" };
-  if (ratio <= 1.55) return { label: "Tres difficile", className: "border-orange-400/60 bg-orange-950 text-orange-100" };
+  if (ratio <= 1.55) return { label: "Très difficile", className: "border-orange-400/60 bg-orange-950 text-orange-100" };
   return { label: "Suicidaire", className: "border-red-400/60 bg-red-950 text-red-100" };
 }
 
 function getSourceLabel(targetType: PendingCombat["targetType"]) {
-  if (targetType === "building") return "Gardiens estimes du lieu.";
-  if (targetType === "town") return "Garnison neutre reperee.";
-  if (targetType === "monster") return "Armee neutre observee.";
-  return "Defense adverse reperee.";
+  if (targetType === "building") return "Gardiens estimés du lieu.";
+  if (targetType === "town") return "Garnison neutre repérée.";
+  if (targetType === "monster") return "Armée neutre observée.";
+  return "Défense adverse repérée.";
 }
 
 function formatCountRange(count: number) {
   if (count <= 0) return "Aucun";
-  if (count < 5) return "1-4 unites";
-  if (count < 10) return "5-9 unites";
-  if (count < 20) return "10-19 unites";
-  if (count < 50) return "20-49 unites";
-  if (count < 100) return "50-99 unites";
-  if (count < 250) return "100-249 unites";
-  return "250+ unites";
+  if (count < 5) return "1-4 unités";
+  if (count < 10) return "5-9 unités";
+  if (count < 20) return "10-19 unités";
+  if (count < 50) return "20-49 unités";
+  if (count < 100) return "50-99 unités";
+  if (count < 250) return "100-249 unités";
+  return "250+ unités";
 }

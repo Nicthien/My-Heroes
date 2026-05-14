@@ -1,6 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M29 78 L34 40 L50 25 L66 40 L71 78 Z" fill="#7d6b96" stroke="#1f1a12" stroke-width="4"/><circle cx="50" cy="30" r="10" fill="#d8ccff" stroke="#1f1a12" stroke-width="4"/><path d="M28 44 L18 75" stroke="#f8f0c8" stroke-width="5"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">S</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-skeleton-title unit-skeleton-desc">
+  <title id="unit-skeleton-title">Squelette</title>
+  <desc id="unit-skeleton-desc">Sprite d'unité Squelette. Le dessin reprend la silhouette de skeleton.</desc>
+  <defs>
+    <linearGradient id="unit-skeleton-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e5e7eb"/>
+      <stop offset="48%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#17151a"/>
+    </linearGradient>
+    <linearGradient id="unit-skeleton-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a7c7be"/>
+      <stop offset="100%" stop-color="#27313c"/>
+    </linearGradient>
+    <linearGradient id="unit-skeleton-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-skeleton-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#a7c7be" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#a7c7be" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(0 0) scale(1 1)">
+    
+    
+    
+    <path d="M35 71 L31 88 H42 L45 72 Z M53 72 L56 88 H67 L61 71 Z" fill="#17151a" stroke="#17151a" stroke-width="1"/><path d="M29 88 H43 M54 88 H69" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+    
+    <path d="M30 37 Q33 28 48 27 Q63 28 66 37 L64 71 Q56 78 48 78 Q40 78 32 71 Z" fill="url(#unit-skeleton-body)" stroke="#17151a" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#a7c7be" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#e5e7eb" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <ellipse cx="48" cy="53" rx="10" ry="8" fill="#a7c7be" opacity=".95"/><circle cx="44" cy="53" r="1.8" fill="#0f172a"/><circle cx="52" cy="53" r="1.8" fill="#0f172a"/><path d="M45 58 H51" stroke="#0f172a" stroke-width="1"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-skeleton-body)" stroke="#17151a" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-skeleton-body)" stroke="#17151a" stroke-width="1.5"/>
+    <circle cx="27" cy="57" r="14" fill="url(#unit-skeleton-body)" stroke="#a7c7be" stroke-width="2"/><circle cx="27" cy="57" r="6" fill="#a7c7be" opacity=".85"/>
+    <path d="M67 79 L67 26" stroke="url(#unit-skeleton-steel)" stroke-width="4" stroke-linecap="round"/><path d="M61 53 H74" stroke="#a7c7be" stroke-width="3" stroke-linecap="round"/><path d="M67 19 L61 28 H73 Z" fill="url(#unit-skeleton-steel)" stroke="#475569" stroke-width="1"/>
+    <ellipse cx="48" cy="20" rx="10" ry="12" fill="#e5e7eb" stroke="#17151a" stroke-width="1.5"/><ellipse cx="44" cy="20" rx="2.4" ry="3" fill="#0f172a"/><ellipse cx="52" cy="20" rx="2.4" ry="3" fill="#0f172a"/><path d="M44 28 H52 M46 24 V30 M50 24 V30" stroke="#0f172a" stroke-width="1"/>
+    
+    <path d="M39 8 H57 L54 17 H42 Z" fill="#111827" opacity=".75"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#e5e7eb" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
 </svg>

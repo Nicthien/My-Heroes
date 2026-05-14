@@ -1,34 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
-  <!-- Rocky ground -->
-  <ellipse cx="32" cy="54" rx="26" ry="8" fill="#706050" stroke="#504030" stroke-width="1.2"/>
-  <!-- Outer pit rim (rocky edge) -->
-  <ellipse cx="32" cy="42" rx="22" ry="12" fill="#807060" stroke="#504030" stroke-width="1.5"/>
-  <!-- Pit inner walls - rocky layers -->
-  <ellipse cx="32" cy="43" rx="18" ry="9" fill="#686050" stroke="#484030" stroke-width="1"/>
-  <ellipse cx="32" cy="44" rx="14" ry="7" fill="#585040" stroke="#383828" stroke-width="0.8"/>
-  <!-- Deep pit bottom (dark) -->
-  <ellipse cx="32" cy="45" rx="10" ry="5" fill="#1a1810"/>
-  <!-- Ore veins in pit walls (orange metallic) -->
-  <path d="M14,42 Q18,36 24,40" fill="none" stroke="#d06020" stroke-width="2.5"/>
-  <path d="M16,46 Q20,42 26,44" fill="none" stroke="#e07030" stroke-width="2"/>
-  <path d="M50,40 Q46,36 40,40" fill="none" stroke="#d06020" stroke-width="2.5"/>
-  <path d="M48,46 Q44,42 38,44" fill="none" stroke="#e07030" stroke-width="2"/>
-  <!-- Ore rocks piled around rim -->
-  <circle cx="10" cy="46" r="5" fill="#808080" stroke="#505050" stroke-width="0.8"/>
-  <circle cx="8" cy="44" r="3.5" fill="#909090" stroke="#606060" stroke-width="0.6"/>
-  <circle cx="12" cy="50" r="3" fill="#707070" stroke="#505050" stroke-width="0.6"/>
-  <!-- Orange ore vein on rock -->
-  <path d="M7,44 Q10,42 12,46" fill="none" stroke="#e07030" stroke-width="1.5"/>
-  <circle cx="54" cy="44" r="4.5" fill="#787878" stroke="#505050" stroke-width="0.8"/>
-  <circle cx="56" cy="48" r="3" fill="#888888" stroke="#606060" stroke-width="0.6"/>
-  <path d="M52,44 Q55,42 57,46" fill="none" stroke="#d06020" stroke-width="1.5"/>
-  <!-- Crossed pickaxes icon (above pit) -->
-  <line x1="20" y1="22" x2="38" y2="34" stroke="#5a4a38" stroke-width="2.5"/>
-  <polygon points="18,20 16,16 22,14 24,18" fill="#b0a090" stroke="#5a4a38" stroke-width="1"/>
-  <polygon points="40,36 38,32 44,32 42,36" fill="#c0b0a0" stroke="#5a4a38" stroke-width="0.8"/>
-  <line x1="44" y1="22" x2="26" y2="34" stroke="#5a4a38" stroke-width="2.5"/>
-  <polygon points="46,20 44,16 50,16 48,20" fill="#b0a090" stroke="#5a4a38" stroke-width="1"/>
-  <polygon points="24,36 22,32 28,32 26,36" fill="#c0b0a0" stroke="#5a4a38" stroke-width="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="ore-pit-title ore-pit-desc">
+  <title id="ore-pit-title">Mine de minerai</title>
+  <desc id="ore-pit-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Mine de minerai.</desc>
+  
+  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#706050" stroke="#504030" stroke-width="1.2"/><ellipse cx="32" cy="42" rx="23" ry="12" fill="#807060" stroke="#504030" stroke-width="1.6"/><ellipse cx="32" cy="44" rx="16" ry="8" fill="#585040" stroke="#383828" stroke-width="1"/><ellipse cx="32" cy="45" rx="10" ry="5" fill="#1a1810"/><path d="M14 42 Q19 36 25 40 M50 40 Q45 36 39 40 M16 47 Q22 42 28 45 M48 47 Q43 42 37 45" fill="none" stroke="#e07030" stroke-width="2"/><path d="M20 23 L39 35 M44 23 L25 35" stroke="#5a4a38" stroke-width="2.5"/><path d="M18 20 L16 16 L23 14 L25 18 M46 20 L44 16 L51 16 L49 20" fill="#b0a090" stroke="#5a4a38" stroke-width="1"/>
 </svg>

@@ -56,21 +56,21 @@ function RmgPreviewContent() {
       <div className="mx-auto flex h-full max-w-[1500px] flex-col gap-4 px-4 py-4">
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-normal">Apercu RMG</h1>
-            <p className="text-sm text-stone-400">Seed {map.seed} · Template {map.templateId}</p>
+            <h1 className="text-xl font-semibold tracking-normal">Aperçu RMG</h1>
+            <p className="text-sm text-stone-400">Graine {map.seed} · Modèle {map.templateId}</p>
           </div>
           <button
             type="button"
             onClick={() => setSeed(randomSeed())}
             className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
           >
-            Nouvelle seed
+            Nouvelle graine
           </button>
         </header>
 
         <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Seed</span>
+            <span className="text-stone-400">Graine</span>
             <input
               value={seed}
               onChange={(event) => setSeed(event.target.value.toUpperCase())}
@@ -109,7 +109,7 @@ function RmgPreviewContent() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Template</span>
+            <span className="text-stone-400">Modèle</span>
             <select
               value={selectedTemplateId}
               onChange={(event) => setTemplateId(event.target.value)}
@@ -144,7 +144,7 @@ function RmgPreviewShell() {
   return (
     <main className="h-screen overflow-hidden bg-stone-950 text-stone-100">
       <div className="mx-auto flex h-full max-w-[1500px] items-center justify-center px-4 py-4">
-        <div className="text-sm font-semibold uppercase tracking-wider text-stone-400">Chargement de l apercu...</div>
+        <div className="text-sm font-semibold uppercase tracking-wider text-stone-400">Chargement de l&apos;aperçu...</div>
       </div>
     </main>
   );

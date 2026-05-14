@@ -1,0 +1,4707 @@
+{
+  "source": "https://heroes.thelazy.net/index.php/List_of_creatures",
+  "sourceRetrievedAt": "2026-05-14",
+  "groups": [
+    {
+      "key": "castle",
+      "label": "Château",
+      "units": [
+        "pikeman",
+        "halberdier",
+        "archer",
+        "marksman",
+        "griffin",
+        "royal_griffin",
+        "swordsman",
+        "crusader",
+        "monk",
+        "zealot",
+        "cavalier",
+        "champion",
+        "angel",
+        "archangel"
+      ]
+    },
+    {
+      "key": "rampart",
+      "label": "Rempart",
+      "units": [
+        "centaur",
+        "centaur_captain",
+        "dwarf",
+        "battle_dwarf",
+        "wood_elf",
+        "grand_elf",
+        "pegasus",
+        "silver_pegasus",
+        "dendroid",
+        "dendroid_soldier",
+        "unicorn",
+        "war_unicorn",
+        "green_dragon",
+        "gold_dragon"
+      ]
+    },
+    {
+      "key": "tower",
+      "label": "Tour",
+      "units": [
+        "gremlin",
+        "master_gremlin",
+        "gargoyle",
+        "obsidian_gargoyle",
+        "golem",
+        "iron_golem",
+        "mage",
+        "arch_mage",
+        "genie",
+        "master_genie",
+        "naga",
+        "naga_queen",
+        "giant",
+        "titan"
+      ]
+    },
+    {
+      "key": "inferno",
+      "label": "Hadès",
+      "units": [
+        "imp",
+        "familiar",
+        "gog",
+        "magog",
+        "hell_hound",
+        "cerberus",
+        "demon",
+        "horned_demon",
+        "pit_fiend",
+        "pit_lord",
+        "efreet",
+        "efreet_sultan",
+        "devil",
+        "arch_devil"
+      ]
+    },
+    {
+      "key": "necropolis",
+      "label": "Nécropole",
+      "units": [
+        "skeleton",
+        "skeleton_warrior",
+        "walking_dead",
+        "zombie",
+        "wight",
+        "wraith",
+        "vampire",
+        "vampire_lord",
+        "lich",
+        "power_lich",
+        "black_knight",
+        "dread_knight",
+        "bone_dragon",
+        "ghost_dragon"
+      ]
+    },
+    {
+      "key": "dungeon",
+      "label": "Donjon",
+      "units": [
+        "troglodyte",
+        "infernal_troglodyte",
+        "harpy",
+        "harpy_hag",
+        "beholder",
+        "evil_eye",
+        "medusa",
+        "medusa_queen",
+        "minotaur",
+        "minotaur_king",
+        "manticore",
+        "scorpicore",
+        "red_dragon",
+        "black_dragon"
+      ]
+    },
+    {
+      "key": "stronghold",
+      "label": "Bastion",
+      "units": [
+        "goblin",
+        "hobgoblin",
+        "wolf_rider",
+        "wolf_raider",
+        "orc",
+        "orc_chieftain",
+        "ogre",
+        "ogre_mage",
+        "roc",
+        "thunderbird",
+        "cyclops",
+        "cyclops_king",
+        "behemoth",
+        "ancient_behemoth"
+      ]
+    },
+    {
+      "key": "fortress",
+      "label": "Forteresse",
+      "units": [
+        "gnoll",
+        "gnoll_marauder",
+        "lizardman",
+        "lizard_warrior",
+        "serpent_fly",
+        "dragon_fly",
+        "basilisk",
+        "greater_basilisk",
+        "gorgon",
+        "mighty_gorgon",
+        "wyvern",
+        "wyvern_monarch",
+        "hydra",
+        "chaos_hydra"
+      ]
+    },
+    {
+      "key": "conflux",
+      "label": "Conflux",
+      "units": [
+        "pixie",
+        "sprite",
+        "air_elemental",
+        "storm_elemental",
+        "water_elemental",
+        "ice_elemental",
+        "fire_elemental",
+        "energy_elemental",
+        "earth_elemental",
+        "magma_elemental",
+        "psychic_elemental",
+        "magic_elemental",
+        "firebird",
+        "phoenix"
+      ]
+    },
+    {
+      "key": "cove",
+      "label": "Crique",
+      "units": [
+        "nymph",
+        "oceanid",
+        "crew_mate",
+        "seaman",
+        "pirate",
+        "corsair",
+        "sea_dog",
+        "stormbird",
+        "ayssid",
+        "sea_witch",
+        "sorceress",
+        "nix",
+        "nix_warrior",
+        "sea_serpent",
+        "haspid"
+      ]
+    },
+    {
+      "key": "factory",
+      "label": "Usine",
+      "units": [
+        "halfling_factory",
+        "halfling_grenadier",
+        "mechanic",
+        "engineer",
+        "armadillo",
+        "bellwether_armadillo",
+        "automaton",
+        "sentinel_automaton",
+        "sandworm",
+        "olgoi_khorkhoi",
+        "gunslinger",
+        "bounty_hunter",
+        "couatl",
+        "crimson_couatl",
+        "dreadnought",
+        "juggernaut"
+      ]
+    },
+    {
+      "key": "bulwark",
+      "label": "Bastion nordique",
+      "units": [
+        "kobold",
+        "kobold_foreman",
+        "mountain_ram",
+        "argali",
+        "snow_elf",
+        "steel_elf",
+        "yeti",
+        "yeti_runemaster",
+        "shaman",
+        "great_shaman",
+        "mammoth",
+        "war_mammoth",
+        "jotunn",
+        "jotunn_warlord"
+      ]
+    },
+    {
+      "key": "neutral",
+      "label": "Neutres",
+      "units": [
+        "peasant",
+        "halfling",
+        "boar",
+        "rogue",
+        "leprechaun",
+        "mummy",
+        "nomad",
+        "sharpshooter",
+        "satyr",
+        "steel_golem",
+        "troll",
+        "gold_golem",
+        "fangarm",
+        "diamond_golem",
+        "enchanter",
+        "faerie_dragon",
+        "rust_dragon",
+        "crystal_dragon",
+        "azure_dragon"
+      ]
+    }
+  ],
+  "creatures": [
+    {
+      "type": "pikeman",
+      "label": "Piquier",
+      "group": "castle",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 4,
+      "defense": 5,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 10,
+      "speed": 4,
+      "growth": 14,
+      "aiValue": 80,
+      "cost": {
+        "gold": 60
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Immune to Jousting"
+    },
+    {
+      "type": "halberdier",
+      "label": "Hallebardier",
+      "group": "castle",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 10,
+      "speed": 5,
+      "growth": 14,
+      "aiValue": 115,
+      "cost": {
+        "gold": 75
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Immune to Jousting"
+    },
+    {
+      "type": "archer",
+      "label": "Archer",
+      "group": "castle",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 3,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 10,
+      "speed": 4,
+      "growth": 9,
+      "aiValue": 126,
+      "cost": {
+        "gold": 100
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots)"
+    },
+    {
+      "type": "marksman",
+      "label": "Tireur d'élite",
+      "group": "castle",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 3,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 10,
+      "speed": 6,
+      "growth": 9,
+      "aiValue": 184,
+      "cost": {
+        "gold": 150
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "double_attack"
+      ],
+      "special": "Ranged (24 shots), Double attack"
+    },
+    {
+      "type": "griffin",
+      "label": "Griffon",
+      "group": "castle",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 8,
+      "minDamage": 3,
+      "maxDamage": 6,
+      "health": 25,
+      "speed": 6,
+      "growth": 7,
+      "aiValue": 351,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "two_retaliations",
+        "flying"
+      ],
+      "special": "Flying , Two retaliations"
+    },
+    {
+      "type": "royal_griffin",
+      "label": "Griffon royal",
+      "group": "castle",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 9,
+      "minDamage": 3,
+      "maxDamage": 6,
+      "health": 25,
+      "speed": 9,
+      "growth": 7,
+      "aiValue": 448,
+      "cost": {
+        "gold": 240
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "unlimited_retaliations",
+        "flying"
+      ],
+      "special": "Flying , Unlimited retaliations"
+    },
+    {
+      "type": "swordsman",
+      "label": "Épéiste",
+      "group": "castle",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 12,
+      "minDamage": 6,
+      "maxDamage": 9,
+      "health": 35,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 445,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "crusader",
+      "label": "Croisé",
+      "group": "castle",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 12,
+      "minDamage": 7,
+      "maxDamage": 10,
+      "health": 35,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 588,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "double_attack"
+      ],
+      "special": "Double attack"
+    },
+    {
+      "type": "monk",
+      "label": "Moine",
+      "group": "castle",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 7,
+      "minDamage": 10,
+      "maxDamage": 12,
+      "health": 30,
+      "speed": 5,
+      "growth": 3,
+      "aiValue": 582,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots)"
+    },
+    {
+      "type": "zealot",
+      "label": "Zélote",
+      "group": "castle",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 10,
+      "minDamage": 10,
+      "maxDamage": 12,
+      "health": 30,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 750,
+      "cost": {
+        "gold": 450
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), No melee penalty"
+    },
+    {
+      "type": "cavalier",
+      "label": "Cavalier",
+      "group": "castle",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 15,
+      "defense": 15,
+      "minDamage": 15,
+      "maxDamage": 25,
+      "health": 100,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1946,
+      "cost": {
+        "gold": 1000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Jousting"
+    },
+    {
+      "type": "champion",
+      "label": "Champion",
+      "group": "castle",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 16,
+      "defense": 16,
+      "minDamage": 20,
+      "maxDamage": 25,
+      "health": 100,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 2100,
+      "cost": {
+        "gold": 1200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Jousting"
+    },
+    {
+      "type": "angel",
+      "label": "Ange",
+      "group": "castle",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 20,
+      "defense": 20,
+      "minDamage": 50,
+      "maxDamage": 50,
+      "health": 200,
+      "speed": 12,
+      "growth": 1,
+      "aiValue": 5019,
+      "cost": {
+        "gold": 3000,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Hates Devils , Morale +1"
+    },
+    {
+      "type": "archangel",
+      "label": "Archange",
+      "group": "castle",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 30,
+      "defense": 30,
+      "minDamage": 50,
+      "maxDamage": 50,
+      "health": 250,
+      "speed": 18,
+      "growth": 1,
+      "aiValue": 8776,
+      "cost": {
+        "gold": 5000,
+        "crystals": 3
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Hates Devils , Resurrection , Morale +1"
+    },
+    {
+      "type": "centaur",
+      "label": "Centaure",
+      "group": "rampart",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 3,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 8,
+      "speed": 6,
+      "growth": 14,
+      "aiValue": 100,
+      "cost": {
+        "gold": 70
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "centaur_captain",
+      "label": "Capitaine centaure",
+      "group": "rampart",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 3,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 10,
+      "speed": 8,
+      "growth": 14,
+      "aiValue": 138,
+      "cost": {
+        "gold": 90
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "dwarf",
+      "label": "Nain",
+      "group": "rampart",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 7,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 20,
+      "speed": 3,
+      "growth": 8,
+      "aiValue": 138,
+      "cost": {
+        "gold": 120
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Resistance (+20%)"
+    },
+    {
+      "type": "battle_dwarf",
+      "label": "Nain de bataille",
+      "group": "rampart",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 7,
+      "defense": 7,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 20,
+      "speed": 5,
+      "growth": 8,
+      "aiValue": 209,
+      "cost": {
+        "gold": 150
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Resistance (+40%)"
+    },
+    {
+      "type": "wood_elf",
+      "label": "Elfe sylvestre",
+      "group": "rampart",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 15,
+      "speed": 6,
+      "growth": 7,
+      "aiValue": 234,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots)"
+    },
+    {
+      "type": "grand_elf",
+      "label": "Grand elfe",
+      "group": "rampart",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 15,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 331,
+      "cost": {
+        "gold": 225
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "double_attack"
+      ],
+      "special": "Ranged (24 shots), Double attack"
+    },
+    {
+      "type": "pegasus",
+      "label": "Pégase",
+      "group": "rampart",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 8,
+      "minDamage": 5,
+      "maxDamage": 9,
+      "health": 30,
+      "speed": 8,
+      "growth": 5,
+      "aiValue": 518,
+      "cost": {
+        "gold": 250
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Magic damper"
+    },
+    {
+      "type": "silver_pegasus",
+      "label": "Pégase argenté",
+      "group": "rampart",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 10,
+      "minDamage": 5,
+      "maxDamage": 9,
+      "health": 30,
+      "speed": 12,
+      "growth": 5,
+      "aiValue": 532,
+      "cost": {
+        "gold": 275
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Magic damper"
+    },
+    {
+      "type": "dendroid",
+      "label": "Garde dendroïde",
+      "group": "rampart",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 12,
+      "minDamage": 10,
+      "maxDamage": 14,
+      "health": 55,
+      "speed": 3,
+      "growth": 3,
+      "aiValue": 517,
+      "cost": {
+        "gold": 350
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Binding"
+    },
+    {
+      "type": "dendroid_soldier",
+      "label": "Soldat dendroïde",
+      "group": "rampart",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 12,
+      "minDamage": 10,
+      "maxDamage": 14,
+      "health": 65,
+      "speed": 4,
+      "growth": 3,
+      "aiValue": 803,
+      "cost": {
+        "gold": 425
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Binding"
+    },
+    {
+      "type": "unicorn",
+      "label": "Licorne",
+      "group": "rampart",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 15,
+      "defense": 14,
+      "minDamage": 18,
+      "maxDamage": 22,
+      "health": 90,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1806,
+      "cost": {
+        "gold": 850
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Blinding attack , Aura of Resistance (+20%)"
+    },
+    {
+      "type": "war_unicorn",
+      "label": "Licorne de guerre",
+      "group": "rampart",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 15,
+      "defense": 14,
+      "minDamage": 18,
+      "maxDamage": 22,
+      "health": 110,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 2030,
+      "cost": {
+        "gold": 950
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Blinding attack , Aura of Resistance (+20%)"
+    },
+    {
+      "type": "green_dragon",
+      "label": "Dragon vert",
+      "group": "rampart",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 18,
+      "defense": 18,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 180,
+      "speed": 10,
+      "growth": 1,
+      "aiValue": 4872,
+      "cost": {
+        "gold": 2400,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , 1-3 lvl spells immunity"
+    },
+    {
+      "type": "gold_dragon",
+      "label": "Dragon d'or",
+      "group": "rampart",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 27,
+      "defense": 27,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 250,
+      "speed": 16,
+      "growth": 1,
+      "aiValue": 8613,
+      "cost": {
+        "gold": 4000,
+        "crystals": 2
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , 1-4 lvl spells immunity"
+    },
+    {
+      "type": "gremlin",
+      "label": "Gremlin",
+      "group": "tower",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 3,
+      "defense": 3,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 4,
+      "speed": 4,
+      "growth": 16,
+      "aiValue": 44,
+      "cost": {
+        "gold": 30
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "master_gremlin",
+      "label": "Maître gremlin",
+      "group": "tower",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 4,
+      "defense": 4,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 4,
+      "speed": 5,
+      "growth": 16,
+      "aiValue": 66,
+      "cost": {
+        "gold": 40
+      },
+      "ranged": true,
+      "shots": 8,
+      "abilities": [],
+      "special": "Ranged (8 shots)"
+    },
+    {
+      "type": "gargoyle",
+      "label": "Gargouille de pierre",
+      "group": "tower",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 6,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 16,
+      "speed": 6,
+      "growth": 9,
+      "aiValue": 165,
+      "cost": {
+        "gold": 130
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Bloodless Unliving , Flying"
+    },
+    {
+      "type": "obsidian_gargoyle",
+      "label": "Gargouille d'obsidienne",
+      "group": "tower",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 7,
+      "defense": 7,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 16,
+      "speed": 9,
+      "growth": 9,
+      "aiValue": 201,
+      "cost": {
+        "gold": 160
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Bloodless Unliving , Flying"
+    },
+    {
+      "type": "golem",
+      "label": "Golem de pierre",
+      "group": "tower",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 10,
+      "minDamage": 4,
+      "maxDamage": 5,
+      "health": 30,
+      "speed": 3,
+      "growth": 6,
+      "aiValue": 250,
+      "cost": {
+        "gold": 150
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Unliving , Spell damage resistance +50%"
+    },
+    {
+      "type": "iron_golem",
+      "label": "Golem de fer",
+      "group": "tower",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 10,
+      "minDamage": 4,
+      "maxDamage": 5,
+      "health": 35,
+      "speed": 5,
+      "growth": 6,
+      "aiValue": 412,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Unliving , Spell damage resistance +75%"
+    },
+    {
+      "type": "mage",
+      "label": "Mage",
+      "group": "tower",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 11,
+      "defense": 8,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 25,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 570,
+      "cost": {
+        "gold": 350
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), No melee penalty , No obstacle penalty , Magic channeler"
+    },
+    {
+      "type": "arch_mage",
+      "label": "Archimage",
+      "group": "tower",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 9,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 30,
+      "speed": 7,
+      "growth": 4,
+      "aiValue": 680,
+      "cost": {
+        "gold": 450
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), No melee penalty , No obstacle penalty , Magic channeler"
+    },
+    {
+      "type": "genie",
+      "label": "Génie",
+      "group": "tower",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 12,
+      "minDamage": 13,
+      "maxDamage": 16,
+      "health": 40,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 884,
+      "cost": {
+        "gold": 550
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Hates Efreet and Efreet Sultans"
+    },
+    {
+      "type": "master_genie",
+      "label": "Maître génie",
+      "group": "tower",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 12,
+      "minDamage": 13,
+      "maxDamage": 16,
+      "health": 40,
+      "speed": 11,
+      "growth": 3,
+      "aiValue": 942,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "spellcaster"
+      ],
+      "special": "Flying , Spellcaster , Hates Efreet and Efreet Sultans"
+    },
+    {
+      "type": "naga",
+      "label": "Naga",
+      "group": "tower",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 16,
+      "defense": 13,
+      "minDamage": 20,
+      "maxDamage": 20,
+      "health": 110,
+      "speed": 5,
+      "growth": 2,
+      "aiValue": 2016,
+      "cost": {
+        "gold": 1100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "No enemy retaliation"
+    },
+    {
+      "type": "naga_queen",
+      "label": "Reine naga",
+      "group": "tower",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 16,
+      "defense": 13,
+      "minDamage": 30,
+      "maxDamage": 30,
+      "health": 110,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 2840,
+      "cost": {
+        "gold": 1600
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "No enemy retaliation"
+    },
+    {
+      "type": "giant",
+      "label": "Géant",
+      "group": "tower",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 19,
+      "defense": 16,
+      "minDamage": 40,
+      "maxDamage": 60,
+      "health": 150,
+      "speed": 7,
+      "growth": 1,
+      "aiValue": 3718,
+      "cost": {
+        "gold": 2000,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Mind spells immunity"
+    },
+    {
+      "type": "titan",
+      "label": "Titan",
+      "group": "tower",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 24,
+      "defense": 24,
+      "minDamage": 40,
+      "maxDamage": 60,
+      "health": 300,
+      "speed": 11,
+      "growth": 1,
+      "aiValue": 7500,
+      "cost": {
+        "gold": 5000,
+        "crystals": 2
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), No melee penalty , Mind spells immunity , Hates Black Dragons"
+    },
+    {
+      "type": "imp",
+      "label": "Diablotin",
+      "group": "inferno",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 2,
+      "defense": 3,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 4,
+      "speed": 5,
+      "growth": 15,
+      "aiValue": 50,
+      "cost": {
+        "gold": 50
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "familiar",
+      "label": "Familier",
+      "group": "inferno",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 4,
+      "defense": 4,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 4,
+      "speed": 7,
+      "growth": 15,
+      "aiValue": 60,
+      "cost": {
+        "gold": 60
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Magic channel"
+    },
+    {
+      "type": "gog",
+      "label": "Gog",
+      "group": "inferno",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 4,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 13,
+      "speed": 4,
+      "growth": 8,
+      "aiValue": 159,
+      "cost": {
+        "gold": 125
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots)"
+    },
+    {
+      "type": "magog",
+      "label": "Magog",
+      "group": "inferno",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 7,
+      "defense": 4,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 13,
+      "speed": 6,
+      "growth": 8,
+      "aiValue": 240,
+      "cost": {
+        "gold": 175
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Fireball attack"
+    },
+    {
+      "type": "hell_hound",
+      "label": "Chien des enfers",
+      "group": "inferno",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 6,
+      "minDamage": 2,
+      "maxDamage": 7,
+      "health": 25,
+      "speed": 7,
+      "growth": 5,
+      "aiValue": 357,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "cerberus",
+      "label": "Cerbère",
+      "group": "inferno",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 2,
+      "maxDamage": 7,
+      "health": 25,
+      "speed": 8,
+      "growth": 5,
+      "aiValue": 392,
+      "cost": {
+        "gold": 250
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "No enemy retaliation , 3-headed attack"
+    },
+    {
+      "type": "demon",
+      "label": "Démon",
+      "group": "inferno",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 10,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 35,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 445,
+      "cost": {
+        "gold": 250
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "horned_demon",
+      "label": "Démon cornu",
+      "group": "inferno",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 10,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 40,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 480,
+      "cost": {
+        "gold": 270
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "pit_fiend",
+      "label": "Suppôt des fosses",
+      "group": "inferno",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 13,
+      "minDamage": 13,
+      "maxDamage": 17,
+      "health": 45,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 765,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "pit_lord",
+      "label": "Seigneur des fosses",
+      "group": "inferno",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 13,
+      "defense": 13,
+      "minDamage": 13,
+      "maxDamage": 17,
+      "health": 45,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 1224,
+      "cost": {
+        "gold": 700
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Summon demons"
+    },
+    {
+      "type": "efreet",
+      "label": "Efrit",
+      "group": "inferno",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 16,
+      "defense": 12,
+      "minDamage": 16,
+      "maxDamage": 24,
+      "health": 90,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 1670,
+      "cost": {
+        "gold": 900
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Fire immunity , Hates Genies"
+    },
+    {
+      "type": "efreet_sultan",
+      "label": "Sultan efrit",
+      "group": "inferno",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 16,
+      "defense": 14,
+      "minDamage": 16,
+      "maxDamage": 24,
+      "health": 90,
+      "speed": 13,
+      "growth": 2,
+      "aiValue": 2343,
+      "cost": {
+        "gold": 1100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Natural Fire Shield , Fire immunity , Hates Genies"
+    },
+    {
+      "type": "devil",
+      "label": "Diable",
+      "group": "inferno",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 19,
+      "defense": 21,
+      "minDamage": 30,
+      "maxDamage": 40,
+      "health": 160,
+      "speed": 11,
+      "growth": 1,
+      "aiValue": 5101,
+      "cost": {
+        "gold": 2700,
+        "mercury": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "teleporting"
+      ],
+      "special": "Teleporting , No enemy retaliation , Luck -1, Hates Angels"
+    },
+    {
+      "type": "arch_devil",
+      "label": "Archidiable",
+      "group": "inferno",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 26,
+      "defense": 28,
+      "minDamage": 30,
+      "maxDamage": 40,
+      "health": 200,
+      "speed": 17,
+      "growth": 1,
+      "aiValue": 7115,
+      "cost": {
+        "gold": 4500,
+        "mercury": 2
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "teleporting"
+      ],
+      "special": "Teleporting , No enemy retaliation , Luck - 2 1 , Hates Angels"
+    },
+    {
+      "type": "skeleton",
+      "label": "Squelette",
+      "group": "necropolis",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 4,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 6,
+      "speed": 4,
+      "growth": 12,
+      "aiValue": 60,
+      "cost": {
+        "gold": 60
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead"
+    },
+    {
+      "type": "skeleton_warrior",
+      "label": "Guerrier squelette",
+      "group": "necropolis",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 6,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 6,
+      "speed": 5,
+      "growth": 12,
+      "aiValue": 85,
+      "cost": {
+        "gold": 70
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead"
+    },
+    {
+      "type": "walking_dead",
+      "label": "Mort-vivant",
+      "group": "necropolis",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 15,
+      "speed": 3,
+      "growth": 8,
+      "aiValue": 98,
+      "cost": {
+        "gold": 100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead"
+    },
+    {
+      "type": "zombie",
+      "label": "Zombie",
+      "group": "necropolis",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 5,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 20,
+      "speed": 4,
+      "growth": 8,
+      "aiValue": 128,
+      "cost": {
+        "gold": 125
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead , Disease"
+    },
+    {
+      "type": "wight",
+      "label": "Spectre",
+      "group": "necropolis",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 7,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 18,
+      "speed": 5,
+      "growth": 7,
+      "aiValue": 252,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "regeneration",
+        "undead"
+      ],
+      "special": "Undead , Flying , Regeneration"
+    },
+    {
+      "type": "wraith",
+      "label": "Apparition",
+      "group": "necropolis",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 7,
+      "defense": 7,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 18,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 315,
+      "cost": {
+        "gold": 230
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "regeneration",
+        "undead"
+      ],
+      "special": "Undead , Flying , Regeneration , Mana drain"
+    },
+    {
+      "type": "vampire",
+      "label": "Vampire",
+      "group": "necropolis",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 9,
+      "minDamage": 5,
+      "maxDamage": 8,
+      "health": 30,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 555,
+      "cost": {
+        "gold": 360
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "flying",
+        "undead"
+      ],
+      "special": "Undead , Flying , No enemy retaliation"
+    },
+    {
+      "type": "vampire_lord",
+      "label": "Seigneur vampire",
+      "group": "necropolis",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 10,
+      "minDamage": 5,
+      "maxDamage": 8,
+      "health": 40,
+      "speed": 9,
+      "growth": 4,
+      "aiValue": 783,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "life_drain",
+        "flying",
+        "undead"
+      ],
+      "special": "Undead , Flying , No enemy retaliation , Life drain"
+    },
+    {
+      "type": "lich",
+      "label": "Liche",
+      "group": "necropolis",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 10,
+      "minDamage": 11,
+      "maxDamage": 13,
+      "health": 30,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 848,
+      "cost": {
+        "gold": 550
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Ranged (12 shots), Undead , Death cloud"
+    },
+    {
+      "type": "power_lich",
+      "label": "Liche supérieure",
+      "group": "necropolis",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 13,
+      "defense": 10,
+      "minDamage": 11,
+      "maxDamage": 15,
+      "health": 40,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 1079,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Ranged (24 shots), Undead , Death cloud"
+    },
+    {
+      "type": "black_knight",
+      "label": "Chevalier noir",
+      "group": "necropolis",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 16,
+      "defense": 16,
+      "minDamage": 15,
+      "maxDamage": 30,
+      "health": 120,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 2087,
+      "cost": {
+        "gold": 1200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead , Curse"
+    },
+    {
+      "type": "dread_knight",
+      "label": "Chevalier de l'effroi",
+      "group": "necropolis",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 18,
+      "defense": 18,
+      "minDamage": 15,
+      "maxDamage": 30,
+      "health": 120,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 2382,
+      "cost": {
+        "gold": 1500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "death_blow",
+        "undead"
+      ],
+      "special": "Undead , Curse , Death blow"
+    },
+    {
+      "type": "bone_dragon",
+      "label": "Dragon squelette",
+      "group": "necropolis",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 17,
+      "defense": 15,
+      "minDamage": 25,
+      "maxDamage": 50,
+      "health": 150,
+      "speed": 9,
+      "growth": 1,
+      "aiValue": 3388,
+      "cost": {
+        "gold": 1800
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "undead"
+      ],
+      "special": "Dragon , Undead , Flying , Morale -1"
+    },
+    {
+      "type": "ghost_dragon",
+      "label": "Dragon fantôme",
+      "group": "necropolis",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 19,
+      "defense": 17,
+      "minDamage": 25,
+      "maxDamage": 50,
+      "health": 200,
+      "speed": 14,
+      "growth": 1,
+      "aiValue": 4696,
+      "cost": {
+        "gold": 3000,
+        "mercury": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "undead"
+      ],
+      "special": "Dragon , Undead , Flying , Morale -1, Aging"
+    },
+    {
+      "type": "troglodyte",
+      "label": "Troglodyte",
+      "group": "dungeon",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 4,
+      "defense": 3,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 5,
+      "speed": 4,
+      "growth": 14,
+      "aiValue": 59,
+      "cost": {
+        "gold": 50
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Immune to Blinding and Stone gaze"
+    },
+    {
+      "type": "infernal_troglodyte",
+      "label": "Troglodyte infernal",
+      "group": "dungeon",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 5,
+      "defense": 4,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 6,
+      "speed": 5,
+      "growth": 14,
+      "aiValue": 84,
+      "cost": {
+        "gold": 65
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Immune to Blinding and Stone gaze"
+    },
+    {
+      "type": "harpy",
+      "label": "Harpie",
+      "group": "dungeon",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 5,
+      "minDamage": 1,
+      "maxDamage": 4,
+      "health": 14,
+      "speed": 6,
+      "growth": 8,
+      "aiValue": 154,
+      "cost": {
+        "gold": 130
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Strike and return"
+    },
+    {
+      "type": "harpy_hag",
+      "label": "Harpie sorcière",
+      "group": "dungeon",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 6,
+      "minDamage": 1,
+      "maxDamage": 4,
+      "health": 14,
+      "speed": 9,
+      "growth": 8,
+      "aiValue": 238,
+      "cost": {
+        "gold": 170
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "flying"
+      ],
+      "special": "Flying , Strike and return , No enemy retaliation"
+    },
+    {
+      "type": "beholder",
+      "label": "Tyrannœil",
+      "group": "dungeon",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 7,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 22,
+      "speed": 5,
+      "growth": 7,
+      "aiValue": 336,
+      "cost": {
+        "gold": 250
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots), No melee penalty"
+    },
+    {
+      "type": "evil_eye",
+      "label": "Mauvais œil",
+      "group": "dungeon",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 22,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 367,
+      "cost": {
+        "gold": 280
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), No melee penalty"
+    },
+    {
+      "type": "medusa",
+      "label": "Méduse",
+      "group": "dungeon",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 9,
+      "minDamage": 6,
+      "maxDamage": 8,
+      "health": 25,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 517,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": true,
+      "shots": 4,
+      "abilities": [],
+      "special": "Ranged (4 shots), No melee penalty , Petrifying attack"
+    },
+    {
+      "type": "medusa_queen",
+      "label": "Reine méduse",
+      "group": "dungeon",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 10,
+      "minDamage": 6,
+      "maxDamage": 8,
+      "health": 30,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 577,
+      "cost": {
+        "gold": 330
+      },
+      "ranged": true,
+      "shots": 8,
+      "abilities": [],
+      "special": "Ranged (8 shots), No melee penalty , Petrifying attack"
+    },
+    {
+      "type": "minotaur",
+      "label": "Minotaure",
+      "group": "dungeon",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 14,
+      "defense": 12,
+      "minDamage": 12,
+      "maxDamage": 20,
+      "health": 50,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 835,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Positive Morale"
+    },
+    {
+      "type": "minotaur_king",
+      "label": "Roi minotaure",
+      "group": "dungeon",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 15,
+      "defense": 15,
+      "minDamage": 12,
+      "maxDamage": 20,
+      "health": 50,
+      "speed": 8,
+      "growth": 3,
+      "aiValue": 1068,
+      "cost": {
+        "gold": 575
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Positive Morale"
+    },
+    {
+      "type": "manticore",
+      "label": "Manticore",
+      "group": "dungeon",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 15,
+      "defense": 13,
+      "minDamage": 14,
+      "maxDamage": 20,
+      "health": 80,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1547,
+      "cost": {
+        "gold": 850
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying"
+    },
+    {
+      "type": "scorpicore",
+      "label": "Scorpicore",
+      "group": "dungeon",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 16,
+      "defense": 14,
+      "minDamage": 14,
+      "maxDamage": 20,
+      "health": 80,
+      "speed": 11,
+      "growth": 2,
+      "aiValue": 1589,
+      "cost": {
+        "gold": 1050
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Paralyzing venom"
+    },
+    {
+      "type": "red_dragon",
+      "label": "Dragon rouge",
+      "group": "dungeon",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 19,
+      "defense": 19,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 180,
+      "speed": 11,
+      "growth": 1,
+      "aiValue": 4702,
+      "cost": {
+        "gold": 2500,
+        "sulfur": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , 1-3 lvl spells immunity"
+    },
+    {
+      "type": "black_dragon",
+      "label": "Dragon noir",
+      "group": "dungeon",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 25,
+      "defense": 25,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 300,
+      "speed": 15,
+      "growth": 1,
+      "aiValue": 8721,
+      "cost": {
+        "gold": 4000,
+        "sulfur": 2
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , Magic immunity , Hates Titans"
+    },
+    {
+      "type": "goblin",
+      "label": "Gobelin",
+      "group": "stronghold",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 4,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 5,
+      "speed": 5,
+      "growth": 15,
+      "aiValue": 60,
+      "cost": {
+        "gold": 40
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "hobgoblin",
+      "label": "Hobgobelin",
+      "group": "stronghold",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 5,
+      "defense": 3,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 5,
+      "speed": 7,
+      "growth": 15,
+      "aiValue": 78,
+      "cost": {
+        "gold": 50
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "wolf_rider",
+      "label": "Chevaucheur de loup",
+      "group": "stronghold",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 10,
+      "speed": 6,
+      "growth": 9,
+      "aiValue": 130,
+      "cost": {
+        "gold": 100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "wolf_raider",
+      "label": "Pillard sur loup",
+      "group": "stronghold",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 4,
+      "health": 10,
+      "speed": 8,
+      "growth": 9,
+      "aiValue": 203,
+      "cost": {
+        "gold": 140
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "double_attack"
+      ],
+      "special": "Double attack"
+    },
+    {
+      "type": "orc",
+      "label": "Orc",
+      "group": "stronghold",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 4,
+      "minDamage": 2,
+      "maxDamage": 5,
+      "health": 15,
+      "speed": 4,
+      "growth": 7,
+      "aiValue": 192,
+      "cost": {
+        "gold": 150
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots)"
+    },
+    {
+      "type": "orc_chieftain",
+      "label": "Chef orc",
+      "group": "stronghold",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 4,
+      "minDamage": 2,
+      "maxDamage": 5,
+      "health": 20,
+      "speed": 5,
+      "growth": 7,
+      "aiValue": 240,
+      "cost": {
+        "gold": 165
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots)"
+    },
+    {
+      "type": "ogre",
+      "label": "Ogre",
+      "group": "stronghold",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 7,
+      "minDamage": 6,
+      "maxDamage": 12,
+      "health": 40,
+      "speed": 4,
+      "growth": 4,
+      "aiValue": 416,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "ogre_mage",
+      "label": "Ogre mage",
+      "group": "stronghold",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 13,
+      "defense": 7,
+      "minDamage": 6,
+      "maxDamage": 12,
+      "health": 60,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 672,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Spellcaster ( Bloodlust )"
+    },
+    {
+      "type": "roc",
+      "label": "Roc",
+      "group": "stronghold",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 11,
+      "minDamage": 11,
+      "maxDamage": 15,
+      "health": 60,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 1027,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying"
+    },
+    {
+      "type": "thunderbird",
+      "label": "Oiseau-tonnerre",
+      "group": "stronghold",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 13,
+      "defense": 11,
+      "minDamage": 11,
+      "maxDamage": 15,
+      "health": 60,
+      "speed": 11,
+      "growth": 3,
+      "aiValue": 1106,
+      "cost": {
+        "gold": 700
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Lightning strike"
+    },
+    {
+      "type": "cyclops",
+      "label": "Cyclope",
+      "group": "stronghold",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 15,
+      "defense": 12,
+      "minDamage": 16,
+      "maxDamage": 20,
+      "health": 70,
+      "speed": 6,
+      "growth": 2,
+      "aiValue": 1266,
+      "cost": {
+        "gold": 750
+      },
+      "ranged": true,
+      "shots": 16,
+      "abilities": [],
+      "special": "Ranged (16 shots), Can attack siege walls"
+    },
+    {
+      "type": "cyclops_king",
+      "label": "Roi cyclope",
+      "group": "stronghold",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 17,
+      "defense": 13,
+      "minDamage": 16,
+      "maxDamage": 20,
+      "health": 70,
+      "speed": 8,
+      "growth": 2,
+      "aiValue": 1443,
+      "cost": {
+        "gold": 1100
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Can attack siege walls"
+    },
+    {
+      "type": "behemoth",
+      "label": "Béhémoth",
+      "group": "stronghold",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 17,
+      "defense": 17,
+      "minDamage": 30,
+      "maxDamage": 50,
+      "health": 160,
+      "speed": 6,
+      "growth": 1,
+      "aiValue": 3162,
+      "cost": {
+        "gold": 1500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Ignores 40% of enemy defense value"
+    },
+    {
+      "type": "ancient_behemoth",
+      "label": "Béhémoth ancien",
+      "group": "stronghold",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 19,
+      "defense": 19,
+      "minDamage": 30,
+      "maxDamage": 50,
+      "health": 300,
+      "speed": 9,
+      "growth": 1,
+      "aiValue": 6168,
+      "cost": {
+        "gold": 3000,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Ignores 80% of enemy defense value"
+    },
+    {
+      "type": "gnoll",
+      "label": "Gnoll",
+      "group": "fortress",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 3,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 6,
+      "speed": 4,
+      "growth": 12,
+      "aiValue": 56,
+      "cost": {
+        "gold": 50
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "gnoll_marauder",
+      "label": "Maraudeur gnoll",
+      "group": "fortress",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 4,
+      "defense": 6,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 6,
+      "speed": 5,
+      "growth": 12,
+      "aiValue": 90,
+      "cost": {
+        "gold": 70
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "lizardman",
+      "label": "Homme-lézard",
+      "group": "fortress",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 6,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 14,
+      "speed": 4,
+      "growth": 9,
+      "aiValue": 126,
+      "cost": {
+        "gold": 110
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [],
+      "special": "Ranged (12 shots)"
+    },
+    {
+      "type": "lizard_warrior",
+      "label": "Guerrier lézard",
+      "group": "fortress",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 8,
+      "minDamage": 2,
+      "maxDamage": 5,
+      "health": 15,
+      "speed": 5,
+      "growth": 9,
+      "aiValue": 156,
+      "cost": {
+        "gold": 140
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots)"
+    },
+    {
+      "type": "serpent_fly",
+      "label": "Mouche-serpent",
+      "group": "fortress",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 9,
+      "minDamage": 2,
+      "maxDamage": 5,
+      "health": 20,
+      "speed": 9,
+      "growth": 8,
+      "aiValue": 268,
+      "cost": {
+        "gold": 220
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Dispels beneficial spells"
+    },
+    {
+      "type": "dragon_fly",
+      "label": "Mouche-dragon",
+      "group": "fortress",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 10,
+      "minDamage": 2,
+      "maxDamage": 5,
+      "health": 20,
+      "speed": 13,
+      "growth": 8,
+      "aiValue": 312,
+      "cost": {
+        "gold": 240
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Dispels beneficial spells , Weakness"
+    },
+    {
+      "type": "basilisk",
+      "label": "Basilic",
+      "group": "fortress",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 11,
+      "defense": 11,
+      "minDamage": 6,
+      "maxDamage": 10,
+      "health": 35,
+      "speed": 5,
+      "growth": 4,
+      "aiValue": 552,
+      "cost": {
+        "gold": 325
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Petrifying attack"
+    },
+    {
+      "type": "greater_basilisk",
+      "label": "Basilic majeur",
+      "group": "fortress",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 12,
+      "minDamage": 6,
+      "maxDamage": 10,
+      "health": 40,
+      "speed": 7,
+      "growth": 4,
+      "aiValue": 714,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Petrifying attack"
+    },
+    {
+      "type": "gorgon",
+      "label": "Gorgone",
+      "group": "fortress",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 14,
+      "minDamage": 12,
+      "maxDamage": 16,
+      "health": 70,
+      "speed": 5,
+      "growth": 3,
+      "aiValue": 890,
+      "cost": {
+        "gold": 525
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "mighty_gorgon",
+      "label": "Gorgone puissante",
+      "group": "fortress",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 11,
+      "defense": 16,
+      "minDamage": 12,
+      "maxDamage": 16,
+      "health": 70,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 1028,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Death stare (10% chance per unit)"
+    },
+    {
+      "type": "wyvern",
+      "label": "Wyverne",
+      "group": "fortress",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 14,
+      "defense": 14,
+      "minDamage": 14,
+      "maxDamage": 18,
+      "health": 70,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1350,
+      "cost": {
+        "gold": 800
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying"
+    },
+    {
+      "type": "wyvern_monarch",
+      "label": "Wyverne monarque",
+      "group": "fortress",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 14,
+      "defense": 14,
+      "minDamage": 18,
+      "maxDamage": 22,
+      "health": 70,
+      "speed": 11,
+      "growth": 2,
+      "aiValue": 1518,
+      "cost": {
+        "gold": 1100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Poisonous"
+    },
+    {
+      "type": "hydra",
+      "label": "Hydre",
+      "group": "fortress",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 16,
+      "defense": 18,
+      "minDamage": 25,
+      "maxDamage": 45,
+      "health": 175,
+      "speed": 5,
+      "growth": 1,
+      "aiValue": 4120,
+      "cost": {
+        "gold": 2200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "No enemy retaliation , Attacks all adjacent enemies"
+    },
+    {
+      "type": "chaos_hydra",
+      "label": "Hydre du chaos",
+      "group": "fortress",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 18,
+      "defense": 20,
+      "minDamage": 25,
+      "maxDamage": 45,
+      "health": 250,
+      "speed": 7,
+      "growth": 1,
+      "aiValue": 5931,
+      "cost": {
+        "gold": 3500,
+        "sulfur": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "No enemy retaliation , Attacks all adjacent enemies"
+    },
+    {
+      "type": "pixie",
+      "label": "Pixie",
+      "group": "conflux",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 2,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 3,
+      "speed": 7,
+      "growth": 20,
+      "aiValue": 55,
+      "cost": {
+        "gold": 25
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying"
+    },
+    {
+      "type": "sprite",
+      "label": "Fée",
+      "group": "conflux",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 2,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 3,
+      "speed": 9,
+      "growth": 20,
+      "aiValue": 95,
+      "cost": {
+        "gold": 30
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "flying"
+      ],
+      "special": "Flying , No enemy retaliation"
+    },
+    {
+      "type": "air_elemental",
+      "label": "Élémentaire d'air",
+      "group": "conflux",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 9,
+      "minDamage": 2,
+      "maxDamage": 8,
+      "health": 25,
+      "speed": 7,
+      "growth": 6,
+      "aiValue": 356,
+      "cost": {
+        "gold": 250
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "elemental"
+      ],
+      "special": "Elemental , Immune to Meteor Shower , Vulnerable to Lightning Bolt , Chain Lightning , Titan's Lightning Bolt and Armageddon , +100% to basic damage to Earth and Magma Elementals"
+    },
+    {
+      "type": "storm_elemental",
+      "label": "Élémentaire de tempête",
+      "group": "conflux",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 9,
+      "minDamage": 2,
+      "maxDamage": 8,
+      "health": 25,
+      "speed": 8,
+      "growth": 6,
+      "aiValue": 486,
+      "cost": {
+        "gold": 275
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "spellcaster",
+        "elemental"
+      ],
+      "special": "Ranged (24 shots), Elemental , Immune to Meteor Shower , Vulnerable to Lightning Bolt , Chain Lightning , Titan's Lightning Bolt and Armageddon , +100% to basic damage to Earth and Magma Elementals , Spellcaster ( Protection from Air )"
+    },
+    {
+      "type": "water_elemental",
+      "label": "Élémentaire d'eau",
+      "group": "conflux",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 10,
+      "minDamage": 3,
+      "maxDamage": 7,
+      "health": 30,
+      "speed": 5,
+      "growth": 6,
+      "aiValue": 315,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "elemental"
+      ],
+      "special": "Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Inferno and Armageddon , +100% to basic damage to Fire and Energy Elementals"
+    },
+    {
+      "type": "ice_elemental",
+      "label": "Élémentaire de glace",
+      "group": "conflux",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 10,
+      "minDamage": 3,
+      "maxDamage": 7,
+      "health": 30,
+      "speed": 6,
+      "growth": 6,
+      "aiValue": 380,
+      "cost": {
+        "gold": 375
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "spellcaster",
+        "elemental"
+      ],
+      "special": "Ranged (24 shots), Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Inferno and Armageddon , +100% to basic damage to Fire and Energy Elementals , Spellcaster ( Protection from Water )"
+    },
+    {
+      "type": "fire_elemental",
+      "label": "Élémentaire de feu",
+      "group": "conflux",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 4,
+      "maxDamage": 6,
+      "health": 35,
+      "speed": 6,
+      "growth": 5,
+      "aiValue": 345,
+      "cost": {
+        "gold": 350
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "elemental"
+      ],
+      "special": "Elemental , Fire immunity , Vulnerable to Ice Bolt and Frost Ring , +100% to basic damage to Water and Ice Elementals"
+    },
+    {
+      "type": "energy_elemental",
+      "label": "Élémentaire d'énergie",
+      "group": "conflux",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 8,
+      "minDamage": 4,
+      "maxDamage": 6,
+      "health": 35,
+      "speed": 8,
+      "growth": 5,
+      "aiValue": 470,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "spellcaster",
+        "elemental"
+      ],
+      "special": "Elemental , Flying , Fire immunity , Vulnerable to Ice Bolt and Frost Ring , +100% to basic damage to Water and Ice Elementals , Spellcaster ( Protection from Fire )"
+    },
+    {
+      "type": "earth_elemental",
+      "label": "Élémentaire de terre",
+      "group": "conflux",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 10,
+      "minDamage": 4,
+      "maxDamage": 8,
+      "health": 40,
+      "speed": 4,
+      "growth": 4,
+      "aiValue": 330,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "elemental"
+      ],
+      "special": "Elemental , Immune to Lightning Bolt , Chain Lightning , Titan's Lightning Bolt and Armageddon , Vulnerable to Meteor Shower , +100% to basic damage to Air and Storm Elementals"
+    },
+    {
+      "type": "magma_elemental",
+      "label": "Élémentaire de magma",
+      "group": "conflux",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 11,
+      "defense": 11,
+      "minDamage": 6,
+      "maxDamage": 10,
+      "health": 40,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 490,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "spellcaster",
+        "elemental"
+      ],
+      "special": "Elemental , Immune to Lightning Bolt , Chain Lightning , Titan's Lightning Bolt and Armageddon , Vulnerable to Meteor Shower , +100% to basic damage to Air and Storm Elementals , Spellcaster ( Protection from Earth )"
+    },
+    {
+      "type": "psychic_elemental",
+      "label": "Élémentaire psychique",
+      "group": "conflux",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 15,
+      "defense": 13,
+      "minDamage": 10,
+      "maxDamage": 20,
+      "health": 75,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1669,
+      "cost": {
+        "gold": 950
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "elemental"
+      ],
+      "special": "Elemental , No enemy retaliation , Attacks all adjacent enemies , -50% damage to creatures with Mind spells immunity"
+    },
+    {
+      "type": "magic_elemental",
+      "label": "Élémentaire magique",
+      "group": "conflux",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 15,
+      "defense": 13,
+      "minDamage": 15,
+      "maxDamage": 25,
+      "health": 80,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 2012,
+      "cost": {
+        "gold": 1200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "elemental"
+      ],
+      "special": "Elemental , No enemy retaliation , Attacks all adjacent enemies , Magic immunity , -50% damage to creatures with Magic immunity"
+    },
+    {
+      "type": "firebird",
+      "label": "Oiseau de feu",
+      "group": "conflux",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 18,
+      "defense": 18,
+      "minDamage": 30,
+      "maxDamage": 40,
+      "health": 150,
+      "speed": 15,
+      "growth": 1,
+      "aiValue": 4336,
+      "cost": {
+        "gold": 2000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Flying , Breath attack , 50% Fire resistance Fire immunity"
+    },
+    {
+      "type": "phoenix",
+      "label": "Phénix",
+      "group": "conflux",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 21,
+      "defense": 18,
+      "minDamage": 30,
+      "maxDamage": 40,
+      "health": 200,
+      "speed": 21,
+      "growth": 1,
+      "aiValue": 6721,
+      "cost": {
+        "gold": 3000,
+        "mercury": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Flying , Breath attack , Fire immunity , Rebirth"
+    },
+    {
+      "type": "nymph",
+      "label": "Nymphe",
+      "group": "cove",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 4,
+      "speed": 6,
+      "growth": 16,
+      "aiValue": 57,
+      "cost": {
+        "gold": 35
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "teleporting"
+      ],
+      "special": "Teleporting , Immune to Ice Bolt and Frost Ring"
+    },
+    {
+      "type": "oceanid",
+      "label": "Océanide",
+      "group": "cove",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 4,
+      "speed": 8,
+      "growth": 16,
+      "aiValue": 75,
+      "cost": {
+        "gold": 45
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "teleporting"
+      ],
+      "special": "Teleporting , Immune to Ice Bolt and Frost Ring"
+    },
+    {
+      "type": "crew_mate",
+      "label": "Matelot",
+      "group": "cove",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 4,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 15,
+      "speed": 5,
+      "growth": 9,
+      "aiValue": 155,
+      "cost": {
+        "gold": 110
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "seaman",
+      "label": "Marin",
+      "group": "cove",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 6,
+      "minDamage": 3,
+      "maxDamage": 4,
+      "health": 15,
+      "speed": 6,
+      "growth": 9,
+      "aiValue": 174,
+      "cost": {
+        "gold": 140
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "pirate",
+      "label": "Pirate",
+      "group": "cove",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 6,
+      "minDamage": 3,
+      "maxDamage": 7,
+      "health": 15,
+      "speed": 6,
+      "growth": 7,
+      "aiValue": 312,
+      "cost": {
+        "gold": 225
+      },
+      "ranged": true,
+      "shots": 4,
+      "abilities": [],
+      "special": "Ranged (4 shots), No melee penalty"
+    },
+    {
+      "type": "corsair",
+      "label": "Corsaire",
+      "group": "cove",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 3,
+      "maxDamage": 7,
+      "health": 15,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 407,
+      "cost": {
+        "gold": 275
+      },
+      "ranged": true,
+      "shots": 4,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "Ranged (4 shots), No melee penalty , No enemy retaliation"
+    },
+    {
+      "type": "sea_dog",
+      "label": "Loup de mer",
+      "group": "cove",
+      "tier": 3,
+      "upgradeLevel": 4,
+      "attack": 12,
+      "defense": 11,
+      "minDamage": 3,
+      "maxDamage": 7,
+      "health": 15,
+      "speed": 8,
+      "growth": 7,
+      "aiValue": 602,
+      "cost": {
+        "gold": 375
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [
+        "no_retaliation"
+      ],
+      "special": "Ranged (12 shots), No melee penalty , No enemy retaliation , Accurate shot"
+    },
+    {
+      "type": "stormbird",
+      "label": "Oiseau-tempête",
+      "group": "cove",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 6,
+      "maxDamage": 9,
+      "health": 30,
+      "speed": 9,
+      "growth": 4,
+      "aiValue": 502,
+      "cost": {
+        "gold": 275
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying"
+    },
+    {
+      "type": "ayssid",
+      "label": "Ayssid",
+      "group": "cove",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 11,
+      "defense": 8,
+      "minDamage": 6,
+      "maxDamage": 10,
+      "health": 30,
+      "speed": 11,
+      "growth": 4,
+      "aiValue": 645,
+      "cost": {
+        "gold": 325
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Ferocity"
+    },
+    {
+      "type": "sea_witch",
+      "label": "Sorcière des mers",
+      "group": "cove",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 7,
+      "minDamage": 10,
+      "maxDamage": 14,
+      "health": 35,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 790,
+      "cost": {
+        "gold": 515
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Ranged (12 shots), Spellcaster (after shot, Weakness / Disrupting Ray )"
+    },
+    {
+      "type": "sorceress",
+      "label": "Sorcière",
+      "group": "cove",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 9,
+      "minDamage": 10,
+      "maxDamage": 16,
+      "health": 35,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 852,
+      "cost": {
+        "gold": 565
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Ranged (12 shots), Spellcaster (after shot, Weakness / Disrupting Ray )"
+    },
+    {
+      "type": "nix",
+      "label": "Nix",
+      "group": "cove",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 16,
+      "minDamage": 18,
+      "maxDamage": 22,
+      "health": 80,
+      "speed": 6,
+      "growth": 2,
+      "aiValue": 1415,
+      "cost": {
+        "gold": 1000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Ignores 30% of enemy attack value"
+    },
+    {
+      "type": "nix_warrior",
+      "label": "Guerrier nix",
+      "group": "cove",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 14,
+      "defense": 17,
+      "minDamage": 18,
+      "maxDamage": 22,
+      "health": 90,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 2116,
+      "cost": {
+        "gold": 1300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Ignores 60% of enemy attack value"
+    },
+    {
+      "type": "sea_serpent",
+      "label": "Serpent de mer",
+      "group": "cove",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 22,
+      "defense": 16,
+      "minDamage": 30,
+      "maxDamage": 55,
+      "health": 180,
+      "speed": 9,
+      "growth": 1,
+      "aiValue": 3953,
+      "cost": {
+        "gold": 2200,
+        "sulfur": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Poisonous"
+    },
+    {
+      "type": "haspid",
+      "label": "Haspide",
+      "group": "cove",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 29,
+      "defense": 20,
+      "minDamage": 30,
+      "maxDamage": 55,
+      "health": 300,
+      "speed": 12,
+      "growth": 1,
+      "aiValue": 7220,
+      "cost": {
+        "gold": 4000,
+        "sulfur": 2
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Poisonous , Revenge"
+    },
+    {
+      "type": "halfling_factory",
+      "label": "Halfelin (Usine)",
+      "group": "factory",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 4,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 4,
+      "speed": 5,
+      "growth": 15,
+      "aiValue": 75,
+      "cost": {
+        "gold": 40
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Positive Luck"
+    },
+    {
+      "type": "halfling_grenadier",
+      "label": "Grenadier halfelin",
+      "group": "factory",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 5,
+      "defense": 2,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 4,
+      "speed": 6,
+      "growth": 15,
+      "aiValue": 95,
+      "cost": {
+        "gold": 60
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Positive Luck , Ranged attack ignores 20% of enemy's defense skill"
+    },
+    {
+      "type": "mechanic",
+      "label": "Mécanicien",
+      "group": "factory",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 4,
+      "health": 14,
+      "speed": 6,
+      "growth": 8,
+      "aiValue": 186,
+      "cost": {
+        "gold": 140
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "breath_attack"
+      ],
+      "special": "Breath attack , Repairing (10 HP per unit)"
+    },
+    {
+      "type": "engineer",
+      "label": "Ingénieur",
+      "group": "factory",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 7,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 16,
+      "speed": 7,
+      "growth": 8,
+      "aiValue": 278,
+      "cost": {
+        "gold": 170
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "breath_attack"
+      ],
+      "special": "Breath attack , Repairing (20 HP per unit)"
+    },
+    {
+      "type": "armadillo",
+      "label": "Tatou",
+      "group": "factory",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 5,
+      "defense": 10,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 25,
+      "speed": 4,
+      "growth": 6,
+      "aiValue": 198,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "bellwether_armadillo",
+      "label": "Tatou meneur",
+      "group": "factory",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 6,
+      "defense": 11,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 25,
+      "speed": 6,
+      "growth": 6,
+      "aiValue": 256,
+      "cost": {
+        "gold": 230
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "automaton",
+      "label": "Automate",
+      "group": "factory",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 10,
+      "minDamage": 7,
+      "maxDamage": 7,
+      "health": 30,
+      "speed": 8,
+      "growth": 5,
+      "aiValue": 669,
+      "cost": {
+        "gold": 350
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "mechanical"
+      ],
+      "special": "Mechanical , Detonation"
+    },
+    {
+      "type": "sentinel_automaton",
+      "label": "Automate sentinelle",
+      "group": "factory",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 10,
+      "minDamage": 9,
+      "maxDamage": 9,
+      "health": 30,
+      "speed": 9,
+      "growth": 5,
+      "aiValue": 947,
+      "cost": {
+        "gold": 450
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "no_retaliation",
+        "mechanical"
+      ],
+      "special": "Mechanical , Detonation , No enemy retaliation"
+    },
+    {
+      "type": "sandworm",
+      "label": "Ver des sables",
+      "group": "factory",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 12,
+      "minDamage": 12,
+      "maxDamage": 16,
+      "health": 50,
+      "speed": 8,
+      "growth": 3,
+      "aiValue": 991,
+      "cost": {
+        "gold": 575
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Burrowing , Immune to Blinding and Stone gaze"
+    },
+    {
+      "type": "olgoi_khorkhoi",
+      "label": "Olgoï-khorkhoï",
+      "group": "factory",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 15,
+      "defense": 12,
+      "minDamage": 12,
+      "maxDamage": 16,
+      "health": 60,
+      "speed": 10,
+      "growth": 3,
+      "aiValue": 1220,
+      "cost": {
+        "gold": 650
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Burrowing , Immune to Blinding and Stone gaze , Devours corpses"
+    },
+    {
+      "type": "gunslinger",
+      "label": "Pistolero",
+      "group": "factory",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 17,
+      "defense": 12,
+      "minDamage": 14,
+      "maxDamage": 24,
+      "health": 45,
+      "speed": 7,
+      "growth": 2,
+      "aiValue": 1351,
+      "cost": {
+        "gold": 800
+      },
+      "ranged": true,
+      "shots": 16,
+      "abilities": [],
+      "special": "Ranged (16 shots), Preemptive shot (once per round)"
+    },
+    {
+      "type": "bounty_hunter",
+      "label": "Chasseur de primes",
+      "group": "factory",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 18,
+      "defense": 14,
+      "minDamage": 14,
+      "maxDamage": 24,
+      "health": 45,
+      "speed": 8,
+      "growth": 2,
+      "aiValue": 1454,
+      "cost": {
+        "gold": 1100
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Preemptive shot (unlimited)"
+    },
+    {
+      "type": "couatl",
+      "label": "Couatl",
+      "group": "factory",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 17,
+      "defense": 17,
+      "minDamage": 25,
+      "maxDamage": 45,
+      "health": 160,
+      "speed": 11,
+      "growth": 1,
+      "aiValue": 3574,
+      "cost": {
+        "gold": 2000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Meditation (skiping a turn)"
+    },
+    {
+      "type": "crimson_couatl",
+      "label": "Couatl cramoisi",
+      "group": "factory",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 21,
+      "defense": 21,
+      "minDamage": 25,
+      "maxDamage": 45,
+      "health": 200,
+      "speed": 15,
+      "growth": 1,
+      "aiValue": 5341,
+      "cost": {
+        "gold": 3500,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Flying , Meditation (without skipping a turn)"
+    },
+    {
+      "type": "dreadnought",
+      "label": "Cuirassé",
+      "group": "factory",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 18,
+      "defense": 20,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 200,
+      "speed": 6,
+      "growth": 1,
+      "aiValue": 3879,
+      "cost": {
+        "gold": 2200,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "mechanical"
+      ],
+      "special": "Mechanical , Heat stroke"
+    },
+    {
+      "type": "juggernaut",
+      "label": "Juggernaut",
+      "group": "factory",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 23,
+      "defense": 23,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 300,
+      "speed": 7,
+      "growth": 1,
+      "aiValue": 6433,
+      "cost": {
+        "gold": 3500,
+        "crystals": 2
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "mechanical"
+      ],
+      "special": "Mechanical , Heat stroke"
+    },
+    {
+      "type": "kobold",
+      "label": "Kobold",
+      "group": "bulwark",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 3,
+      "defense": 4,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 8,
+      "speed": 3,
+      "growth": 15,
+      "aiValue": 54,
+      "cost": {
+        "gold": 40
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Generates 1 Gold per unit per day"
+    },
+    {
+      "type": "kobold_foreman",
+      "label": "Contremaître kobold",
+      "group": "bulwark",
+      "tier": 1,
+      "upgradeLevel": 2,
+      "attack": 5,
+      "defense": 6,
+      "minDamage": 1,
+      "maxDamage": 2,
+      "health": 8,
+      "speed": 5,
+      "growth": 15,
+      "aiValue": 84,
+      "cost": {
+        "gold": 60
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Generates 1 Gold per unit per day"
+    },
+    {
+      "type": "mountain_ram",
+      "label": "Bélier des montagnes",
+      "group": "bulwark",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 6,
+      "minDamage": 3,
+      "maxDamage": 4,
+      "health": 18,
+      "speed": 7,
+      "growth": 9,
+      "aiValue": 228,
+      "cost": {
+        "gold": 135
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "argali",
+      "label": "Argali",
+      "group": "bulwark",
+      "tier": 2,
+      "upgradeLevel": 2,
+      "attack": 8,
+      "defense": 6,
+      "minDamage": 3,
+      "maxDamage": 4,
+      "health": 18,
+      "speed": 8,
+      "growth": 9,
+      "aiValue": 250,
+      "cost": {
+        "gold": 170
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Immune to Ice Bolt and Frost Ring , Adjacent enemies receive +20% Spell Damage"
+    },
+    {
+      "type": "snow_elf",
+      "label": "Elfe des neiges",
+      "group": "bulwark",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 8,
+      "minDamage": 4,
+      "maxDamage": 6,
+      "health": 21,
+      "speed": 6,
+      "growth": 7,
+      "aiValue": 370,
+      "cost": {
+        "gold": 230
+      },
+      "ranged": true,
+      "shots": 4,
+      "abilities": [],
+      "special": "Ranged (4 shots), No melee penalty"
+    },
+    {
+      "type": "steel_elf",
+      "label": "Elfe d'acier",
+      "group": "bulwark",
+      "tier": 3,
+      "upgradeLevel": 2,
+      "attack": 9,
+      "defense": 10,
+      "minDamage": 4,
+      "maxDamage": 6,
+      "health": 24,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 526,
+      "cost": {
+        "gold": 260
+      },
+      "ranged": true,
+      "shots": 8,
+      "abilities": [],
+      "special": "Ranged (8 shots), No melee penalty , May shoot while adjacent to enemy creatures"
+    },
+    {
+      "type": "yeti",
+      "label": "Yéti",
+      "group": "bulwark",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 8,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 40,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 504,
+      "cost": {
+        "gold": 325
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Recovers from negative effects in one round of combat"
+    },
+    {
+      "type": "yeti_runemaster",
+      "label": "Yéti maître des runes",
+      "group": "bulwark",
+      "tier": 4,
+      "upgradeLevel": 2,
+      "attack": 11,
+      "defense": 9,
+      "minDamage": 7,
+      "maxDamage": 9,
+      "health": 45,
+      "speed": 7,
+      "growth": 4,
+      "aiValue": 751,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Recovers from negative effects in one round of combat, Possesses Runes"
+    },
+    {
+      "type": "shaman",
+      "label": "Chamane",
+      "group": "bulwark",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 11,
+      "defense": 8,
+      "minDamage": 11,
+      "maxDamage": 13,
+      "health": 35,
+      "speed": 5,
+      "growth": 3,
+      "aiValue": 685,
+      "cost": {
+        "gold": 450
+      },
+      "ranged": true,
+      "shots": 12,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Ranged (12 shots), Spellcaster ( Air Shield )"
+    },
+    {
+      "type": "great_shaman",
+      "label": "Grand chamane",
+      "group": "bulwark",
+      "tier": 5,
+      "upgradeLevel": 2,
+      "attack": 12,
+      "defense": 11,
+      "minDamage": 11,
+      "maxDamage": 13,
+      "health": 35,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 818,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Ranged (24 shots), Spellcaster ( Air Shield ), Freezing Shot"
+    },
+    {
+      "type": "mammoth",
+      "label": "Mammouth",
+      "group": "bulwark",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 16,
+      "minDamage": 14,
+      "maxDamage": 20,
+      "health": 120,
+      "speed": 5,
+      "growth": 2,
+      "aiValue": 1359,
+      "cost": {
+        "gold": 850
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "war_mammoth",
+      "label": "Mammouth de guerre",
+      "group": "bulwark",
+      "tier": 6,
+      "upgradeLevel": 2,
+      "attack": 14,
+      "defense": 18,
+      "minDamage": 14,
+      "maxDamage": 20,
+      "health": 135,
+      "speed": 6,
+      "growth": 2,
+      "aiValue": 1601,
+      "cost": {
+        "gold": 1000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Receives +100% Defense while defending in combat."
+    },
+    {
+      "type": "jotunn",
+      "label": "Jötunn",
+      "group": "bulwark",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 18,
+      "defense": 18,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 165,
+      "speed": 8,
+      "growth": 1,
+      "aiValue": 4180,
+      "cost": {
+        "gold": 2000
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Teleports allies (once per combat), -1 enemy flying units' Speed"
+    },
+    {
+      "type": "jotunn_warlord",
+      "label": "Seigneur jötunn",
+      "group": "bulwark",
+      "tier": 7,
+      "upgradeLevel": 2,
+      "attack": 20,
+      "defense": 20,
+      "minDamage": 40,
+      "maxDamage": 50,
+      "health": 300,
+      "speed": 10,
+      "growth": 1,
+      "aiValue": 6694,
+      "cost": {
+        "gold": 3500,
+        "crystals": 1
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying"
+      ],
+      "special": "Teleports allies (unlimited), -2 enemy flying units' Speed"
+    },
+    {
+      "type": "peasant",
+      "label": "Paysan",
+      "group": "neutral",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 1,
+      "defense": 1,
+      "minDamage": 1,
+      "maxDamage": 1,
+      "health": 1,
+      "speed": 3,
+      "growth": 25,
+      "aiValue": 15,
+      "cost": {
+        "gold": 10
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "halfling",
+      "label": "Halfelin",
+      "group": "neutral",
+      "tier": 1,
+      "upgradeLevel": 0,
+      "attack": 4,
+      "defense": 2,
+      "minDamage": 1,
+      "maxDamage": 3,
+      "health": 4,
+      "speed": 5,
+      "growth": 15,
+      "aiValue": 75,
+      "cost": {
+        "gold": 40
+      },
+      "ranged": true,
+      "shots": 24,
+      "abilities": [],
+      "special": "Ranged (24 shots), Positive Luck"
+    },
+    {
+      "type": "boar",
+      "label": "Sanglier",
+      "group": "neutral",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 6,
+      "defense": 5,
+      "minDamage": 2,
+      "maxDamage": 3,
+      "health": 15,
+      "speed": 6,
+      "growth": 8,
+      "aiValue": 145,
+      "cost": {
+        "gold": 150
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": ""
+    },
+    {
+      "type": "rogue",
+      "label": "Voleur",
+      "group": "neutral",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 3,
+      "minDamage": 2,
+      "maxDamage": 4,
+      "health": 10,
+      "speed": 6,
+      "growth": 8,
+      "aiValue": 135,
+      "cost": {
+        "gold": 100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Spying"
+    },
+    {
+      "type": "leprechaun",
+      "label": "Farfadet",
+      "group": "neutral",
+      "tier": 2,
+      "upgradeLevel": 0,
+      "attack": 8,
+      "defense": 5,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 15,
+      "speed": 5,
+      "growth": 9,
+      "aiValue": 208,
+      "cost": {
+        "gold": 100
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Doubles friendly units Luck chance, Spellcaster ( Fortune )"
+    },
+    {
+      "type": "mummy",
+      "label": "Momie",
+      "group": "neutral",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 7,
+      "defense": 7,
+      "minDamage": 3,
+      "maxDamage": 5,
+      "health": 30,
+      "speed": 5,
+      "growth": 7,
+      "aiValue": 270,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "undead"
+      ],
+      "special": "Undead , Curse"
+    },
+    {
+      "type": "nomad",
+      "label": "Nomade",
+      "group": "neutral",
+      "tier": 3,
+      "upgradeLevel": 0,
+      "attack": 9,
+      "defense": 8,
+      "minDamage": 2,
+      "maxDamage": 6,
+      "health": 30,
+      "speed": 7,
+      "growth": 7,
+      "aiValue": 345,
+      "cost": {
+        "gold": 200
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Sandwalker"
+    },
+    {
+      "type": "sharpshooter",
+      "label": "Franc-tireur",
+      "group": "neutral",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 10,
+      "minDamage": 8,
+      "maxDamage": 10,
+      "health": 15,
+      "speed": 9,
+      "growth": 4,
+      "aiValue": 585,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": true,
+      "shots": 32,
+      "abilities": [],
+      "special": "Ranged (32 shots), No range and obstacle penalty"
+    },
+    {
+      "type": "satyr",
+      "label": "Satyre",
+      "group": "neutral",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 11,
+      "minDamage": 6,
+      "maxDamage": 10,
+      "health": 35,
+      "speed": 7,
+      "growth": 4,
+      "aiValue": 518,
+      "cost": {
+        "gold": 300
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Spellcaster ( Mirth )"
+    },
+    {
+      "type": "steel_golem",
+      "label": "Golem d'acier",
+      "group": "neutral",
+      "tier": 4,
+      "upgradeLevel": 0,
+      "attack": 10,
+      "defense": 11,
+      "minDamage": 6,
+      "maxDamage": 8,
+      "health": 45,
+      "speed": 6,
+      "growth": 4,
+      "aiValue": 597,
+      "cost": {
+        "gold": 400
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Unliving , Spell damage resistance (+80%)"
+    },
+    {
+      "type": "troll",
+      "label": "Troll",
+      "group": "neutral",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 14,
+      "defense": 7,
+      "minDamage": 10,
+      "maxDamage": 15,
+      "health": 40,
+      "speed": 7,
+      "growth": 3,
+      "aiValue": 1024,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "regeneration"
+      ],
+      "special": "Regeneration"
+    },
+    {
+      "type": "gold_golem",
+      "label": "Golem d'or",
+      "group": "neutral",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 11,
+      "defense": 12,
+      "minDamage": 8,
+      "maxDamage": 10,
+      "health": 50,
+      "speed": 5,
+      "growth": 3,
+      "aiValue": 600,
+      "cost": {
+        "gold": 500
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Unliving , Spell damage resistance (+85%)"
+    },
+    {
+      "type": "fangarm",
+      "label": "Fangarm",
+      "group": "neutral",
+      "tier": 5,
+      "upgradeLevel": 0,
+      "attack": 12,
+      "defense": 12,
+      "minDamage": 8,
+      "maxDamage": 12,
+      "health": 50,
+      "speed": 6,
+      "growth": 3,
+      "aiValue": 929,
+      "cost": {
+        "gold": 600
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "unlimited_retaliations",
+        "flying"
+      ],
+      "special": "Flying , Mind spells immunity , Unlimited retaliations, Hypnotizing attack"
+    },
+    {
+      "type": "diamond_golem",
+      "label": "Golem de diamant",
+      "group": "neutral",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 13,
+      "defense": 12,
+      "minDamage": 10,
+      "maxDamage": 14,
+      "health": 60,
+      "speed": 5,
+      "growth": 2,
+      "aiValue": 775,
+      "cost": {
+        "gold": 750
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Unliving , Spell Damage Resistance (+95%)"
+    },
+    {
+      "type": "enchanter",
+      "label": "Enchanteur",
+      "group": "neutral",
+      "tier": 6,
+      "upgradeLevel": 0,
+      "attack": 17,
+      "defense": 12,
+      "minDamage": 14,
+      "maxDamage": 14,
+      "health": 30,
+      "speed": 9,
+      "growth": 2,
+      "aiValue": 1210,
+      "cost": {
+        "gold": 750
+      },
+      "ranged": true,
+      "shots": 32,
+      "abilities": [
+        "spellcaster"
+      ],
+      "special": "Ranged (32 shots), No melee and obstacle penalty , Spellcaster"
+    },
+    {
+      "type": "faerie_dragon",
+      "label": "Dragon féerique",
+      "group": "neutral",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 20,
+      "defense": 20,
+      "minDamage": 20,
+      "maxDamage": 30,
+      "health": 500,
+      "speed": 15,
+      "growth": 1,
+      "aiValue": 30501,
+      "cost": {
+        "gold": 10000,
+        "crystals": 8
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "spellcaster"
+      ],
+      "special": "Dragon , Flying , Spellcaster , Natural Magic Mirror"
+    },
+    {
+      "type": "rust_dragon",
+      "label": "Dragon rouillé",
+      "group": "neutral",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 30,
+      "defense": 30,
+      "minDamage": 50,
+      "maxDamage": 50,
+      "health": 750,
+      "speed": 17,
+      "growth": 1,
+      "aiValue": 26433,
+      "cost": {
+        "gold": 15000,
+        "sulfur": 14
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , Acid breath"
+    },
+    {
+      "type": "crystal_dragon",
+      "label": "Dragon de cristal",
+      "group": "neutral",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 40,
+      "defense": 40,
+      "minDamage": 60,
+      "maxDamage": 75,
+      "health": 800,
+      "speed": 16,
+      "growth": 1,
+      "aiValue": 39338,
+      "cost": {
+        "gold": 20000,
+        "crystals": 10
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [],
+      "special": "Dragon , Crystal generation , Magic resistance (+20%)"
+    },
+    {
+      "type": "azure_dragon",
+      "label": "Dragon azur",
+      "group": "neutral",
+      "tier": 7,
+      "upgradeLevel": 0,
+      "attack": 50,
+      "defense": 50,
+      "minDamage": 70,
+      "maxDamage": 80,
+      "health": 1000,
+      "speed": 19,
+      "growth": 1,
+      "aiValue": 78845,
+      "cost": {
+        "gold": 30000,
+        "mercury": 20
+      },
+      "ranged": false,
+      "shots": 0,
+      "abilities": [
+        "flying",
+        "breath_attack"
+      ],
+      "special": "Dragon , Flying , Breath attack , Fear , Fearless, 1-3 lvl spells immunity"
+    }
+  ]
+}

@@ -1,39 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Shadow -->
-  <ellipse cx="32" cy="59" rx="22" ry="4" fill="#000000" opacity="0.25"/>
-  <!-- Sandy volcanic ground -->
-  <ellipse cx="32" cy="54" rx="26" ry="8" fill="#b89030" stroke="#8a6a18" stroke-width="1.2"/>
-  <!-- Main dune mound -->
-  <polygon points="8,54 32,20 56,54" fill="#c8a838" stroke="#8a6a18" stroke-width="1.2"/>
-  <polygon points="8,54 32,20 20,54" fill="#d8b848" stroke="none"/>
-  <polygon points="20,54 32,20 42,54" fill="#c0a030" stroke="none"/>
-  <!-- Volcanic cracks in dune (orange/red) -->
-  <path d="M22,48 Q26,42 28,46" fill="none" stroke="#e04800" stroke-width="1.5"/>
-  <path d="M36,44 Q40,38 42,44" fill="none" stroke="#c83000" stroke-width="1.5"/>
-  <path d="M30,52 Q32,48 34,52" fill="none" stroke="#d04000" stroke-width="1.2"/>
-  <!-- Hot crack glow -->
-  <path d="M22,48 Q26,42 28,46" fill="none" stroke="#ff8020" stroke-width="0.8" opacity="0.6"/>
-  <path d="M36,44 Q40,38 42,44" fill="none" stroke="#ff6010" stroke-width="0.8" opacity="0.6"/>
-  <!-- SULFUR CRYSTAL FORMATIONS (main icon) -->
-  <!-- Left sulfur crystals -->
-  <polygon points="14,40 10,54 18,54" fill="#e8d020" stroke="#b0a010" stroke-width="0.8"/>
-  <polygon points="14,40 10,54 14,54" fill="#f8e840" opacity="0.5"/>
-  <polygon points="10,42 7,53 13,53" fill="#d8c010" stroke="#a09000" stroke-width="0.8"/>
-  <polygon points="18,38 15,52 21,52" fill="#e0c818" stroke="#a09000" stroke-width="0.8"/>
-  <!-- Center sulfur crystal (large, most visible) -->
-  <polygon points="32,10 26,42 38,42" fill="#f0d020" stroke="#c0a008" stroke-width="1.2"/>
-  <polygon points="32,10 26,42 32,42" fill="#fff060" opacity="0.5"/>
-  <!-- Crystal glint -->
-  <line x1="30" y1="16" x2="34" y2="38" stroke="#ffffff" stroke-width="0.8" opacity="0.4"/>
-  <!-- Right sulfur crystals -->
-  <polygon points="50,38 47,52 53,52" fill="#e8d020" stroke="#b0a010" stroke-width="0.8"/>
-  <polygon points="50,38 47,52 50,52" fill="#f8e840" opacity="0.5"/>
-  <polygon points="54,42 51,54 57,54" fill="#d8c010" stroke="#a09000" stroke-width="0.8"/>
-  <polygon points="46,36 43,50 49,50" fill="#e0c818" stroke="#a09000" stroke-width="0.8"/>
-  <!-- Steam/sulfur gas vents -->
-  <path d="M24,36 Q22,28 24,22 Q26,16 24,10" fill="none" stroke="#f0f0c0" stroke-width="1.8" opacity="0.55" stroke-linecap="round"/>
-  <path d="M40,34 Q42,26 40,20 Q38,14 40,8" fill="none" stroke="#e8e8b0" stroke-width="1.5" opacity="0.45" stroke-linecap="round"/>
-  <path d="M32,32 Q30,24 32,18" fill="none" stroke="#fffff0" stroke-width="1.2" opacity="0.4" stroke-linecap="round"/>
-  <!-- Sulfur tip glow -->
-  <circle cx="32" cy="11" r="2.5" fill="#fff080" opacity="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="sulfur-dune-title sulfur-dune-desc">
+  <title id="sulfur-dune-title">Dune de soufre</title>
+  <desc id="sulfur-dune-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Dune de soufre.</desc>
+  
+  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#c8a838" stroke="#8a6a18" stroke-width="1.2"/><path d="M8 54 L32 20 L56 54 Z" fill="#c8a838" stroke="#8a6a18" stroke-width="1.2"/><path d="M22 48 Q27 42 29 46 M36 44 Q40 38 43 44 M30 52 Q32 48 35 52" fill="none" stroke="#e04800" stroke-width="1.5"/><path d="M32 10 L26 42 H38 Z M14 40 L10 54 H18 Z M50 38 L46 53 H54 Z M18 38 L15 52 H22 Z M46 36 L43 51 H50 Z" fill="#f0d020" stroke="#a09000" stroke-width="1"/><path d="M24 36 Q22 28 24 22 Q27 16 24 10 M40 34 Q43 26 40 20 Q37 14 40 8" fill="none" stroke="#f0f0c0" stroke-width="1.7" opacity=".55"/>
 </svg>

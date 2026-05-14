@@ -1,6 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M29 78 L34 40 L50 25 L66 40 L71 78 Z" fill="#c84f3d" stroke="#1f1a12" stroke-width="4"/><circle cx="50" cy="30" r="10" fill="#ffb36c" stroke="#1f1a12" stroke-width="4"/><path d="M28 44 L18 75" stroke="#f8f0c8" stroke-width="5"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">HH</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-hell-hound-title unit-hell-hound-desc">
+  <title id="unit-hell-hound-title">Chien des enfers</title>
+  <desc id="unit-hell-hound-desc">Sprite d'unité Chien des enfers. Le dessin reprend la silhouette de hell hound.</desc>
+  <defs>
+    <linearGradient id="unit-hell-hound-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fecaca"/>
+      <stop offset="48%" stop-color="#9f1239"/>
+      <stop offset="100%" stop-color="#2a0608"/>
+    </linearGradient>
+    <linearGradient id="unit-hell-hound-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffca5f"/>
+      <stop offset="100%" stop-color="#ff6b1a"/>
+    </linearGradient>
+    <linearGradient id="unit-hell-hound-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-hell-hound-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#ffca5f" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#ffca5f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#ff7a1f" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#ff7a1f" stroke-width="2" stroke-dasharray="2 4" opacity=".7"/>
+    <path d="M22 78 C16 64 28 58 23 44 C36 55 32 66 40 78 M74 78 C80 64 68 58 73 44 C60 55 64 66 56 78" fill="#ff7a1f" opacity=".25"/>
+  </g>
+    <path d="M12 68 C12 52 31 46 56 49 C75 52 84 63 78 77 C70 91 43 92 22 80 C15 76 11 72 12 68 Z" fill="#2a0608" stroke="#090909" stroke-width="2"/>
+    <path d="M58 49 C62 35 76 32 84 42 C89 48 82 57 70 58 C65 53 62 50 58 49 Z" fill="#9f1239" stroke="#090909" stroke-width="1.7"/>
+    <path d="M67 41 L67 27 L76 39 M80 44 L91 36 L87 50" fill="#ffca5f" stroke="#090909" stroke-width="1"/>
+    <circle cx="75" cy="47" r="2" fill="#fef08a"/>
+    <path d="M71 58 L69 66 L75 62 M82 57 L84 65 L78 62" fill="#f8fafc"/>
+    <path d="M20 76 L15 91 M39 80 L37 93 M67 77 L74 91" stroke="#190909" stroke-width="4" stroke-linecap="round"/>
+    <path d="M12 68 C0 63 2 50 16 47" fill="none" stroke="#190909" stroke-width="4" stroke-linecap="round"/>
+    <path d="M26 49 L31 37 L37 49 M45 48 L51 35 L57 49" fill="#ffca5f" opacity=".85"/>
+  </g>
 </svg>

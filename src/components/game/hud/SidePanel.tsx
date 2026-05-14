@@ -59,15 +59,15 @@ export default function SidePanel() {
                   />
                 }
                 title={h.name}
-                subtitle={townAtHero ? `Niveau ${h.level} · Au chateau` : `Niveau ${h.level}`}
+                subtitle={townAtHero ? `Niveau ${h.level} · Au château` : `Niveau ${h.level}`}
                 meta={
                   <div className="flex items-center gap-2 text-[10px] text-amber-200/80">
                     {townAtHero && (
                       <button
                         type="button"
                         className="grid h-5 w-5 place-items-center rounded border border-sky-500/40 bg-sky-950/50 text-sky-200 transition hover:border-sky-300/70 hover:bg-sky-900/60 hover:text-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200/80"
-                        title={`Au chateau : ${townAtHero.name}`}
-                        aria-label={`Selectionner le chateau ${townAtHero.name}`}
+                        title={`Au château : ${townAtHero.name}`}
+                        aria-label={`Sélectionner le château ${townAtHero.name}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           selectTown(townAtHero.id);

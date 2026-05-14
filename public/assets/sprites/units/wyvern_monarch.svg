@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-wyvern-monarch-title unit-wyvern-monarch-desc">
+  <title id="unit-wyvern-monarch-title">Wyverne monarque</title>
+  <desc id="unit-wyvern-monarch-desc">Sprite d'unité Wyverne monarque. Le dessin reprend la silhouette de wyvern monarch.</desc>
+  <defs>
+    <linearGradient id="unit-wyvern-monarch-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bef264"/>
+      <stop offset="48%" stop-color="#596a3d"/>
+      <stop offset="100%" stop-color="#202815"/>
+    </linearGradient>
+    <linearGradient id="unit-wyvern-monarch-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d1e68a"/>
+      <stop offset="100%" stop-color="#47682f"/>
+    </linearGradient>
+    <linearGradient id="unit-wyvern-monarch-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-wyvern-monarch-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#d1e68a" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#d1e68a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g>
+    <g opacity=".55">
+    <ellipse cx="48" cy="49" rx="35" ry="40" fill="#86efac" opacity=".10"/>
+    <path d="M24 70 Q15 52 27 34 M72 70 Q82 52 69 34" fill="none" stroke="#86efac" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>
+    
+  </g>
+    <path d="M39 45 C24 16 9 21 8 52 C21 47 32 54 42 70 Z" fill="#47682f" stroke="#202815" stroke-width="2"/>
+    <path d="M54 45 C69 14 86 22 89 52 C75 47 64 54 53 70 Z" fill="#47682f" stroke="#202815" stroke-width="2"/>
+    <path d="M14 51 L34 54 M22 30 L39 62 M84 51 L62 54 M76 30 L58 62" stroke="#d1e68a" stroke-width="1.6" opacity=".7"/>
+    <path d="M13 69 C18 52 37 46 61 52 C77 56 82 70 71 82 C58 95 32 91 17 79 C13 76 11 72 13 69 Z" fill="url(#unit-wyvern-monarch-body)" stroke="#202815" stroke-width="2"/>
+    <path d="M56 52 C59 37 74 29 85 37 C93 43 88 55 73 58 C67 53 62 52 56 52 Z" fill="url(#unit-wyvern-monarch-body)" stroke="#202815" stroke-width="1.7"/>
+    <path d="M73 35 L71 19 L81 34 M85 42 L93 33 L90 50" fill="#d1e68a" stroke="#202815" stroke-width="1"/>
+    <circle cx="75" cy="44" r="2" fill="#fef3c7"/>
+    <path d="M24 77 L18 91 M42 81 L39 93 M65 78 L61 92" stroke="#47682f" stroke-width="4" stroke-linecap="round"/>
+    <path d="M15 92 Q21 84 28 90 M34 94 Q41 86 48 92 M57 93 Q64 85 72 91" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round"/>
+    <path d="M14 70 C-2 67 1 51 17 50 C10 58 14 64 25 66 Z" fill="url(#unit-wyvern-monarch-body)" stroke="#202815" stroke-width="1.3"/>
+    <path d="M70 73 C83 77 83 88 68 90" fill="none" stroke="#47682f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M28 57 C42 54 58 56 72 65 M26 67 C40 64 55 66 69 74" fill="none" stroke="#d1e68a" stroke-width="1.2" opacity=".55"/>
+  </g>
+</svg>

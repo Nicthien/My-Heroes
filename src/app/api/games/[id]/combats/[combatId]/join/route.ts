@@ -29,7 +29,7 @@ export async function POST(
   } | null;
   const hero = gamePlayer?.heroes.find((item) => item.id === String(body.heroId));
 
-  if (!gamePlayer || !hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+  if (!gamePlayer || !hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
   const side: CombatSide = body.side === "defender" ? "defender" : "attacker";
 

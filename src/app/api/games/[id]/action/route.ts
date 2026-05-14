@@ -118,7 +118,7 @@ export async function POST(
 
     if (action.type === "MOVE_HERO") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement);
@@ -262,7 +262,7 @@ export async function POST(
       }
       if (!hero || !town) return NextResponse.json({ error: "Chateau invalide" }, { status: 400 });
       if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
-        return NextResponse.json({ error: "Ce chateau neutre est garde" }, { status: 400 });
+        return NextResponse.json({ error: "Ce château neutre est gardé" }, { status: 400 });
       }
       await supabase
         .from("towns")
@@ -386,7 +386,7 @@ export async function POST(
       if (!rule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
 
       const available = (town.availableRecruits?.[unitType] ?? 0);
-      if (available < count) return NextResponse.json({ error: "Pas assez d'unites disponibles" }, { status: 400 });
+      if (available < count) return NextResponse.json({ error: "Pas assez d'unités disponibles" }, { status: 400 });
 
       const totalCost = Object.fromEntries(Object.entries(rule.cost).map(([key, value]) => [key, (value ?? 0) * count]));
       const resources = playerResources(gamePlayer);
@@ -410,7 +410,7 @@ export async function POST(
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
       if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le heros doit etre au chateau pour recevoir la garnison" }, { status: 400 });
+        return NextResponse.json({ error: "Le héros doit être au château pour recevoir la garnison" }, { status: 400 });
       }
 
       const garrison = town.garrison ?? [];
@@ -628,7 +628,7 @@ function validateMovePath(
   movement: number
 ): { ok: true; usedMovement: number } | { ok: false; error: string } {
   if (!Array.isArray(path) || path.length < 2) return { ok: false, error: "Chemin invalide" };
-  if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false, error: "Le chemin ne commence pas sur le heros" };
+  if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false, error: "Le chemin ne commence pas sur le héros" };
 
   let usedMovement = 0;
   for (let i = 1; i < path.length; i++) {

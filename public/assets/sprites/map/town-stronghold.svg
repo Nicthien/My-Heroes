@@ -1,12 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="48" cy="80" rx="38" ry="11" fill="#000" opacity=".27"/>
-  <path d="M19 47h58v29H19z" fill="#8b4b2d" stroke="#30170c" stroke-width="3"/>
-  <path d="M14 38h18v38H14zM64 38h18v38H64z" fill="#a25e37" stroke="#30170c" stroke-width="3"/>
-  <path d="M34 32h28v44H34z" fill="#774127" stroke="#30170c" stroke-width="3"/>
-  <path d="M12 38l11-18 11 18zM62 38l11-18 11 18zM32 32 48 9l16 23z" fill="#c96a2c" stroke="#57250f" stroke-width="3"/>
-  <path d="M21 47v-9h9v9h9v-9h9v9h9v-9h9v9h9v-9" fill="none" stroke="#30170c" stroke-width="3"/>
-  <path d="M26 54h8M41 46h8M56 48h8M65 57h9M24 64h10M51 61h12" stroke="#e5b86a" stroke-width="3" stroke-linecap="round"/>
-  <path d="M38 76V62c0-8 20-8 20 0v14z" fill="#271409" stroke="#110803" stroke-width="3"/>
-  <path d="M41 42c4 7 10 7 14 0M38 39c-8 0-12-6-13-14M58 39c8 0 12-6 13-14" fill="none" stroke="#f3dfb6" stroke-width="3" stroke-linecap="round"/>
-  <path d="M48 45 55 55H41z" fill="#f0c06d" stroke="#57250f" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="town-stronghold-title town-stronghold-desc">
+  <title id="town-stronghold-title">Ville bastion</title>
+  <desc id="town-stronghold-desc">Sprite de ville sur la carte, avec silhouette et détails propres à sa faction : Ville bastion.</desc>
+  
+  <ellipse cx="48" cy="82" rx="38" ry="10" fill="#000" opacity=".28"/>
+  <path d="M37 39 C25 38 20 28 18 14 M59 39 C72 38 77 28 79 14" fill="none" stroke="#f3dfb6" stroke-width="4" stroke-linecap="round"/><path d="M48 44 L58 57 H38 Z" fill="#f0c06d" stroke="#30170c" stroke-width="2"/>
+  <path d="M19 48 H77 V78 H19 Z" fill="#c96a2c" stroke="#30170c" stroke-width="3"/>
+  <path d="M14 39 H33 V78 H14 Z M63 39 H82 V78 H63 Z" fill="#fed7aa" stroke="#30170c" stroke-width="3" opacity=".82"/>
+  <path d="M34 31 H62 V78 H34 Z" fill="#774127" stroke="#30170c" stroke-width="3"/>
+  <path d="M13 39 L24 17 L35 39 Z M61 39 L72 17 L83 39 Z M32 31 L48 5 L64 31 Z" fill="#f0c06d" stroke="#30170c" stroke-width="3"/>
+  <path d="M20 48 V39 H28 V48 H36 V39 H44 V48 H52 V39 H60 V48 H68 V39 H76 V48" fill="none" stroke="#30170c" stroke-width="3"/>
+  <path d="M26 56 H34 M42 47 H51 M57 49 H66 M65 59 H75 M24 67 H35 M51 64 H64" stroke="#fed7aa" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+  <path d="M39 78 V62 C39 53 57 53 57 62 V78 Z" fill="#18110d" stroke="#090706" stroke-width="3"/>
+  <path d="M44 65 V78 M52 65 V78 M39 70 H57" stroke="#774127" stroke-width="1.8"/>
 </svg>

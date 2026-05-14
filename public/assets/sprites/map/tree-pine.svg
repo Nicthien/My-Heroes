@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="tree-pine-title tree-pine-desc">
+  <title id="tree-pine-title">Pin</title>
+  <desc id="tree-pine-desc">Sprite de décor de carte : Pin.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".24"/>
+  <path d="M29 47 H35 V58 H29 Z" fill="#6f421f" stroke="#3d2410" stroke-width="1.5"/>
+  <path d="M32 5 L19 28 H45 Z" fill="#1f5a2d" stroke="#0d2d18" stroke-width="2"/>
+  <path d="M32 15 L15 40 H49 Z" fill="#2f7a3b" stroke="#0d2d18" stroke-width="2"/>
+  <path d="M32 27 L12 52 H52 Z" fill="#3f9148" stroke="#0d2d18" stroke-width="2"/>
+  <path d="M27 21 L32 12 L37 21 M23 35 L32 24 L42 36 M20 47 L32 34 L45 47" fill="none" stroke="#9bd36d" stroke-width="1.5" opacity=".5"/>
+</svg>

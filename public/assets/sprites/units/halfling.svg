@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-halfling-title unit-halfling-desc">
+  <title id="unit-halfling-title">Halfelin</title>
+  <desc id="unit-halfling-desc">Sprite d'unité Halfelin. Le dessin reprend la silhouette de halfling.</desc>
+  <defs>
+    <linearGradient id="unit-halfling-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="48%" stop-color="#7f1d1d"/>
+      <stop offset="100%" stop-color="#2a0b0b"/>
+    </linearGradient>
+    <linearGradient id="unit-halfling-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#3f1d1d"/>
+    </linearGradient>
+    <linearGradient id="unit-halfling-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-halfling-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(0 0) scale(1 1)">
+    
+    
+    
+    <path d="M35 71 L31 88 H42 L45 72 Z M53 72 L56 88 H67 L61 71 Z" fill="#2a0b0b" stroke="#2a0b0b" stroke-width="1"/><path d="M29 88 H43 M54 88 H69" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+    
+    <path d="M30 37 Q33 28 48 27 Q63 28 66 37 L64 71 Q56 78 48 78 Q40 78 32 71 Z" fill="url(#unit-halfling-body)" stroke="#2a0b0b" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#fef3c7" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#f8fafc" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <path d="M36 47 H60 M39 53 H57 M42 59 H54" stroke="#fef3c7" stroke-width="1.8" stroke-linecap="round"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-halfling-body)" stroke="#2a0b0b" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-halfling-body)" stroke="#2a0b0b" stroke-width="1.5"/>
+    
+    <path d="M43 47 H80 M49 36 Q63 48 49 60 M62 48 L80 66" stroke="#d8c29a" stroke-width="3" stroke-linecap="round"/><path d="M79 47 H90" stroke="url(#unit-halfling-steel)" stroke-width="2"/>
+    <path d="M37 17 Q48 9 59 17 L57 29 Q48 35 39 29 Z" fill="url(#unit-halfling-steel)" stroke="#2a0b0b" stroke-width="1.6"/><path d="M40 22 H46 M50 22 H56" stroke="#0f172a" stroke-width="1.9" stroke-linecap="round"/><path d="M42 28 H54" stroke="#2a0b0b" stroke-width="1.1" opacity=".65"/>
+    
+    <path d="M35 14 Q48 3 61 14 L57 18 Q48 14 39 18 Z" fill="#3f1d1d" stroke="#2a0b0b" stroke-width="1.5"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#f8fafc" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,6 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <ellipse cx="50" cy="82" rx="30" ry="8" fill="#000" opacity=".28"/>
-  <path d="M29 78 L34 40 L50 25 L66 40 L71 78 Z" fill="#4f8b78" stroke="#1f1a12" stroke-width="4"/><circle cx="50" cy="30" r="10" fill="#b8f3de" stroke="#1f1a12" stroke-width="4"/><path d="M28 44 L18 75" stroke="#f8f0c8" stroke-width="5"/>
-  <rect x="20" y="6" width="56" height="18" rx="4" fill="#1f1a12" opacity=".86"/>
-  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" fill="#fff6c2">G</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="unit-gnoll-title unit-gnoll-desc">
+  <title id="unit-gnoll-title">Gnoll</title>
+  <desc id="unit-gnoll-desc">Sprite d'unité Gnoll. Le dessin reprend la silhouette de gnoll.</desc>
+  <defs>
+    <linearGradient id="unit-gnoll-body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bef264"/>
+      <stop offset="48%" stop-color="#596a3d"/>
+      <stop offset="100%" stop-color="#202815"/>
+    </linearGradient>
+    <linearGradient id="unit-gnoll-alt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d1e68a"/>
+      <stop offset="100%" stop-color="#47682f"/>
+    </linearGradient>
+    <linearGradient id="unit-gnoll-steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="55%" stop-color="#aeb8c4"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <radialGradient id="unit-gnoll-glow" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#d1e68a" stop-opacity=".65"/>
+      <stop offset="100%" stop-color="#d1e68a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="49" cy="89" rx="33" ry="5" fill="#000" opacity=".28"/>
+  <g transform="translate(8 13) scale(0.82 0.84)">
+    
+    
+    
+    <path d="M35 71 L31 88 H42 L45 72 Z M53 72 L56 88 H67 L61 71 Z" fill="#202815" stroke="#202815" stroke-width="1"/><path d="M29 88 H43 M54 88 H69" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
+    
+    <path d="M30 37 Q33 28 48 27 Q63 28 66 37 L64 71 Q56 78 48 78 Q40 78 32 71 Z" fill="url(#unit-gnoll-body)" stroke="#202815" stroke-width="2"/>
+    <path d="M35 40 H61 L58 62 H38 Z" fill="#d1e68a" opacity=".20"/>
+    <path d="M39 43 H57 M40 49 H56 M41 55 H55" stroke="#bef264" stroke-width="1.1" opacity=".42" stroke-linecap="round"/>
+    <path d="M38.980000000000004 58.74 L43.9 46.44 M48 60.38 V44.8 M57.019999999999996 58.74 L52.1 46.44" stroke="#d1e68a" stroke-width="1.722" stroke-linecap="round"/>
+    
+    <path d="M31 41 Q18 50 21 68 L30 65 Q28 53 35 43 Z" fill="url(#unit-gnoll-body)" stroke="#202815" stroke-width="1.5"/><path d="M65 41 Q78 50 75 68 L66 65 Q68 53 61 43 Z" fill="url(#unit-gnoll-body)" stroke="#202815" stroke-width="1.5"/>
+    <circle cx="27" cy="57" r="14" fill="url(#unit-gnoll-body)" stroke="#d1e68a" stroke-width="2"/><circle cx="27" cy="57" r="6" fill="#d1e68a" opacity=".85"/>
+    <path d="M64 81 L60 26" stroke="#7a4e20" stroke-width="4" stroke-linecap="round"/><path d="M57 22 C75 17 76 40 59 36 Z" fill="url(#unit-gnoll-steel)" stroke="#475569" stroke-width="1.2"/><path d="M57 23 C45 23 44 40 59 36" fill="url(#unit-gnoll-steel)" stroke="#475569" stroke-width="1.2"/>
+    <path d="M37 17 Q48 9 59 17 L57 29 Q48 35 39 29 Z" fill="url(#unit-gnoll-steel)" stroke="#202815" stroke-width="1.6"/><path d="M40 22 H46 M50 22 H56" stroke="#0f172a" stroke-width="1.9" stroke-linecap="round"/><path d="M42 28 H54" stroke="#202815" stroke-width="1.1" opacity=".65"/>
+    
+    <path d="M35 14 Q48 3 61 14 L57 18 Q48 14 39 18 Z" fill="#47682f" stroke="#202815" stroke-width="1.5"/>
+    <path d="M37 38 H59 M38 64 H58" stroke="#bef264" stroke-width="1.4" opacity=".55" stroke-linecap="round"/>
+  </g>
 </svg>

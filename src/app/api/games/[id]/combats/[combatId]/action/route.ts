@@ -226,7 +226,7 @@ function buildManualCombatResult(
     attackerLosses: getSideLosses("attacker", before, after),
     defenderLosses: getSideLosses("defender", before, after),
     experienceGained: winnerSide === "attacker" ? 500 : 0,
-    log: [`Victoire du camp ${winnerSide === "attacker" ? "attaquant" : "defenseur"}.`],
+    log: [`Victoire du camp ${winnerSide === "attacker" ? "attaquant" : "défenseur"}.`],
   };
 }
 

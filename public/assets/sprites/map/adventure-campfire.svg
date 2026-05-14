@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="adventure-campfire-title adventure-campfire-desc">
+  <title id="adventure-campfire-title">Feu de camp</title>
+  <desc id="adventure-campfire-desc">Feu de camp avec buches, sacoche et ressources abandonnees.</desc>
+  <ellipse cx="49" cy="77" rx="31" ry="10" fill="#1a1710" opacity=".36"/>
+  <path d="M26 70l19-10 25 9-19 11z" fill="#3a2b1b"/>
+  <path d="M25 66l9-8 34 13-9 8z" fill="#6d4321"/>
+  <path d="M31 57l35 13" stroke="#2b160b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M69 61l-8-9 7-10c7 8 8 14 1 19z" fill="#ffb02e"/>
+  <path d="M54 63c-11-8-8-19 0-31 2 9 13 14 7 27z" fill="#f05a24"/>
+  <path d="M48 64c-7-8-4-15 3-24 0 8 8 11 3 22z" fill="#ffd36a"/>
+  <path d="M22 68c4-6 12-7 16-2l-3 10H23z" fill="#765538"/>
+  <path d="M23 68h15" stroke="#352617" stroke-width="2"/>
+  <circle cx="72" cy="68" r="5" fill="#d8a52b"/>
+  <circle cx="79" cy="70" r="4" fill="#f2c851"/>
+  <circle cx="70" cy="75" r="3" fill="#f6d66e"/>
+  <path d="M16 73h14M63 78h18" stroke="#242116" stroke-width="3" stroke-linecap="round"/>
+  <path d="M38 74l5-5 4 5-5 4z" fill="#7cc7d6"/>
+  <path d="M54 75l4-5 5 4-4 5z" fill="#a67ce6"/>
+</svg>

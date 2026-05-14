@@ -49,6 +49,7 @@ const RESOURCE_ITEMS = [
 ] as const;
 
 const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
+const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
@@ -56,6 +57,11 @@ type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
 function getNotificationPromptDismissed() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(NOTIFICATION_PROMPT_DISMISSED_KEY) === "true";
+}
+
+function getDevPanelVisible() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DEV_PANEL_VISIBLE_KEY) === "true";
 }
 
 function factionLabel(f: Faction): string {
@@ -305,7 +311,7 @@ function HUDContent() {
     getNotificationPromptDismissed
   );
   const [showDevPassword, setShowDevPassword] = useState(false);
-  const [showDevPanel, setShowDevPanel] = useState(false);
+  const [showDevPanel, setShowDevPanel] = useState(getDevPanelVisible);
   const [devPassword, setDevPassword] = useState("");
   const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
@@ -622,11 +628,21 @@ function HUDContent() {
     setShowDevPassword(true);
   };
 
+  const setDevPanelVisibility = (visible: boolean) => {
+    setShowDevPanel(visible);
+    if (typeof window === "undefined") return;
+    if (visible) {
+      window.localStorage.setItem(DEV_PANEL_VISIBLE_KEY, "true");
+    } else {
+      window.localStorage.removeItem(DEV_PANEL_VISIBLE_KEY);
+    }
+  };
+
   const unlockDevPanel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (devPassword === "godmode") {
       setShowDevPassword(false);
-      setShowDevPanel(true);
+      setDevPanelVisibility(true);
       setDevPassword("");
       setDevPasswordError(null);
       return;
@@ -886,13 +902,13 @@ function HUDContent() {
       )}
 
       {showDevPanel && (
-        <div className="pointer-events-auto absolute left-3 top-24 z-50 w-72 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
+        <div className="pointer-events-auto absolute bottom-4 left-3 z-50 w-72 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
           <div className="flex items-center justify-between gap-3">
             <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
             <button
               type="button"
               className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-sm font-black text-amber-200 transition hover:border-amber-300"
-              onClick={() => setShowDevPanel(false)}
+              onClick={() => setDevPanelVisibility(false)}
               aria-label="Fermer le mode DEV"
             >
               X

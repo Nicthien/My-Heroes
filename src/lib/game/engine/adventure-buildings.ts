@@ -1,0 +1,142 @@
+import { AdventureBuildingType, MapTile, TerrainType } from "../types";
+import { getAdventureBuildingLabel } from "../adventure-buildings";
+import { PlacementContext } from "./placement";
+import { shuffle } from "./rng";
+import { tilesInZone } from "./zones";
+
+type AdventurePlacement = {
+  tile: MapTile;
+  type: AdventureBuildingType;
+};
+
+export function placeAdventureBuildings(ctx: PlacementContext): void {
+  const stargateCandidates: MapTile[] = [];
+
+  for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
+    const meta = ctx.zoneGrid.meta[zoneId];
+    const targetCount = adventureTargetForZone(meta.type, meta.value);
+    const choices = pickAdventureTypesForZone(ctx, zoneId, targetCount);
+
+    for (const type of choices) {
+      const tile = findAdventureTile(ctx, zoneId, type);
+      if (!tile) continue;
+      placeAdventureBuilding(tile, type);
+    }
+
+    const stargateTile = findAdventureTile(ctx, zoneId, AdventureBuildingType.STARGATE);
+    if (stargateTile) stargateCandidates.push(stargateTile);
+  }
+
+  placeStargatePairs(ctx, stargateCandidates);
+}
+
+function adventureTargetForZone(type: string, value: number): number {
+  if (value < 1800) return 0;
+  if (type === "treasure") return value >= 6000 ? 3 : 2;
+  if (type === "junction") return 1;
+  return value >= 4500 ? 2 : 1;
+}
+
+function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count: number): AdventureBuildingType[] {
+  if (count <= 0) return [];
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const base: AdventureBuildingType[] = meta.type === "treasure"
+    ? [AdventureBuildingType.CAMPFIRE, AdventureBuildingType.OBSERVATORY, AdventureBuildingType.LIGHTHOUSE]
+    : [AdventureBuildingType.CAMPFIRE, AdventureBuildingType.OBSERVATORY];
+
+  const out: AdventureBuildingType[] = [];
+  for (const type of shuffle(ctx.rng, base)) {
+    if (out.length >= count) break;
+    out.push(type);
+  }
+  return out;
+}
+
+function findAdventureTile(
+  ctx: PlacementContext,
+  zoneId: number,
+  type: AdventureBuildingType,
+): MapTile | null {
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
+  for (const roadBuffer of [1, 0]) {
+    for (const pos of candidates) {
+      const tile = ctx.tiles[pos.y][pos.x];
+      if (!isValidAdventureTile(ctx, tile, type, roadBuffer)) continue;
+      return tile;
+    }
+  }
+  return null;
+}
+
+function placeStargatePairs(ctx: PlacementContext, candidates: MapTile[]): void {
+  const shuffled = shuffle(ctx.rng, candidates).filter((tile) =>
+    isValidAdventureTile(ctx, tile, AdventureBuildingType.STARGATE, 0)
+  );
+  const pairCount = Math.min(Math.floor(shuffled.length / 2), ctx.width >= 72 ? 2 : 1);
+
+  for (let i = 0; i < pairCount; i++) {
+    const a = shuffled[i * 2];
+    const b = shuffled[i * 2 + 1];
+    if (!a || !b) continue;
+    const idA = `adv-stargate-${a.x}-${a.y}`;
+    const idB = `adv-stargate-${b.x}-${b.y}`;
+    placeAdventureBuilding(a, AdventureBuildingType.STARGATE, idA, idB);
+    placeAdventureBuilding(b, AdventureBuildingType.STARGATE, idB, idA);
+  }
+}
+
+function placeAdventureBuilding(
+  tile: MapTile,
+  type: AdventureBuildingType,
+  id = `adv-${type}-${tile.x}-${tile.y}`,
+  targetId?: string,
+): AdventurePlacement {
+  tile.object = {
+    type: "adventure_building",
+    id,
+    subtype: type,
+    name: getAdventureBuildingLabel(type),
+    targetId,
+  };
+  return { tile, type };
+}
+
+function isValidAdventureTile(ctx: PlacementContext, tile: MapTile, type: AdventureBuildingType, roadBuffer: number): boolean {
+  if (!tile.isPassable || tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) return false;
+  if (tile.object || tile.decor || tile.road) return false;
+  if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
+  if (hasMajorObjectNearby(ctx, tile.x, tile.y, 2)) return false;
+  if (type === AdventureBuildingType.LIGHTHOUSE && !hasWaterNearby(ctx, tile.x, tile.y, 3)) return false;
+  return true;
+}
+
+function hasRoadNearby(ctx: PlacementContext, x: number, y: number, radius: number): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const tile = ctx.tiles[y + dy]?.[x + dx];
+      if (tile?.road) return true;
+    }
+  }
+  return false;
+}
+
+function hasWaterNearby(ctx: PlacementContext, x: number, y: number, radius: number): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const tile = ctx.tiles[y + dy]?.[x + dx];
+      if (tile?.terrain === TerrainType.WATER) return true;
+    }
+  }
+  return false;
+}
+
+function hasMajorObjectNearby(ctx: PlacementContext, x: number, y: number, radius: number): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const tile = ctx.tiles[y + dy]?.[x + dx];
+      if (!tile?.object) continue;
+      if (tile.object.type !== "resource") return true;
+    }
+  }
+  return false;
+}

@@ -369,8 +369,12 @@ export type DecorKind =
   | "tree-pine"
   | "tree-oak"
   | "tree-dead"
+  | "grove-pine"
+  | "grove-oak"
+  | "grove-dead"
   | "rock-large"
   | "rock-small"
+  | "boulder-cluster"
   | "bush"
   | "flower"
   | "cactus"
@@ -403,6 +407,21 @@ export interface ResourceBuilding {
   guardianPower: number;
 }
 
+export enum AdventureBuildingType {
+  OBSERVATORY = "observatory",
+  CAMPFIRE = "campfire",
+  LIGHTHOUSE = "lighthouse",
+  STARGATE = "stargate",
+}
+
+export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatable";
+
+export interface AdventureBuildingState {
+  visitedAdventureBuildings?: string[];
+  playerAdventureVisits?: Record<string, string[]>;
+  signaledLighthouses?: Record<string, string[]>;
+}
+
 export interface NeutralArmy {
   id: string;
   status: "ACTIVE" | "DEFEATED" | string;
@@ -420,12 +439,14 @@ export interface MapObject {
     | "building"
     | "combat"
     | "wall"
-    | "gate";
+    | "gate"
+    | "adventure_building";
   id: string;
   subtype?: string;
   name?: string;
   guardianPower?: number;
   amount?: number;
+  targetId?: string;
 }
 
 export type CombatMode = "AUTO" | "MANUAL";

@@ -9,7 +9,9 @@ import {
   getGrowthForBuiltTownBuilding,
   subtractCost,
 } from "@/lib/game/economy";
-import { BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
+import { createCampfireReward, addVisit, hasPlayerVisited, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { makeRng } from "@/lib/game/engine/rng";
+import { AdventureBuildingType, BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import {
   CLASS_STARTING_STATS,
   HERO_RECRUIT_COST_GOLD,
@@ -94,6 +96,8 @@ interface MinimalPlayer {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; gold?: number; destination: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination: Position }
+  | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
@@ -144,6 +148,7 @@ export async function POST(
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
       const collected = new Set<string>((mapState.collected as string[]) ?? []);
       const killed = new Set<string>((mapState.killed as string[]) ?? []);
+      const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
       for (const army of ((game.neutralArmies ?? []) as Array<{ id: string; status: string }>)) {
         if (army.status !== "ACTIVE") killed.add(army.id);
       }
@@ -155,6 +160,7 @@ export async function POST(
         players,
         collected,
         killed,
+        visitedAdventureBuildings,
       });
       const movePath = firstStop ? action.path.slice(0, firstStop.pathIndex + 1) : action.path;
       const usedMovement = getPathMovementCost(mapData, movePath);
@@ -231,6 +237,18 @@ export async function POST(
           await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
           interaction = { type: "CAPTURE_BUILDING", buildingType: building.buildingType, destination: lastPos };
         }
+      } else if (tile?.object?.type === "adventure_building" && !visitedAdventureBuildings.has(tile.object.id)) {
+        interaction = await handleAdventureBuildingVisit({
+          supabase,
+          gameId: id,
+          gamePlayer,
+          hero,
+          mapData,
+          mapState,
+          object: tile.object,
+          position: lastPos,
+          explored,
+        });
       }
 
       // Capture d'un château neutre : si garnison vide → capture immédiate.
@@ -593,6 +611,181 @@ async function getResourceBuilding(
     : null;
 }
 
+async function handleAdventureBuildingVisit({
+  supabase,
+  gameId,
+  gamePlayer,
+  hero,
+  mapData,
+  mapState,
+  object,
+  position,
+  explored,
+}: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  gamePlayer: MinimalPlayer;
+  hero: MinimalHero;
+  mapData: GameMap;
+  mapState: Record<string, unknown>;
+  object: MapObject;
+  position: Position;
+  explored: Set<string>;
+}): Promise<MoveInteraction> {
+  const buildingType = object.subtype as AdventureBuildingType | undefined;
+  const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
+  const playerAdventureVisits = (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {};
+  const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
+
+  if (!buildingType) {
+    return { type: "ADVENTURE_BUILDING", buildingType: "unknown", destination: position, message: "Batiment d'aventure visite." };
+  }
+
+  if (
+    (buildingType === AdventureBuildingType.OBSERVATORY || buildingType === AdventureBuildingType.LIGHTHOUSE) &&
+    hasPlayerVisited(playerAdventureVisits, gamePlayer.id, object.id)
+  ) {
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: `${getAdventureBuildingLabel(buildingType)} deja visite.`,
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.CAMPFIRE) {
+    const rng = makeRng(`${gameId}:${object.id}:${gamePlayer.id}`);
+    const reward = createCampfireReward(rng);
+    const resources = playerResources(gamePlayer);
+    const resourceUpdate: Partial<Resources> = { gold: resources.gold + reward.gold };
+
+    for (const [resource, amount] of Object.entries(reward.resources)) {
+      const key = resource as keyof Resources;
+      resourceUpdate[key] = (resources[key] ?? 0) + (amount ?? 0);
+    }
+
+    visitedAdventureBuildings.add(object.id);
+    await supabase.from("game_players").update(resourceUpdate).eq("id", gamePlayer.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        visitedAdventureBuildings: Array.from(visitedAdventureBuildings),
+      },
+    }).eq("id", gameId);
+
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: {
+        gold: reward.gold,
+        resources: reward.resources as Record<string, number>,
+      },
+      message: "Feu de camp fouille.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.OBSERVATORY) {
+    const revealed = computeVisibleTiles(mapData, [position], 20);
+    for (const key of revealed) explored.add(key);
+    await supabase.from("game_players").update({
+      explored_tiles: Array.from(explored),
+    }).eq("id", gamePlayer.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+      },
+    }).eq("id", gameId);
+
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: "Observatoire visite : terrain revele.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.LIGHTHOUSE) {
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+        signaledLighthouses: addVisit(signaledLighthouses, gamePlayer.id, object.id),
+      },
+    }).eq("id", gameId);
+
+    const lighthouseCount = new Set([...(signaledLighthouses[gamePlayer.id] ?? []), object.id]).size;
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: `Phare signale : +${lighthouseCount * 500} mouvement naval potentiel.`,
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.STARGATE) {
+    const target = findStargateDestination(mapData, object.targetId);
+    if (!target) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette Stargate ne repond pas." };
+    }
+
+    const landing = findTeleportLanding(mapData, target);
+    if (!landing) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La sortie de la Stargate est bloquee." };
+    }
+
+    await supabase.from("heroes").update({ x: landing.x, y: landing.y }).eq("id", hero.id);
+    const visibleAfterTeleport = computeVisibleTiles(mapData, [landing], 5);
+    for (const key of visibleAfterTeleport) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+
+    return {
+      type: "TELEPORT",
+      buildingType,
+      from: position,
+      to: landing,
+      destination: landing,
+      message: "Stargate activee : teleportation effectuee.",
+    };
+  }
+
+  return {
+    type: "ADVENTURE_BUILDING",
+    buildingType,
+    destination: position,
+    message: `${getAdventureBuildingLabel(buildingType)} visite.`,
+  };
+}
+
+function findStargateDestination(map: GameMap, targetId: string | undefined): Position | null {
+  if (!targetId) return null;
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "adventure_building" && tile.object.id === targetId) {
+        return { x: tile.x, y: tile.y };
+      }
+    }
+  }
+  return null;
+}
+
+function findTeleportLanding(map: GameMap, target: Position): Position | null {
+  const positions = [
+    target,
+    { x: target.x + 1, y: target.y },
+    { x: target.x - 1, y: target.y },
+    { x: target.x, y: target.y + 1 },
+    { x: target.x, y: target.y - 1 },
+  ];
+
+  for (const position of positions) {
+    const tile = map.tiles[position.y]?.[position.x];
+    if (isTileTraversable(tile)) return position;
+  }
+  return null;
+}
+
 async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>, gameId: string, turnNumber: number, gamePlayerId: string) {
   await supabase.from("turns").upsert({
     game_id: gameId,
@@ -626,6 +819,9 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
   }
 
   const nextTurnNumber = turnNumber + 1;
+  const mapState = (game.mapState as Record<string, unknown>) ?? {};
+  const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
+  const mapData = game.mapData as GameMap | undefined;
   for (const player of alivePlayers) {
     let goldIncome = 500, woodIncome = 2, oreIncome = 1;
     let mercuryIncome = 0, crystalsIncome = 0, gemsIncome = 0, sulfurIncome = 0;
@@ -667,7 +863,15 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
       gems: (player.gems ?? 0) + gemsIncome,
       sulfur: player.sulfur + sulfurIncome,
     }).eq("id", player.id);
-    await supabase.from("heroes").update({ movement: 10 }).eq("game_player_id", player.id);
+    const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
+    for (const hero of player.heroes ?? []) {
+      const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
+      const dailyMovement = isOnWater ? 10 + lighthouseCount * 500 : 10;
+      await supabase.from("heroes").update({
+        movement: dailyMovement,
+        max_movement: dailyMovement,
+      }).eq("id", hero.id);
+    }
 
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
@@ -697,6 +901,7 @@ function findFirstMoveStop({
   players,
   collected,
   killed,
+  visitedAdventureBuildings,
 }: {
   path: Position[];
   map: GameMap;
@@ -709,6 +914,7 @@ function findFirstMoveStop({
   }>;
   collected: Set<string>;
   killed: Set<string>;
+  visitedAdventureBuildings: Set<string>;
 }): { pathIndex: number; object?: MapObject; hero?: MinimalHero & { playerId: string } } | null {
   for (let i = 1; i < path.length; i++) {
     const position = path[i];
@@ -721,6 +927,7 @@ function findFirstMoveStop({
     if (!object) continue;
     if (object.type === "resource" && collected.has(object.id)) continue;
     if (object.type === "monster" && killed.has(object.id)) continue;
+    if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
     if (object.type === "wall" || object.type === "gate") continue;
     if (object.type === "building") {
       const owner = players.find((player) =>

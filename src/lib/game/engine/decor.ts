@@ -4,66 +4,68 @@ import { RNG, pick, randInt } from "./rng";
 interface BiomeDecor {
   density: number; // 0..1 probabilité par tile
   blockingRatio: number; // proportion du décor qui est bloquant
-  kinds: DecorKind[];
-  blockingKinds: DecorKind[];
+  scenicKinds: DecorKind[];
+  obstacleKinds: DecorKind[];
 }
 
 const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   [TerrainType.GRASS]: {
     density: 0.24,
-    blockingRatio: 0.15,
-    kinds: ["flower", "bush", "grass-tuft", "tree-oak", "rock-small"],
-    blockingKinds: ["tree-oak", "rock-small"],
+    blockingRatio: 0.06,
+    scenicKinds: ["flower", "bush", "grass-tuft", "tree-oak", "rock-small"],
+    obstacleKinds: ["grove-oak", "boulder-cluster"],
   },
   [TerrainType.FOREST]: {
-    density: 0.75,
-    blockingRatio: 0.55,
-    kinds: ["tree-pine", "tree-oak", "bush", "flower", "grass-tuft"],
-    blockingKinds: ["tree-pine", "tree-oak", "rock-large"],
+    density: 0.62,
+    blockingRatio: 0.24,
+    scenicKinds: ["tree-pine", "tree-oak", "bush", "flower", "grass-tuft"],
+    obstacleKinds: ["grove-pine", "grove-oak"],
   },
   [TerrainType.DIRT]: {
     density: 0.18,
-    blockingRatio: 0.2,
-    kinds: ["bush", "rock-small", "grass-tuft", "flower"],
-    blockingKinds: ["rock-small", "rock-large"],
+    blockingRatio: 0.06,
+    scenicKinds: ["bush", "rock-small", "grass-tuft", "flower"],
+    obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SAND]: {
     density: 0.12,
-    blockingRatio: 0.12,
-    kinds: ["rock-small", "grass-tuft"],
-    blockingKinds: ["rock-large"],
+    blockingRatio: 0.04,
+    scenicKinds: ["rock-small", "grass-tuft"],
+    obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SNOW]: {
-    density: 0.35,
-    blockingRatio: 0.4,
-    kinds: ["tree-pine", "rock-small", "tree-dead", "grass-tuft"],
-    blockingKinds: ["tree-pine", "rock-large"],
+    density: 0.34,
+    blockingRatio: 0.15,
+    scenicKinds: ["tree-pine", "rock-small", "tree-dead", "grass-tuft"],
+    obstacleKinds: ["grove-pine", "boulder-cluster"],
   },
   [TerrainType.MOUNTAIN]: {
-    density: 0.5,
-    blockingRatio: 0.75,
-    kinds: ["rock-large", "rock-small", "tree-dead", "grass-tuft"],
-    blockingKinds: ["rock-large", "rock-small"],
+    density: 0.46,
+    blockingRatio: 0.16,
+    scenicKinds: ["rock-small", "tree-dead", "grass-tuft"],
+    obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SWAMP]: {
-    density: 0.32,
-    blockingRatio: 0.35,
-    kinds: ["tree-dead", "bush", "grass-tuft", "rock-small"],
-    blockingKinds: ["tree-dead", "rock-small"],
+    density: 0.3,
+    blockingRatio: 0.18,
+    scenicKinds: ["tree-dead", "bush", "grass-tuft", "rock-small"],
+    obstacleKinds: ["grove-dead", "boulder-cluster"],
   },
   [TerrainType.LAVA]: {
-    density: 0.18,
-    blockingRatio: 0.15,
-    kinds: ["rock-small", "rock-large"],
-    blockingKinds: ["rock-large"],
+    density: 0.16,
+    blockingRatio: 0.05,
+    scenicKinds: ["rock-small"],
+    obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.WATER]: {
     density: 0,
     blockingRatio: 0,
-    kinds: [],
-    blockingKinds: [],
+    scenicKinds: [],
+    obstacleKinds: [],
   },
 };
+
+const NATURAL_WALL_DECOR_CHANCE = 0.18;
 
 export function placeDecor(
   tiles: MapTile[][],
@@ -79,7 +81,7 @@ export function placeDecor(
       // Ne pas mettre de décor sur les objets gameplay, ni sur les routes, ni sur les murs
       if (tile.object) {
         // Sur les murs naturels : ajoute un gros décor bloquant pour la lisibilité
-        if (tile.object.type === "wall" && tile.object.subtype === "natural") {
+        if (tile.object.type === "wall" && tile.object.subtype === "natural" && rng() < NATURAL_WALL_DECOR_CHANCE) {
           const kind = pickBlockingForTerrain(tile.terrain, rng);
           if (kind) tile.decor = { type: kind, blocking: true, variant: randInt(rng, 0, 2) };
         }
@@ -92,7 +94,7 @@ export function placeDecor(
       if (rng() > conf.density) continue;
 
       const blocking = rng() < conf.blockingRatio;
-      const palette = blocking ? conf.blockingKinds : conf.kinds;
+      const palette = blocking ? conf.obstacleKinds : conf.scenicKinds;
       if (palette.length === 0) continue;
       const kind = pick(rng, palette);
       tile.decor = { type: kind, blocking, variant: randInt(rng, 0, 2) };
@@ -149,7 +151,7 @@ function sceneryChance(type: string): number {
 function pickSceneryForTerrain(t: TerrainType, rng: RNG): DecorKind {
   switch (t) {
     case TerrainType.MOUNTAIN:
-      return pick(rng, ["rock-small", "rock-large", "tree-dead", "grass-tuft"] as DecorKind[]);
+      return pick(rng, ["rock-small", "tree-dead", "grass-tuft"] as DecorKind[]);
     case TerrainType.SAND:
       return pick(rng, ["rock-small", "grass-tuft"] as DecorKind[]);
     case TerrainType.FOREST:
@@ -157,7 +159,7 @@ function pickSceneryForTerrain(t: TerrainType, rng: RNG): DecorKind {
     case TerrainType.SWAMP:
       return pick(rng, ["tree-dead", "bush", "grass-tuft", "rock-small"] as DecorKind[]);
     case TerrainType.LAVA:
-      return pick(rng, ["rock-small", "rock-large"] as DecorKind[]);
+      return pick(rng, ["rock-small"] as DecorKind[]);
     default:
       return pick(rng, ["bush", "flower", "grass-tuft", "rock-small", "tree-oak"] as DecorKind[]);
   }
@@ -165,8 +167,8 @@ function pickSceneryForTerrain(t: TerrainType, rng: RNG): DecorKind {
 
 function pickBlockingForTerrain(t: TerrainType, rng: RNG): DecorKind | null {
   const conf = BIOME_DECOR[t];
-  if (!conf || conf.blockingKinds.length === 0) {
-    return pick(rng, ["rock-large", "tree-dead"] as DecorKind[]);
+  if (!conf || conf.obstacleKinds.length === 0) {
+    return pick(rng, ["boulder-cluster", "grove-dead"] as DecorKind[]);
   }
-  return pick(rng, conf.blockingKinds);
+  return pick(rng, conf.obstacleKinds);
 }

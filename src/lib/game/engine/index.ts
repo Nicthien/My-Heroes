@@ -21,6 +21,7 @@ import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
+import { placeAdventureBuildings } from "./adventure-buildings";
 
 function isPassable(terrain: TerrainType): boolean {
   return terrain !== TerrainType.LAVA;
@@ -161,6 +162,9 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   // 5) Routes : pavées entre châteaux, dirt vers les mines
   buildRoads(tiles, width, height, townPositions, "paved");
   buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10);
+
+  // Batiments d'aventure hors route pour recompenser l'exploration.
+  placeAdventureBuildings({ tiles, zoneGrid, width, height, rng });
 
   // 6) Décor (passe finale)
   placeDecor(tiles, width, height, rng);

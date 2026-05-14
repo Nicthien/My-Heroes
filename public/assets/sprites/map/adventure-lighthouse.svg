@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="adventure-lighthouse-title adventure-lighthouse-desc">
+  <title id="adventure-lighthouse-title">Phare</title>
+  <desc id="adventure-lighthouse-desc">Phare cotier avec lanterne brillante et base rocheuse.</desc>
+  <ellipse cx="48" cy="80" rx="31" ry="9" fill="#10202a" opacity=".35"/>
+  <path d="M31 78h34l-5-50H36z" fill="#e5dfcb"/>
+  <path d="M36 28h24l-3-8H39z" fill="#b9b0a0"/>
+  <path d="M33 55h30l1 9H32z" fill="#b54a3e"/>
+  <path d="M35 39h26l1 8H34z" fill="#b54a3e"/>
+  <path d="M39 20h18l3-8H36z" fill="#5a6871"/>
+  <path d="M38 12h20v10H38z" fill="#b9d9ec"/>
+  <path d="M42 12v10M48 12v10M54 12v10" stroke="#4b5a62" stroke-width="1.5"/>
+  <path d="M32 12h32" stroke="#2f3538" stroke-width="4" stroke-linecap="round"/>
+  <path d="M58 16l28-9-24 19z" fill="#ffe88a" opacity=".62"/>
+  <path d="M38 16L12 8l24 18z" fill="#ffe88a" opacity=".38"/>
+  <circle cx="48" cy="17" r="5" fill="#fff2a4"/>
+  <path d="M43 61h9v17h-9z" fill="#3e4546"/>
+  <path d="M23 76l9-8 9 5 10-7 11 8 10-5 8 7z" fill="#55605f"/>
+  <path d="M20 82c9-5 17-1 25-4 10-4 18 1 31-3" fill="none" stroke="#3c8bb0" stroke-width="4" stroke-linecap="round"/>
+  <path d="M17 87c9-4 21 0 31-3 9-3 18 0 31-3" fill="none" stroke="#8bd3ec" stroke-width="2" stroke-linecap="round"/>
+</svg>

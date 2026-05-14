@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { GameState, PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
+import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { findPath, computeReachableTiles, computeVisibleTiles, getPlayerVisionCenters, isTileTraversable } from "@/lib/game/engine";
@@ -21,6 +22,8 @@ type PendingMove = {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; gold?: number; destination?: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
+  | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
@@ -331,6 +334,26 @@ export default function GameMapComponent() {
 
     if (interaction.type === "CAPTURE_TOWN") {
       setCombatMessage("Chateau capture.");
+      return true;
+    }
+
+    if (interaction.type === "ADVENTURE_BUILDING") {
+      if (interaction.reward) {
+        const parts = [];
+        if (interaction.reward.gold) parts.push(`+${interaction.reward.gold} Or`);
+        for (const [resource, amount] of Object.entries(interaction.reward.resources ?? {})) {
+          parts.push(`+${amount} ${formatResourceName(resource)}`);
+        }
+        setCombatMessage(parts.length > 0 ? parts.join(", ") : interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+      } else {
+        setCombatMessage(interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+      }
+      return true;
+    }
+
+    if (interaction.type === "TELEPORT") {
+      setCombatMessage(interaction.message ?? "Teleportation effectuee.");
+      rendererRef.current?.centerOnTile(interaction.to.x, interaction.to.y);
       return true;
     }
 
@@ -898,6 +921,81 @@ export default function GameMapComponent() {
         return;
       }
 
+      if (obj.type === "adventure_building" && selectedHeroId && myPlayer) {
+        const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+        if (!hero) return;
+        const destination = { x: obj.x, y: obj.y };
+        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        if (path.length <= 1) {
+          if (handleOutOfRange(hero, destination) === "inaccessible") {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          }
+          return;
+        }
+
+        const pendingAdventure = pendingMoveRef.current;
+        const isConfirmingAdventure =
+          pendingAdventure?.heroId === selectedHeroId &&
+          pendingAdventure.destination.x === destination.x &&
+          pendingAdventure.destination.y === destination.y;
+
+        if (!isConfirmingAdventure) {
+          pendingAttackRef.current = null;
+          pendingMoveRef.current = { heroId: selectedHeroId, destination, path };
+          rendererRef.current.highlightPath(path);
+          rendererRef.current.highlightTile(destination.x, destination.y, 0x22d3ee);
+          setCombatMessage(`Cliquez a nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
+          return;
+        }
+
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          pendingMoveRef.current = null;
+          rendererRef.current.clearHighlights();
+          return;
+        }
+
+        isSyncingMoveRef.current = true;
+        useGameStore.getState().setMovePending(true);
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "MOVE_HERO",
+            heroId: selectedHeroId,
+            path: path.map((p: Position) => ({ x: p.x, y: p.y })),
+          }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              isSyncingMoveRef.current = false;
+              useGameStore.getState().setMovePending(false);
+              setCombatMessage(await getApiErrorMessage(res));
+              return null;
+            }
+            return res.json();
+          })
+          .then((data) => {
+            if (!data) return;
+            handleMoveInteraction(selectedHeroId, data.interaction as MoveInteraction | null | undefined);
+            refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
+              .then((state) => {
+                if (state) useGameStore.getState().setGameState(state);
+              })
+              .finally(() => {
+                isSyncingMoveRef.current = false;
+                useGameStore.getState().setMovePending(false);
+              });
+          })
+          .catch(() => {
+            isSyncingMoveRef.current = false;
+            useGameStore.getState().setMovePending(false);
+            setCombatMessage("Deplacement impossible pour le moment.");
+          });
+        return;
+      }
+
       if (obj.type === "hero") {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
@@ -1201,6 +1299,9 @@ function selectObjectOnTile(
   const enemyBuilding = objects.find((obj) => obj.type === "building" && !obj.playerId);
   if (enemyBuilding) return enemyBuilding;
 
+  const adventureBuilding = objects.find((obj) => obj.type === "adventure_building");
+  if (adventureBuilding) return adventureBuilding;
+
   const hero = objects.find((obj) => obj.type === "hero");
   const town = objects.find((obj) => obj.type === "town");
 
@@ -1360,6 +1461,29 @@ function buildObjects(
           name: RESOURCE_BUILDING_RULES.find((r) => r.type === (building?.type ?? tileObject.subtype))?.label ?? building?.type ?? tileObject.subtype ?? "",
           buildingType: tileObject.subtype,
           guardianPower: tileObject.guardianPower ?? building?.guardianPower ?? 0,
+        });
+      }
+    }
+  }
+
+  if (gameState.map?.tiles) {
+    for (let y = 0; y < gameState.map.height; y++) {
+      for (let x = 0; x < gameState.map.width; x++) {
+        const tile = gameState.map.tiles[y]?.[x];
+        if (!tile?.object || tile.object.type !== "adventure_building") continue;
+        const key = `${x},${y}`;
+        if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+
+        objects.push({
+          type: "adventure_building",
+          id: tile.object.id,
+          playerId: null,
+          x,
+          y,
+          faction: "",
+          color: "",
+          name: tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
+          buildingType: tile.object.subtype,
         });
       }
     }

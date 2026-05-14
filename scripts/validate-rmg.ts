@@ -19,6 +19,7 @@ interface MapStats {
   towns: number;
   buildings: number;
   resources: number;
+  adventureBuildings: number;
   monsters: number;
   decor: number;
   blockingDecor: number;
@@ -100,6 +101,10 @@ function validateMap(
     addIssue("warning", templateId, seed, playerCount, size, `low monster count: ${stats.monsters}`);
   }
 
+  if (stats.adventureBuildings < Math.max(2, Math.floor(playerCount / 2))) {
+    addIssue("warning", templateId, seed, playerCount, size, `low adventure building count: ${stats.adventureBuildings}`);
+  }
+
   if (stats.roads < playerCount * 4) {
     addIssue("warning", templateId, seed, playerCount, size, `low road coverage: ${stats.roads} road tiles`);
   }
@@ -145,6 +150,14 @@ function validateMap(
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} path is not connected to the road network at ${tile.x},${tile.y}`);
         }
       }
+      if (tile.object?.type === "adventure_building") {
+        if (tile.road) {
+          addIssue("error", templateId, seed, playerCount, size, `adventure building ${tile.object.id} is on a road at ${tile.x},${tile.y}`);
+        }
+        if (tile.object.subtype === "stargate" && !tile.object.targetId) {
+          addIssue("error", templateId, seed, playerCount, size, `stargate ${tile.object.id} has no target at ${tile.x},${tile.y}`);
+        }
+      }
       if (tile.object?.type === "wall" && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `wall placed on water at ${tile.x},${tile.y}`);
       }
@@ -164,6 +177,7 @@ function collectStats(map: GameMap): MapStats {
     towns: 0,
     buildings: 0,
     resources: 0,
+    adventureBuildings: 0,
     monsters: 0,
     decor: 0,
     blockingDecor: 0,
@@ -182,6 +196,7 @@ function collectStats(map: GameMap): MapStats {
       if (tile.object?.type === "town") stats.towns++;
       if (tile.object?.type === "building") stats.buildings++;
       if (tile.object?.type === "resource") stats.resources++;
+      if (tile.object?.type === "adventure_building") stats.adventureBuildings++;
       if (tile.object?.type === "monster") stats.monsters++;
     }
   }

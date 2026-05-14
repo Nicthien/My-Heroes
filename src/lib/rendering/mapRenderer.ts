@@ -1,7 +1,7 @@
 import { GameMap, Position } from "@/lib/game/types";
 
 export interface MapObjectData {
-  type: "hero" | "town" | "combat" | "building";
+  type: "hero" | "town" | "combat" | "building" | "adventure_building";
   id: string;
   playerId: string | null;
   x: number;

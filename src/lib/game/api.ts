@@ -1,7 +1,7 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
-  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy,
+  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType,
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { getDominantUnitType } from "./neutral-armies";
@@ -209,6 +209,7 @@ export function mapApiToGameState(
   const mapState = (data.mapState as Record<string, unknown>) ?? {};
   const collected = new Set<string>((mapState.collected as string[]) ?? []);
   const killed = new Set<string>((mapState.killed as string[]) ?? []);
+  const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
   const neutralArmies = (data.neutralArmies as ApiNeutralArmy[] | undefined) ?? [];
   const defeatedNeutralArmies = new Set(
     neutralArmies
@@ -244,6 +245,12 @@ export function mapApiToGameState(
           if (obj.type === "resource" && collected.has(obj.id)) {
             delete tile.object;
           } else if (obj.type === "monster" && (killed.has(obj.id) || defeatedNeutralArmies.has(obj.id))) {
+            delete tile.object;
+          } else if (
+            obj.type === "adventure_building" &&
+            obj.subtype === AdventureBuildingType.CAMPFIRE &&
+            visitedAdventureBuildings.has(obj.id)
+          ) {
             delete tile.object;
           } else if (obj.type === "monster") {
             const dominantUnitType = dominantNeutralUnits.get(obj.id);

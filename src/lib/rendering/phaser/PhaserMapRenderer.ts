@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
@@ -61,6 +62,7 @@ function getMapObjectHoverText(object: MapObject) {
     ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
     : "Armée neutre";
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
+  if (object.type === "adventure_building") return getAdventureBuildingLabel(object.subtype);
   if (object.type === "artifact") return "Artefact";
 
   return null;
@@ -98,6 +100,16 @@ type RoadPalette = {
   grit: number;
   alpha: number;
 };
+
+const DECOR_SPRITES: Partial<Record<DecorKind, string>> = {
+  "grove-pine": MAP_SPRITES.decor.grove_pine,
+  "grove-oak": MAP_SPRITES.decor.grove_oak,
+  "grove-dead": MAP_SPRITES.decor.grove_dead,
+  "boulder-cluster": MAP_SPRITES.decor.boulder_cluster,
+};
+
+const BLOCKING_DECOR_SPRITE_SIZE = 72;
+const BLOCKING_DECOR_GROUND_OFFSET = TILE_HEIGHT / 2 + 8;
 
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
@@ -351,6 +363,18 @@ class PhaserMapScene extends Phaser.Scene {
     const { type: kind, variant = 0 } = decor;
     if (!isAllowedDecor(kind)) return;
 
+    const spritePath = DECOR_SPRITES[kind];
+    if (spritePath) {
+      const size = BLOCKING_DECOR_SPRITE_SIZE;
+      const groundY = isoY + BLOCKING_DECOR_GROUND_OFFSET;
+      const sprite = this.add.image(isoX, groundY, spritePath);
+      sprite.setOrigin(0.5, 1);
+      sprite.setDisplaySize(size, size);
+      sprite.setDepth(groundY);
+      this.decorLayer.add(sprite);
+      return;
+    }
+
     const g = this.add.graphics();
     const baseY = isoY + 2;
     const scale = 0.92 + variant * 0.08;
@@ -367,11 +391,23 @@ class PhaserMapScene extends Phaser.Scene {
       case "tree-dead":
         this.drawDeadTree(g, isoX, baseY, scale);
         break;
+      case "grove-pine":
+        this.drawPineGrove(g, isoX, baseY, scale);
+        break;
+      case "grove-oak":
+        this.drawOakGrove(g, isoX, baseY, scale);
+        break;
+      case "grove-dead":
+        this.drawDeadGrove(g, isoX, baseY, scale);
+        break;
       case "rock-large":
         this.drawRockCluster(g, isoX, baseY, scale);
         break;
       case "rock-small":
         this.drawSmallRock(g, isoX, baseY, scale);
+        break;
+      case "boulder-cluster":
+        this.drawBoulderCluster(g, isoX, baseY, scale);
         break;
       case "bush":
         this.drawBush(g, isoX, baseY, scale);
@@ -561,6 +597,102 @@ class PhaserMapScene extends Phaser.Scene {
     graphics.lineTo(x + 9 * scale, y - 22 * scale);
     graphics.moveTo(x + 1, y - 7 * scale);
     graphics.lineTo(x + 6 * scale, y - 11 * scale);
+    graphics.strokePath();
+  }
+
+  private drawPineGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawObstacleBase(graphics, x, y + 1, scale, 0x29471f, 0x182d16, 0x102410);
+    this.drawPineTree(graphics, x - 10 * scale, y + 1, scale * 0.92);
+    this.drawPineTree(graphics, x + 9 * scale, y + 1, scale * 0.98);
+    this.drawPineTree(graphics, x, y - 4 * scale, scale * 1.15);
+    graphics.lineStyle(2, 0x123417, 0.75);
+    graphics.beginPath();
+    graphics.moveTo(x - 17 * scale, y - 4 * scale);
+    graphics.lineTo(x, y - 33 * scale);
+    graphics.lineTo(x + 18 * scale, y - 4 * scale);
+    graphics.strokePath();
+  }
+
+  private drawOakGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawObstacleBase(graphics, x, y + 1, scale, 0x315625, 0x1b3518, 0x132911);
+    this.drawOakTree(graphics, x - 10 * scale, y + 1, scale * 0.9);
+    this.drawOakTree(graphics, x + 9 * scale, y + 1, scale);
+    this.drawOakTree(graphics, x, y - 4 * scale, scale * 1.08);
+    graphics.fillStyle(0x173f1d, 0.7);
+    graphics.fillEllipse(x, y - 17 * scale, 31 * scale, 21 * scale);
+    graphics.fillStyle(0x5da85d, 0.28);
+    graphics.fillEllipse(x - 6 * scale, y - 22 * scale, 15 * scale, 8 * scale);
+  }
+
+  private drawDeadGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawObstacleBase(graphics, x, y + 1, scale, 0x4b3522, 0x2b1d13, 0x21150e);
+    this.drawDeadTree(graphics, x - 10 * scale, y + 1, scale * 0.9);
+    this.drawDeadTree(graphics, x + 9 * scale, y + 1, scale);
+    this.drawDeadTree(graphics, x, y - 3 * scale, scale * 1.12);
+    graphics.lineStyle(2, 0x21150d, 0.78);
+    graphics.beginPath();
+    graphics.moveTo(x - 17 * scale, y - 5 * scale);
+    graphics.lineTo(x + 16 * scale, y - 7 * scale);
+    graphics.strokePath();
+  }
+
+  private drawBoulderCluster(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
+    this.drawObstacleBase(graphics, x, y + 1, scale, 0x62686a, 0x3e4446, 0x2f3538);
+    this.drawRockCluster(graphics, x - 4 * scale, y, scale * 1.1);
+    graphics.fillStyle(0x4f5558, 1);
+    graphics.fillCircle(x - 13 * scale, y - 5 * scale, 8 * scale);
+    graphics.fillStyle(0x777d7e, 1);
+    graphics.fillCircle(x + 12 * scale, y - 6 * scale, 9 * scale);
+    graphics.fillStyle(0xa5a8a6, 0.42);
+    graphics.fillCircle(x + 8 * scale, y - 10 * scale, 3 * scale);
+    graphics.lineStyle(2, 0x2b2d2d, 0.9);
+    graphics.beginPath();
+    graphics.moveTo(x - 21 * scale, y - 2 * scale);
+    graphics.lineTo(x - 8 * scale, y - 14 * scale);
+    graphics.lineTo(x + 8 * scale, y - 15 * scale);
+    graphics.lineTo(x + 22 * scale, y - 3 * scale);
+    graphics.strokePath();
+  }
+
+  private drawObstacleBase(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    scale: number,
+    top: number,
+    left: number,
+    right: number
+  ) {
+    const halfW = 24 * scale;
+    const halfH = 11 * scale;
+    const drop = 7 * scale;
+
+    graphics.fillStyle(0x070806, 0.32);
+    graphics.fillEllipse(x, y + drop + 1, 56 * scale, 14 * scale);
+
+    graphics.fillStyle(left, 1);
+    graphics.beginPath();
+    graphics.moveTo(x - halfW, y);
+    graphics.lineTo(x, y + halfH);
+    graphics.lineTo(x, y + halfH + drop);
+    graphics.lineTo(x - halfW, y + drop);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(right, 1);
+    graphics.beginPath();
+    graphics.moveTo(x + halfW, y);
+    graphics.lineTo(x, y + halfH);
+    graphics.lineTo(x, y + halfH + drop);
+    graphics.lineTo(x + halfW, y + drop);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(top, 1);
+    drawDiamondPath(graphics, x, y);
+    graphics.fillPath();
+    graphics.lineStyle(1.5, 0x0b1209, 0.78);
+    drawDiamondPath(graphics, x, y);
     graphics.strokePath();
   }
 
@@ -1285,6 +1417,10 @@ class PhaserMapScene extends Phaser.Scene {
         if (object.guardianPower && object.guardianPower > 0) {
           this.addBadge(this.objectLayer, iso.x, y - 37, String(Math.ceil(object.guardianPower / 100)), 0xff4444, y + 6);
         }
+      } else if (object.type === "adventure_building" && object.buildingType) {
+        const metrics = getObjectMetrics(object);
+        if (!metrics) continue;
+        this.addObjectSprite(object, iso.x, y + metrics.offsetY, MAP_SPRITES.adventureBuildings[object.buildingType], metrics.width, metrics.height);
       } else if (object.type === "combat") {
         const markerY = y - 60;
         const markerDepth = y + 1000;
@@ -2032,8 +2168,12 @@ function isAllowedDecor(kind: DecorKind) {
     kind === "tree-pine" ||
     kind === "tree-oak" ||
     kind === "tree-dead" ||
+    kind === "grove-pine" ||
+    kind === "grove-oak" ||
+    kind === "grove-dead" ||
     kind === "rock-large" ||
     kind === "rock-small" ||
+    kind === "boulder-cluster" ||
     kind === "bush" ||
     kind === "flower" ||
     kind === "grass-tuft"
@@ -2046,6 +2186,9 @@ function getObjectMetrics(object: MapObjectData) {
     : { width: 62, height: 62, offsetY: 15 };
   if (object.type === "town") return { width: 82, height: 82, offsetY: 20 };
   if (object.type === "building") return { width: 52, height: 52, offsetY: 6 };
+  if (object.type === "adventure_building") return object.buildingType === "stargate"
+    ? { width: 58, height: 58, offsetY: 6 }
+    : { width: 52, height: 52, offsetY: 6 };
   if (object.type === "combat") return { width: 48, height: 48, offsetY: 10 };
   return null;
 }

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="grove-dead-title grove-dead-desc">
+  <title id="grove-dead-title">Bosquet mort bloquant</title>
+  <desc id="grove-dead-desc">Enchevetrement d'arbres morts en 2.5D indiquant un obstacle infranchissable.</desc>
+  <ellipse cx="48" cy="81" rx="34" ry="9" fill="#0b0806" opacity=".38"/>
+  <path d="M16 63 48 45l32 18-32 18z" fill="#4b3522"/>
+  <path d="M16 63v9l32 17v-8z" fill="#2b1d13"/>
+  <path d="M80 63v9L48 89v-8z" fill="#21150e"/>
+  <path d="M16 63 48 81l32-18" fill="none" stroke="#140d09" stroke-width="2"/>
+  <g stroke="#4d321d" stroke-width="5" stroke-linecap="round">
+    <path d="M28 73V31"/>
+    <path d="M48 75V20"/>
+    <path d="M67 73V34"/>
+  </g>
+  <g stroke="#7a5130" stroke-width="4" stroke-linecap="round">
+    <path d="M28 48 15 35M29 43l14-13M48 45 32 33M49 38l16-15M67 54l-13-12M67 48l14-10"/>
+  </g>
+  <g stroke="#25170e" stroke-width="4" stroke-linecap="round">
+    <path d="M18 68h60M18 63l24 10M39 67l32-9M54 73l28-10"/>
+  </g>
+  <path d="M20 70 48 84 76 70" fill="none" stroke="#120c08" stroke-width="5" stroke-linecap="round"/>
+  <g fill="#9b7448" opacity=".48">
+    <circle cx="28" cy="30" r="3"/>
+    <circle cx="48" cy="20" r="3"/>
+    <circle cx="67" cy="34" r="3"/>
+  </g>
+  <path d="M25 58 48 45 72 58" fill="none" stroke="#b08b5d" stroke-width="2" opacity=".28"/>
+</svg>

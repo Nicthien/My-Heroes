@@ -307,7 +307,40 @@ export interface Hero {
   position: Position;
   movement: number;
   maxMovement: number;
+  mana?: number;
+  maxMana?: number;
+  morale?: number;
+  luck?: number;
+  skills?: HeroSkill[];
+  artifacts?: HeroArtifact[];
+  spellbook?: HeroSpell[];
+  statusEffects?: HeroStatusEffect[];
   armies: UnitStack[];
+}
+
+export interface HeroSkill {
+  id: string;
+  skill: string;
+  level: number;
+}
+
+export interface HeroArtifact {
+  id: string;
+  artifactType: string;
+  slot?: string | null;
+}
+
+export interface HeroSpell {
+  id: string;
+  spell: string;
+}
+
+export interface HeroStatusEffect {
+  id: string;
+  effectType: string;
+  amount: number;
+  expiresOn?: string | null;
+  expiresTurn?: number | null;
 }
 
 export interface TavernHeroOffer {
@@ -403,6 +436,15 @@ export interface ResourceBuilding {
   guardianPower: number;
 }
 
+export interface AdventureObject {
+  id: string;
+  type: string;
+  position: Position;
+  ownerId: string | null;
+  guardianPower: number;
+  state: Record<string, unknown>;
+}
+
 export interface NeutralArmy {
   id: string;
   status: "ACTIVE" | "DEFEATED" | string;
@@ -418,6 +460,7 @@ export interface MapObject {
     | "artifact"
     | "monster"
     | "building"
+    | "adventure"
     | "combat"
     | "wall"
     | "gate";
@@ -534,6 +577,7 @@ export interface Player {
   heroes: Hero[];
   towns: Town[];
   resourceBuildings: ResourceBuilding[];
+  adventureObjects?: AdventureObject[];
   isAlive: boolean;
   turnOrder: number;
   exploredTiles: string[];
@@ -545,6 +589,7 @@ export type GameAction =
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
+  | { type: "VISIT_ADVENTURE_OBJECT"; heroId: string; objectId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
@@ -575,4 +620,5 @@ export interface GameState {
   winnerId?: string;
   activeCombats?: PersistentCombat[];
   neutralArmies?: NeutralArmy[];
+  adventureObjects?: AdventureObject[];
 }

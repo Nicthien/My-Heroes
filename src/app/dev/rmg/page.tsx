@@ -164,6 +164,7 @@ function Legend() {
   const objectItems = [
     ["Ville", OBJECT_COLOR.town],
     ["Mine", OBJECT_COLOR.building],
+    ["Objet", OBJECT_COLOR.adventure],
     ["Monstre", OBJECT_COLOR.monster],
     ["Ressource", OBJECT_COLOR.resource],
     ["Mur", OBJECT_COLOR.wall],

@@ -7,6 +7,67 @@ function rows(value: unknown): DbRow[] {
   return Array.isArray(value) ? (value as DbRow[]) : [];
 }
 
+function isOptionalSchemaError(error: { code?: string; message?: string; details?: string } | null): boolean {
+  if (!error) return false;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return (
+    error.code === "PGRST200" ||
+    error.code === "PGRST205" ||
+    error.code === "42P01" ||
+    text.includes("schema cache") ||
+    text.includes("no matches were found") ||
+    text.includes("does not exist")
+  );
+}
+
+async function attachHeroRows(
+  supabase: SupabaseAdmin,
+  heroes: DbRow[],
+  table: string,
+  property: string,
+): Promise<void> {
+  const heroIds = heroes.map((hero) => hero.id).filter((id): id is string => typeof id === "string");
+  if (heroIds.length === 0) return;
+
+  const { data, error } = await supabase.from(table).select("*").in("hero_id", heroIds);
+  if (error) {
+    if (isOptionalSchemaError(error)) return;
+    throw error;
+  }
+
+  const byHero = new Map<string, DbRow[]>();
+  for (const row of rows(data)) {
+    const heroId = row.hero_id;
+    if (typeof heroId !== "string") continue;
+    byHero.set(heroId, [...(byHero.get(heroId) ?? []), row]);
+  }
+
+  for (const hero of heroes) {
+    hero[property] = typeof hero.id === "string" ? byHero.get(hero.id) ?? [] : [];
+  }
+}
+
+async function hydrateOptionalAdventureState(supabase: SupabaseAdmin, gameRow: DbRow): Promise<void> {
+  const players = rows(gameRow.game_players ?? gameRow.players);
+  const heroes = players.flatMap((player) => rows(player.heroes));
+
+  await attachHeroRows(supabase, heroes, "hero_artifacts", "hero_artifacts");
+  await attachHeroRows(supabase, heroes, "hero_skills", "hero_skills");
+  await attachHeroRows(supabase, heroes, "hero_spellbook", "hero_spellbook");
+  await attachHeroRows(supabase, heroes, "hero_status_effects", "hero_status_effects");
+
+  if (typeof gameRow.id !== "string") return;
+  const { data, error } = await supabase.from("adventure_objects").select("*").eq("game_id", gameRow.id);
+  if (error) {
+    if (isOptionalSchemaError(error)) {
+      gameRow.adventure_objects = [];
+      return;
+    }
+    throw error;
+  }
+  gameRow.adventure_objects = data ?? [];
+}
+
 export function toGame(row: DbRow) {
   return {
     id: row.id,
@@ -27,6 +88,7 @@ export function toGame(row: DbRow) {
     turns: rows(row.turns).map(toTurn),
     combats: rows(row.combats).map(toCombat),
     neutralArmies: rows(row.neutral_armies).map(toNeutralArmy),
+    adventureObjects: rows(row.adventure_objects).map(toAdventureObject),
   };
 }
 
@@ -69,12 +131,57 @@ export function toHero(row: DbRow) {
     defense: row.defense,
     spellPower: row.spell_power,
     knowledge: row.knowledge,
+    mana: row.mana ?? 10,
+    maxMana: row.max_mana ?? 10,
+    morale: row.morale ?? 0,
+    luck: row.luck ?? 0,
     movement: row.movement,
     maxMovement: row.max_movement,
     x: row.x,
     y: row.y,
     isMoving: row.is_moving,
     armies: rows(row.armies).map(toArmy),
+    artifacts: rows(row.hero_artifacts).map(toHeroArtifact),
+    skills: rows(row.hero_skills).map(toHeroSkill),
+    spellbook: rows(row.hero_spellbook).map(toHeroSpell),
+    statusEffects: rows(row.hero_status_effects).map(toHeroStatusEffect),
+  };
+}
+
+export function toHeroArtifact(row: DbRow) {
+  return {
+    id: row.id,
+    heroId: row.hero_id,
+    artifactType: row.artifact_type,
+    slot: row.slot,
+  };
+}
+
+export function toHeroSkill(row: DbRow) {
+  return {
+    id: row.id,
+    heroId: row.hero_id,
+    skill: row.skill,
+    level: row.level,
+  };
+}
+
+export function toHeroSpell(row: DbRow) {
+  return {
+    id: row.id,
+    heroId: row.hero_id,
+    spell: row.spell,
+  };
+}
+
+export function toHeroStatusEffect(row: DbRow) {
+  return {
+    id: row.id,
+    heroId: row.hero_id,
+    effectType: row.effect_type,
+    amount: row.amount,
+    expiresOn: row.expires_on,
+    expiresTurn: row.expires_turn,
   };
 }
 
@@ -119,6 +226,19 @@ export function toResourceBuilding(row: DbRow) {
     x: row.x,
     y: row.y,
     guardianPower: row.guardian_power,
+  };
+}
+
+export function toAdventureObject(row: DbRow) {
+  return {
+    id: row.id,
+    gameId: row.game_id,
+    gamePlayerId: row.game_player_id,
+    objectType: row.object_type,
+    x: row.x,
+    y: row.y,
+    guardianPower: row.guardian_power,
+    state: row.state ?? {},
   };
 }
 
@@ -212,6 +332,9 @@ export async function getGamePlayer(supabase: SupabaseAdmin, gameId: string, use
     .maybeSingle();
 
   if (error) throw error;
+  if (data) {
+    await hydrateOptionalAdventureState(supabase, { id: gameId, game_players: [data] });
+  }
   return data ? toPlayer(data) : null;
 }
 
@@ -235,6 +358,7 @@ export async function getGameWithRelations(supabase: SupabaseAdmin, id: string) 
     .maybeSingle();
 
   if (error) throw error;
+  if (data) await hydrateOptionalAdventureState(supabase, data);
   return data ? toGame(data) : null;
 }
 

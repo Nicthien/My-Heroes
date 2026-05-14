@@ -1,7 +1,7 @@
 import { GameMap, Position } from "@/lib/game/types";
 
 export interface MapObjectData {
-  type: "hero" | "town" | "combat" | "building";
+  type: "hero" | "town" | "combat" | "building" | "adventure";
   id: string;
   playerId: string | null;
   x: number;
@@ -12,6 +12,10 @@ export interface MapObjectData {
   onWater?: boolean;
   inTown?: boolean;
   buildingType?: string;
+  adventureObjectType?: string;
+  category?: string;
+  description?: string;
+  consumed?: boolean;
   guardianPower?: number;
 }
 

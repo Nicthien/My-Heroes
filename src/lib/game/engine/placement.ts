@@ -1,6 +1,9 @@
+import { getAdventureObjectRule } from "../adventure-objects";
 import { MapTile, TerrainType } from "../types";
 import { ZoneGrid, tilesInZone } from "./zones";
 import {
+  ADVENTURE_OBJECT_SPECS,
+  AdventureObjectSpec,
   BUILDING_SPECS,
   BuildingSpec,
   ObjectSpec,
@@ -29,10 +32,15 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
   const piles: { value: ObjectSpec; weight: number }[] = (
     ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"] as ResourceSubtype[]
   ).map((s) => ({ value: makePileSpec(s), weight: s === "gold" ? 4 : 2 }));
+  const adventureObjects = ADVENTURE_OBJECT_SPECS.map((spec) => ({
+    value: spec as ObjectSpec,
+    weight: spec.preferredTerrain.includes(terrainBias) ? 0.55 : 0.12,
+  }));
 
   // Buildings rares mais existants, piles fréquentes
   const choices: { value: ObjectSpec; weight: number }[] = [
     ...buildings.map((b) => ({ value: b.value, weight: b.weight * 0.6 })),
+    ...adventureObjects,
     ...piles,
   ];
   return weightedPick(rng, choices);
@@ -40,6 +48,19 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
 
 function isTileFree(tile: MapTile): boolean {
   return tile.isPassable && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor;
+}
+
+function hasExplorationAccess(ctx: PlacementContext, x: number, y: number): boolean {
+  for (const next of [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ]) {
+    const tile = ctx.tiles[next.y]?.[next.x];
+    if (tile?.isPassable && tile.object?.type !== "wall" && !tile.decor?.blocking) return true;
+  }
+  return false;
 }
 
 function hasMajorObjectNearby(
@@ -54,7 +75,7 @@ function hasMajorObjectNearby(
       const ny = y + dy;
       if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) continue;
       const t = ctx.tiles[ny][nx];
-      if (t.object?.type === "building" || t.object?.type === "town") return true;
+      if (t.object?.type === "building" || t.object?.type === "adventure" || t.object?.type === "town") return true;
     }
   }
   return false;
@@ -88,6 +109,20 @@ function placeBuilding(
     id: `bld-${spec.buildingType}-${tile.x}-${tile.y}`,
     subtype: spec.buildingType,
     guardianPower,
+  };
+}
+
+function placeAdventureObject(
+  tile: MapTile,
+  spec: AdventureObjectSpec,
+): void {
+  const rule = getAdventureObjectRule(spec.objectType);
+  tile.object = {
+    type: "adventure",
+    id: `adv-${spec.objectType}-${tile.x}-${tile.y}`,
+    subtype: spec.objectType,
+    name: rule?.label ?? spec.objectType,
+    guardianPower: spec.guardianPower,
   };
 }
 
@@ -160,6 +195,7 @@ export interface ZoneFillResult {
   zoneId: number;
   spentValue: number;
   placedBuildings: { x: number; y: number; spec: BuildingSpec }[];
+  placedAdventureObjects: { x: number; y: number; spec: AdventureObjectSpec }[];
   placedPiles: { x: number; y: number; pile: PileSpec }[];
   guardianThreat: number;
 }
@@ -173,6 +209,7 @@ export function fillZone(
   const meta = ctx.zoneGrid.meta[zoneId];
   let budget = meta.value;
   const placedBuildings: ZoneFillResult["placedBuildings"] = [];
+  const placedAdventureObjects: ZoneFillResult["placedAdventureObjects"] = [];
   const placedPiles: ZoneFillResult["placedPiles"] = [];
 
   // Châteaux : leur valeur a déjà été soustraite à l'extérieur si placé en amont (cf orchestrator)
@@ -182,7 +219,7 @@ export function fillZone(
   const allTiles = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
     .filter((p) => isTileFree(ctx.tiles[p.y][p.x]));
   if (allTiles.length === 0) {
-    return { zoneId, spentValue: 0, placedBuildings, placedPiles, guardianThreat: 0 };
+    return { zoneId, spentValue: 0, placedBuildings, placedAdventureObjects, placedPiles, guardianThreat: 0 };
   }
 
   // Place les mines en priorite avant que les piles de ressources consomment le budget.
@@ -246,6 +283,13 @@ export function fillZone(
           placedPiles.push({ x: adj[i].x, y: adj[i].y, pile });
         }
       }
+    } else if (obj.kind === "adventure") {
+      if (obj.value > budget + 1000) continue;
+      const placed = tryPlaceAdventureObject(ctx, shuffled, zoneId, obj);
+      if (placed) {
+        budget -= obj.value;
+        placedAdventureObjects.push({ x: placed.x, y: placed.y, spec: obj });
+      }
     } else {
       if (obj.value > budget + 100) continue;
       const placed = tryPlacePile(ctx, shuffled, zoneId, obj);
@@ -262,7 +306,7 @@ export function fillZone(
   // Place 1-3 piles de monstres gardiens près des objets les plus précieux
   placeZoneGuardians(ctx, zoneId, placedBuildings, guardianThreat);
 
-  return { zoneId, spentValue: spent, placedBuildings, placedPiles, guardianThreat };
+  return { zoneId, spentValue: spent, placedBuildings, placedAdventureObjects, placedPiles, guardianThreat };
 }
 
 function tryPlaceBuilding(
@@ -274,12 +318,34 @@ function tryPlaceBuilding(
   for (const t of tiles) {
     const tile = ctx.tiles[t.y][t.x];
     if (!isTileFree(tile)) continue;
+    if (!hasExplorationAccess(ctx, t.x, t.y)) continue;
     if (!spec.preferredTerrain.includes(tile.terrain)) {
       // Permet quand même, mais avec proba réduite
       if (ctx.rng() > 0.3) continue;
     }
     if (hasMajorObjectNearby(ctx, t.x, t.y, 2)) continue;
     placeBuilding(ctx, tile, spec, 0); // guardianPower rempli par les guardians de zone
+    return { x: t.x, y: t.y };
+  }
+  return null;
+}
+
+function tryPlaceAdventureObject(
+  ctx: PlacementContext,
+  tiles: { x: number; y: number }[],
+  zoneId: number,
+  spec: AdventureObjectSpec,
+): { x: number; y: number } | null {
+  for (const t of tiles) {
+    const tile = ctx.tiles[t.y][t.x];
+    if (!isTileFree(tile)) continue;
+    if (ctx.zoneGrid.tilesZone[t.y][t.x] !== zoneId) continue;
+    if (!hasExplorationAccess(ctx, t.x, t.y)) continue;
+    if (!spec.preferredTerrain.includes(tile.terrain)) {
+      if (ctx.rng() > 0.2) continue;
+    }
+    if (hasMajorObjectNearby(ctx, t.x, t.y, 2)) continue;
+    placeAdventureObject(tile, spec);
     return { x: t.x, y: t.y };
   }
   return null;

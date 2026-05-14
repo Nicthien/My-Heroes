@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-mineral-spring-title adventure-mineral-spring-desc">
+  <title id="adventure-mineral-spring-title">Source minerale</title>
+  <desc id="adventure-mineral-spring-desc">Sprite original d'objet d'aventure : Source minerale.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(61 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(23 58% 52%)" stroke="hsl(61 46% 28%)" stroke-width="2"/><path d="M14 49 C14 36 22 28 32 28 C43 28 51 36 51 49 C43 56 22 56 14 49 Z" fill="hsl(23 58% 52%)" stroke="hsl(61 46% 28%)" stroke-width="2"/><ellipse cx="32" cy="47" rx="14" ry="6" fill="#7dd3fc" stroke="#075985" stroke-width="1.5"/><path d="M25 30 C24 20 34 18 32 8 M36 31 C42 24 38 18 44 12" fill="none" stroke="hsl(188 72% 62%)" stroke-width="2" stroke-linecap="round" opacity=".75"/>
+</svg>

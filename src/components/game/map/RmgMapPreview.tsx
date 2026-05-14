@@ -22,6 +22,7 @@ export const OBJECT_COLOR: Record<MapObject["type"], string> = {
   artifact: "#a78bfa",
   monster: "#dc2626",
   building: "#f59e0b",
+  adventure: "#a78bfa",
   combat: "#fb923c",
   wall: "#111827",
   gate: "#78350f",
@@ -144,6 +145,7 @@ export function RmgMapPreview({
 function objectRadius(type: MapObject["type"]): number {
   if (type === "town") return 0.34;
   if (type === "building") return 0.28;
+  if (type === "adventure") return 0.26;
   if (type === "monster") return 0.25;
   return 0.2;
 }

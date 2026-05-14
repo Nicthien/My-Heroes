@@ -279,6 +279,12 @@ async function persistResolvedCombat(
           .eq("game_id", combat.game_id)
           .eq("x", combat.x)
           .eq("y", combat.y);
+        await supabase
+          .from("adventure_objects")
+          .update({ guardian_power: 0 })
+          .eq("game_id", combat.game_id)
+          .eq("x", combat.x)
+          .eq("y", combat.y);
       }
     }
     if (combat.defender_hero_id && combat.defender_player_id) {

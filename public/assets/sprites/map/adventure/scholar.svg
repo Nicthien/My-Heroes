@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-scholar-title adventure-scholar-desc">
+  <title id="adventure-scholar-title">Erudit</title>
+  <desc id="adventure-scholar-desc">Sprite original d'objet d'aventure : Erudit.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(119 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(81 58% 52%)" stroke="hsl(119 46% 28%)" stroke-width="2"/><path d="M17 50 V20 L31 13 L47 20 V50 Z" fill="hsl(81 58% 52%)" stroke="hsl(119 46% 28%)" stroke-width="2"/><path d="M23 45 H41 V25 H23 Z" fill="#f8fafc" stroke="hsl(119 46% 28%)" stroke-width="1.5"/><path d="M32 25 V45 M26 31 H30 M34 31 H39 M26 37 H30 M34 37 H39" stroke="hsl(119 46% 28%)" stroke-width="1.3"/><path d="M32 8 L37 18 H27 Z" fill="hsl(246 72% 62%)" stroke="hsl(119 46% 28%)" stroke-width="1.5"/>
+</svg>

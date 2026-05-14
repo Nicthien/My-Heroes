@@ -18,6 +18,7 @@ interface MapStats {
   bridges: number;
   towns: number;
   buildings: number;
+  adventureObjects: number;
   resources: number;
   monsters: number;
   decor: number;
@@ -120,8 +121,6 @@ function validateMap(
   }
 
   const connected = floodReachable(map, placePlayerStart(map, 0));
-  const roadStart = findRoadNetworkStart(map);
-  const connectedRoads = roadStart ? floodRoadReachable(map, roadStart) : new Set<string>();
   for (let playerIndex = 0; playerIndex < playerCount; playerIndex++) {
     const start = placePlayerStart(map, playerIndex);
     if (!map.tiles[start.y]?.[start.x]?.isPassable) {
@@ -137,12 +136,15 @@ function validateMap(
       if (tile.object?.type === "town" && !connected.has(`${tile.x},${tile.y}`)) {
         addIssue("warning", templateId, seed, playerCount, size, `town ${tile.object.id} is not connected to player 1`);
       }
-      if (tile.object?.type === "building") {
-        const key = `${tile.x},${tile.y}`;
-        if (!tile.road) {
-          addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} has no access path at ${tile.x},${tile.y}`);
-        } else if (!connectedRoads.has(key)) {
-          addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} path is not connected to the road network at ${tile.x},${tile.y}`);
+      if (tile.object?.type === "building" || tile.object?.type === "adventure") {
+        if (tile.road) {
+          addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} ${tile.object.id} is on a road at ${tile.x},${tile.y}`);
+        }
+        if (hasAdjacentRoad(map, tile.x, tile.y)) {
+          addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} ${tile.object.id} is adjacent to a road at ${tile.x},${tile.y}`);
+        }
+        if (!hasPassableNeighbor(map, tile.x, tile.y)) {
+          addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} ${tile.object.id} has no passable exploration access at ${tile.x},${tile.y}`);
         }
       }
       if (tile.object?.type === "wall" && tile.terrain === TerrainType.WATER) {
@@ -163,6 +165,7 @@ function collectStats(map: GameMap): MapStats {
     bridges: 0,
     towns: 0,
     buildings: 0,
+    adventureObjects: 0,
     resources: 0,
     monsters: 0,
     decor: 0,
@@ -181,6 +184,7 @@ function collectStats(map: GameMap): MapStats {
       if (tile.decor?.blocking) stats.blockingDecor++;
       if (tile.object?.type === "town") stats.towns++;
       if (tile.object?.type === "building") stats.buildings++;
+      if (tile.object?.type === "adventure") stats.adventureObjects++;
       if (tile.object?.type === "resource") stats.resources++;
       if (tile.object?.type === "monster") stats.monsters++;
     }
@@ -212,42 +216,25 @@ function floodReachable(map: GameMap, start: { x: number; y: number }): Set<stri
   return seen;
 }
 
-function findRoadNetworkStart(map: GameMap): { x: number; y: number } | null {
-  for (let playerIndex = 0; playerIndex < 8; playerIndex++) {
-    const start = placePlayerStart(map, playerIndex);
-    if (map.tiles[start.y]?.[start.x]?.road) return start;
-  }
-
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      if (tile.road) return { x: tile.x, y: tile.y };
-    }
-  }
-
-  return null;
+function hasAdjacentRoad(map: GameMap, x: number, y: number): boolean {
+  return [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ].some((position) => Boolean(map.tiles[position.y]?.[position.x]?.road));
 }
 
-function floodRoadReachable(map: GameMap, start: { x: number; y: number }): Set<string> {
-  const seen = new Set<string>();
-  const queue = [start];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const key = `${current.x},${current.y}`;
-    if (seen.has(key)) continue;
-    const tile = map.tiles[current.y]?.[current.x];
-    if (!tile?.road) continue;
-    seen.add(key);
-    for (const next of [
-      { x: current.x + 1, y: current.y },
-      { x: current.x - 1, y: current.y },
-      { x: current.x, y: current.y + 1 },
-      { x: current.x, y: current.y - 1 },
-    ]) {
-      if (next.x < 0 || next.x >= map.width || next.y < 0 || next.y >= map.height) continue;
-      if (!seen.has(`${next.x},${next.y}`)) queue.push(next);
-    }
-  }
-  return seen;
+function hasPassableNeighbor(map: GameMap, x: number, y: number): boolean {
+  return [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ].some((position) => {
+    const tile = map.tiles[position.y]?.[position.x];
+    return Boolean(tile?.isPassable && tile.object?.type !== "wall" && !tile.decor?.blocking);
+  });
 }
 
 function addIssue(

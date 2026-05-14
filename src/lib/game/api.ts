@@ -1,7 +1,7 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
-  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy,
+  AdventureObject, ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy,
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { getDominantUnitType } from "./neutral-armies";
@@ -48,6 +48,14 @@ interface ApiHero {
   y: number;
   movement: number;
   maxMovement: number;
+  mana?: number;
+  maxMana?: number;
+  morale?: number;
+  luck?: number;
+  artifacts?: Array<{ id: string; artifactType: string; slot?: string | null }>;
+  skills?: Array<{ id: string; skill: string; level: number }>;
+  spellbook?: Array<{ id: string; spell: string }>;
+  statusEffects?: Array<{ id: string; effectType: string; amount: number; expiresOn?: string | null; expiresTurn?: number | null }>;
   armies: ApiArmy[];
 }
 
@@ -91,6 +99,16 @@ interface ApiResourceBuilding {
   x: number;
   y: number;
   guardianPower: number;
+}
+
+interface ApiAdventureObject {
+  id: string;
+  gamePlayerId: string | null;
+  objectType: string;
+  x: number;
+  y: number;
+  guardianPower: number;
+  state?: Record<string, unknown>;
 }
 
 interface ApiCombat {
@@ -161,6 +179,14 @@ export function mapApiToGameState(
       position: { x: h.x, y: h.y },
       movement: h.movement,
       maxMovement: h.maxMovement,
+      mana: h.mana ?? h.knowledge * 10,
+      maxMana: h.maxMana ?? h.knowledge * 10,
+      morale: h.morale ?? 0,
+      luck: h.luck ?? 0,
+      artifacts: h.artifacts ?? [],
+      skills: h.skills ?? [],
+      spellbook: h.spellbook ?? [],
+      statusEffects: h.statusEffects ?? [],
       armies: h.armies.map((a) => ({
         id: a.id,
         unitType: a.unitType as UnitType,
@@ -233,6 +259,14 @@ export function mapApiToGameState(
     }
   }
   const allBuildings = players.flatMap((p) => p.resourceBuildings);
+  const adventureObjects = ((data.adventureObjects as ApiAdventureObject[] | undefined) ?? []).map((object): AdventureObject => ({
+    id: object.id,
+    type: object.objectType,
+    position: { x: object.x, y: object.y },
+    ownerId: object.gamePlayerId,
+    guardianPower: object.guardianPower ?? 0,
+    state: object.state ?? {},
+  }));
 
   if (mapData?.tiles) {
     for (let y = 0; y < mapData.height; y++) {
@@ -252,6 +286,15 @@ export function mapApiToGameState(
             const buildingData = allBuildings.find((b) => b.id === obj.id || (b.position.x === x && b.position.y === y));
             if (buildingData) {
               obj.guardianPower = buildingData.guardianPower;
+            }
+            if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
+              delete tile.object;
+            }
+          } else if (obj.type === "adventure") {
+            const adventureData = adventureObjects.find((item) => item.id === obj.id || (item.position.x === x && item.position.y === y));
+            if (adventureData) {
+              obj.guardianPower = adventureData.guardianPower;
+              if (adventureData.state?.consumed) delete tile.object;
             }
             if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
               delete tile.object;
@@ -293,6 +336,7 @@ export function mapApiToGameState(
         position: stack.position,
       })),
     })),
+    adventureObjects,
     activeCombats: ((data.combats as ApiCombat[] | undefined) ?? [])
       .filter((combat) => combat.status === "ACTIVE")
       .map((combat) => ({

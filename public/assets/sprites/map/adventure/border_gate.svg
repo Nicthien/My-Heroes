@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-border-gate-title adventure-border-gate-desc">
+  <title id="adventure-border-gate-title">Porte frontiere</title>
+  <desc id="adventure-border-gate-desc">Sprite original d'objet d'aventure : Porte frontiere.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(277 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(239 58% 52%)" stroke="hsl(277 46% 28%)" stroke-width="2"/><ellipse cx="32" cy="36" rx="15" ry="24" fill="#111827" stroke="hsl(277 46% 28%)" stroke-width="4"/><ellipse cx="32" cy="36" rx="9" ry="17" fill="hsl(44 72% 62%)" opacity=".85"/><path d="M23 17 C30 9 40 12 43 21 M20 45 C27 55 40 55 45 44" fill="none" stroke="#fff" stroke-width="2" opacity=".55"/><circle cx="32" cy="36" r="4" fill="#fff" opacity=".65"/>
+</svg>

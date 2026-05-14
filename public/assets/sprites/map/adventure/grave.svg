@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-grave-title adventure-grave-desc">
+  <title id="adventure-grave-title">Tombe</title>
+  <desc id="adventure-grave-desc">Sprite original d'objet d'aventure : Tombe.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(88 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(50 58% 52%)" stroke="hsl(88 46% 28%)" stroke-width="2"/><path d="M16 34 H48 V51 H16 Z" fill="hsl(50 58% 52%)" stroke="hsl(88 46% 28%)" stroke-width="2"/><path d="M16 35 C18 20 46 20 48 35 Z" fill="hsl(215 72% 62%)" stroke="hsl(88 46% 28%)" stroke-width="2"/><path d="M16 39 H48 M32 24 V51" stroke="hsl(88 46% 28%)" stroke-width="2"/><rect x="28" y="38" width="8" height="7" rx="1" fill="#fef3c7" stroke="hsl(88 46% 28%)"/>
+</svg>

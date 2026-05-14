@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
+import { AdventureEffect, getAdventureObjectRule } from "@/lib/game/adventure-objects";
 import {
   RESOURCE_BUILDING_RULES,
   UNIT_RULES,
@@ -71,6 +72,14 @@ interface MinimalHero {
   y: number;
   movement: number;
   experience: number;
+  attack?: number;
+  defense?: number;
+  spellPower?: number;
+  knowledge?: number;
+  mana?: number;
+  maxMana?: number;
+  morale?: number;
+  luck?: number;
   armies: MinimalArmy[];
 }
 
@@ -94,8 +103,9 @@ interface MinimalPlayer {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; gold?: number; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "adventure"; destination: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
+  | { type: "VISIT_ADVENTURE_OBJECT"; objectType?: string; message: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "STOP"; message: string; destination: Position };
 
@@ -231,6 +241,22 @@ export async function POST(
           await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
           interaction = { type: "CAPTURE_BUILDING", buildingType: building.buildingType, destination: lastPos };
         }
+      } else if (tile?.object?.type === "adventure") {
+        const adventure = await getAdventureObject(supabase, id, tile.object.id);
+        const guardianPower = Number(adventure?.guardianPower ?? tile.object.guardianPower ?? 0);
+        if (guardianPower > 0) {
+          interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "adventure", destination: lastPos };
+        } else if (adventure) {
+          interaction = await resolveAdventureObjectVisit({
+            supabase,
+            gameId: id,
+            game,
+            gamePlayer,
+            hero: { ...hero, x: lastPos.x, y: lastPos.y },
+            adventure,
+            destination: lastPos,
+          });
+        }
       }
 
       // Capture d'un château neutre : si garnison vide → capture immédiate.
@@ -279,6 +305,29 @@ export async function POST(
       await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
       await supabase.from("heroes").update({ x: building.x, y: building.y, experience: hero.experience + 150 }).eq("id", hero.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_BUILDING", buildingType: building.buildingType } });
+    }
+
+    if (action.type === "VISIT_ADVENTURE_OBJECT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      const adventure = await getAdventureObject(supabase, id, String(action.objectId ?? ""));
+      if (!hero || !adventure) return NextResponse.json({ error: "Objet d'aventure invalide" }, { status: 400 });
+      if (hero.x !== adventure.x || hero.y !== adventure.y) {
+        return NextResponse.json({ error: "Le héros doit être sur l'objet pour le visiter" }, { status: 400 });
+      }
+      if ((adventure.guardianPower ?? 0) > 0) {
+        return NextResponse.json({ error: "Cet objet est gardé" }, { status: 400 });
+      }
+
+      const interaction = await resolveAdventureObjectVisit({
+        supabase,
+        gameId: id,
+        game,
+        gamePlayer,
+        hero,
+        adventure,
+        destination: { x: adventure.x, y: adventure.y },
+      });
+      return NextResponse.json({ success: true, interaction });
     }
 
     if (action.type === "CAPTURE_TOWN") {
@@ -591,6 +640,365 @@ async function getResourceBuilding(
   return data
     ? { id: data.id, x: data.x, y: data.y, buildingType: data.building_type, guardianPower: data.guardian_power }
     : null;
+}
+
+interface MinimalAdventureObject {
+  id: string;
+  x: number;
+  y: number;
+  objectType: string;
+  guardianPower: number;
+  gamePlayerId: string | null;
+  state: Record<string, unknown>;
+}
+
+async function getAdventureObject(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  objectId: string
+): Promise<MinimalAdventureObject | null> {
+  const { data } = await supabase
+    .from("adventure_objects")
+    .select("id,x,y,object_type,guardian_power,game_player_id,state")
+    .eq("game_id", gameId)
+    .eq("id", objectId)
+    .maybeSingle();
+
+  return data
+    ? {
+      id: data.id,
+      x: data.x,
+      y: data.y,
+      objectType: data.object_type,
+      guardianPower: data.guardian_power,
+      gamePlayerId: data.game_player_id,
+      state: data.state ?? {},
+    }
+    : null;
+}
+
+async function resolveAdventureObjectVisit(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  game: { turnNumber?: unknown; mapData?: unknown };
+  gamePlayer: MinimalPlayer;
+  hero: MinimalHero;
+  adventure: MinimalAdventureObject;
+  destination: Position;
+}): Promise<MoveInteraction> {
+  const { supabase, gameId, game, gamePlayer, hero, adventure } = params;
+  const rule = getAdventureObjectRule(adventure.objectType);
+  if (!rule) {
+    return { type: "STOP", message: "Objet d'aventure inconnu.", destination: params.destination };
+  }
+
+  const visitCheck = canVisitAdventureObject(adventure.state, rule.visitFrequency, hero.id, gamePlayer.id, Number(game.turnNumber ?? 1));
+  if (!visitCheck.ok) {
+    return { type: "STOP", message: visitCheck.message, destination: params.destination };
+  }
+
+  const messages: string[] = [];
+  let finalDestination = params.destination;
+  for (const effect of rule.effects) {
+    const result = await applyAdventureEffect({ supabase, gameId, game, gamePlayer, hero, adventure, effect });
+    if (result.message) messages.push(result.message);
+    if (result.destination) finalDestination = result.destination;
+  }
+
+  const nextState = markAdventureVisited(
+    adventure.state,
+    rule.visitFrequency,
+    hero.id,
+    gamePlayer.id,
+    Number(game.turnNumber ?? 1),
+    rule.consumesOnVisit === true,
+  );
+  await supabase
+    .from("adventure_objects")
+    .update({
+      game_player_id: rule.category === "mine" ? gamePlayer.id : adventure.gamePlayerId,
+      guardian_power: 0,
+      state: nextState,
+    })
+    .eq("game_id", gameId)
+    .eq("id", adventure.id);
+
+  return {
+    type: "VISIT_ADVENTURE_OBJECT",
+    objectType: adventure.objectType,
+    message: messages[0] ?? `${rule.label} visite.`,
+    destination: finalDestination,
+  };
+}
+
+async function applyAdventureEffect(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  game: { turnNumber?: unknown; mapData?: unknown };
+  gamePlayer: MinimalPlayer;
+  hero: MinimalHero;
+  adventure: MinimalAdventureObject;
+  effect: AdventureEffect;
+}): Promise<{ message?: string; destination?: Position }> {
+  const { supabase, gameId, game, gamePlayer, hero, adventure, effect } = params;
+  switch (effect.type) {
+    case "resource": {
+      const resources = resolveResourceReward(effect.resources, effect.randomResource);
+      await addPlayerResources(supabase, gamePlayer.id, resources);
+      return { message: formatResourceReward(resources) };
+    }
+    case "combat_reward": {
+      const resources = pickRewardResources(effect.reward);
+      if (Object.keys(resources).length > 0) await addPlayerResources(supabase, gamePlayer.id, resources);
+      if (effect.reward.experience) {
+        await supabase.from("heroes").update({ experience: hero.experience + effect.reward.experience }).eq("id", hero.id);
+      }
+      if (effect.reward.artifactTier) await grantArtifact(supabase, hero.id, `artifact_${effect.reward.artifactTier}`);
+      if (effect.reward.recruit) await addUnitsToHero(supabase, hero, effect.reward.recruit, 1);
+      return { message: "Les gardiens sont vaincus et la recompense est obtenue." };
+    }
+    case "stat": {
+      const stat = effect.stat === "choice_attack_defense" ? "attack" : effect.stat === "choice_magic" ? "spellPower" : effect.stat;
+      const column = stat === "spellPower" ? "spell_power" : stat;
+      await supabase.from("heroes").update({ [column]: Number(hero[stat] ?? 0) + effect.amount }).eq("id", hero.id);
+      return { message: `+${effect.amount} ${formatHeroStat(stat)}.` };
+    }
+    case "movement": {
+      await supabase.from("heroes").update({ movement: Math.max(0, Number(hero.movement ?? 0) + effect.amount) }).eq("id", hero.id);
+      return { message: `${effect.amount >= 0 ? "+" : ""}${effect.amount} mouvement.` };
+    }
+    case "morale":
+    case "luck": {
+      await supabase.from("heroes").update({ [effect.type]: Number(hero[effect.type] ?? 0) + effect.amount }).eq("id", hero.id);
+      await supabase.from("hero_status_effects").insert({
+        hero_id: hero.id,
+        effect_type: effect.type,
+        amount: effect.amount,
+        expires_on: effect.duration,
+      });
+      return { message: `${effect.type === "morale" ? "Moral" : "Chance"} ${effect.amount >= 0 ? "+" : ""}${effect.amount}.` };
+    }
+    case "mana": {
+      const maxMana = Number(hero.maxMana ?? (hero.knowledge ?? 1) * 10);
+      const currentMana = Number(hero.mana ?? maxMana);
+      const mana = effect.mode === "restore"
+        ? maxMana
+        : effect.mode === "multiply"
+          ? maxMana * effect.amount
+          : currentMana + effect.amount;
+      await supabase.from("heroes").update({ mana }).eq("id", hero.id);
+      return { message: "Points de magie recuperes." };
+    }
+    case "experience": {
+      await supabase.from("heroes").update({ experience: hero.experience + effect.amount }).eq("id", hero.id);
+      return { message: `+${effect.amount} experience.` };
+    }
+    case "reveal": {
+      await revealForPlayer(supabase, gamePlayer, game.mapData as GameMap, hero, effect);
+      return { message: "La carte est revelee." };
+    }
+    case "skill": {
+      await supabase.from("hero_skills").upsert({
+        hero_id: hero.id,
+        skill: effect.skill,
+        level: 1,
+      }, { onConflict: "hero_id,skill" });
+      return { message: `Competence apprise : ${effect.skill}.` };
+    }
+    case "spell": {
+      await supabase.from("hero_spellbook").upsert({
+        hero_id: hero.id,
+        spell: effect.spell,
+      }, { onConflict: "hero_id,spell" });
+      return { message: `Sort appris : ${effect.spell}.` };
+    }
+    case "artifact": {
+      await grantArtifact(supabase, hero.id, `artifact_${effect.tier}`);
+      return { message: "Artefact obtenu." };
+    }
+    case "recruit": {
+      await addUnitsToHero(supabase, hero, effect.unitType ?? UnitType.PIKEMAN, effect.min);
+      return { message: "Des creatures rejoignent l'armee." };
+    }
+    case "transport": {
+      const destination = await resolveTransport(supabase, gameId, adventure, effect.mode);
+      if (destination) {
+        await supabase.from("heroes").update({ x: destination.x, y: destination.y }).eq("id", hero.id);
+        return { message: "Le heros est transporte.", destination };
+      }
+      return { message: "Le transport n'a pas de destination disponible." };
+    }
+    case "market":
+      return { message: "Le service commercial est disponible." };
+    case "quest":
+      return { message: "La condition de quete est enregistree." };
+    case "transform":
+      return { message: "La transformation est disponible." };
+    case "sanctuary":
+      return { message: "Le heros est protege dans le sanctuaire." };
+    case "message":
+      return { message: effect.text };
+  }
+}
+
+function canVisitAdventureObject(
+  state: Record<string, unknown>,
+  frequency: string,
+  heroId: string,
+  playerId: string,
+  turnNumber: number,
+): { ok: true } | { ok: false; message: string } {
+  if (state.consumed) return { ok: false, message: "Cet objet a deja ete utilise." };
+  if (frequency === "repeatable") return { ok: true };
+
+  const week = Math.floor((turnNumber - 1) / 7) + 1;
+  const heroVisits = (state.heroVisits ?? {}) as Record<string, number>;
+  const playerVisits = (state.playerVisits ?? {}) as Record<string, number>;
+
+  if (frequency === "once" && state.visited) return { ok: false, message: "Cet objet a deja ete visite." };
+  if (frequency === "once_per_hero" && heroVisits[heroId]) return { ok: false, message: "Ce heros a deja visite cet objet." };
+  if (frequency === "once_per_player" && playerVisits[playerId]) return { ok: false, message: "Vous avez deja visite cet objet." };
+  if (frequency === "daily" && heroVisits[heroId] === turnNumber) return { ok: false, message: "Revenez demain." };
+  if (frequency === "weekly" && playerVisits[playerId] === week) return { ok: false, message: "Revenez la semaine prochaine." };
+  return { ok: true };
+}
+
+function markAdventureVisited(
+  state: Record<string, unknown>,
+  frequency: string,
+  heroId: string,
+  playerId: string,
+  turnNumber: number,
+  consumed: boolean,
+) {
+  const week = Math.floor((turnNumber - 1) / 7) + 1;
+  const next = { ...state };
+  const heroVisits = { ...((next.heroVisits ?? {}) as Record<string, number>) };
+  const playerVisits = { ...((next.playerVisits ?? {}) as Record<string, number>) };
+  if (frequency === "once") next.visited = true;
+  if (frequency === "once_per_hero" || frequency === "daily") heroVisits[heroId] = turnNumber;
+  if (frequency === "once_per_player") playerVisits[playerId] = turnNumber;
+  if (frequency === "weekly") playerVisits[playerId] = week;
+  next.heroVisits = heroVisits;
+  next.playerVisits = playerVisits;
+  if (consumed) next.consumed = true;
+  return next;
+}
+
+const RESOURCE_KEYS = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"] as const;
+
+function resolveResourceReward(resources: Partial<Resources>, randomResource?: boolean): Partial<Resources> {
+  if (!randomResource) return resources;
+  const keys = RESOURCE_KEYS.filter((key) => key !== "gold" && key !== "wood" && resources[key] === undefined);
+  const picked = keys[0] ?? "ore";
+  return { ...resources, [picked]: 4 };
+}
+
+function pickRewardResources(reward: Partial<Resources>): Partial<Resources> {
+  return Object.fromEntries(
+    RESOURCE_KEYS.map((key) => [key, reward[key]])
+      .filter(([, amount]) => typeof amount === "number" && amount > 0),
+  ) as Partial<Resources>;
+}
+
+async function addPlayerResources(
+  supabase: ReturnType<typeof createAdminClient>,
+  playerId: string,
+  resources: Partial<Resources>,
+) {
+  const player = await getGameRowForPlayer(supabase, playerId);
+  if (!player) return;
+  const patch = Object.fromEntries(
+    Object.entries(resources).map(([key, amount]) => [key, Number(player[key] ?? 0) + Number(amount ?? 0)]),
+  );
+  if (Object.keys(patch).length > 0) await supabase.from("game_players").update(patch).eq("id", playerId);
+}
+
+function formatResourceReward(resources: Partial<Resources>) {
+  const parts = Object.entries(resources)
+    .filter(([, amount]) => Number(amount ?? 0) > 0)
+    .map(([key, amount]) => `+${amount} ${key}`);
+  return parts.length > 0 ? parts.join(", ") : "Ressources obtenues.";
+}
+
+function formatHeroStat(stat: string) {
+  if (stat === "attack") return "attaque";
+  if (stat === "defense") return "defense";
+  if (stat === "spellPower") return "puissance";
+  return "savoir";
+}
+
+async function grantArtifact(supabase: ReturnType<typeof createAdminClient>, heroId: string, artifactType: string) {
+  await supabase.from("hero_artifacts").insert({
+    hero_id: heroId,
+    artifact_type: `${artifactType}_${randomUUID().slice(0, 8)}`,
+    slot: null,
+  });
+}
+
+async function addUnitsToHero(
+  supabase: ReturnType<typeof createAdminClient>,
+  hero: MinimalHero,
+  unitType: UnitType,
+  count: number,
+) {
+  const rule = UNIT_RULES[unitType];
+  const existing = hero.armies.find((army) => army.unitType === unitType);
+  if (existing) {
+    const nextCount = existing.count + count;
+    await supabase.from("armies").update({
+      count: nextCount,
+      health: existing.health + rule.health * count,
+    }).eq("id", existing.id);
+    return;
+  }
+
+  await supabase.from("armies").insert({
+    hero_id: hero.id,
+    unit_type: unitType,
+    count,
+    health: rule.health * count,
+    max_health: rule.health,
+    position: hero.armies.length,
+  });
+}
+
+async function revealForPlayer(
+  supabase: ReturnType<typeof createAdminClient>,
+  player: MinimalPlayer,
+  map: GameMap,
+  hero: MinimalHero,
+  effect: Extract<AdventureEffect, { type: "reveal" }>,
+) {
+  const explored = new Set(player.exploredTiles ?? []);
+  if (effect.mode === "radius") {
+    const visible = computeVisibleTiles(map, [{ x: hero.x, y: hero.y }], effect.radius ?? 8);
+    for (const key of visible) explored.add(key);
+  } else {
+    for (const row of map.tiles) {
+      for (const tile of row) {
+        if (effect.mode === "water" && tile.terrain !== "water") continue;
+        explored.add(`${tile.x},${tile.y}`);
+      }
+    }
+  }
+  await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", player.id);
+}
+
+async function resolveTransport(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  adventure: MinimalAdventureObject,
+  mode: string,
+): Promise<Position | null> {
+  if (mode !== "teleport" && mode !== "subterranean" && mode !== "whirlpool") return null;
+  const { data } = await supabase
+    .from("adventure_objects")
+    .select("id,x,y,object_type")
+    .eq("game_id", gameId)
+    .eq("object_type", adventure.objectType);
+  const other = (data ?? []).find((item) => item.id !== adventure.id);
+  return other ? { x: other.x, y: other.y } : null;
 }
 
 async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>, gameId: string, turnNumber: number, gamePlayerId: string) {

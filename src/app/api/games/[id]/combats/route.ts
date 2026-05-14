@@ -123,7 +123,10 @@ export async function POST(
   const townDefender = !defender && !buildingDefender && body.targetType === "town"
     ? await getTownDefender(supabase, id, String(body.targetId ?? ""), targetPosition)
     : null;
-  const targetDefender = defender ?? buildingDefender ?? townDefender;
+  const adventureDefender = !defender && !buildingDefender && !townDefender && body.targetType === "adventure"
+    ? await getAdventureObjectDefender(supabase, id, String(body.targetId ?? ""))
+    : null;
+  const targetDefender = defender ?? buildingDefender ?? townDefender ?? adventureDefender;
   if (!targetDefender) {
     const debug = {
       gameId: id,
@@ -218,6 +221,12 @@ export async function POST(
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
+      } else if (body.targetType === "adventure") {
+        await supabase
+          .from("adventure_objects")
+          .update({ guardian_power: 0 })
+          .eq("game_id", id)
+          .eq("id", targetDefender.id);
       } else if (!targetDefender.playerId) {
         await supabase
           .from("resource_buildings")
@@ -330,6 +339,41 @@ async function getBuildingDefender(
     }],
     x: building.x,
     y: building.y,
+  };
+}
+
+async function getAdventureObjectDefender(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  targetId: string
+) {
+  const { data: object, error } = await supabase
+    .from("adventure_objects")
+    .select("id,x,y,guardian_power")
+    .eq("game_id", gameId)
+    .eq("id", targetId)
+    .maybeSingle();
+
+  if (error || !object || object.guardian_power <= 0) return null;
+
+  const count = Math.max(8, Math.ceil(Number(object.guardian_power) / 14));
+  return {
+    id: object.id,
+    playerId: null,
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: [{
+      id: `${object.id}-guards`,
+      unitType: UnitType.PIKEMAN,
+      count,
+      health: count * 12,
+      maxHealth: 12,
+      position: 0,
+    }],
+    x: object.x,
+    y: object.y,
   };
 }
 

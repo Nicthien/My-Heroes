@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { ADVENTURE_OBJECT_RULES } from "@/lib/game/adventure-objects";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
@@ -52,6 +53,11 @@ const PUBLIC_SVGS: { path: string; label: string; group: string }[] = [
   { path: "/assets/sprites/resources/crystals.svg", label: "Cristaux", group: "Ressources" },
   { path: "/assets/sprites/resources/gems.svg", label: "Gemmes", group: "Ressources" },
   { path: "/assets/sprites/resources/sulfur.svg", label: "Soufre", group: "Ressources" },
+  ...ADVENTURE_OBJECT_RULES.map((rule) => ({
+    path: rule.sprite,
+    label: rule.label,
+    group: "Carte - objets d'aventure",
+  })),
 ];
 
 function mockUnit(unitType: UnitType, side: "attacker" | "defender"): CombatBoardUnit {

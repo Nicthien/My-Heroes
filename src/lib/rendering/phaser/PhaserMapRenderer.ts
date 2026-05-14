@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
+import { getAdventureObjectLabel } from "@/lib/game/adventure-objects";
 import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
@@ -61,6 +62,7 @@ function getMapObjectHoverText(object: MapObject) {
     ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
     : "Armée neutre";
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
+  if (object.type === "adventure" && object.subtype) return getAdventureObjectLabel(object.subtype);
   if (object.type === "artifact") return "Artefact";
 
   return null;
@@ -1285,6 +1287,11 @@ class PhaserMapScene extends Phaser.Scene {
         if (object.guardianPower && object.guardianPower > 0) {
           this.addBadge(this.objectLayer, iso.x, y - 37, String(Math.ceil(object.guardianPower / 100)), 0xff4444, y + 6);
         }
+      } else if (object.type === "adventure" && object.adventureObjectType) {
+        this.addObjectSprite(object, iso.x, y + 6, MAP_SPRITES.adventure[object.adventureObjectType], 52, 52);
+        if (object.guardianPower && object.guardianPower > 0) {
+          this.addBadge(this.objectLayer, iso.x, y - 37, String(Math.ceil(object.guardianPower / 100)), 0xff4444, y + 6);
+        }
       } else if (object.type === "combat") {
         const markerY = y - 60;
         const markerDepth = y + 1000;
@@ -2046,6 +2053,7 @@ function getObjectMetrics(object: MapObjectData) {
     : { width: 62, height: 62, offsetY: 15 };
   if (object.type === "town") return { width: 82, height: 82, offsetY: 20 };
   if (object.type === "building") return { width: 52, height: 52, offsetY: 6 };
+  if (object.type === "adventure") return { width: 52, height: 52, offsetY: 6 };
   if (object.type === "combat") return { width: 48, height: 48, offsetY: 10 };
   return null;
 }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-buoy-title adventure-buoy-desc">
+  <title id="adventure-buoy-title">Bouee</title>
+  <desc id="adventure-buoy-desc">Sprite original d'objet d'aventure : Bouee.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(82 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(44 58% 52%)" stroke="hsl(82 46% 28%)" stroke-width="2"/><path d="M11 43 C18 34 27 31 33 35 C40 30 51 35 55 44 C47 52 20 53 11 43 Z" fill="#2563eb" stroke="#0f2d68" stroke-width="2"/><path d="M17 43 C25 47 40 47 49 42" fill="none" stroke="#bae6fd" stroke-width="2" stroke-linecap="round"/><path d="M32 11 L40 35 H24 Z" fill="hsl(209 72% 62%)" stroke="hsl(82 46% 28%)" stroke-width="2"/><path d="M32 12 V35" stroke="#fff" stroke-width="1.5" opacity=".55"/>
+</svg>

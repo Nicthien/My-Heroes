@@ -91,7 +91,7 @@ export function placeDecor(
       if (!conf) continue;
       if (rng() > conf.density) continue;
 
-      const blocking = rng() < conf.blockingRatio;
+      const blocking = rng() < conf.blockingRatio && !isProtectedObjectApproach(tiles, width, height, x, y);
       const palette = blocking ? conf.blockingKinds : conf.kinds;
       if (palette.length === 0) continue;
       const kind = pick(rng, palette);
@@ -104,6 +104,26 @@ export function placeDecor(
       }
     }
   }
+}
+
+function isProtectedObjectApproach(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): boolean {
+  for (const next of [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ]) {
+    if (next.x < 0 || next.x >= width || next.y < 0 || next.y >= height) continue;
+    const objectType = tiles[next.y][next.x].object?.type;
+    if (objectType === "building" || objectType === "adventure") return true;
+  }
+  return false;
 }
 
 function placeObjectScenery(

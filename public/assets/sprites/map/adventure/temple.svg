@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-temple-title adventure-temple-desc">
+  <title id="adventure-temple-title">Temple</title>
+  <desc id="adventure-temple-desc">Sprite original d'objet d'aventure : Temple.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(234 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(196 58% 52%)" stroke="hsl(234 46% 28%)" stroke-width="2"/><path d="M18 51 V31 L32 11 L46 31 V51 Z" fill="hsl(196 58% 52%)" stroke="hsl(234 46% 28%)" stroke-width="2"/><path d="M25 51 V38 Q32 31 39 38 V51 Z" fill="#111827"/><circle cx="32" cy="25" r="6" fill="hsl(1 72% 62%)" stroke="hsl(234 46% 28%)" stroke-width="1.5"/><path d="M32 17 V33 M24 25 H40" stroke="#fff" stroke-width="1.4" opacity=".5"/>
+</svg>

@@ -16,7 +16,7 @@ import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./templat
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
 import { buildConnectionsAndWalls } from "./connections";
 import { applyChokepointGuards, fillZone, placeTownInZone } from "./placement";
-import { buildRoads, buildSecondaryRoads } from "./roads";
+import { buildRoads } from "./roads";
 import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
@@ -136,7 +136,6 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     if (placed) townPositions.push({ x: placed.x, y: placed.y });
   }
 
-  const miningPositions: Position[] = [];
   for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
     const meta = zoneGrid.meta[zoneId];
     const tplZone = template.zones.find((z) => z.id === meta.templateZoneId)!;
@@ -147,20 +146,18 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
       budgetMeta.value = Math.max(2000, meta.value - castleBudgetShare);
     }
     zoneGrid.meta[zoneId] = budgetMeta;
-    const r = fillZone(
+    fillZone(
       { tiles, zoneGrid, width, height, rng },
       zoneId,
       tplZone.monsterStrength,
     );
-    for (const b of r.placedBuildings) miningPositions.push({ x: b.x, y: b.y });
   }
 
   // 4) Gardes des chokepoints
   applyChokepointGuards({ tiles, zoneGrid, width, height, rng }, chokepoints);
 
-  // 5) Routes : pavées entre châteaux, dirt vers les mines
+  // 5) Routes : pavées entre châteaux uniquement. Les objets d'aventure restent hors-route.
   buildRoads(tiles, width, height, townPositions, "paved");
-  buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10);
 
   // 6) Décor (passe finale)
   placeDecor(tiles, width, height, rng);

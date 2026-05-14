@@ -234,6 +234,22 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
     }];
   }
 
+  if (pendingCombat.targetType === "adventure") {
+    const destination = pendingCombat.destination;
+    const guardianPower = Math.max(0, destination
+      ? gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0
+      : 0);
+    const count = Math.max(8, Math.ceil(guardianPower / 14));
+    return [{
+      id: `${pendingCombat.targetId}-guards-preview`,
+      unitType: UnitType.PIKEMAN,
+      count,
+      health: count * 12,
+      maxHealth: 12,
+      position: 0,
+    }];
+  }
+
   const defenderHero = findHero(gameState, pendingCombat.targetId);
   return defenderHero?.armies ?? [];
 }
@@ -255,6 +271,7 @@ function getDifficulty(ratio: number) {
 }
 
 function getSourceLabel(targetType: PendingCombat["targetType"]) {
+  if (targetType === "adventure") return "Gardiens estimes de l'objet.";
   if (targetType === "building") return "Gardiens estimés du lieu.";
   if (targetType === "town") return "Garnison neutre repérée.";
   if (targetType === "monster") return "Armée neutre observée.";

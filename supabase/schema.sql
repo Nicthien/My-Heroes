@@ -66,6 +66,12 @@ create table public.heroes (
   defense integer not null default 1,
   spell_power integer not null default 1,
   knowledge integer not null default 1,
+  mana integer not null default 10,
+  max_mana integer not null default 10,
+  morale integer not null default 0,
+  luck integer not null default 0,
+  boat_id text,
+  map_layer text not null default 'surface',
   movement numeric not null default 10,
   max_movement numeric not null default 10,
   x integer not null,
@@ -132,6 +138,52 @@ create table public.resource_buildings (
   guardian_power integer not null default 0
 );
 
+create table public.adventure_objects (
+  id text primary key,
+  game_id uuid not null references public.games(id) on delete cascade,
+  game_player_id uuid references public.game_players(id) on delete set null,
+  object_type text not null,
+  x integer not null,
+  y integer not null,
+  guardian_power integer not null default 0,
+  state jsonb not null default '{}'
+);
+
+create table public.hero_artifacts (
+  id uuid primary key default gen_random_uuid(),
+  hero_id uuid not null references public.heroes(id) on delete cascade,
+  artifact_type text not null,
+  slot text,
+  created_at timestamptz not null default now()
+);
+
+create table public.hero_skills (
+  id uuid primary key default gen_random_uuid(),
+  hero_id uuid not null references public.heroes(id) on delete cascade,
+  skill text not null,
+  level integer not null default 1,
+  created_at timestamptz not null default now(),
+  unique (hero_id, skill)
+);
+
+create table public.hero_spellbook (
+  id uuid primary key default gen_random_uuid(),
+  hero_id uuid not null references public.heroes(id) on delete cascade,
+  spell text not null,
+  created_at timestamptz not null default now(),
+  unique (hero_id, spell)
+);
+
+create table public.hero_status_effects (
+  id uuid primary key default gen_random_uuid(),
+  hero_id uuid not null references public.heroes(id) on delete cascade,
+  effect_type text not null,
+  amount integer not null default 0,
+  expires_on text,
+  expires_turn integer,
+  created_at timestamptz not null default now()
+);
+
 create table public.turns (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete cascade,
@@ -180,6 +232,7 @@ alter publication supabase_realtime add table public.game_players;
 alter publication supabase_realtime add table public.heroes;
 alter publication supabase_realtime add table public.towns;
 alter publication supabase_realtime add table public.resource_buildings;
+alter publication supabase_realtime add table public.adventure_objects;
 alter publication supabase_realtime add table public.combats;
 alter publication supabase_realtime add table public.combat_participants;
 

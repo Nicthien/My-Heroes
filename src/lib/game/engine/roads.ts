@@ -33,6 +33,7 @@ function findRoadPath(
       const isStartOrEnd =
         (n.x === start.x && n.y === start.y) || (n.x === end.x && n.y === end.y);
       // On peut traverser une tile non-passable seulement si c'est le départ/arrivée (château)
+      if (!isStartOrEnd && isRoadBlockedByObjectOrNearbyObject(tiles, width, height, n.x, n.y)) continue;
       if (!t.isPassable && !isStartOrEnd) continue;
       // Préfère terrain plat et déjà passable
       if (t.terrain === TerrainType.WATER && !isStartOrEnd && !canBridgeWater(tiles, width, height, n.x, n.y)) continue;
@@ -82,6 +83,9 @@ function findForcedRoadPath(
     for (const n of neighbors) {
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const tile = tiles[n.y][n.x];
+      const isStartOrEnd =
+        (n.x === start.x && n.y === start.y) || (n.x === end.x && n.y === end.y);
+      if (!isStartOrEnd && isRoadBlockedByObjectOrNearbyObject(tiles, width, height, n.x, n.y)) continue;
       const waterCost = tile.terrain === TerrainType.WATER ? 4 : 0;
       const wallCost = tile.object?.type === "wall" ? 8 : 0;
       const blockingDecorCost = tile.decor?.blocking ? 4 : 0;
@@ -125,6 +129,7 @@ function findPathToNearestRoad(
     for (const n of neighbors) {
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const nextTile = tiles[n.y][n.x];
+      if (isRoadBlockedByObjectOrNearbyObject(tiles, width, height, n.x, n.y)) continue;
       if (!nextTile.isPassable) continue;
       if (nextTile.terrain === TerrainType.WATER && !canBridgeWater(tiles, width, height, n.x, n.y)) continue;
       const wobble = ((n.x * 928371 + n.y * 523111) % 7) * 0.035;
@@ -171,6 +176,7 @@ export function paintRoad(
 ): void {
   for (const p of path) {
     const tile = tiles[p.y][p.x];
+    if (tile.object && tile.object.type !== "town" && tile.object.type !== "wall") continue;
     if (tile.object?.type === "wall") tile.object = undefined;
     if (tile.decor?.blocking) tile.decor = undefined;
     tile.isPassable = true;
@@ -179,6 +185,33 @@ export function paintRoad(
     if (tile.road === "paved" && type === "dirt") continue;
     tile.road = type;
   }
+}
+
+function isRoadBlockedByObjectOrNearbyObject(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): boolean {
+  const tile = tiles[y]?.[x];
+  if (!tile) return true;
+  if (tile.object && tile.object.type !== "town" && tile.object.type !== "wall") return true;
+
+  for (const side of [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ]) {
+    const nx = x + side.dx;
+    const ny = y + side.dy;
+    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+    const object = tiles[ny]?.[nx]?.object;
+    if (object?.type === "building" || object?.type === "adventure") return true;
+  }
+
+  return false;
 }
 
 /** Trace une route entre tous les châteaux donnés. */

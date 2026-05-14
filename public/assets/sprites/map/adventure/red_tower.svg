@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="adventure-red-tower-title adventure-red-tower-desc">
+  <title id="adventure-red-tower-title">Tour rouge</title>
+  <desc id="adventure-red-tower-desc">Sprite original d'objet d'aventure : Tour rouge.</desc>
+  
+  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/><path d="M10 51 L32 37 L54 51 L32 61 Z" fill="hsl(20 46% 28%)" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="hsl(342 58% 52%)" stroke="hsl(20 46% 28%)" stroke-width="2"/><path d="M14 51 V28 L32 12 L50 28 V51 Z" fill="hsl(342 58% 52%)" stroke="hsl(20 46% 28%)" stroke-width="2"/><path d="M20 51 V38 Q32 27 44 38 V51 Z" fill="#111827"/><path d="M18 28 H46 M24 22 H40" stroke="hsl(147 72% 62%)" stroke-width="3" stroke-linecap="round"/><path d="M19 35 H25 M39 35 H45" stroke="#fff" stroke-width="2" opacity=".5"/>
+</svg>

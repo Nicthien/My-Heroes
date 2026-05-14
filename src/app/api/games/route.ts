@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles } from "@/lib/game/engine";
+import { getAdventureObjectRule } from "@/lib/game/adventure-objects";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/neutral-armies";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
@@ -189,6 +190,7 @@ export async function POST(request: Request) {
 
   await createNeutralArmies(supabase, gameRow.id, mapData);
   await createResourceBuildings(supabase, gameRow.id, mapData);
+  await createAdventureObjects(supabase, gameRow.id, mapData);
   await createNeutralTowns(supabase, gameRow.id, mapData);
 
   const game = await getGameWithRelations(supabase, gameRow.id);
@@ -270,6 +272,37 @@ async function createResourceBuildings(
       x: tile.x,
       y: tile.y,
       guardian_power: guardianPower,
+    });
+  }
+}
+
+async function createAdventureObjects(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
+) {
+  const adventureTiles = mapData.tiles.flatMap((row) =>
+    row.filter((tile) => tile.object?.type === "adventure"),
+  );
+
+  for (const tile of adventureTiles) {
+    const id = tile.object?.id;
+    const objectType = tile.object?.subtype;
+    if (!id || !objectType) continue;
+    const rule = getAdventureObjectRule(objectType);
+
+    await supabase.from("adventure_objects").insert({
+      id,
+      game_id: gameId,
+      game_player_id: null,
+      object_type: objectType,
+      x: tile.x,
+      y: tile.y,
+      guardian_power: tile.object?.guardianPower ?? rule?.guardianPower ?? 0,
+      state: {
+        visits: {},
+        generated: true,
+      },
     });
   }
 }

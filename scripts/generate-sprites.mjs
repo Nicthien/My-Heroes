@@ -323,6 +323,21 @@ const decorSpecs = [
   { file: "grass-tuft", title: "Touffe d'herbe", kind: "grass-tuft" },
 ];
 
+const adventureObjectSource = await readFile(path.join(ROOT, "src", "lib", "game", "adventure-objects.ts"), "utf8");
+const adventureObjectSpecs = Array.from(adventureObjectSource.matchAll(/rule\("([^"]+)",\s*"([^"]+)"/g))
+  .map((match) => ({ file: match[1], title: match[2], kind: adventureKind(match[1]) }));
+
+function adventureKind(id) {
+  if (id.includes("ship") || id.includes("boat") || id.includes("sea") || id.includes("water") || id.includes("whirlpool") || id.includes("buoy") || id.includes("flotsam") || id.includes("jetsam")) return "water";
+  if (id.includes("gate") || id.includes("portal") || id.includes("subterranean") || id.includes("town_gate")) return "portal";
+  if (id.includes("bank") || id.includes("crypt") || id.includes("utopia") || id.includes("hive") || id.includes("stockpile") || id.includes("tower")) return "bank";
+  if (id.includes("school") || id.includes("university") || id.includes("library") || id.includes("scholar") || id.includes("witch")) return "knowledge";
+  if (id.includes("chest") || id.includes("campfire") || id.includes("wagon") || id.includes("grave") || id.includes("corpse")) return "treasure";
+  if (id.includes("fountain") || id.includes("well") || id.includes("spring") || id.includes("oasis")) return "spring";
+  if (id.includes("market") || id.includes("guild") || id.includes("factory") || id.includes("yard")) return "service";
+  return "landmark";
+}
+
 function esc(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -984,6 +999,48 @@ function decorSvg(spec) {
   });
 }
 
+function adventureObjectSvg(spec) {
+  const id = idFrom(`adventure-${spec.file}`);
+  const hue = hashText(spec.file);
+  const c1 = hsl(hue, 58, 52);
+  const c2 = hsl((hue + 38) % 360, 46, 28);
+  const accent = hsl((hue + 165) % 360, 72, 62);
+  const shadow = `<ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".25"/>`;
+  const base = `<path d="M10 51 L32 37 L54 51 L32 61 Z" fill="${c2}" opacity=".75"/><path d="M15 48 L32 37 L49 48 L32 57 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/>`;
+  let detail = "";
+  if (spec.kind === "water") {
+    detail = `<path d="M11 43 C18 34 27 31 33 35 C40 30 51 35 55 44 C47 52 20 53 11 43 Z" fill="#2563eb" stroke="#0f2d68" stroke-width="2"/><path d="M17 43 C25 47 40 47 49 42" fill="none" stroke="#bae6fd" stroke-width="2" stroke-linecap="round"/><path d="M32 11 L40 35 H24 Z" fill="${accent}" stroke="${c2}" stroke-width="2"/><path d="M32 12 V35" stroke="#fff" stroke-width="1.5" opacity=".55"/>`;
+  } else if (spec.kind === "portal") {
+    detail = `<ellipse cx="32" cy="36" rx="15" ry="24" fill="#111827" stroke="${c2}" stroke-width="4"/><ellipse cx="32" cy="36" rx="9" ry="17" fill="${accent}" opacity=".85"/><path d="M23 17 C30 9 40 12 43 21 M20 45 C27 55 40 55 45 44" fill="none" stroke="#fff" stroke-width="2" opacity=".55"/><circle cx="32" cy="36" r="4" fill="#fff" opacity=".65"/>`;
+  } else if (spec.kind === "bank") {
+    detail = `<path d="M14 51 V28 L32 12 L50 28 V51 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M20 51 V38 Q32 27 44 38 V51 Z" fill="#111827"/><path d="M18 28 H46 M24 22 H40" stroke="${accent}" stroke-width="3" stroke-linecap="round"/><path d="M19 35 H25 M39 35 H45" stroke="#fff" stroke-width="2" opacity=".5"/>`;
+  } else if (spec.kind === "knowledge") {
+    detail = `<path d="M17 50 V20 L31 13 L47 20 V50 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M23 45 H41 V25 H23 Z" fill="#f8fafc" stroke="${c2}" stroke-width="1.5"/><path d="M32 25 V45 M26 31 H30 M34 31 H39 M26 37 H30 M34 37 H39" stroke="${c2}" stroke-width="1.3"/><path d="M32 8 L37 18 H27 Z" fill="${accent}" stroke="${c2}" stroke-width="1.5"/>`;
+  } else if (spec.kind === "treasure") {
+    detail = `<path d="M16 34 H48 V51 H16 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M16 35 C18 20 46 20 48 35 Z" fill="${accent}" stroke="${c2}" stroke-width="2"/><path d="M16 39 H48 M32 24 V51" stroke="${c2}" stroke-width="2"/><rect x="28" y="38" width="8" height="7" rx="1" fill="#fef3c7" stroke="${c2}"/>`;
+  } else if (spec.kind === "spring") {
+    detail = `<path d="M14 49 C14 36 22 28 32 28 C43 28 51 36 51 49 C43 56 22 56 14 49 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><ellipse cx="32" cy="47" rx="14" ry="6" fill="#7dd3fc" stroke="#075985" stroke-width="1.5"/><path d="M25 30 C24 20 34 18 32 8 M36 31 C42 24 38 18 44 12" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" opacity=".75"/>`;
+  } else if (spec.kind === "service") {
+    detail = `<path d="M13 50 V27 L32 15 L51 27 V50 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M18 28 H46 L42 21 H22 Z" fill="${accent}" stroke="${c2}" stroke-width="1.5"/><circle cx="25" cy="39" r="5" fill="#fef3c7" stroke="${c2}"/><circle cx="39" cy="39" r="5" fill="#dbeafe" stroke="${c2}"/><path d="M25 34 V44 M20 39 H30 M36 39 H42" stroke="${c2}" stroke-width="1.4"/>`;
+  } else {
+    detail = `<path d="M18 51 V31 L32 11 L46 31 V51 Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M25 51 V38 Q32 31 39 38 V51 Z" fill="#111827"/><circle cx="32" cy="25" r="6" fill="${accent}" stroke="${c2}" stroke-width="1.5"/><path d="M32 17 V33 M24 25 H40" stroke="#fff" stroke-width="1.4" opacity=".5"/>`;
+  }
+  return svg({ title: spec.title, desc: `Sprite original d'objet d'aventure : ${spec.title}.`, id, width: 64, height: 64, body: `${shadow}${base}${detail}` });
+}
+
+function hashText(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % 360;
+}
+
+function hsl(h, s, l) {
+  return `hsl(${h} ${s}% ${l}%)`;
+}
+
 function decorBody(kind) {
   const shadow = `<ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".24"/>`;
   if (kind === "wall-brick") return `${shadow}
@@ -1089,6 +1146,10 @@ for (const spec of buildingSpecs) {
 
 for (const spec of decorSpecs) {
   await writeSvg(path.join("map", `${spec.file}.svg`), decorSvg(spec));
+}
+
+for (const spec of adventureObjectSpecs) {
+  await writeSvg(path.join("map", "adventure", `${spec.file}.svg`), adventureObjectSvg(spec));
 }
 
 console.log(`${units.length + townSpecs.length + heroSpecs.length + resourceSpecs.length + buildingSpecs.length + decorSpecs.length} sprites SVG générés.`);

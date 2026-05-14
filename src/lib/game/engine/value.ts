@@ -1,3 +1,4 @@
+import { ADVENTURE_OBJECT_RULES } from "../adventure-objects";
 import { ResourceBuildingType, TerrainType } from "../types";
 
 export type ResourceSubtype = "gold" | "wood" | "ore" | "mercury" | "crystals" | "gems" | "sulfur";
@@ -18,7 +19,15 @@ export interface BuildingSpec {
   clusterCount: [number, number];
 }
 
-export type ObjectSpec = PileSpec | BuildingSpec;
+export interface AdventureObjectSpec {
+  kind: "adventure";
+  objectType: string;
+  value: number;
+  preferredTerrain: TerrainType[];
+  guardianPower: number;
+}
+
+export type ObjectSpec = PileSpec | BuildingSpec | AdventureObjectSpec;
 
 export const PILE_VALUE: Record<ResourceSubtype, number> = {
   gold: 500,
@@ -100,6 +109,16 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     clusterCount: [1, 2],
   },
 ];
+
+export const ADVENTURE_OBJECT_SPECS: AdventureObjectSpec[] = ADVENTURE_OBJECT_RULES
+  .filter((rule) => rule.appearsOnRandomMap !== false && rule.rmgValue !== null)
+  .map((rule) => ({
+    kind: "adventure",
+    objectType: rule.id,
+    value: Math.max(100, rule.rmgValue ?? 1000),
+    preferredTerrain: rule.allowedTerrain,
+    guardianPower: rule.guardianPower ?? (rule.guarded ? Math.max(800, Math.floor((rule.rmgValue ?? 1000) * 0.9)) : 0),
+  }));
 
 export function buildingSpec(type: ResourceBuildingType): BuildingSpec {
   const s = BUILDING_SPECS.find((b) => b.buildingType === type);

@@ -1,4 +1,5 @@
 import { UnitType } from "@/lib/game/types";
+import { ADVENTURE_OBJECT_RULES } from "@/lib/game/adventure-objects";
 
 export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) => {
   sprites[unitType] = `/assets/sprites/units/${unitType}.svg`;
@@ -48,6 +49,9 @@ export const MAP_SPRITES = {
     gem_pond: "/assets/sprites/map/gem-pond.svg",
     sulfur_dune: "/assets/sprites/map/sulfur-dune.svg",
   } as Record<string, string>,
+  adventure: Object.fromEntries(
+    ADVENTURE_OBJECT_RULES.map((rule) => [rule.id, rule.sprite]),
+  ) as Record<string, string>,
   decor: {
     wall_brick: "/assets/sprites/map/wall-brick.svg",
     wall_vegetal: "/assets/sprites/map/wall-vegetal.svg",
@@ -82,5 +86,6 @@ export const MAP_SPRITE_PATHS = Array.from(new Set([
   ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),
   ...Object.values(MAP_SPRITES.buildings),
+  ...Object.values(MAP_SPRITES.adventure),
   ...Object.values(MAP_SPRITES.decor),
 ]));

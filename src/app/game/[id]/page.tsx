@@ -96,6 +96,7 @@ export default function GamePage() {
     const myPlayer = gameState.players.find((player) => player.userId === userId);
     if (!myPlayer) return;
     const combat = gameState.activeCombats?.find((item) => {
+      if (item.status !== "ACTIVE") return false;
       if (minimizedCombatIds.includes(item.id)) return false;
       return item.attackerPlayerId === myPlayer.id || item.defenderPlayerId === myPlayer.id || item.participants?.some((participant) => participant.playerId === myPlayer.id);
     });

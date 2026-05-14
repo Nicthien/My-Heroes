@@ -731,7 +731,11 @@ export default function GameMapComponent() {
           .then(async (response) => {
             if (!response.ok) {
               const message = await getApiErrorMessage(response);
-              if (message.toLowerCase().includes("garde")) {
+              const normalizedMessage = message
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase();
+              if (normalizedMessage.includes("garde")) {
                 pendingAttackRef.current = null;
                 rendererRef.current?.clearHighlights();
                 setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "town", destination, path });

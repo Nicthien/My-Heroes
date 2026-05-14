@@ -35,7 +35,7 @@ export type UnitModelKind = "infantry" | "archer" | "cavalry" | "winged" | "larg
 
 export default function CombatScreen() {
   const { data: session } = useSession();
-  const { activeCombat, setActiveCombat, setCombatResult, setGameState, gameState, minimizeCombat } = useGameStore();
+  const { activeCombat, setActiveCombat, setCombatResult, setGameState, gameState, minimizeCombat, focusTile } = useGameStore();
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const isSubmittingActionRef = useRef(false);
   const neutralActionKeyRef = useRef<string | null>(null);
@@ -43,9 +43,22 @@ export default function CombatScreen() {
   const resolveCombat = useCallback(async (combat: PersistentCombat) => {
     setActiveCombat(null);
     if (combat.result) setCombatResult(combat.result);
+    const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+    const didLose = Boolean(
+      combat.result &&
+      myPlayer &&
+      (combat.attackerPlayerId === myPlayer.id || combat.defenderPlayerId === myPlayer.id || combat.participants?.some((participant) => participant.playerId === myPlayer.id)) &&
+      combat.result.winnerPlayerId !== myPlayer.id
+    );
+    if (didLose) {
+      const mainTown = myPlayer.towns[0];
+      if (mainTown) {
+        focusTile(mainTown.position.x, mainTown.position.y);
+      }
+    }
     const refreshed = await refreshGameState(combat.gameId, session?.user?.id);
     if (refreshed) setGameState(refreshed);
-  }, [session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
+  }, [focusTile, gameState?.players, session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
 
   useEffect(() => {
     if (!activeCombat) return;

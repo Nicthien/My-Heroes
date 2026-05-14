@@ -27,7 +27,7 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
     weight: b.preferredTerrain.includes(terrainBias) ? 1 : 0.4,
   }));
   const piles: { value: ObjectSpec; weight: number }[] = (
-    ["gold", "wood", "ore", "mercury", "crystals", "sulfur"] as ResourceSubtype[]
+    ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"] as ResourceSubtype[]
   ).map((s) => ({ value: makePileSpec(s), weight: s === "gold" ? 4 : 2 }));
 
   // Buildings rares mais existants, piles fréquentes

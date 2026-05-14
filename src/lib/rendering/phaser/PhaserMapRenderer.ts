@@ -48,6 +48,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   ore: "MIN",
   mercury: "MER",
   crystals: "CRI",
+  gems: "GEM",
   sulfur: "SOU",
 };
 

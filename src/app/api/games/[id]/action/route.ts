@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
-import { BUILDING_RULES, DWELLING_TIERS, FACTION_UNITS, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
+import {
+  RESOURCE_BUILDING_RULES,
+  UNIT_RULES,
+  canAfford,
+  getFactionBuildingRule,
+  getGrowthForBuiltTownBuilding,
+  subtractCost,
+} from "@/lib/game/economy";
 import { BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import {
   CLASS_STARTING_STATS,
@@ -77,6 +84,7 @@ interface MinimalPlayer {
   ore: number;
   mercury: number;
   crystals: number;
+  gems: number;
   sulfur: number;
   exploredTiles: string[];
   heroes: MinimalHero[];
@@ -320,11 +328,14 @@ export async function POST(
     if (action.type === "BUILD") {
       const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
       const building = action.building as BuildingType;
-      const rule = BUILDING_RULES.find((item) => item.type === building);
+      const townFaction = ((town?.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      const rule = getFactionBuildingRule(townFaction, building);
       if (!town || !rule) return NextResponse.json({ error: "Batiment invalide" }, { status: 400 });
 
       const buildings = (town.buildings ?? []) as string[];
       if (buildings.includes(building)) return NextResponse.json({ error: "Batiment deja construit" }, { status: 400 });
+      const missingRequirement = rule.requires?.find((requirement) => !buildings.includes(requirement));
+      if (missingRequirement) return NextResponse.json({ error: "Prérequis manquant" }, { status: 400 });
       const resources = playerResources(gamePlayer);
       if (!canAfford(resources, rule.cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
@@ -505,6 +516,7 @@ function playerResources(player: {
   ore: number;
   mercury: number;
   crystals: number;
+  gems?: number;
   sulfur: number;
 }): Resources {
   return {
@@ -513,6 +525,7 @@ function playerResources(player: {
     ore: player.ore,
     mercury: player.mercury,
     crystals: player.crystals,
+    gems: player.gems ?? 0,
     sulfur: player.sulfur,
   };
 }
@@ -615,7 +628,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
   const nextTurnNumber = turnNumber + 1;
   for (const player of alivePlayers) {
     let goldIncome = 500, woodIncome = 2, oreIncome = 1;
-    let mercuryIncome = 0, crystalsIncome = 0, sulfurIncome = 0;
+    let mercuryIncome = 0, crystalsIncome = 0, gemsIncome = 0, sulfurIncome = 0;
 
     for (const building of player.resourceBuildings ?? []) {
       const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === building.buildingType);
@@ -625,13 +638,24 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
         oreIncome += rule.production.ore ?? 0;
         mercuryIncome += rule.production.mercury ?? 0;
         crystalsIncome += rule.production.crystals ?? 0;
+        gemsIncome += rule.production.gems ?? 0;
         sulfurIncome += rule.production.sulfur ?? 0;
       }
     }
 
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
-      if (buildings.includes(BuildingType.RESOURCE_SILO)) goldIncome += 500;
+      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? Faction.CASTLE) as Faction;
+      for (const building of buildings) {
+        const rule = getFactionBuildingRule(townFaction, building);
+        goldIncome += rule?.dailyProduction?.gold ?? 0;
+        woodIncome += rule?.dailyProduction?.wood ?? 0;
+        oreIncome += rule?.dailyProduction?.ore ?? 0;
+        mercuryIncome += rule?.dailyProduction?.mercury ?? 0;
+        crystalsIncome += rule?.dailyProduction?.crystals ?? 0;
+        gemsIncome += rule?.dailyProduction?.gems ?? 0;
+        sulfurIncome += rule?.dailyProduction?.sulfur ?? 0;
+      }
     }
 
     await supabase.from("game_players").update({
@@ -640,6 +664,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
       ore: player.ore + oreIncome,
       mercury: player.mercury + mercuryIncome,
       crystals: player.crystals + crystalsIncome,
+      gems: (player.gems ?? 0) + gemsIncome,
       sulfur: player.sulfur + sulfurIncome,
     }).eq("id", player.id);
     await supabase.from("heroes").update({ movement: 10 }).eq("game_player_id", player.id);
@@ -647,14 +672,12 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
       const recruits: Record<string, number> = { ...(town.availableRecruits ?? {}) };
-      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? "castle") as Faction;
-      const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
-      for (let tier = 0; tier < DWELLING_TIERS.length; tier++) {
-        if (!buildings.includes(DWELLING_TIERS[tier])) continue;
-        const unitType = factionTiers[tier];
-        const rule = UNIT_RULES[unitType];
-        if (!rule) continue;
-        recruits[unitType] = (recruits[unitType] ?? 0) + rule.growth;
+      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? Faction.CASTLE) as Faction;
+      for (const building of buildings) {
+        const growth = getGrowthForBuiltTownBuilding(townFaction, building);
+        for (const [unitType, amount] of Object.entries(growth)) {
+          recruits[unitType] = (recruits[unitType] ?? 0) + (amount ?? 0);
+        }
       }
       await supabase.from("towns").update({ available_recruits: recruits }).eq("id", town.id);
     }

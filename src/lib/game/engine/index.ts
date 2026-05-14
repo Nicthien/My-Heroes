@@ -6,11 +6,11 @@ import {
   GameMap,
   MapTile,
   TerrainType,
-  BuildingType,
   Position,
+  Resources,
 } from "../types";
 
-import { RESOURCE_BUILDING_RULES } from "../economy";
+import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "../economy";
 import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
@@ -355,19 +355,29 @@ export function computeReachableTiles(
   return reachable;
 }
 
-export function calculateIncome(player: Player): { gold: number; wood: number; ore: number; mercury: number; crystals: number; sulfur: number } {
+export function calculateIncome(player: Player): Resources {
   let gold = 500;
   let wood = 0;
   let ore = 0;
   let mercury = 0;
   let crystals = 0;
+  let gems = 0;
   let sulfur = 0;
 
   for (const town of player.towns) {
     gold += 500;
-    if (town.buildings.includes("resource_silo" as BuildingType)) gold += 500;
     wood += 2;
     ore += 1;
+    for (const building of town.buildings) {
+      const rule = getFactionBuildingRule(town.townType ?? town.faction, building);
+      gold += rule?.dailyProduction?.gold ?? 0;
+      wood += rule?.dailyProduction?.wood ?? 0;
+      ore += rule?.dailyProduction?.ore ?? 0;
+      mercury += rule?.dailyProduction?.mercury ?? 0;
+      crystals += rule?.dailyProduction?.crystals ?? 0;
+      gems += rule?.dailyProduction?.gems ?? 0;
+      sulfur += rule?.dailyProduction?.sulfur ?? 0;
+    }
   }
 
   for (const building of player.resourceBuildings) {
@@ -378,11 +388,12 @@ export function calculateIncome(player: Player): { gold: number; wood: number; o
       ore += rule.production.ore ?? 0;
       mercury += rule.production.mercury ?? 0;
       crystals += rule.production.crystals ?? 0;
+      gems += rule.production.gems ?? 0;
       sulfur += rule.production.sulfur ?? 0;
     }
   }
 
-  return { gold, wood, ore, mercury, crystals, sulfur };
+  return { gold, wood, ore, mercury, crystals, gems, sulfur };
 }
 
 export function computeVisibleTiles(map: GameMap, centers: Position[], radius: number): Set<string> {
@@ -437,6 +448,7 @@ export function processAction(state: GameState, action: GameAction): GameState {
                 ore: p.resources.ore + income.ore,
                 mercury: p.resources.mercury + income.mercury,
                 crystals: p.resources.crystals + income.crystals,
+                gems: p.resources.gems + income.gems,
                 sulfur: p.resources.sulfur + income.sulfur,
               },
               heroes: p.heroes.map((h: Hero) => ({ ...h, movement: h.maxMovement })),

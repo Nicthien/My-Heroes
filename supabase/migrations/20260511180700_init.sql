@@ -41,6 +41,7 @@ create table public.game_players (
   ore integer not null default 10,
   mercury integer not null default 5,
   crystals integer not null default 5,
+  gems integer not null default 5,
   sulfur integer not null default 5,
   is_ready boolean not null default false,
   is_alive boolean not null default true,

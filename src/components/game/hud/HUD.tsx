@@ -10,12 +10,13 @@ import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes
 import { refreshGameState } from "@/lib/game/refresh";
 import { UNIT_RULES as COMBAT_UNIT_RULES } from "@/lib/game/units";
 import {
-  BUILDING_RULES,
-  DWELLING_TIERS,
-  FACTION_UNITS,
   UNIT_RULES,
   canAfford,
   formatCost,
+  getFactionBuildingRule,
+  getFactionBuildingRules,
+  getGrowthForBuiltTownBuilding,
+  getRecruitableUnitsForFaction,
   subtractCost,
 } from "@/lib/game/economy";
 import {
@@ -43,6 +44,7 @@ const RESOURCE_ITEMS = [
   { key: "ore", label: "Minerai", short: "Min.", src: "/assets/sprites/resources/ore.svg", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
   { key: "mercury", label: "Mercure", short: "Merc.", src: "/assets/sprites/resources/mercury.svg", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
   { key: "crystals", label: "Cristaux", short: "Crist.", src: "/assets/sprites/resources/crystals.svg", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
+  { key: "gems", label: "Gemmes", short: "Gem.", src: "/assets/sprites/resources/gems.svg", text: "text-pink-100", ring: "ring-pink-300/50", glow: "shadow-pink-400/30", bg: "from-pink-200 to-rose-700" },
   { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.svg", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
 ] as const;
 
@@ -66,6 +68,7 @@ function factionLabel(f: Faction): string {
     dungeon: "Donjon",
     stronghold: "Bastion",
     fortress: "Forteresse",
+    conflux: "Conflux",
   };
   return labels[f] || f;
 }
@@ -74,7 +77,9 @@ function unitTypeLabel(u: string): string {
   return UNIT_RULES[u as UnitType]?.label ?? u;
 }
 
-function buildingTypeLabel(building: string): string {
+function buildingTypeLabel(building: string, faction: Faction = Faction.CASTLE): string {
+  const factionRule = getFactionBuildingRule(faction, building);
+  if (factionRule) return factionRule.label;
   const labels: Record<string, string> = {
     castle: "Château",
     tavern: "Taverne",
@@ -95,33 +100,46 @@ function buildingTypeLabel(building: string): string {
 
 function ResourceBar({ resources }: { resources: Resources }) {
   return (
-    <div className="grid grid-cols-3 gap-1.5 text-xs xl:text-sm">
-      {RESOURCE_ITEMS.map((item) => (
-        <span
-          key={item.key}
-          title={`${item.label} : ${resources[item.key]}`}
-          className="group flex min-w-[5rem] items-center justify-between gap-2 rounded-lg border border-amber-700/50 bg-gradient-to-b from-stone-900 to-black px-2.5 py-1 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)] transition hover:-translate-y-0.5 hover:border-amber-400/70 xl:min-w-[5.5rem] xl:px-3"
-        >
-          <ResourceIcon item={item} />
-          <span className="font-black tabular-nums text-amber-100 drop-shadow">{resources[item.key]}</span>
-        </span>
-      ))}
+    <div className="grid w-[clamp(21rem,34vw,27rem)] grid-cols-[1.15fr_repeat(3,1fr)] grid-rows-2 gap-1.5 text-xs xl:text-sm">
+      {RESOURCE_ITEMS.map((item) => {
+        const isGold = item.key === "gold";
+
+        return (
+          <span
+            key={item.key}
+            title={`${item.label} : ${resources[item.key]}`}
+            className={`group flex items-center rounded-lg border border-amber-700/50 bg-gradient-to-b from-stone-900 to-black shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)] transition hover:-translate-y-0.5 hover:border-amber-400/70 ${
+              isGold
+                ? "row-span-2 flex-col justify-center gap-1.5 px-2 py-2"
+                : "min-h-[2.35rem] justify-between gap-2 px-2 py-1 xl:px-2.5"
+            }`}
+          >
+            <ResourceIcon item={item} size={isGold ? "lg" : "sm"} />
+            <span className={`font-black tabular-nums text-amber-100 drop-shadow ${isGold ? "text-lg xl:text-xl" : ""}`}>
+              {resources[item.key]}
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-function ResourceIcon({ item }: { item: ResourceItem }) {
+function ResourceIcon({ item, size = "sm" }: { item: ResourceItem; size?: "sm" | "lg" }) {
+  const sizeClass = size === "lg" ? "h-8 w-8" : "h-6 w-6";
+  const imageSize = size === "lg" ? 32 : 24;
+
   return (
     <span
-      className={`relative grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gradient-to-br ${item.bg} ring-1 ${item.ring} shadow-inner`}
+      className={`relative grid shrink-0 place-items-center rounded-full bg-gradient-to-br ${item.bg} ring-1 ${item.ring} shadow-inner ${sizeClass}`}
       aria-hidden="true"
     >
       <Image
         src={item.src}
         alt=""
-        width={24}
-        height={24}
-        className="h-6 w-6 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]"
+        width={imageSize}
+        height={imageSize}
+        className={`${sizeClass} object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]`}
       />
     </span>
   );
@@ -294,6 +312,7 @@ function HUDContent() {
     townId: null,
     tab: "summary",
   });
+  const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
@@ -406,7 +425,8 @@ function HUDContent() {
   const handleBuild = async (building: BuildingType) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
-    const rule = BUILDING_RULES.find((item) => item.type === building);
+    const townFaction = (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? Faction.CASTLE) as Faction);
+    const rule = getFactionBuildingRule(townFaction, building);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
 
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
@@ -436,7 +456,7 @@ function HUDContent() {
                   availableRecruits: addImmediateDwellingGrowth(
                     town.availableRecruits,
                     building,
-                    ((town as { townType?: string }).townType ?? town.faction ?? "castle") as Faction
+                    ((town as { townType?: string }).townType ?? town.faction ?? Faction.CASTLE) as Faction
                   ),
                   lastBuiltTurn: gameState.turnNumber,
                 }
@@ -574,16 +594,13 @@ function HUDContent() {
     building: BuildingType,
     townFaction: Faction
   ) => {
-    const tier = DWELLING_TIERS.indexOf(building);
-    if (tier < 0) return stock;
-    const factionTiers = FACTION_UNITS[townFaction] ?? FACTION_UNITS[Faction.CASTLE];
-    const unitType = factionTiers[tier];
-    const unitRule = UNIT_RULES[unitType];
-    if (!unitRule) return stock;
-    return {
-      ...stock,
-      [unitType]: (stock[unitType] ?? 0) + unitRule.growth,
-    };
+    const growth = getGrowthForBuiltTownBuilding(townFaction, building);
+    if (Object.keys(growth).length === 0) return stock;
+    const next = { ...stock };
+    for (const [unitType, amount] of Object.entries(growth)) {
+      next[unitType as UnitType] = (next[unitType as UnitType] ?? 0) + (amount ?? 0);
+    }
+    return next;
   };
 
   const requestNotifications = async () => {
@@ -666,14 +683,10 @@ function HUDContent() {
   const selectedTownFaction = selectedTown
     ? (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction)
     : Faction.CASTLE;
-  const selectedTownFactionTiers = FACTION_UNITS[selectedTownFaction] ?? FACTION_UNITS[Faction.CASTLE];
-  const selectedTownRecruitEntries = selectedTownFactionTiers.map((unitType, tier) => ({
-    rule: UNIT_RULES[unitType],
-    tier,
-    unitType,
-  }));
+  const selectedTownBuildingRules = getFactionBuildingRules(selectedTownFaction);
+  const selectedTownRecruitEntries = getRecruitableUnitsForFaction(selectedTownFaction);
   const buildableBuildings = selectedTown
-    ? BUILDING_RULES.filter((rule) => {
+    ? selectedTownBuildingRules.filter((rule) => {
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
         const missingRequirement = rule.requires?.some(
           (requirement) => !selectedTown.buildings.includes(requirement)
@@ -687,8 +700,8 @@ function HUDContent() {
       }).length
     : 0;
   const recruitableUnits = selectedTown
-    ? selectedTownRecruitEntries.filter(({ rule, tier }) => {
-        const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
+    ? selectedTownRecruitEntries.filter(({ rule, dwelling }) => {
+        const hasDwelling = selectedTown.buildings.includes(dwelling);
         const available = selectedTown.availableRecruits[rule.type] ?? 0;
         return hasDwelling && available > 0 && Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost));
       }).length
@@ -706,12 +719,17 @@ function HUDContent() {
   const displayedTownTab = townTabs.some((tab) => tab.id === activeTownTab)
     ? activeTownTab
     : "summary";
+  const displayedBuildRules = selectedTown && hideMissingBuildRequirements
+    ? selectedTownBuildingRules.filter((rule) =>
+        !rule.requires?.some((requirement) => !selectedTown.buildings.includes(requirement))
+      )
+    : selectedTownBuildingRules;
 
   return (
     <div className="absolute inset-0 pointer-events-none">
       {/* Top bar */}
       <div className="pointer-events-auto absolute left-0 right-0 top-0 border-b-2 border-amber-700/60 bg-gradient-to-b from-[#1a1208] via-[#0e0904] to-[#1a1208] px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(252,211,77,0.15)]">
-        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
           <div className="flex min-w-0 items-center gap-3 justify-self-start text-left">
             <button
               type="button"
@@ -1046,7 +1064,7 @@ function HUDContent() {
                     <div className="flex flex-wrap gap-1">
                       {selectedTown.buildings.map((b, i) => (
                         <span key={i} className="rounded-md border border-amber-700/40 bg-black/50 px-2 py-0.5 text-[11px] text-amber-200/90">
-                          {buildingTypeLabel(b)}
+                          {buildingTypeLabel(b, selectedTownFaction)}
                         </span>
                       ))}
                     </div>
@@ -1158,7 +1176,16 @@ function HUDContent() {
 
             {displayedTownTab === "build" && (
               <div className="space-y-2">
-                {BUILDING_RULES.map((rule) => {
+                <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-amber-500"
+                    checked={hideMissingBuildRequirements}
+                    onChange={(event) => setHideMissingBuildRequirements(event.currentTarget.checked)}
+                  />
+                  <span>Masquer les prérequis manquants</span>
+                </label>
+                {displayedBuildRules.map((rule) => {
                   const alreadyBuilt = selectedTown.buildings.includes(rule.type);
                   const missingRequirement = rule.requires?.find((requirement) => !selectedTown.buildings.includes(requirement));
                   const disabled =
@@ -1179,7 +1206,7 @@ function HUDContent() {
                           <div className="text-xs text-amber-200/60">{rule.description}</div>
                           <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
                           {missingRequirement && (
-                            <div className="mt-1 text-xs text-red-300">Prérequis manquant : {buildingTypeLabel(missingRequirement)}</div>
+                            <div className="mt-1 text-xs text-red-300">Prérequis manquant : {buildingTypeLabel(missingRequirement, selectedTownFaction)}</div>
                           )}
                         </div>
                         <button
@@ -1221,8 +1248,8 @@ function HUDContent() {
 
             {displayedTownTab === "recruit" && (
               <div className="space-y-2">
-                {selectedTownRecruitEntries.map(({ rule, tier }) => {
-                  const hasDwelling = selectedTown.buildings.includes(DWELLING_TIERS[tier]);
+                {selectedTownRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
+                  const hasDwelling = selectedTown.buildings.includes(dwelling);
                   const available = selectedTown.availableRecruits[rule.type] ?? 0;
                   const disabled =
                     !hasDwelling ||
@@ -1242,7 +1269,8 @@ function HUDContent() {
                             <div className="truncate text-sm font-bold text-amber-100">{rule.label}</div>
                             <div className="text-xs text-amber-200/60">PV {rule.health} · {formatCost(rule.cost)} / unité</div>
                             {hasDwelling && <div className="mt-1 text-xs text-emerald-300">Disponible : {available}</div>}
-                            {!hasDwelling && <div className="mt-1 text-xs text-red-300">Prérequis : {buildingTypeLabel(DWELLING_TIERS[tier])}</div>}
+                            {upgraded && <div className="mt-1 text-xs text-sky-300">Amélioration palier {tier + 1}</div>}
+                            {!hasDwelling && <div className="mt-1 text-xs text-red-300">Prérequis : {buildingTypeLabel(dwelling, selectedTownFaction)}</div>}
                           </div>
                         </div>
                         <button

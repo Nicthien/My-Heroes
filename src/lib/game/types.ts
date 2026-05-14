@@ -29,6 +29,19 @@ export enum BuildingType {
   DWELLING_5 = "dwelling_5",
   DWELLING_6 = "dwelling_6",
   DWELLING_7 = "dwelling_7",
+  UPG_DWELLING_1 = "upg_dwelling_1",
+  UPG_DWELLING_2 = "upg_dwelling_2",
+  UPG_DWELLING_3 = "upg_dwelling_3",
+  UPG_DWELLING_4 = "upg_dwelling_4",
+  UPG_DWELLING_5 = "upg_dwelling_5",
+  UPG_DWELLING_6 = "upg_dwelling_6",
+  UPG_DWELLING_7 = "upg_dwelling_7",
+  UNIQUE_1 = "unique_1",
+  UNIQUE_2 = "unique_2",
+  UNIQUE_3 = "unique_3",
+  UNIQUE_4 = "unique_4",
+  UNIQUE_5 = "unique_5",
+  UNIQUE_6 = "unique_6",
 }
 
 export enum Faction {
@@ -40,6 +53,7 @@ export enum Faction {
   DUNGEON = "dungeon",
   STRONGHOLD = "stronghold",
   FORTRESS = "fortress",
+  CONFLUX = "conflux",
 }
 
 export enum HeroClass {
@@ -59,6 +73,8 @@ export enum HeroClass {
   BATTLE_MAGE = "battle_mage",
   BEASTMASTER = "beastmaster",
   WITCH = "witch",
+  PLANESWALKER = "planeswalker",
+  ELEMENTALIST = "elementalist",
 }
 
 export enum UnitType {
@@ -260,6 +276,7 @@ export interface Resources {
   ore: number;
   mercury: number;
   crystals: number;
+  gems: number;
   sulfur: number;
 }
 
@@ -374,6 +391,7 @@ export enum ResourceBuildingType {
   ORE_PIT = "ore_pit",
   ALCHEMIST_LAB = "alchemist_lab",
   CRYSTAL_CAVERN = "crystal_cavern",
+  GEM_POND = "gem_pond",
   SULFUR_DUNE = "sulfur_dune",
 }
 

@@ -17,6 +17,7 @@ export const MAP_SPRITES = {
     dungeon: "/assets/sprites/map/hero-dungeon.svg",
     stronghold: "/assets/sprites/map/hero-stronghold.svg",
     fortress: "/assets/sprites/map/hero-fortress.svg",
+    conflux: "/assets/sprites/map/hero-tower.svg",
   } as Record<string, string>,
   towns: {
     castle: "/assets/sprites/map/town-castle.svg",
@@ -27,6 +28,7 @@ export const MAP_SPRITES = {
     dungeon: "/assets/sprites/map/town-dungeon.svg",
     stronghold: "/assets/sprites/map/town-stronghold.svg",
     fortress: "/assets/sprites/map/town-fortress.svg",
+    conflux: "/assets/sprites/map/town-tower.svg",
   } as Record<string, string>,
   resources: {
     gold: "/assets/sprites/resources/gold.svg",
@@ -34,6 +36,7 @@ export const MAP_SPRITES = {
     ore: "/assets/sprites/resources/ore.svg",
     mercury: "/assets/sprites/resources/mercury.svg",
     crystals: "/assets/sprites/resources/crystals.svg",
+    gems: "/assets/sprites/resources/gems.svg",
     sulfur: "/assets/sprites/resources/sulfur.svg",
   } as Record<string, string>,
   buildings: {
@@ -42,6 +45,7 @@ export const MAP_SPRITES = {
     ore_pit: "/assets/sprites/map/ore-pit.svg",
     alchemist_lab: "/assets/sprites/map/alchemist-lab.svg",
     crystal_cavern: "/assets/sprites/map/crystal-cavern.svg",
+    gem_pond: "/assets/sprites/map/gem-pond.svg",
     sulfur_dune: "/assets/sprites/map/sulfur-dune.svg",
   } as Record<string, string>,
   decor: {

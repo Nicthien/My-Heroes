@@ -94,6 +94,49 @@ function findForcedRoadPath(
   return [];
 }
 
+function findPathToNearestRoad(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  start: Position,
+): Position[] {
+  const openSet: { pos: Position; g: number; path: Position[] }[] = [];
+  const best = new Map<string, number>();
+  openSet.push({ pos: start, g: 0, path: [start] });
+
+  while (openSet.length > 0) {
+    openSet.sort((a, b) => a.g - b.g);
+    const cur = openSet.shift()!;
+    const key = `${cur.pos.x},${cur.pos.y}`;
+    if (cur.g >= (best.get(key) ?? Number.POSITIVE_INFINITY)) continue;
+    best.set(key, cur.g);
+
+    const tile = tiles[cur.pos.y][cur.pos.x];
+    const isStart = cur.pos.x === start.x && cur.pos.y === start.y;
+    if (!isStart && tile.road) return cur.path;
+
+    const neighbors: Position[] = [
+      { x: cur.pos.x + 1, y: cur.pos.y },
+      { x: cur.pos.x - 1, y: cur.pos.y },
+      { x: cur.pos.x, y: cur.pos.y + 1 },
+      { x: cur.pos.x, y: cur.pos.y - 1 },
+    ];
+
+    for (const n of neighbors) {
+      if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
+      const nextTile = tiles[n.y][n.x];
+      if (!nextTile.isPassable) continue;
+      if (nextTile.terrain === TerrainType.WATER && !canBridgeWater(tiles, width, height, n.x, n.y)) continue;
+      const wobble = ((n.x * 928371 + n.y * 523111) % 7) * 0.035;
+      const bridgeCost = nextTile.terrain === TerrainType.WATER ? 6 : 0;
+      const cost = (nextTile.movementCost === 999 ? 5 : nextTile.movementCost) + bridgeCost + wobble;
+      openSet.push({ pos: n, g: cur.g + cost, path: [...cur.path, n] });
+    }
+  }
+
+  return [];
+}
+
 function canBridgeWater(
   tiles: MapTile[][],
   width: number,
@@ -190,6 +233,14 @@ export function buildSecondaryRoads(
   maxDistance: number = 8,
 ): void {
   for (const mine of miningPositions) {
+    const pathToRoad = findPathToNearestRoad(tiles, width, height, mine);
+    if (pathToRoad.length > 0) {
+      paintRoad(tiles, pathToRoad, "dirt");
+      continue;
+    }
+
+    if (townPositions.length === 0) continue;
+
     let bestTown = townPositions[0];
     let bestDist = Number.POSITIVE_INFINITY;
     for (const t of townPositions) {
@@ -199,8 +250,14 @@ export function buildSecondaryRoads(
         bestTown = t;
       }
     }
-    if (bestDist > maxDistance) continue;
+
+    const shouldForceFallback = bestDist <= maxDistance || !tiles[mine.y][mine.x].road;
     const path = findRoadPath(tiles, width, height, bestTown, mine);
-    if (path.length > 0) paintRoad(tiles, path, "dirt");
+    if (path.length > 0) {
+      paintRoad(tiles, path, "dirt");
+    } else if (shouldForceFallback) {
+      const forcedPath = findForcedRoadPath(tiles, width, height, bestTown, mine);
+      if (forcedPath.length > 0) paintRoad(tiles, forcedPath, "dirt");
+    }
   }
 }

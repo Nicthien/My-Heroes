@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-labelledby="resource-gems-title resource-gems-desc">
+  <title id="resource-gems-title">Gemmes</title>
+  <desc id="resource-gems-desc">Sprite de ressource Gemmes, avec pierres taillées roses et rouges.</desc>
+  <ellipse cx="24" cy="40" rx="16" ry="5" fill="#000" opacity=".25"/>
+  <path d="M12 17 L20 8 H32 L40 17 L34 38 H18 Z" fill="#fb7185" stroke="#881337" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M20 8 L24 17 L32 8 M12 17 H40 M18 38 L24 17 L34 38" fill="none" stroke="#be123c" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M18 16 L22 11 H30 L36 17" fill="none" stroke="#ffe4e6" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M8 28 L14 20 L21 38 H10 Z" fill="#f9a8d4" stroke="#9d174d" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M37 27 L43 19 L42 38 H32 Z" fill="#e11d48" stroke="#881337" stroke-width="1.8" stroke-linejoin="round"/>
+  <circle cx="28" cy="24" r="3" fill="#fff1f2" opacity=".8"/>
+</svg>

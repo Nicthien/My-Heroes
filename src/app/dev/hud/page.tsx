@@ -52,7 +52,7 @@ function buildMockState(): GameState {
         name: "Leon Sticky-Fingers",
         faction: Faction.CASTLE,
         color: "#3b82f6",
-        resources: { gold: 15000, wood: 30, ore: 30, mercury: 20, crystals: 20, sulfur: 20 },
+        resources: { gold: 15000, wood: 30, ore: 30, mercury: 20, crystals: 20, gems: 20, sulfur: 20 },
         heroes: [
           {
             id: "h1",
@@ -112,7 +112,7 @@ function buildMockState(): GameState {
         name: "Adversaire",
         faction: Faction.INFERNO,
         color: "#ef4444",
-        resources: { gold: 8000, wood: 10, ore: 10, mercury: 5, crystals: 5, sulfur: 5 },
+        resources: { gold: 8000, wood: 10, ore: 10, mercury: 5, crystals: 5, gems: 5, sulfur: 5 },
         heroes: [],
         towns: [],
         resourceBuildings: [],

@@ -1211,7 +1211,7 @@
       "aiValue": 3718,
       "cost": {
         "gold": 2000,
-        "crystals": 1
+        "gems": 1
       },
       "ranged": false,
       "shots": 0,
@@ -1234,7 +1234,7 @@
       "aiValue": 7500,
       "cost": {
         "gold": 5000,
-        "crystals": 2
+        "gems": 2
       },
       "ranged": true,
       "shots": 24,

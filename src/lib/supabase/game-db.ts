@@ -44,6 +44,7 @@ export function toPlayer(row: DbRow) {
     ore: row.ore,
     mercury: row.mercury,
     crystals: row.crystals,
+    gems: row.gems ?? 0,
     sulfur: row.sulfur,
     isReady: row.is_ready,
     isAlive: row.is_alive,

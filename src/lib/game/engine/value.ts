@@ -1,6 +1,6 @@
 import { ResourceBuildingType, TerrainType } from "../types";
 
-export type ResourceSubtype = "gold" | "wood" | "ore" | "mercury" | "crystals" | "sulfur";
+export type ResourceSubtype = "gold" | "wood" | "ore" | "mercury" | "crystals" | "gems" | "sulfur";
 
 export interface PileSpec {
   kind: "pile";
@@ -26,6 +26,7 @@ export const PILE_VALUE: Record<ResourceSubtype, number> = {
   ore: 200,
   mercury: 350,
   crystals: 350,
+  gems: 350,
   sulfur: 350,
 };
 
@@ -35,6 +36,7 @@ export const PILE_AMOUNT: Record<ResourceSubtype, number> = {
   ore: 5,
   mercury: 3,
   crystals: 3,
+  gems: 3,
   sulfur: 3,
 };
 
@@ -79,6 +81,14 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 2000,
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.GRASS],
     clusterResource: "crystals",
+    clusterCount: [1, 2],
+  },
+  {
+    kind: "building",
+    buildingType: ResourceBuildingType.GEM_POND,
+    value: 2000,
+    preferredTerrain: [TerrainType.SNOW, TerrainType.GRASS, TerrainType.MOUNTAIN],
+    clusterResource: "gems",
     clusterCount: [1, 2],
   },
   {

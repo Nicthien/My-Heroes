@@ -17,6 +17,7 @@ interface ApiPlayer {
   ore: number;
   mercury: number;
   crystals: number;
+  gems?: number;
   sulfur: number;
   isAlive: boolean;
   turnOrder: number;
@@ -141,6 +142,7 @@ export function mapApiToGameState(
       ore: p.ore,
       mercury: p.mercury,
       crystals: p.crystals,
+      gems: p.gems ?? 0,
       sulfur: p.sulfur,
     },
     heroes: p.heroes.map((h): Hero => ({

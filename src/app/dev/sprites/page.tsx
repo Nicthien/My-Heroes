@@ -30,6 +30,7 @@ const PUBLIC_SVGS: { path: string; label: string; group: string }[] = [
   { path: "/assets/sprites/map/town-fortress.svg", label: "Ville forteresse", group: "Carte - factions" },
   { path: "/assets/sprites/map/alchemist-lab.svg", label: "Laboratoire d'alchimiste", group: "Carte" },
   { path: "/assets/sprites/map/crystal-cavern.svg", label: "Caverne de cristaux", group: "Carte" },
+  { path: "/assets/sprites/map/gem-pond.svg", label: "Bassin de gemmes", group: "Carte" },
   { path: "/assets/sprites/map/gold-mine.svg", label: "Mine d'or", group: "Carte" },
   { path: "/assets/sprites/map/ore-pit.svg", label: "Mine de minerai", group: "Carte" },
   { path: "/assets/sprites/map/sawmill.svg", label: "Scierie", group: "Carte" },
@@ -49,6 +50,7 @@ const PUBLIC_SVGS: { path: string; label: string; group: string }[] = [
   { path: "/assets/sprites/resources/ore.svg", label: "Minerai", group: "Ressources" },
   { path: "/assets/sprites/resources/mercury.svg", label: "Mercure", group: "Ressources" },
   { path: "/assets/sprites/resources/crystals.svg", label: "Cristaux", group: "Ressources" },
+  { path: "/assets/sprites/resources/gems.svg", label: "Gemmes", group: "Ressources" },
   { path: "/assets/sprites/resources/sulfur.svg", label: "Soufre", group: "Ressources" },
 ];
 

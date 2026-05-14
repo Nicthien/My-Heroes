@@ -9,17 +9,18 @@ const ALL_FACTIONS: Faction[] = [
   Faction.DUNGEON,
   Faction.STRONGHOLD,
   Faction.FORTRESS,
+  Faction.CONFLUX,
 ];
 
 const TERRAIN_FACTION_POOLS: Partial<Record<TerrainType, Faction[]>> = {
-  [TerrainType.GRASS]: [Faction.CASTLE, Faction.RAMPART],
+  [TerrainType.GRASS]: [Faction.CASTLE, Faction.RAMPART, Faction.CONFLUX],
   [TerrainType.FOREST]: [Faction.RAMPART],
   [TerrainType.SNOW]: [Faction.TOWER],
   [TerrainType.LAVA]: [Faction.INFERNO],
   [TerrainType.SWAMP]: [Faction.FORTRESS],
   [TerrainType.SAND]: [Faction.DUNGEON, Faction.STRONGHOLD],
   [TerrainType.DIRT]: [Faction.STRONGHOLD, Faction.CASTLE],
-  [TerrainType.MOUNTAIN]: [Faction.DUNGEON, Faction.TOWER, Faction.STRONGHOLD],
+  [TerrainType.MOUNTAIN]: [Faction.DUNGEON, Faction.TOWER, Faction.STRONGHOLD, Faction.CONFLUX],
   [TerrainType.WATER]: [Faction.FORTRESS],
 };
 
@@ -87,6 +88,14 @@ const TOWN_NAME_POOLS: Record<Faction, string[]> = {
     "Fangegarde",
     "Roseauval",
     "Hydrelac",
+  ],
+  [Faction.CONFLUX]: [
+    "Aetheris",
+    "Briseplan",
+    "Pyrelune",
+    "Ondeclaire",
+    "Vortexia",
+    "Auroracime",
   ],
 };
 

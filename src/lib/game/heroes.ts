@@ -37,6 +37,8 @@ export const CLASS_STARTING_STATS: Record<HeroClass, HeroStats> = {
   [HeroClass.BATTLE_MAGE]: { attack: 2, defense: 1, spellPower: 1, knowledge: 1 },
   [HeroClass.BEASTMASTER]: { attack: 1, defense: 2, spellPower: 1, knowledge: 1 },
   [HeroClass.WITCH]: { attack: 0, defense: 1, spellPower: 2, knowledge: 2 },
+  [HeroClass.PLANESWALKER]: { attack: 2, defense: 2, spellPower: 1, knowledge: 1 },
+  [HeroClass.ELEMENTALIST]: { attack: 0, defense: 0, spellPower: 3, knowledge: 3 },
 };
 
 export const FACTION_STARTING_UNIT: Record<Faction, { unitType: UnitType; min: number; max: number }> = {
@@ -48,6 +50,7 @@ export const FACTION_STARTING_UNIT: Record<Faction, { unitType: UnitType; min: n
   [Faction.DUNGEON]: { unitType: UnitType.TROGLODYTE, min: 25, max: 35 },
   [Faction.STRONGHOLD]: { unitType: UnitType.GOBLIN, min: 20, max: 30 },
   [Faction.FORTRESS]: { unitType: UnitType.GNOLL, min: 15, max: 25 },
+  [Faction.CONFLUX]: { unitType: UnitType.PIXIE, min: 20, max: 30 },
 };
 
 export const HERO_ROSTER: HeroTemplate[] = [
@@ -209,6 +212,24 @@ export const HERO_ROSTER: HeroTemplate[] = [
   { id: "andra", name: "Andra", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Intelligence" },
   { id: "tiva", name: "Tiva", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Œil d'aigle" },
   { id: "adrienne", name: "Adrienne", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Magie du feu" },
+  // Conflux - Planeswalkers
+  { id: "pasis", name: "Pasis", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
+  { id: "thunar", name: "Thunar", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
+  { id: "ignissa", name: "Ignissa", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
+  { id: "lacus", name: "Lacus", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
+  { id: "monere", name: "Monere", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
+  { id: "erdamon", name: "Erdamon", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
+  { id: "fiur", name: "Fiur", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
+  { id: "kalt", name: "Kalt", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
+  // Conflux - Elementalists
+  { id: "luna", name: "Luna", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Mur de feu" },
+  { id: "brissa", name: "Brissa", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Hâte" },
+  { id: "ciele", name: "Ciele", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Flèche magique" },
+  { id: "labetha", name: "Labetha", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Peau de pierre" },
+  { id: "inteus", name: "Inteus", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Soif de sang" },
+  { id: "aenain", name: "Aenain", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Rayon perturbateur" },
+  { id: "gelare", name: "Gelare", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Or" },
+  { id: "grindan", name: "Grindan", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Or" },
 ];
 
 const HERO_BY_ID = new Map(HERO_ROSTER.map((h) => [h.id, h]));

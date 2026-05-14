@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { BUILDING_RULES, DWELLING_TIERS, FACTION_UNITS, RESOURCE_BUILDING_RULES, UNIT_RULES, canAfford, subtractCost } from "@/lib/game/economy";
-import { BuildingType, Faction, GameMap, HeroClass, Resources, UnitType } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import {
   CLASS_STARTING_STATS,
   HERO_RECRUIT_COST_GOLD,
@@ -22,6 +22,7 @@ interface MinimalBuilding {
   x: number;
   y: number;
   buildingType?: string;
+  guardianPower?: number;
 }
 
 interface MinimalTown {
@@ -83,6 +84,13 @@ interface MinimalPlayer {
   resourceBuildings: MinimalResourceBuilding[];
 }
 
+type MoveInteraction =
+  | { type: "COLLECT"; resource: string; gold?: number; destination: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position }
+  | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
+  | { type: "CAPTURE_TOWN"; destination: Position }
+  | { type: "STOP"; message: string; destination: Position };
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -107,6 +115,7 @@ export async function POST(
       turnOrder: number;
       resourceBuildings: MinimalBuilding[];
       towns: MinimalTown[];
+      heroes?: MinimalHero[];
     }>;
     const turns = game.turns as MinimalTurn[];
     const completedTurn = turns.find((turn) =>
@@ -124,14 +133,31 @@ export async function POST(
       const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-      const lastPos = action.path[action.path.length - 1];
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const collected = new Set<string>((mapState.collected as string[]) ?? []);
+      const killed = new Set<string>((mapState.killed as string[]) ?? []);
+      for (const army of ((game.neutralArmies ?? []) as Array<{ id: string; status: string }>)) {
+        if (army.status !== "ACTIVE") killed.add(army.id);
+      }
+      const firstStop = findFirstMoveStop({
+        path: action.path,
+        map: mapData,
+        movingHeroId: hero.id,
+        movingPlayerId: gamePlayer.id,
+        players,
+        collected,
+        killed,
+      });
+      const movePath = firstStop ? action.path.slice(0, firstStop.pathIndex + 1) : action.path;
+      const usedMovement = getPathMovementCost(mapData, movePath);
+      const lastPos = movePath[movePath.length - 1];
       const { error: heroUpdateError } = await supabase.from("heroes").update({
         x: lastPos.x,
         y: lastPos.y,
-        movement: Math.max(0, hero.movement - validation.usedMovement),
+        movement: Math.max(0, hero.movement - usedMovement),
       }).eq("id", hero.id);
       if (heroUpdateError) {
-        console.error("heroes.update failed:", heroUpdateError, { heroId: hero.id, x: lastPos.x, y: lastPos.y, movement: hero.movement, used: validation.usedMovement });
+        console.error("heroes.update failed:", heroUpdateError, { heroId: hero.id, x: lastPos.x, y: lastPos.y, movement: hero.movement, used: usedMovement });
         return NextResponse.json({ error: `Erreur mise à jour héros: ${heroUpdateError.message}` }, { status: 500 });
       }
 
@@ -159,11 +185,8 @@ export async function POST(
       for (const key of newlyVisible) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
-      const tile = (game.mapData as GameMap).tiles?.[lastPos.y]?.[lastPos.x];
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const collected = new Set<string>((mapState.collected as string[]) ?? []);
-      const killed = new Set<string>((mapState.killed as string[]) ?? []);
-      let interaction: { type: string; resource?: string; gold?: number } | null = null;
+      const tile = mapData.tiles?.[lastPos.y]?.[lastPos.x];
+      let interaction: MoveInteraction | null = null;
 
       if (tile?.object?.type === "resource" && !collected.has(tile.object.id)) {
         collected.add(tile.object.id);
@@ -171,15 +194,35 @@ export async function POST(
         const amount = resourceType === "gold" ? 500 : 2;
         await incrementPlayerResource(supabase, gamePlayer.id, resourceType, amount);
         await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected) } }).eq("id", id);
-        interaction = { type: "COLLECT", resource: resourceType, gold: resourceType === "gold" ? amount : undefined };
+        interaction = { type: "COLLECT", resource: resourceType, gold: resourceType === "gold" ? amount : undefined, destination: lastPos };
       }
 
-      if (tile?.object?.type === "monster" && !killed.has(tile.object.id)) {
-        killed.add(tile.object.id);
-        await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected), killed: Array.from(killed) } }).eq("id", id);
-        await supabase.from("heroes").update({ experience: hero.experience + 150 }).eq("id", hero.id);
-        await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", tile.object.id);
-        interaction = { type: "FIGHT", resource: "victory", gold: 150 };
+      if (firstStop?.hero) {
+        if (firstStop.hero.playerId === gamePlayer.id) {
+          interaction = { type: "STOP", message: "Un de vos heros bloque le chemin.", destination: lastPos };
+        } else {
+          interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos };
+        }
+      } else if (tile?.object?.type === "monster" && !killed.has(tile.object.id)) {
+        interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "monster", destination: lastPos };
+      } else if (tile?.object?.type === "artifact") {
+        interaction = { type: "STOP", message: "Artefact atteint.", destination: lastPos };
+      } else if (tile?.object?.type === "building") {
+        const building = players.flatMap((player) => player.resourceBuildings)
+          .find((item) => item.id === tile.object?.id || (item.x === lastPos.x && item.y === lastPos.y))
+          ?? await getResourceBuilding(supabase, id, tile.object.id);
+        const owner = players.find((player) =>
+          player.resourceBuildings.some((item) => item.id === building?.id || (item.x === lastPos.x && item.y === lastPos.y))
+        );
+        const guardianPower = Number(building?.guardianPower ?? tile.object.guardianPower ?? 0);
+        if (owner?.id === gamePlayer.id) {
+          interaction = { type: "STOP", message: "Batiment deja controle.", destination: lastPos };
+        } else if (guardianPower > 0) {
+          interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "building", destination: lastPos };
+        } else if (building) {
+          await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
+          interaction = { type: "CAPTURE_BUILDING", buildingType: building.buildingType, destination: lastPos };
+        }
       }
 
       // Capture d'un château neutre : si garnison vide → capture immédiate.
@@ -195,7 +238,9 @@ export async function POST(
           .maybeSingle();
         if (neutralTown) {
           const garrison = (neutralTown.neutral_garrison ?? []) as unknown[];
-          if (garrison.length === 0) {
+          if (garrison.length > 0) {
+            interaction = { type: "COMBAT", targetId: neutralTown.id, targetType: "town", destination: lastPos };
+          } else {
             await supabase
               .from("towns")
               .update({
@@ -208,12 +253,12 @@ export async function POST(
               .from("heroes")
               .update({ experience: hero.experience + 250 })
               .eq("id", hero.id);
-            interaction = { type: "CAPTURE_TOWN" };
+            interaction = { type: "CAPTURE_TOWN", destination: lastPos };
           }
         }
       }
 
-      return NextResponse.json({ success: true, interaction });
+      return NextResponse.json({ success: true, interaction, stoppedAt: firstStop ? lastPos : null });
     }
 
     if (action.type === "CAPTURE_BUILDING") {
@@ -525,13 +570,13 @@ async function getResourceBuilding(
 ): Promise<MinimalBuilding | null> {
   const { data } = await supabase
     .from("resource_buildings")
-    .select("id,x,y,building_type")
+    .select("id,x,y,building_type,guardian_power")
     .eq("game_id", gameId)
     .eq("id", buildingId)
     .maybeSingle();
 
   return data
-    ? { id: data.id, x: data.x, y: data.y, buildingType: data.building_type }
+    ? { id: data.id, x: data.x, y: data.y, buildingType: data.building_type, guardianPower: data.guardian_power }
     : null;
 }
 
@@ -619,6 +664,61 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     turn_number: nextTurnNumber,
     current_turn_player_id: firstPlayer?.id ?? null,
   }).eq("id", gameId);
+}
+
+function findFirstMoveStop({
+  path,
+  map,
+  movingHeroId,
+  movingPlayerId,
+  players,
+  collected,
+  killed,
+}: {
+  path: Position[];
+  map: GameMap;
+  movingHeroId: string;
+  movingPlayerId: string;
+  players: Array<{
+    id: string;
+    resourceBuildings: MinimalBuilding[];
+    heroes?: MinimalHero[];
+  }>;
+  collected: Set<string>;
+  killed: Set<string>;
+}): { pathIndex: number; object?: MapObject; hero?: MinimalHero & { playerId: string } } | null {
+  for (let i = 1; i < path.length; i++) {
+    const position = path[i];
+    const hero = players
+      .flatMap((player) => (player.heroes ?? []).map((item) => ({ ...item, playerId: player.id })))
+      .find((item) => item.id !== movingHeroId && item.x === position.x && item.y === position.y);
+    if (hero) return { pathIndex: i, hero };
+
+    const object = map.tiles[position.y]?.[position.x]?.object;
+    if (!object) continue;
+    if (object.type === "resource" && collected.has(object.id)) continue;
+    if (object.type === "monster" && killed.has(object.id)) continue;
+    if (object.type === "wall" || object.type === "gate") continue;
+    if (object.type === "building") {
+      const owner = players.find((player) =>
+        player.id === movingPlayerId &&
+        player.resourceBuildings.some((building) =>
+          building.id === object.id || (building.x === position.x && building.y === position.y)
+        )
+      );
+      if (owner) return { pathIndex: i, object };
+    }
+    return { pathIndex: i, object };
+  }
+
+  return null;
+}
+
+function getPathMovementCost(map: GameMap, path: Position[]) {
+  return path.slice(1).reduce((total, position) => {
+    const tile = map.tiles[position.y]?.[position.x];
+    return total + (tile?.movementCost ?? 1);
+  }, 0);
 }
 
 function validateMovePath(

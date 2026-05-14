@@ -1,8 +1,10 @@
 import Phaser from "phaser";
-import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, TerrainType } from "@/lib/game/types";
+import { getResourceBuildingLabel } from "@/lib/game/economy";
+import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
+import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getTownSpritePath } from "@/lib/rendering/phaser/assets";
+import { MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getMonsterSpritePath, getTownSpritePath } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -54,8 +56,10 @@ function getMapObjectHoverText(object: MapObject) {
     return RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase();
   }
 
-  if (object.type === "monster") return "Armee neutre";
-  if (object.type === "building" && object.subtype) return object.subtype;
+  if (object.type === "monster") return object.subtype && object.subtype in UNIT_RULES
+    ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
+    : "Armee neutre";
+  if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
   if (object.type === "artifact") return "Artefact";
 
   return null;
@@ -66,6 +70,8 @@ const MAX_CAMERA_ZOOM = 1.85;
 const CAMERA_ZOOM_STEP = 1.15;
 const BOARD_BORDER_WIDTH = 42;
 const BOARD_THICKNESS = 34;
+const REACHABLE_TILE_COLOR = 0x2f80ff;
+const REACHABLE_TILE_ALPHA = 0.34;
 
 type WaterTileEffect = {
   graphics: Phaser.GameObjects.Graphics;
@@ -82,6 +88,15 @@ type LavaTileEffect = {
 };
 
 type FogEdgeSide = "northWest" | "northEast" | "southEast" | "southWest";
+type RoadSide = "northEast" | "southEast" | "southWest" | "northWest";
+type RoadPalette = {
+  shadow: number;
+  edge: number;
+  fill: number;
+  highlight: number;
+  grit: number;
+  alpha: number;
+};
 
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
@@ -158,6 +173,9 @@ class PhaserMapScene extends Phaser.Scene {
         const iso = cartToIso(x, y);
         this.renderTile(tile, iso.x, iso.y);
         const depth = getTileDepth(tile);
+        if (tile.object?.type === "wall" && tile.object.subtype === "natural") {
+          this.renderNaturalWall(tile, iso.x, iso.y - depth);
+        }
         if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth);
       }
     }
@@ -278,12 +296,32 @@ class PhaserMapScene extends Phaser.Scene {
     const road = tile.road;
     if (!road) return;
     const isBridge = tile.terrain === TerrainType.WATER;
-    const color = isBridge ? 0x8b5a2b : road === "paved" ? 0xa39280 : 0x7d6a4a;
-    graphics.fillStyle(color, isBridge ? 0.95 : 0.85);
-    drawDiamondPath(graphics, isoX, isoY);
+    const palette = getRoadPalette(road, isBridge);
+    const connections = this.getRoadConnections(tile);
+    const center = { x: isoX, y: isoY + 1 };
+    const jitter = hashTile(tile.x, tile.y);
+
+    graphics.fillStyle(palette.shadow, isBridge ? 0.2 : 0.12);
+    drawInsetDiamondPath(graphics, isoX, isoY + 1, 0.38);
     graphics.fillPath();
+
+    for (const [index, side] of connections.entries()) {
+      const point = getRoadExitPoint(isoX, isoY, side);
+      drawRoadStroke(graphics, center, point, palette, isBridge);
+      if (!isBridge) drawRoadGravel(graphics, center, point, palette, jitter + index * 0.17, road);
+    }
+
     if (isBridge) {
-      graphics.lineStyle(2, 0x4a2f18, 0.85);
+      graphics.fillStyle(palette.edge, 0.62);
+      graphics.fillEllipse(center.x, center.y, 15, 7.5);
+      graphics.fillStyle(palette.fill, palette.alpha);
+      graphics.fillEllipse(center.x, center.y, 11, 5);
+    } else {
+      drawRoadJunctionGrit(graphics, center, palette, jitter, road);
+    }
+
+    if (isBridge) {
+      graphics.lineStyle(2, 0x4a2f18, 0.9);
       graphics.beginPath();
       graphics.moveTo(isoX - TILE_WIDTH / 2 + 8, isoY);
       graphics.lineTo(isoX + TILE_WIDTH / 2 - 8, isoY);
@@ -291,6 +329,21 @@ class PhaserMapScene extends Phaser.Scene {
       graphics.lineTo(isoX, isoY + TILE_HEIGHT / 2 - 5);
       graphics.strokePath();
     }
+  }
+
+  private getRoadConnections(tile: MapTile): RoadSide[] {
+    const connections: RoadSide[] = [];
+    if (this.hasRoad(tile.x, tile.y - 1)) connections.push("northEast");
+    if (this.hasRoad(tile.x + 1, tile.y)) connections.push("southEast");
+    if (this.hasRoad(tile.x, tile.y + 1)) connections.push("southWest");
+    if (this.hasRoad(tile.x - 1, tile.y)) connections.push("northWest");
+
+    if (connections.length > 0) return connections;
+    return ["northEast", "southWest"];
+  }
+
+  private hasRoad(x: number, y: number) {
+    return Boolean(this.map?.tiles[y]?.[x]?.road);
   }
 
   private renderDecor(decor: DecorItem, isoX: number, isoY: number) {
@@ -331,6 +384,131 @@ class PhaserMapScene extends Phaser.Scene {
     }
     g.setDepth(baseY);
     this.decorLayer.add(g);
+  }
+
+  private renderNaturalWall(tile: MapTile, isoX: number, isoY: number) {
+    const g = this.add.graphics();
+    const jitter = hashTile(tile.x, tile.y);
+    const topY = isoY - 19 - jitter * 2;
+    const baseY = isoY + 7;
+    const drop = baseY - topY;
+    const north = { x: isoX, y: topY - TILE_HEIGHT / 2 };
+    const east = { x: isoX + TILE_WIDTH / 2, y: topY };
+    const south = { x: isoX, y: topY + TILE_HEIGHT / 2 };
+    const west = { x: isoX - TILE_WIDTH / 2, y: topY };
+    const baseNorth = { x: north.x, y: north.y + drop };
+    const baseEast = { x: east.x, y: east.y + drop };
+    const baseSouth = { x: south.x, y: south.y + drop };
+    const baseWest = { x: west.x, y: west.y + drop };
+    const exposed = this.getExposedNaturalWallSides(tile);
+
+    g.fillStyle(0x071006, 0.3);
+    drawDiamondPath(g, isoX, isoY + 8);
+    g.fillPath();
+
+    if (exposed.northEast) this.drawNaturalWallFace(g, north, east, baseNorth, baseEast, 0x3f6b34, 0.86);
+    if (exposed.southEast) this.drawNaturalWallFace(g, east, south, baseEast, baseSouth, 0x275324, 0.96);
+    if (exposed.southWest) this.drawNaturalWallFace(g, south, west, baseSouth, baseWest, 0x1f421f, 0.98);
+    if (exposed.northWest) this.drawNaturalWallFace(g, west, north, baseWest, baseNorth, 0x5f8748, 0.76);
+
+    g.fillStyle(0x4f7d3a, 0.72);
+    g.lineStyle(1.5, 0x173015, 0.72);
+    g.beginPath();
+    g.moveTo(north.x, north.y + 1 - jitter * 2);
+    g.lineTo(east.x - 4, east.y + 2 + jitter * 2);
+    g.lineTo(south.x, south.y + 2);
+    g.lineTo(west.x + 4, west.y + 1 - jitter);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    this.drawNaturalWallTop(g, north, east, south, west, jitter);
+
+    g.setDepth(baseY + 0.5);
+    this.decorLayer.add(g);
+  }
+
+  private drawNaturalWallFace(
+    graphics: Phaser.GameObjects.Graphics,
+    topA: Position,
+    topB: Position,
+    bottomA: Position,
+    bottomB: Position,
+    color: number,
+    alpha: number
+  ) {
+    graphics.fillStyle(color, alpha);
+    graphics.lineStyle(1.2, 0x13280f, 0.78);
+    graphics.beginPath();
+    graphics.moveTo(topA.x, topA.y);
+    graphics.lineTo(topB.x, topB.y);
+    graphics.lineTo(bottomB.x, bottomB.y);
+    graphics.lineTo(bottomA.x, bottomA.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    graphics.lineStyle(1, 0x143010, 0.28);
+    for (const t of [0.34, 0.68]) {
+      const a = lerpPoint(topA, bottomA, t);
+      const b = lerpPoint(topB, bottomB, t);
+      graphics.beginPath();
+      graphics.moveTo(a.x, a.y);
+      graphics.lineTo(b.x, b.y);
+      graphics.strokePath();
+    }
+
+    graphics.lineStyle(1, 0x9fd089, 0.2);
+    const highlightA = lerpPoint(topA, bottomA, 0.2);
+    const highlightB = lerpPoint(topB, bottomB, 0.2);
+    graphics.beginPath();
+    graphics.moveTo(highlightA.x, highlightA.y);
+    graphics.lineTo(highlightB.x, highlightB.y);
+    graphics.strokePath();
+  }
+
+  private drawNaturalWallTop(
+    graphics: Phaser.GameObjects.Graphics,
+    north: Position,
+    east: Position,
+    south: Position,
+    west: Position,
+    jitter: number
+  ) {
+    const center = getPolygonCenter([north, east, south, west]);
+    const blobs = [
+      { x: north.x, y: north.y + 12, w: 20, h: 13, c: 0x6aa34d },
+      { x: west.x + 17, y: west.y + 5, w: 23, h: 15, c: 0x578f43 },
+      { x: center.x - 8, y: center.y - 1, w: 28, h: 18, c: 0x73ad55 },
+      { x: center.x + 10, y: center.y + 1 + jitter * 2, w: 28, h: 18, c: 0x619b49 },
+      { x: east.x - 16, y: east.y + 6, w: 23, h: 15, c: 0x79b85a },
+      { x: south.x - 6, y: south.y - 8, w: 30, h: 17, c: 0x4f823e },
+      { x: south.x + 9, y: south.y - 7, w: 24, h: 14, c: 0x5d9446 },
+    ];
+
+    for (const blob of blobs) {
+      graphics.fillStyle(0x142a12, 0.5);
+      graphics.fillEllipse(blob.x, blob.y + 1, blob.w + 3, blob.h + 3);
+      graphics.fillStyle(blob.c, 1);
+      graphics.fillEllipse(blob.x, blob.y, blob.w, blob.h);
+      graphics.fillStyle(0x9fca7b, 0.24);
+      graphics.fillEllipse(blob.x - blob.w * 0.16, blob.y - blob.h * 0.18, blob.w * 0.45, blob.h * 0.34);
+    }
+
+    graphics.fillStyle(0x2f5f2b, 0.38);
+    graphics.fillEllipse(center.x - 2, center.y + 9, 34, 9);
+
+    graphics.fillStyle(0xb7dd8d, 0.78);
+    graphics.fillCircle(west.x + 15, west.y + 3, 2);
+    graphics.fillCircle(east.x - 13, east.y + 4 + jitter * 2, 1.7);
+    graphics.fillCircle(center.x + 4, center.y - 5, 1.8);
+
+    graphics.lineStyle(1.4, 0xc4e79b, 0.34);
+    graphics.beginPath();
+    graphics.moveTo(west.x + 13, west.y + 3);
+    graphics.lineTo(center.x - 1, center.y - 6);
+    graphics.lineTo(east.x - 11, east.y + 3);
+    graphics.strokePath();
   }
 
   private drawDecorShadow(graphics: Phaser.GameObjects.Graphics, x: number, y: number, kind: DecorKind) {
@@ -520,7 +698,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
   }
 
-  highlightTiles(tiles: Position[], color = 0x32d583, alpha = 0.2) {
+  highlightTiles(tiles: Position[], color = REACHABLE_TILE_COLOR, alpha = REACHABLE_TILE_ALPHA) {
     this.reachableLayer.removeAll(true);
     for (const tile of tiles) {
       this.drawDiamond(this.reachableLayer, tile.x, tile.y, color, alpha);
@@ -702,7 +880,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
 
     if (tile.object) {
-      this.renderMapObject(tile.object, isoX, isoY - depth);
+      this.renderMapObject(tile.object, isoX, isoY - depth, tile);
     }
   }
 
@@ -721,7 +899,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.mapLayer.add(lava);
   }
 
-  private renderMapObject(object: MapObject, isoX: number, isoY: number) {
+  private renderMapObject(object: MapObject, isoX: number, isoY: number, tile?: MapTile) {
     if (object.type === "resource" && object.subtype) {
       const sprite = this.add.image(isoX, isoY + 4, MAP_SPRITES.resources[object.subtype]);
       sprite.setOrigin(0.5, 1);
@@ -729,27 +907,349 @@ class PhaserMapScene extends Phaser.Scene {
       sprite.setDepth(isoY + 4);
       this.mapObjectLayer.add(sprite);
     } else if (object.type === "monster") {
-      const sprite = this.add.image(isoX, isoY + 3, MAP_SPRITES.monster);
+      const sprite = this.add.image(isoX, isoY + 3, getMonsterSpritePath(object.subtype));
       sprite.setOrigin(0.5, 1);
       sprite.setDisplaySize(44, 44);
       sprite.setDepth(isoY + 3);
       this.mapObjectLayer.add(sprite);
     } else if (object.type === "wall" && object.subtype === "brick") {
-      // Mur de briques : pavé surélevé
       const g = this.add.graphics();
-      g.fillStyle(0x8a5a3a, 1);
-      g.lineStyle(1, 0x4a2a1a, 1);
-      drawDiamondPath(g, isoX, isoY - 8);
-      g.fillPath();
-      g.strokePath();
-      // crénelures
-      g.fillStyle(0x6b3f24, 1);
-      g.fillRect(isoX - 10, isoY - 12, 6, 4);
-      g.fillRect(isoX + 4, isoY - 12, 6, 4);
-      g.setDepth(isoY);
-      this.mapObjectLayer.add(g);
+      this.drawBrickWall(g, isoX, isoY, tile);
+      this.mapLayer.add(g);
     }
-    // Note : les murs naturels sont rendus via decorLayer (gros rochers/arbres morts placés par decor.ts)
+    // Note: natural walls are rendered via decorLayer.
+  }
+
+  private drawBrickWall(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, tile?: MapTile) {
+    const topY = isoY - 24;
+    const baseY = isoY + 4;
+    const drop = baseY - topY;
+    const north = { x: isoX, y: topY - TILE_HEIGHT / 2 };
+    const east = { x: isoX + TILE_WIDTH / 2, y: topY };
+    const south = { x: isoX, y: topY + TILE_HEIGHT / 2 };
+    const west = { x: isoX - TILE_WIDTH / 2, y: topY };
+    const baseNorth = { x: north.x, y: north.y + drop };
+    const baseEast = { x: east.x, y: east.y + drop };
+    const baseSouth = { x: south.x, y: south.y + drop };
+    const baseWest = { x: west.x, y: west.y + drop };
+    const exposed = this.getExposedWallSides(tile);
+
+    graphics.fillStyle(0x050403, 0.24);
+    drawDiamondPath(graphics, isoX, isoY + 6);
+    graphics.fillPath();
+
+    if (exposed.northEast) this.drawWallFace(graphics, north, east, baseNorth, baseEast, 0x5f5548, 0.86);
+    if (exposed.southEast) this.drawWallFace(graphics, east, south, baseEast, baseSouth, 0x4f4539, 1);
+    if (exposed.southWest) this.drawWallFace(graphics, south, west, baseSouth, baseWest, 0x3f372f, 1);
+    if (exposed.northWest) this.drawWallFace(graphics, west, north, baseWest, baseNorth, 0x6e6252, 0.75);
+
+    graphics.fillStyle(0x96876f, 1);
+    graphics.lineStyle(1.5, 0x2b241d, 0.95);
+    graphics.beginPath();
+    graphics.moveTo(north.x, north.y);
+    graphics.lineTo(east.x, east.y);
+    graphics.lineTo(south.x, south.y);
+    graphics.lineTo(west.x, west.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    this.drawWallTopMasonry(graphics, north, east, south, west);
+
+    if (exposed.southEast) this.drawWallBattlements(graphics, east, south);
+    if (exposed.southWest) this.drawWallBattlements(graphics, south, west);
+    if (exposed.northEast) this.drawWallCapstones(graphics, north, east);
+    if (exposed.northWest) this.drawWallCapstones(graphics, west, north);
+  }
+
+  private drawWallSegment(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, orientation: "x" | "y") {
+    const dir = orientation === "x" ? { x: 25, y: 12 } : { x: -25, y: 12 };
+    const normal = orientation === "x" ? { x: -6, y: 5 } : { x: 6, y: 5 };
+    const height = 20;
+    const lift = { x: 0, y: -height };
+
+    const a = { x: isoX - dir.x, y: isoY - dir.y + 4 };
+    const b = { x: isoX + dir.x, y: isoY + dir.y + 4 };
+    const c = { x: b.x + normal.x, y: b.y + normal.y };
+    const d = { x: a.x + normal.x, y: a.y + normal.y };
+    const at = { x: a.x + lift.x, y: a.y + lift.y };
+    const bt = { x: b.x + lift.x, y: b.y + lift.y };
+    const ct = { x: c.x + lift.x, y: c.y + lift.y };
+    const dt = { x: d.x + lift.x, y: d.y + lift.y };
+
+    graphics.fillStyle(0x060504, 0.24);
+    graphics.beginPath();
+    graphics.moveTo(a.x - normal.x, a.y + 5);
+    graphics.lineTo(b.x - normal.x, b.y + 5);
+    graphics.lineTo(c.x + normal.x, c.y + 7);
+    graphics.lineTo(d.x + normal.x, d.y + 7);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(0x5c5348, 1);
+    graphics.lineStyle(1, 0x2d251d, 0.9);
+    graphics.beginPath();
+    graphics.moveTo(a.x, a.y);
+    graphics.lineTo(b.x, b.y);
+    graphics.lineTo(bt.x, bt.y);
+    graphics.lineTo(at.x, at.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    graphics.fillStyle(0x3f3832, 1);
+    graphics.beginPath();
+    graphics.moveTo(b.x, b.y);
+    graphics.lineTo(c.x, c.y);
+    graphics.lineTo(ct.x, ct.y);
+    graphics.lineTo(bt.x, bt.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    graphics.fillStyle(0x8f806a, 1);
+    graphics.beginPath();
+    graphics.moveTo(at.x, at.y);
+    graphics.lineTo(bt.x, bt.y);
+    graphics.lineTo(ct.x, ct.y);
+    graphics.lineTo(dt.x, dt.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    // Mortar joints on the front face — gives stone-block texture without
+    // breaking the continuity of the parapet.
+    graphics.lineStyle(1, 0x2f2923, 0.4);
+    for (let i = 1; i < 3; i++) {
+      const t = i / 3;
+      const px = Phaser.Math.Linear(a.x, b.x, t);
+      const py = Phaser.Math.Linear(a.y, b.y, t);
+      const qx = Phaser.Math.Linear(at.x, bt.x, t);
+      const qy = Phaser.Math.Linear(at.y, bt.y, t);
+      graphics.beginPath();
+      graphics.moveTo(px, py);
+      graphics.lineTo(qx, qy);
+      graphics.strokePath();
+    }
+
+    // A horizontal stone-course line halfway up the front face — adds a "real wall"
+    // bond pattern without any spikes on top.
+    graphics.lineStyle(1, 0x2f2923, 0.3);
+    graphics.beginPath();
+    graphics.moveTo(a.x + 2, a.y - height / 2);
+    graphics.lineTo(b.x - 2, b.y - height / 2);
+    graphics.strokePath();
+
+    // Soft highlight along the front-top edge of the parapet for relief.
+    graphics.lineStyle(1, 0xb8aa8a, 0.35);
+    graphics.beginPath();
+    graphics.moveTo(at.x + 3, at.y + 1);
+    graphics.lineTo(bt.x - 3, bt.y + 1);
+    graphics.strokePath();
+  }
+
+  private drawWallPillar(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number) {
+    // Flat corner stone at intersections — flush with parapet height (no taller),
+    // just a small reinforced block to mask the seam between two crossing segments.
+    const cy = isoY + 4;
+    const topY = isoY - 20 + 4;
+    const baseY = cy + 4;
+
+    // Faint ground shadow.
+    graphics.fillStyle(0x060504, 0.22);
+    graphics.fillEllipse(isoX, baseY + 2, 16, 6);
+
+    // Body block (slightly wider than the slab thickness so it reads as a corner stone).
+    graphics.fillStyle(0x4c4339, 1);
+    graphics.lineStyle(1, 0x2d251d, 0.85);
+    graphics.fillRect(isoX - 5, topY + 4, 10, baseY - topY - 4);
+    graphics.strokeRect(isoX - 5, topY + 4, 10, baseY - topY - 4);
+
+    // Parapet cap, same color/height as the slab tops — flush continuity.
+    graphics.fillStyle(0x8f806a, 1);
+    graphics.fillRect(isoX - 7, topY, 14, 5);
+    graphics.strokeRect(isoX - 7, topY, 14, 5);
+
+    // A subtle highlight on the cap edge.
+    graphics.lineStyle(1, 0xb8aa8a, 0.35);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 5, topY + 1);
+    graphics.lineTo(isoX + 5, topY + 1);
+    graphics.strokePath();
+  }
+
+  private getWallOrientation(tile?: MapTile): "x" | "y" | "cross" {
+    if (!tile || !this.map) return "x";
+
+    const westEast = this.isBrickWall(tile.x - 1, tile.y) || this.isBrickWall(tile.x + 1, tile.y);
+    const northSouth = this.isBrickWall(tile.x, tile.y - 1) || this.isBrickWall(tile.x, tile.y + 1);
+    if (westEast && northSouth) return "cross";
+    return northSouth ? "y" : "x";
+  }
+
+  private getExposedWallSides(tile?: MapTile) {
+    if (!tile || !this.map) {
+      return { northEast: true, southEast: true, southWest: true, northWest: true };
+    }
+
+    return {
+      northEast: !this.isBrickWall(tile.x, tile.y - 1),
+      southEast: !this.isBrickWall(tile.x + 1, tile.y),
+      southWest: !this.isBrickWall(tile.x, tile.y + 1),
+      northWest: !this.isBrickWall(tile.x - 1, tile.y),
+    };
+  }
+
+  private getExposedNaturalWallSides(tile?: MapTile) {
+    if (!tile || !this.map) {
+      return { northEast: true, southEast: true, southWest: true, northWest: true };
+    }
+
+    return {
+      northEast: !this.isNaturalWall(tile.x, tile.y - 1),
+      southEast: !this.isNaturalWall(tile.x + 1, tile.y),
+      southWest: !this.isNaturalWall(tile.x, tile.y + 1),
+      northWest: !this.isNaturalWall(tile.x - 1, tile.y),
+    };
+  }
+
+  private isNaturalWall(x: number, y: number) {
+    const object = this.map?.tiles[y]?.[x]?.object;
+    return object?.type === "wall" && object.subtype === "natural";
+  }
+
+  private drawWallFace(
+    graphics: Phaser.GameObjects.Graphics,
+    topA: Position,
+    topB: Position,
+    bottomA: Position,
+    bottomB: Position,
+    color: number,
+    alpha: number
+  ) {
+    graphics.fillStyle(color, alpha);
+    graphics.lineStyle(1, 0x261f19, 0.8);
+    graphics.beginPath();
+    graphics.moveTo(topA.x, topA.y);
+    graphics.lineTo(topB.x, topB.y);
+    graphics.lineTo(bottomB.x, bottomB.y);
+    graphics.lineTo(bottomA.x, bottomA.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+
+    graphics.lineStyle(1, 0x2f281f, 0.28);
+    for (let i = 1; i < 3; i++) {
+      const t = i / 3;
+      const a = lerpPoint(topA, bottomA, t);
+      const b = lerpPoint(topB, bottomB, t);
+      graphics.beginPath();
+      graphics.moveTo(a.x, a.y);
+      graphics.lineTo(b.x, b.y);
+      graphics.strokePath();
+    }
+
+    for (let i = 1; i < 3; i++) {
+      const t = i / 3;
+      const a = lerpPoint(topA, topB, t);
+      const b = lerpPoint(bottomA, bottomB, t);
+      graphics.beginPath();
+      graphics.moveTo(a.x, a.y);
+      graphics.lineTo(b.x, b.y);
+      graphics.strokePath();
+    }
+  }
+
+  private drawWallTopMasonry(
+    graphics: Phaser.GameObjects.Graphics,
+    north: Position,
+    east: Position,
+    south: Position,
+    west: Position
+  ) {
+    const nwA = lerpPoint(north, west, 0.42);
+    const esA = lerpPoint(east, south, 0.42);
+    const neA = lerpPoint(north, east, 0.42);
+    const wsA = lerpPoint(west, south, 0.42);
+    const nwB = lerpPoint(north, west, 0.72);
+    const esB = lerpPoint(east, south, 0.72);
+    const neB = lerpPoint(north, east, 0.72);
+    const wsB = lerpPoint(west, south, 0.72);
+
+    graphics.lineStyle(1, 0x544938, 0.45);
+    graphics.beginPath();
+    graphics.moveTo(nwA.x, nwA.y);
+    graphics.lineTo(esA.x, esA.y);
+    graphics.moveTo(neA.x, neA.y);
+    graphics.lineTo(wsA.x, wsA.y);
+    graphics.moveTo(nwB.x, nwB.y);
+    graphics.lineTo(esB.x, esB.y);
+    graphics.moveTo(neB.x, neB.y);
+    graphics.lineTo(wsB.x, wsB.y);
+    graphics.strokePath();
+
+    graphics.lineStyle(1, 0xc4b28c, 0.28);
+    graphics.beginPath();
+    graphics.moveTo(north.x + 3, north.y + 3);
+    graphics.lineTo(east.x - 5, east.y + 1);
+    graphics.strokePath();
+  }
+
+  private drawWallBattlements(graphics: Phaser.GameObjects.Graphics, from: Position, to: Position) {
+    for (const t of [0.32, 0.68]) {
+      const center = lerpPoint(from, to, t);
+      this.drawWallMerlon(graphics, center.x, center.y - 5);
+    }
+  }
+
+  private drawWallCapstones(graphics: Phaser.GameObjects.Graphics, from: Position, to: Position) {
+    graphics.lineStyle(2, 0x7a6d58, 0.65);
+    graphics.beginPath();
+    graphics.moveTo(from.x + (to.x - from.x) * 0.15, from.y + (to.y - from.y) * 0.15);
+    graphics.lineTo(from.x + (to.x - from.x) * 0.85, from.y + (to.y - from.y) * 0.85);
+    graphics.strokePath();
+  }
+
+  private drawWallMerlon(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
+    const north = { x, y: y - 5 };
+    const east = { x: x + 7, y: y - 1 };
+    const south = { x, y: y + 4 };
+    const west = { x: x - 7, y: y - 1 };
+    const drop = 7;
+
+    this.drawWallFace(
+      graphics,
+      east,
+      south,
+      { x: east.x, y: east.y + drop },
+      { x: south.x, y: south.y + drop },
+      0x5b5042,
+      1
+    );
+    this.drawWallFace(
+      graphics,
+      south,
+      west,
+      { x: south.x, y: south.y + drop },
+      { x: west.x, y: west.y + drop },
+      0x443b31,
+      1
+    );
+
+    graphics.fillStyle(0xa69778, 1);
+    graphics.lineStyle(1, 0x2c251d, 0.9);
+    graphics.beginPath();
+    graphics.moveTo(north.x, north.y);
+    graphics.lineTo(east.x, east.y);
+    graphics.lineTo(south.x, south.y);
+    graphics.lineTo(west.x, west.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+  }
+
+  private isBrickWall(x: number, y: number) {
+    return this.map?.tiles[y]?.[x]?.object?.type === "wall" && this.map.tiles[y][x].object?.subtype === "brick";
   }
 
   private renderObjects() {
@@ -1147,6 +1647,154 @@ function drawDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: nu
   graphics.lineTo(x, y + TILE_HEIGHT / 2);
   graphics.lineTo(x - TILE_WIDTH / 2, y);
   graphics.closePath();
+}
+
+function drawInsetDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number, inset: number) {
+  const width = TILE_WIDTH * (1 - inset);
+  const height = TILE_HEIGHT * (1 - inset);
+  graphics.beginPath();
+  graphics.moveTo(x, y - height / 2);
+  graphics.lineTo(x + width / 2, y);
+  graphics.lineTo(x, y + height / 2);
+  graphics.lineTo(x - width / 2, y);
+  graphics.closePath();
+}
+
+function getRoadExitPoint(x: number, y: number, side: RoadSide): Position {
+  switch (side) {
+    case "northEast":
+      return { x: x + TILE_WIDTH * 0.24, y: y - TILE_HEIGHT * 0.24 };
+    case "southEast":
+      return { x: x + TILE_WIDTH * 0.24, y: y + TILE_HEIGHT * 0.24 };
+    case "southWest":
+      return { x: x - TILE_WIDTH * 0.24, y: y + TILE_HEIGHT * 0.24 };
+    case "northWest":
+      return { x: x - TILE_WIDTH * 0.24, y: y - TILE_HEIGHT * 0.24 };
+  }
+}
+
+function drawRoadStroke(
+  graphics: Phaser.GameObjects.Graphics,
+  from: Position,
+  to: Position,
+  palette: RoadPalette,
+  isBridge: boolean
+) {
+  graphics.lineStyle(isBridge ? 13 : 11, palette.edge, 0.84);
+  graphics.beginPath();
+  graphics.moveTo(from.x, from.y);
+  graphics.lineTo(to.x, to.y);
+  graphics.strokePath();
+
+  graphics.lineStyle(isBridge ? 9 : 7, palette.fill, palette.alpha);
+  graphics.beginPath();
+  graphics.moveTo(from.x, from.y);
+  graphics.lineTo(to.x, to.y);
+  graphics.strokePath();
+
+  graphics.lineStyle(isBridge ? 2 : 1, palette.highlight, isBridge ? 0.28 : 0.22);
+  graphics.beginPath();
+  graphics.moveTo(from.x - 1, from.y - 2);
+  graphics.lineTo(to.x - 1, to.y - 2);
+  graphics.strokePath();
+}
+
+function drawRoadGravel(
+  graphics: Phaser.GameObjects.Graphics,
+  from: Position,
+  to: Position,
+  palette: RoadPalette,
+  seed: number,
+  road: RoadType
+) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normal = { x: -dy / length, y: dx / length };
+  const count = road === "paved" ? 6 : 7;
+  const spread = road === "paved" ? 8 : 9;
+
+  for (let i = 0; i < count; i++) {
+    const a = pseudoRandom(seed, i);
+    const b = pseudoRandom(seed + 0.31, i);
+    const t = 0.15 + (i / Math.max(1, count - 1)) * 0.72 + a * 0.06;
+    const offset = (b - 0.5) * spread;
+    const x = Phaser.Math.Linear(from.x, to.x, t) + normal.x * offset;
+    const y = Phaser.Math.Linear(from.y, to.y, t) + normal.y * offset;
+    const radius = 0.75 + pseudoRandom(seed + 0.73, i) * (road === "paved" ? 0.75 : 0.9);
+    const light = pseudoRandom(seed + 0.47, i) > 0.66;
+    const alpha = light ? 0.38 : road === "paved" ? 0.52 : 0.46;
+
+    graphics.fillStyle(light ? palette.highlight : palette.grit, alpha);
+    if (road === "paved" || i % 3 === 0) {
+      graphics.fillRect(x - radius * 1.15, y - radius * 0.55, radius * 2.3, radius * 1.1);
+    } else {
+      graphics.fillCircle(x, y, radius);
+    }
+  }
+}
+
+function drawRoadJunctionGrit(
+  graphics: Phaser.GameObjects.Graphics,
+  center: Position,
+  palette: RoadPalette,
+  seed: number,
+  road: RoadType
+) {
+  const count = road === "paved" ? 8 : 10;
+  for (let i = 0; i < count; i++) {
+    const angle = pseudoRandom(seed + 0.19, i) * Math.PI * 2;
+    const distance = 2 + pseudoRandom(seed + 0.37, i) * 10;
+    const x = center.x + Math.cos(angle) * distance;
+    const y = center.y + Math.sin(angle) * distance * 0.5;
+    const radius = 0.75 + pseudoRandom(seed + 0.61, i) * 0.9;
+    const light = pseudoRandom(seed + 0.83, i) > 0.7;
+
+    graphics.fillStyle(light ? palette.highlight : palette.grit, light ? 0.38 : 0.5);
+    if (road === "paved" || i % 2 === 0) {
+      graphics.fillRect(x - radius, y - radius * 0.55, radius * 2, radius * 1.1);
+    } else {
+      graphics.fillCircle(x, y, radius);
+    }
+  }
+}
+
+function getRoadPalette(road: RoadType, isBridge: boolean): RoadPalette {
+  if (isBridge) {
+    return {
+      shadow: 0x1d0f06,
+      edge: 0x4a2f18,
+      fill: 0xa06a35,
+      highlight: 0xd8a96c,
+      grit: 0x2d1709,
+      alpha: 0.9,
+    };
+  }
+
+  if (road === "paved") {
+    return {
+      shadow: 0x1c1915,
+      edge: 0x4d4237,
+      fill: 0xbfb09a,
+      highlight: 0xf1e4cc,
+      grit: 0x625548,
+      alpha: 0.82,
+    };
+  }
+
+  return {
+    shadow: 0x1b1209,
+    edge: 0x4f351d,
+    fill: 0x9d743c,
+    highlight: 0xd7b06f,
+    grit: 0x3d2815,
+    alpha: 0.84,
+  };
+}
+
+function pseudoRandom(seed: number, index: number): number {
+  const value = Math.sin((seed + index * 12.9898) * 43758.5453);
+  return value - Math.floor(value);
 }
 
 function drawFogDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number, padding: number) {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
-import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
+import { computeVisibleTiles, getPlayerVisionCenters, isTileTraversable, normalizeMapMovement } from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
@@ -349,7 +349,8 @@ function validateCombatPath(
     if (Math.abs(prev.x - curr.x) + Math.abs(prev.y - curr.y) !== 1) return { ok: false };
     const tile = map.tiles[curr.y]?.[curr.x];
     // Allow the final tile even if occupied by a monster/enemy (that's the combat target)
-    if (!tile || (!tile.isPassable && i < path.length - 1)) return { ok: false };
+    if (!tile || tile.object?.type === "wall") return { ok: false };
+    if (!isTileTraversable(tile) && i < path.length - 1) return { ok: false };
     usedMovement += tile.movementCost ?? 1;
   }
   if (usedMovement > movement) return { ok: false };

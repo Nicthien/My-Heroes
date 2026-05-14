@@ -24,12 +24,17 @@ export function createCombatBoard(
   addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1, 1, undefined, terrain);
   addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2, 1, undefined, terrain);
   const turnQueue = buildTurnQueue(units, 1);
+  const initialUnits = cloneCombatUnits(units);
   return {
-    boardState: { units, terrain },
+    boardState: { units, initialUnits, terrain },
     turnQueue,
     currentUnitId: turnQueue[0] ?? null,
     currentPlayerId: units.find((unit) => unit.id === turnQueue[0])?.ownerPlayerId ?? null,
   };
+}
+
+export function cloneCombatUnits(units: CombatBoardUnit[]) {
+  return units.map((unit) => ({ ...unit }));
 }
 
 function addUnits(

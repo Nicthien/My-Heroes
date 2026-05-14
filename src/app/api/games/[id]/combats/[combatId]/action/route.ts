@@ -33,7 +33,10 @@ export async function POST(
     .eq("game_id", id)
     .single();
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
-  if (combat.status !== "ACTIVE") return NextResponse.json({ error: "Combat deja termine" }, { status: 400 });
+  if (combat.status !== "ACTIVE") {
+    const mapped = toCombat(combat);
+    return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
+  }
   const { data: attackerHero, error: attackerError } = await supabase
     .from("heroes")
     .select("attack,defense")
@@ -50,7 +53,7 @@ export async function POST(
     : { data: null, error: null };
   if (defenderError) return NextResponse.json({ error: defenderError.message }, { status: 500 });
 
-  const boardState = combat.board_state as { units: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+  const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
   if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayer.id) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
@@ -70,8 +73,9 @@ export async function POST(
     defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
   });
 
+  const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
   const result = execution.result
-    ? buildManualCombatResult(execution.result, boardState.units ?? [], execution.units, combat)
+    ? buildManualCombatResult(execution.result, initialUnits, execution.units, combat)
     : null;
   const actionLog = [...(combat.action_log ?? []), ...execution.log];
 
@@ -93,7 +97,7 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (result) {
-    await persistResolvedCombat(supabase, combat, boardState.units ?? [], execution.units, execution.result);
+    await persistResolvedCombat(supabase, combat, initialUnits, execution.units, execution.result);
   }
   const mapped = toCombat(data);
   return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
@@ -231,7 +235,7 @@ function getSideLosses(side: "attacker" | "defender", before: CombatBoardUnit[],
     .filter((unit) => unit.side === side)
     .map((unit) => {
       const next = after.find((item) => item.id === unit.id);
-      return { unitType: unit.unitType, lost: unit.count - (next?.count ?? 0) };
+      return { unitType: unit.unitType, lost: Math.max(0, unit.count - (next?.count ?? 0)) };
     })
     .filter((loss) => loss.lost > 0);
 }

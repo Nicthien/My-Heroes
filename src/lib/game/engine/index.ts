@@ -47,16 +47,23 @@ function getMovementCost(terrain: TerrainType): number {
 
 /** Coût de déplacement effectif d'une tile : les routes priment sur le terrain. */
 export function effectiveMovementCost(tile: MapTile): number {
+  if (!isTileTraversable(tile)) return 999;
   if (tile.road === "paved") return 0.75;
   if (tile.road === "dirt") return 1.0;
   return tile.movementCost;
 }
 
+export function isTileTraversable(tile: MapTile | undefined): boolean {
+  return Boolean(tile && tile.isPassable && tile.object?.type !== "wall" && !tile.decor?.blocking);
+}
+
 export function normalizeMapMovement(map: GameMap): GameMap {
   for (const row of map.tiles) {
     for (const tile of row) {
-      tile.isPassable = isPassable(tile.terrain);
-      tile.movementCost = getMovementCost(tile.terrain);
+      const blockedByObject = tile.object?.type === "wall";
+      const blockedByDecor = tile.decor?.blocking === true;
+      tile.isPassable = isPassable(tile.terrain) && !blockedByObject && !blockedByDecor;
+      tile.movementCost = tile.isPassable ? getMovementCost(tile.terrain) : 999;
     }
   }
 
@@ -89,7 +96,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   const templateId =
     opts.templateId ?? pickDefaultTemplate(playerCount, rng);
   const fullTemplate = getTemplate(templateId);
-  const template = resolveTemplate(fullTemplate, playerCount);
+  const template = resolveTemplate(fullTemplate, playerCount, rng);
 
   // 1) Zones + terrain
   const tiles: MapTile[][] = [];
@@ -276,7 +283,7 @@ export function findPath(
         continue;
 
       const tile = map.tiles[neighbor.y][neighbor.x];
-      if (!tile.isPassable) continue;
+      if (!isTileTraversable(tile)) continue;
 
       const nKey = `${neighbor.x},${neighbor.y}`;
       if (closedSet.has(nKey)) continue;
@@ -331,7 +338,7 @@ export function computeReachableTiles(
       }
 
       const tile = map.tiles[neighbor.y]?.[neighbor.x];
-      if (!tile?.isPassable) continue;
+      if (!tile || !isTileTraversable(tile)) continue;
 
       const nextCost = current.cost + effectiveMovementCost(tile);
       if (nextCost > maxMovement) continue;

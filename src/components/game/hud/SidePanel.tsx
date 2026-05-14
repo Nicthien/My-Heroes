@@ -2,7 +2,7 @@
 
 import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
+import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
 import {
   HourglassIcon,
   MineIcon,
@@ -38,6 +38,10 @@ export default function SidePanel() {
         <Section title={`Héros (${heroes.length})`}>
           {heroes.map((h) => {
             const active = h.id === selectedHeroId;
+            const townAtHero = towns.find((town) =>
+              town.position.x === h.position.x &&
+              town.position.y === h.position.y
+            );
             return (
               <Row
                 key={h.id}
@@ -55,11 +59,28 @@ export default function SidePanel() {
                   />
                 }
                 title={h.name}
-                subtitle={`Niveau ${h.level}`}
+                subtitle={townAtHero ? `Niveau ${h.level} · Au chateau` : `Niveau ${h.level}`}
                 meta={
-                  <div className="flex items-center gap-1 text-[10px] text-amber-200/80">
-                    <HourglassIcon className="h-3 w-3" />
-                    {h.movement}/{h.maxMovement}
+                  <div className="flex items-center gap-2 text-[10px] text-amber-200/80">
+                    {townAtHero && (
+                      <button
+                        type="button"
+                        className="grid h-5 w-5 place-items-center rounded border border-sky-500/40 bg-sky-950/50 text-sky-200 transition hover:border-sky-300/70 hover:bg-sky-900/60 hover:text-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200/80"
+                        title={`Au chateau : ${townAtHero.name}`}
+                        aria-label={`Selectionner le chateau ${townAtHero.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectTown(townAtHero.id);
+                          focusTile(townAtHero.position.x, townAtHero.position.y);
+                        }}
+                      >
+                        <TowerIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <HourglassIcon className="h-3 w-3" />
+                      {h.movement}/{h.maxMovement}
+                    </span>
                   </div>
                 }
               />
@@ -104,11 +125,7 @@ export default function SidePanel() {
           {mines.map((m) => {
             const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === m.type);
             const label = rule?.label ?? m.type;
-            const prod = rule
-              ? Object.entries(rule.production)
-                  .map(([k, v]) => `+${v} ${k}`)
-                  .join(", ")
-              : "";
+            const prod = rule ? formatResourceProduction(rule.production) : "";
             return (
               <Row
                 key={m.id}
@@ -159,8 +176,15 @@ function Row({
   onClick: () => void;
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onClick();
+      }}
       className={`group flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition ${
         active
           ? "border-amber-400/70 bg-amber-700/15 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.25)]"
@@ -177,7 +201,7 @@ function Row({
         )}
       </div>
       {meta}
-    </button>
+    </div>
   );
 }
 

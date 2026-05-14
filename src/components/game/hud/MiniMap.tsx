@@ -24,13 +24,14 @@ export default function MiniMap() {
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
+  const hasActiveCombat = useGameStore((state) => Boolean(state.activeCombat));
   const focusTile = useGameStore((state) => state.focusTile);
   const zoomMap = useGameStore((state) => state.zoomMap);
 
   const currentPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
   const visibility = useMemo(
-    () => (gameState && currentPlayer ? getMiniMapVisibility(gameState, currentPlayer, devRevealMap) : null),
-    [gameState, currentPlayer, devRevealMap]
+    () => (gameState && currentPlayer ? getMiniMapVisibility(gameState, currentPlayer, devRevealMap || hasActiveCombat) : null),
+    [gameState, currentPlayer, devRevealMap, hasActiveCombat]
   );
 
   if (!gameState?.map || !currentPlayer || !visibility) return null;
@@ -151,11 +152,11 @@ export default function MiniMap() {
   );
 }
 
-function getMiniMapVisibility(gameState: GameState, currentPlayer: Player, revealMap: boolean) {
+function getMiniMapVisibility(gameState: GameState, currentPlayer: Player, revealAll: boolean) {
   const visible = new Set<string>();
   const explored = new Set<string>(currentPlayer.exploredTiles);
 
-  if (revealMap || gameState.status === "PENDING") {
+  if (revealAll) {
     for (let y = 0; y < gameState.map.height; y++) {
       for (let x = 0; x < gameState.map.width; x++) {
         const key = `${x},${y}`;

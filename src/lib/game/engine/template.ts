@@ -1,4 +1,5 @@
 import { TerrainType } from "../types";
+import { shuffle, type RNG } from "./rng";
 
 export type GuardStrength = "weak" | "normal" | "strong" | "veryStrong";
 export type WallType = "natural" | "brick";
@@ -584,7 +585,7 @@ export function listTemplatesForPlayers(playerCount: number): MapTemplate[] {
 }
 
 /** Résout le template pour un nombre de joueurs : ne garde que les zones joueur utiles. */
-export function resolveTemplate(template: MapTemplate, playerCount: number): MapTemplate {
+export function resolveTemplate(template: MapTemplate, playerCount: number, rng?: RNG): MapTemplate {
   const playerZones = template.zones.filter((z) => z.type === "player");
   if (playerCount > playerZones.length) {
     throw new Error(
@@ -597,11 +598,25 @@ export function resolveTemplate(template: MapTemplate, playerCount: number): Map
   const sortedPlayerZones = playerZones
     .slice()
     .sort((a, b) => (a.ownerIndex ?? 0) - (b.ownerIndex ?? 0));
-  for (let i = 0; i < playerCount; i++) keepIds.add(sortedPlayerZones[i].id);
+  const selectedPlayerZones = (rng ? shuffle(rng, sortedPlayerZones) : sortedPlayerZones)
+    .slice(0, playerCount);
+  const ownerIndexes = rng
+    ? shuffle(rng, Array.from({ length: playerCount }, (_, index) => index))
+    : Array.from({ length: playerCount }, (_, index) => index);
+  const randomizedOwnerByZoneId = new Map(
+    selectedPlayerZones.map((zone, index) => [zone.id, ownerIndexes[index]]),
+  );
+  for (const zone of selectedPlayerZones) keepIds.add(zone.id);
 
   return {
     ...template,
-    zones: template.zones.filter((z) => keepIds.has(z.id)),
+    zones: template.zones
+      .filter((z) => keepIds.has(z.id))
+      .map((z) =>
+        randomizedOwnerByZoneId.has(z.id)
+          ? { ...z, ownerIndex: randomizedOwnerByZoneId.get(z.id) }
+          : z,
+      ),
     connections: template.connections.filter((c) => keepIds.has(c.from) && keepIds.has(c.to)),
   };
 }

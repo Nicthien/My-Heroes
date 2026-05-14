@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
@@ -36,6 +36,16 @@ export type UnitModelKind = "infantry" | "archer" | "cavalry" | "winged" | "larg
 export default function CombatScreen() {
   const { data: session } = useSession();
   const { activeCombat, setActiveCombat, setCombatResult, setGameState, gameState, minimizeCombat } = useGameStore();
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const isSubmittingActionRef = useRef(false);
+  const neutralActionKeyRef = useRef<string | null>(null);
+
+  const resolveCombat = useCallback(async (combat: PersistentCombat) => {
+    setActiveCombat(null);
+    if (combat.result) setCombatResult(combat.result);
+    const refreshed = await refreshGameState(combat.gameId, session?.user?.id);
+    if (refreshed) setGameState(refreshed);
+  }, [session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
 
   useEffect(() => {
     if (!activeCombat) return;
@@ -45,41 +55,101 @@ export default function CombatScreen() {
       const data = await response.json();
       const mapped = mapCombat(data);
       if (mapped.status === "RESOLVED") {
-        setActiveCombat(null);
-        if (mapped.result) setCombatResult(mapped.result);
-        const refreshed = await refreshGameState(activeCombat.gameId, session?.user?.id);
-        if (refreshed) setGameState(refreshed);
+        await resolveCombat(mapped);
         return;
       }
       setActiveCombat(mapped);
     }, 2000);
     return () => clearInterval(interval);
-  }, [activeCombat, session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
+  }, [activeCombat, resolveCombat, setActiveCombat]);
+
+  useEffect(() => {
+    if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
+
+    const currentActor = activeCombat.boardState.units.find((unit) => unit.id === activeCombat.currentUnitId);
+    if (!currentActor || currentActor.ownerPlayerId !== null) return;
+
+    const actionKey = [
+      activeCombat.id,
+      activeCombat.currentUnitId,
+      activeCombat.round,
+      activeCombat.turnQueue.join(","),
+      activeCombat.actionLog.length,
+    ].join(":");
+    if (neutralActionKeyRef.current === actionKey || isSubmittingActionRef.current) return;
+
+    let cancelled = false;
+    const combat = activeCombat;
+    neutralActionKeyRef.current = actionKey;
+    isSubmittingActionRef.current = true;
+    setIsSubmittingAction(true);
+
+    async function playNeutralTurns() {
+      try {
+        const response = await fetchWithSupabaseAuth(`/api/games/${combat.gameId}/combats/${combat.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!response.ok) {
+          neutralActionKeyRef.current = null;
+          return;
+        }
+
+        const data = await response.json();
+        const combatPayload = data.combat ?? data;
+        if (!combatPayload || cancelled) return;
+
+        const mapped = mapCombat(combatPayload);
+        if (mapped.status === "RESOLVED" || data.result) {
+          await resolveCombat({ ...mapped, result: mapped.result ?? data.result });
+        } else {
+          setActiveCombat(mapped);
+        }
+      } finally {
+        isSubmittingActionRef.current = false;
+        if (!cancelled) setIsSubmittingAction(false);
+      }
+    }
+
+    playNeutralTurns();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCombat, gameState, resolveCombat, setActiveCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
   const units = activeCombat.boardState.units;
   const currentUnit = units.find((unit) => unit.id === activeCombat.currentUnitId);
   const isMyAction = Boolean(myPlayer && activeCombat.currentPlayerId === myPlayer.id);
+  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction;
 
   const submitAction = async (action: Record<string, unknown>) => {
-    const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(action),
-    });
-    if (!response.ok) return;
-    const data = await response.json();
-    const combatPayload = data.combat ?? data;
-    if (!combatPayload) return;
-    const mapped = mapCombat(combatPayload);
-    if (data.result) {
-      setActiveCombat(null);
-      setCombatResult(data.result);
-      const refreshed = await refreshGameState(activeCombat.gameId, session?.user?.id);
-      if (refreshed) setGameState(refreshed);
-    } else {
-      setActiveCombat(mapped);
+    if (!canSubmitAction || isSubmittingActionRef.current) return;
+
+    isSubmittingActionRef.current = true;
+    setIsSubmittingAction(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action),
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const combatPayload = data.combat ?? data;
+      if (!combatPayload) return;
+      const mapped = mapCombat(combatPayload);
+      if (mapped.status === "RESOLVED" || data.result) {
+        await resolveCombat({ ...mapped, result: mapped.result ?? data.result });
+      } else {
+        setActiveCombat(mapped);
+      }
+    } finally {
+      isSubmittingActionRef.current = false;
+      setIsSubmittingAction(false);
     }
   };
 
@@ -105,7 +175,7 @@ export default function CombatScreen() {
       </header>
       <div className="relative z-10 flex min-h-0 flex-1">
         <main className="relative flex min-w-0 flex-1 items-center justify-center overflow-auto px-5 pb-5 pt-3">
-          <IsoBattlefield combat={activeCombat} isMyAction={isMyAction} onAction={submitAction} />
+          <IsoBattlefield combat={activeCombat} isMyAction={canSubmitAction} onAction={submitAction} />
         </main>
         <aside className="relative z-20 flex w-80 flex-col gap-4 border-l border-amber-700/50 bg-gradient-to-b from-[#1a1208]/95 via-[#120f0a]/95 to-stone-950/95 p-4 shadow-[-14px_0_28px_rgba(0,0,0,0.45)]">
           <ParchmentBackground />
@@ -121,7 +191,7 @@ export default function CombatScreen() {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={!isMyAction}
+              disabled={!canSubmitAction}
               onClick={() => submitAction({ type: "WAIT" })}
               className="rounded-md border border-amber-600/50 bg-gradient-to-b from-stone-800 to-stone-950 px-3 py-2 font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset] transition hover:from-stone-700 hover:to-stone-900 disabled:opacity-40"
             >
@@ -129,7 +199,7 @@ export default function CombatScreen() {
             </button>
             <button
               type="button"
-              disabled={!isMyAction}
+              disabled={!canSubmitAction}
               onClick={() => submitAction({ type: "DEFEND" })}
               className="rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
             >

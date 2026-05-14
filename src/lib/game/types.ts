@@ -186,6 +186,7 @@ export interface Town {
   id: string;
   name: string;
   faction: Faction;
+  townType?: Faction;
   position: Position;
   level: number;
   buildings: BuildingType[];
@@ -265,6 +266,13 @@ export interface ResourceBuilding {
   guardianPower: number;
 }
 
+export interface NeutralArmy {
+  id: string;
+  status: "ACTIVE" | "DEFEATED" | string;
+  position: Position;
+  stacks: UnitStack[];
+}
+
 export interface MapObject {
   type:
     | "town"
@@ -278,6 +286,7 @@ export interface MapObject {
     | "gate";
   id: string;
   subtype?: string;
+  name?: string;
   guardianPower?: number;
   amount?: number;
 }
@@ -333,7 +342,7 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
@@ -428,4 +437,5 @@ export interface GameState {
   currentTurnPlayerId: string;
   winnerId?: string;
   activeCombats?: PersistentCombat[];
+  neutralArmies?: NeutralArmy[];
 }

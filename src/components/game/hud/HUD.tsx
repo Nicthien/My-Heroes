@@ -5,7 +5,7 @@ import Image from "next/image";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { Resources, Faction, BuildingType, UnitStack, UnitType, type CombatBoardUnit } from "@/lib/game/types";
+import { Resources, Faction, BuildingType, UnitStack, UnitType, type CombatBoardUnit, type Hero } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
 import { UNIT_RULES as COMBAT_UNIT_RULES } from "@/lib/game/units";
@@ -258,6 +258,17 @@ function TownTabIcon({ tab }: { tab: TownTab }) {
   }
 }
 
+function TransferToHeroIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h11" />
+      <path d="m12 8 4 4-4 4" />
+      <circle cx="7" cy="7" r="3" />
+      <path d="M2.5 20a4.5 4.5 0 0 1 9 0" />
+    </svg>
+  );
+}
+
 export default function HUD() {
   const gameState = useGameStore((state) => state.gameState);
 
@@ -283,6 +294,7 @@ function HUDContent() {
     townId: null,
     tab: "summary",
   });
+  const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
     gameState: nullableGameState,
@@ -309,13 +321,12 @@ function HUDContent() {
   );
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
-  const selectedHero = gameState.players
-    .flatMap((p) => p.heroes)
-    .find((h) => h.id === selectedHeroId);
+  const allHeroes = gameState.players.flatMap((p) => p.heroes);
+  const allTowns = gameState.players.flatMap((p) => p.towns);
 
-  const selectedTown = gameState.players
-    .flatMap((p) => p.towns)
-    .find((t) => t.id === selectedTownId);
+  const selectedHero = allHeroes.find((h) => h.id === selectedHeroId);
+
+  const selectedTown = allTowns.find((t) => t.id === selectedTownId);
 
   const selectedTownOwner = gameState.players.find((p) =>
     p.towns.some((town) => town.id === selectedTownId)
@@ -324,16 +335,18 @@ function HUDContent() {
   const isMyTown = Boolean(
     selectedTownOwner && myPlayer && selectedTownOwner.id === myPlayer.id
   );
-  const heroAtSelectedTown = selectedTown && myPlayer
-    ? (
-        selectedHero && myPlayer.heroes.some((hero) => hero.id === selectedHero.id) &&
-        selectedHero.position.x === selectedTown.position.x &&
-        selectedHero.position.y === selectedTown.position.y
-          ? selectedHero
-          : myPlayer.heroes.find((hero) =>
-              hero.position.x === selectedTown.position.x &&
-              hero.position.y === selectedTown.position.y
-            )
+  const heroesAtSelectedTown = selectedTown && myPlayer
+    ? myPlayer.heroes.filter((hero) =>
+        hero.position.x === selectedTown.position.x &&
+        hero.position.y === selectedTown.position.y
+      )
+    : [];
+  const selectedGarrisonTargetHero = heroesAtSelectedTown.find((hero) => hero.id === garrisonTargetHeroId);
+  const garrisonTargetHero = selectedGarrisonTargetHero ?? heroesAtSelectedTown[0];
+  const townAtSelectedHero = selectedHero
+    ? allTowns.find((town) =>
+        town.position.x === selectedHero.position.x &&
+        town.position.y === selectedHero.position.y
       )
     : undefined;
 
@@ -505,8 +518,8 @@ function HUDContent() {
     });
   };
 
-  const handleTransferGarrisonToHero = async (unitType: UnitType) => {
-    if (!selectedTown || !myPlayer || !canAct || !isMyTown || !heroAtSelectedTown) return;
+  const handleTransferGarrisonToHero = async (unitType: UnitType, targetHero: Hero | undefined = garrisonTargetHero) => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown || !targetHero) return;
 
     const rule = UNIT_RULES[unitType];
     if (!rule) return;
@@ -517,7 +530,7 @@ function HUDContent() {
       body: JSON.stringify({
         type: "TRANSFER_GARRISON_TO_HERO",
         townId: selectedTown.id,
-        heroId: heroAtSelectedTown.id,
+        heroId: targetHero.id,
         unitType,
         count: 1,
       }),
@@ -528,7 +541,7 @@ function HUDContent() {
       return;
     }
 
-    const targetHeroId = heroAtSelectedTown.id;
+    const targetHeroId = targetHero.id;
     setGameState({
       ...gameState,
       players: gameState.players.map((player) => {
@@ -929,6 +942,15 @@ function HUDContent() {
             <div className="text-xs uppercase tracking-wider text-amber-200/60">
               Niveau {selectedHero.level} · XP {selectedHero.experience}
             </div>
+            {townAtSelectedHero && (
+              <button
+                type="button"
+                className="w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
+                onClick={() => useGameStore.getState().selectTown(townAtSelectedHero.id)}
+              >
+                Au chateau : <span className="font-black">{townAtSelectedHero.name}</span>
+              </button>
+            )}
             <div className={goldDivider} />
             <div className="grid grid-cols-2 gap-2 text-sm">
               <Stat label="Attaque" value={selectedHero.stats.attack} color="text-red-300" />
@@ -1044,9 +1066,26 @@ function HUDContent() {
                     <div className="text-amber-200/60">garnison</div>
                   </div>
                 </div>
-                {heroAtSelectedTown && (
+                {heroesAtSelectedTown.length > 0 && (
                   <div className="rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-sm text-sky-100">
-                    Héros présent : <span className="font-black">{heroAtSelectedTown.name}</span>
+                    <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-sky-200/70">
+                      Heros au chateau
+                    </div>
+                    <div className="space-y-1">
+                      {heroesAtSelectedTown.map((hero) => (
+                        <button
+                          key={hero.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 rounded-md border border-sky-400/20 bg-black/30 px-2 py-1 text-left transition hover:border-sky-300/60 hover:bg-sky-900/50"
+                          onClick={() => useGameStore.getState().selectHero(hero.id)}
+                        >
+                          <span className="truncate font-black">{hero.name}</span>
+                          <span className="shrink-0 text-xs text-sky-200/70">
+                            {hero.armies.length} stack{hero.armies.length > 1 ? "s" : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1054,16 +1093,34 @@ function HUDContent() {
 
             {displayedTownTab === "garrison" && (
               <div className="space-y-2">
-                {isMyTown && !heroAtSelectedTown && (
+                {isMyTown && heroesAtSelectedTown.length === 0 && (
                   <div className="rounded-md border border-red-500/40 bg-red-950/50 px-3 py-2 text-xs text-red-200">
                     Aucun héros au château pour recevoir la garnison.
+                  </div>
+                )}
+                {isMyTown && heroesAtSelectedTown.length > 0 && (
+                  <div className="rounded-md border border-sky-500/30 bg-sky-950/40 px-3 py-2">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-sky-200/70">
+                      Envoyer vers
+                      <select
+                        className="mt-2 w-full rounded-md border border-sky-500/40 bg-black/60 px-2 py-1.5 text-sm font-bold text-sky-50 outline-none transition focus:border-sky-300"
+                        value={garrisonTargetHero?.id ?? ""}
+                        onChange={(event) => setGarrisonTargetHeroId(event.target.value || null)}
+                      >
+                        {heroesAtSelectedTown.map((hero) => (
+                          <option key={hero.id} value={hero.id}>
+                            {hero.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 )}
                 {selectedTown.garrison.length === 0 ? (
                   <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucune unité en garnison.</div>
                 ) : (
                   selectedTown.garrison.map((unit) => {
-                    const disabled = !canAct || !isMyTown || !heroAtSelectedTown || isPending;
+                    const disabled = !canAct || !isMyTown || !garrisonTargetHero || isPending;
                     return (
                       <div key={unit.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
                         <div className="flex items-center justify-between gap-3">
@@ -1075,15 +1132,21 @@ function HUDContent() {
                             </div>
                           </div>
                           <button
-                            className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black transition ${
+                            type="button"
+                            className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
                               disabled
                                 ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
                                 : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
                             }`}
                             disabled={disabled}
                             onClick={() => handleTransferGarrisonToHero(unit.unitType)}
+                            aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "heros"}`}
+                            title={`Envoyer vers ${garrisonTargetHero?.name ?? "heros"}`}
                           >
-                            Vers {heroAtSelectedTown?.name ?? "héros"}
+                            <TransferToHeroIcon className="h-5 w-5" />
+                            <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-sky-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-sky-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                              Envoyer
+                            </span>
                           </button>
                         </div>
                       </div>

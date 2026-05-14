@@ -1,3 +1,10 @@
+import { UnitType } from "@/lib/game/types";
+
+export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) => {
+  sprites[unitType] = `/assets/sprites/units/${unitType}.svg`;
+  return sprites;
+}, {} as Record<UnitType, string>);
+
 export const MAP_SPRITES = {
   hero: "/assets/sprites/map/hero-cavalier.svg",
   town: "/assets/sprites/map/town-castle.svg",
@@ -48,12 +55,17 @@ export function getTownSpritePath(faction: string) {
   return MAP_SPRITES.towns[faction] ?? MAP_SPRITES.town;
 }
 
+export function getMonsterSpritePath(unitType: string | undefined) {
+  return UNIT_SPRITES[unitType as UnitType] ?? MAP_SPRITES.monster;
+}
+
 export const MAP_SPRITE_PATHS = Array.from(new Set([
   MAP_SPRITES.hero,
   MAP_SPRITES.town,
   ...Object.values(MAP_SPRITES.heroes),
   ...Object.values(MAP_SPRITES.towns),
   MAP_SPRITES.monster,
+  ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),
   ...Object.values(MAP_SPRITES.buildings),
 ]));

@@ -1,9 +1,10 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
-  ResourceBuilding, ResourceBuildingType, TavernHeroOffer,
+  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy,
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
+import { getDominantUnitType } from "./neutral-armies";
 
 interface ApiPlayer {
   id: string;
@@ -58,14 +59,25 @@ interface ApiArmy {
   position: number;
 }
 
+interface ApiNeutralArmy {
+  id: string;
+  status: string;
+  x: number;
+  y: number;
+  stacks?: ApiArmy[];
+}
+
 interface ApiTown {
   id: string;
   name: string;
+  townType?: string;
   x: number;
   y: number;
   level: number;
   buildings: string[];
   garrison: string[];
+  neutralGarrison?: ApiArmy[];
+  isNeutral?: boolean;
   availableRecruits?: Record<string, number>;
   tavernOffer?: TavernHeroOffer[];
   lastBuiltTurn?: number | null;
@@ -160,10 +172,20 @@ export function mapApiToGameState(
       id: t.id,
       name: t.name,
       faction: p.faction as Faction,
+      townType: t.townType as Faction | undefined,
       position: { x: t.x, y: t.y },
       level: t.level,
       buildings: (t.buildings || []) as BuildingType[],
       garrison: (t.garrison || []) as never[],
+      neutralGarrison: (t.neutralGarrison ?? []).map((a) => ({
+        id: a.id,
+        unitType: a.unitType as UnitType,
+        count: a.count,
+        health: a.health,
+        maxHealth: a.maxHealth,
+        position: a.position,
+      })),
+      isNeutral: t.isNeutral ?? false,
       availableRecruits: (t.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
       tavernOffer: t.tavernOffer ?? [],
       lastBuiltTurn: t.lastBuiltTurn ?? null,
@@ -185,10 +207,17 @@ export function mapApiToGameState(
   const mapState = (data.mapState as Record<string, unknown>) ?? {};
   const collected = new Set<string>((mapState.collected as string[]) ?? []);
   const killed = new Set<string>((mapState.killed as string[]) ?? []);
+  const neutralArmies = (data.neutralArmies as ApiNeutralArmy[] | undefined) ?? [];
   const defeatedNeutralArmies = new Set(
-    ((data.neutralArmies as Array<{ id: string; status: string }> | undefined) ?? [])
+    neutralArmies
       .filter((army) => army.status !== "ACTIVE")
       .map((army) => army.id)
+  );
+  const dominantNeutralUnits = new Map(
+    neutralArmies
+      .filter((army) => army.status === "ACTIVE")
+      .map((army) => [army.id, getDominantUnitType(army.stacks)] as const)
+      .filter((entry): entry is readonly [string, UnitType] => Boolean(entry[1]))
   );
 
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
@@ -214,6 +243,9 @@ export function mapApiToGameState(
             delete tile.object;
           } else if (obj.type === "monster" && (killed.has(obj.id) || defeatedNeutralArmies.has(obj.id))) {
             delete tile.object;
+          } else if (obj.type === "monster") {
+            const dominantUnitType = dominantNeutralUnits.get(obj.id);
+            if (dominantUnitType) obj.subtype = dominantUnitType;
           } else if (obj.type === "building") {
             const buildingData = allBuildings.find((b) => b.id === obj.id || (b.position.x === x && b.position.y === y));
             if (buildingData) {
@@ -246,6 +278,19 @@ export function mapApiToGameState(
     calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
     winnerId: data.winnerId as string | undefined,
+    neutralArmies: neutralArmies.map((army): NeutralArmy => ({
+      id: army.id,
+      status: army.status,
+      position: { x: army.x, y: army.y },
+      stacks: (army.stacks ?? []).map((stack) => ({
+        id: stack.id,
+        unitType: stack.unitType as UnitType,
+        count: stack.count,
+        health: stack.health,
+        maxHealth: stack.maxHealth,
+        position: stack.position,
+      })),
+    })),
     activeCombats: ((data.combats as ApiCombat[] | undefined) ?? [])
       .filter((combat) => combat.status === "ACTIVE")
       .map((combat) => ({

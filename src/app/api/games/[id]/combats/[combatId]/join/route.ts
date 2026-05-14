@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
-import { addReinforcementUnits, buildTurnQueue } from "@/lib/game/combat/persistent";
+import { addReinforcementUnits, buildTurnQueue, cloneCombatUnits } from "@/lib/game/combat/persistent";
 import type { CombatBoardUnit, CombatSide, CombatTerrainFeature, UnitStack } from "@/lib/game/types";
 
 export async function POST(
@@ -56,14 +56,17 @@ export async function POST(
   if (combatRow.status === "ACTIVE") {
     const boardState = (combatRow.board_state ?? { units: [], terrain: [] }) as {
       units: CombatBoardUnit[];
+      initialUnits?: CombatBoardUnit[];
       terrain?: CombatTerrainFeature[];
     };
     const units = [...(boardState.units ?? [])];
+    const initialUnits = [...(boardState.initialUnits ?? boardState.units ?? [])];
     const terrain = boardState.terrain ?? [];
     const round = combatRow.round ?? 1;
     const alreadyOnBoard = units.some((unit) => unit.heroId === hero.id);
 
     if (!alreadyOnBoard) {
+      const beforeReinforcements = units.length;
       addReinforcementUnits({
         units,
         terrain,
@@ -74,6 +77,7 @@ export async function POST(
         participantId: participantRow.id,
         joinsRound: round + 1,
       });
+      initialUnits.push(...cloneCombatUnits(units.slice(beforeReinforcements)));
 
       const turnQueue = buildTurnQueue(units, round);
       const currentUnitId = combatRow.current_unit_id && turnQueue.includes(combatRow.current_unit_id)
@@ -83,7 +87,7 @@ export async function POST(
       const { error: updateError } = await supabase
         .from("combats")
         .update({
-          board_state: { units, terrain },
+          board_state: { ...boardState, units, initialUnits, terrain },
           turn_queue: turnQueue,
           current_unit_id: currentUnitId,
         })

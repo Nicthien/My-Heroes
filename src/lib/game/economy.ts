@@ -17,6 +17,15 @@ export interface ResourceBuildingRule {
   guardianBasePower: number;
 }
 
+export const RESOURCE_LABELS: Record<keyof Resources, string> = {
+  gold: "or",
+  wood: "bois",
+  ore: "minerai",
+  mercury: "mercure",
+  crystals: "cristaux",
+  sulfur: "soufre",
+};
+
 export const RESOURCE_BUILDING_RULES: ResourceBuildingRule[] = [
   {
     type: ResourceBuildingType.GOLD_MINE,
@@ -55,6 +64,22 @@ export const RESOURCE_BUILDING_RULES: ResourceBuildingRule[] = [
     guardianBasePower: 350,
   },
 ];
+
+export function formatResourceName(resource: string) {
+  return RESOURCE_LABELS[resource as keyof Resources] ?? resource;
+}
+
+export function formatResourceProduction(production: Partial<Resources>) {
+  return Object.entries(production)
+    .filter(([, amount]) => Boolean(amount))
+    .map(([resource, amount]) => `+${amount} ${formatResourceName(resource)}`)
+    .join(", ");
+}
+
+export function getResourceBuildingLabel(type: string | undefined) {
+  if (!type) return undefined;
+  return RESOURCE_BUILDING_RULES.find((rule) => rule.type === type)?.label;
+}
 
 export interface UnitRule {
   type: UnitType;

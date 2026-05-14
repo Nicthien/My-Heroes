@@ -13,7 +13,7 @@ import {
   startingArmyForFaction,
   type TavernOffer,
 } from "@/lib/game/heroes";
-import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
+import { computeVisibleTiles, getPlayerVisionCenters, isTileTraversable, normalizeMapMovement } from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -638,7 +638,7 @@ function validateMovePath(
       return { ok: false, error: "Chemin invalide" };
     }
     const tile = map.tiles[current.y]?.[current.x];
-    if (!tile || !tile.isPassable) return { ok: false, error: "Terrain infranchissable" };
+    if (!isTileTraversable(tile)) return { ok: false, error: "Terrain infranchissable" };
     usedMovement += tile.movementCost;
   }
   if (usedMovement > movement) return { ok: false, error: "Deplacement insuffisant" };

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
-import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { pickTownName } from "@/lib/game/town-generation";
 import { Faction, GameMap, HeroClass } from "@/lib/game/types";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -118,7 +119,7 @@ export async function POST(
 
   await supabase.from("towns").insert({
     game_player_id: playerRow.id,
-    name: FACTION_TOWN_NAMES[factionKey],
+    name: pickTownName(factionKey, `${id}:${playerRow.id}:${turnOrder}`),
     town_type: factionKey,
     x: startPos.x,
     y: startPos.y,

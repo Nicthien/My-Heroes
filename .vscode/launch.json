@@ -6,7 +6,12 @@
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run dev",
-            "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+            "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**", "${workspaceFolder}/.next/**"],
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/**",
+                "!${workspaceFolder}/node_modules/**",
+                "!${workspaceFolder}/.next/**"
+            ]
         },
         {
             "name": "Next.js: debug client-side",
@@ -32,7 +37,12 @@
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "autoAttachChildProcesses": true,
-            "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"],
+            "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**", "${workspaceFolder}/.next/**"],
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/**",
+                "!${workspaceFolder}/node_modules/**",
+                "!${workspaceFolder}/.next/**"
+            ],
             "serverReadyAction": {
                 "action": "debugWithEdge",
                 "killOnServerStop": true,

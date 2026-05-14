@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles } from "@/lib/game/engine";
-import { FACTION_TOWN_NAMES, FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
-import { Faction, HeroClass } from "@/lib/game/types";
+import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/neutral-armies";
+import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
+import { Faction, GameMap, HeroClass, MapObject, MapTile, TerrainType } from "@/lib/game/types";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
@@ -91,6 +93,8 @@ export async function POST(request: Request) {
     playerCount: maxPlayers,
   });
   prefixMonsterIds(mapData, randomUUID());
+  assignMonsterSubtypes(mapData);
+  assignNeutralTownTraits(mapData);
   const startPos = placePlayerStart(mapData, 0);
   const initialExplored = computeVisibleTiles(mapData, [{ x: startPos.x, y: startPos.y }], 5);
   const profileName = await getProfileName(supabase, user.id);
@@ -173,7 +177,7 @@ export async function POST(request: Request) {
   const { error: townError } = await supabase.from("towns").insert({
     game_id: gameRow.id,
     game_player_id: playerRow.id,
-    name: FACTION_TOWN_NAMES[factionKey],
+    name: pickTownName(factionKey, `${gameRow.id}:${playerRow.id}:0`),
     town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
@@ -204,17 +208,29 @@ async function createNeutralArmies(
     const id = tile.object?.id;
     if (!id) continue;
     const guardianPower = tile.object?.guardianPower ?? 100;
-    // Compose la garnison en piquiers : chaque piquier vaut ~12 HP × valeur ≈ guardianPower
-    const count = Math.max(5, Math.floor(guardianPower / 12));
+    const stacks = createNeutralArmyStacksForTile(tile, guardianPower, id);
     await supabase.from("neutral_armies").insert({ id, game_id: gameId, x: tile.x, y: tile.y });
-    await supabase.from("neutral_army_stacks").insert({
+    await supabase.from("neutral_army_stacks").insert(stacks.map((stack) => ({
       neutral_army_id: id,
-      unit_type: "pikeman",
-      count,
-      health: count * 12,
-      max_health: 12,
-      position: 0,
-    });
+      unit_type: stack.unitType,
+      count: stack.count,
+      health: stack.health,
+      max_health: stack.maxHealth,
+      position: stack.position,
+    })));
+  }
+}
+
+function assignMonsterSubtypes(
+  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
+) {
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "monster") continue;
+      const stacks = createNeutralArmyStacksForTile(tile, tile.object.guardianPower ?? 100, tile.object.id);
+      const dominantUnitType = getDominantUnitType(stacks);
+      if (dominantUnitType) tile.object.subtype = dominantUnitType;
+    }
   }
 }
 
@@ -263,22 +279,18 @@ async function createNeutralTowns(
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
 ) {
-  const neutralFactions = [
-    Faction.CASTLE,
-    Faction.RAMPART,
-    Faction.TOWER,
-    Faction.NECROPOLIS,
-    Faction.DUNGEON,
-  ];
-  let idx = 0;
   for (let y = 0; y < mapData.tiles.length; y++) {
     for (let x = 0; x < mapData.tiles[y].length; x++) {
       const tile = mapData.tiles[y][x];
       if (tile.object?.type !== "town") continue;
-      if (tile.object.subtype && !tile.object.subtype.startsWith("neutral")) continue;
+      if (!isNeutralTownObject(tile.object)) continue;
 
-      const f = neutralFactions[idx % neutralFactions.length];
-      idx++;
+      const terrain = townBiomeTerrain(mapData, tile);
+      const seed = `${mapData.seed ?? gameId}:${tile.object.id}:${x}:${y}`;
+      const f = isFaction(tile.object.subtype)
+        ? tile.object.subtype
+        : pickTownFactionForTerrain(terrain, seed);
+      const townName = tile.object.name ?? pickTownName(f, seed);
       // Garnison neutre simple : 1 stack de tier 4-5 de la faction
       const tierUnit = FACTION_UNITS[f][3];
       const rule = UNIT_RULES[tierUnit];
@@ -297,7 +309,7 @@ async function createNeutralTowns(
       await supabase.from("towns").insert({
         game_id: gameId,
         game_player_id: null,
-        name: `${FACTION_TOWN_NAMES[f]} neutre`,
+        name: townName,
         town_type: f,
         x,
         y,
@@ -308,4 +320,30 @@ async function createNeutralTowns(
       });
     }
   }
+}
+
+function assignNeutralTownTraits(mapData: GameMap) {
+  for (let y = 0; y < mapData.tiles.length; y++) {
+    for (let x = 0; x < mapData.tiles[y].length; x++) {
+      const tile = mapData.tiles[y][x];
+      if (tile.object?.type !== "town") continue;
+      if (!isNeutralTownObject(tile.object)) continue;
+
+      const terrain = townBiomeTerrain(mapData, tile);
+      const seed = `${mapData.seed ?? "map"}:${tile.object.id}:${x}:${y}`;
+      const faction = pickTownFactionForTerrain(terrain, seed);
+      tile.object.subtype = faction;
+      tile.object.name = pickTownName(faction, seed);
+    }
+  }
+}
+
+function isNeutralTownObject(object: MapObject) {
+  return object.id.startsWith("neutral-town-") || object.subtype === "neutral" || object.subtype === undefined;
+}
+
+function townBiomeTerrain(mapData: GameMap, tile: MapTile): TerrainType | string | undefined {
+  return tile.zoneId !== undefined
+    ? mapData.zones?.[tile.zoneId]?.baseTerrain ?? tile.terrain
+    : tile.terrain;
 }

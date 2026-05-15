@@ -5,7 +5,7 @@ import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, 
 import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { HERO_DIRECTIONS, HERO_SPRITESHEETS, MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type HeroDirection } from "@/lib/rendering/phaser/assets";
+import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritePath, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -167,7 +167,7 @@ class PhaserMapScene extends Phaser.Scene {
       if (path.endsWith(".svg")) this.load.svg(path, path);
       else this.load.image(path, path);
     }
-    for (const sheet of Object.values(HERO_SPRITESHEETS)) {
+    for (const sheet of DIRECTIONAL_SPRITESHEETS) {
       this.load.spritesheet(sheet.key, sheet.path, {
         frameWidth: sheet.frameWidth,
         frameHeight: sheet.frameHeight,
@@ -201,7 +201,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       this.updateHoverLabel(pointer.x, pointer.y);
     });
-    this.createHeroAnimations();
+    this.createDirectionalAnimations();
     this.readyCallback?.();
   }
 
@@ -1546,7 +1546,7 @@ class PhaserMapScene extends Phaser.Scene {
       ? getHeroTravelMetrics(renderedHero.object)
       : metrics;
 
-    renderedHero.animation.mode = renderedHero.object.onWater ? "boat" : "mounted";
+    this.setRenderedHeroSurface(renderedHero, this.isWaterPosition(startPosition), "walk");
 
     return new Promise<void>((resolve) => {
       let index = 1;
@@ -1554,6 +1554,8 @@ class PhaserMapScene extends Phaser.Scene {
         const from = path[index - 1];
         const to = path[index];
         if (!from || !to) {
+          const finalPosition = path[path.length - 1] ?? startPosition;
+          this.setRenderedHeroSurface(renderedHero, this.isWaterPosition(finalPosition), "idle");
           renderedHero.animation.mode = renderedHero.object.onWater
             ? "boat"
             : renderedHero.object.inTown
@@ -1568,8 +1570,14 @@ class PhaserMapScene extends Phaser.Scene {
         const start = this.getObjectRenderPoint(from, travelMetrics.offsetY);
         const end = this.getObjectRenderPoint(to, travelMetrics.offsetY);
         const tweenState = { x: start.x, y: start.y };
+        const fromWater = this.isWaterPosition(from);
+        const toWater = this.isWaterPosition(to);
         renderedHero.direction = getHeroDirection(from, to, renderedHero.direction);
         this.heroDirections.set(heroId, renderedHero.direction);
+        this.setRenderedHeroSurface(renderedHero, fromWater, "walk");
+        if (toWater && !fromWater) {
+          this.setRenderedHeroSurface(renderedHero, true, "walk");
+        }
         this.playHeroAnimation(renderedHero, "walk");
         this.updateRenderedHeroPosition(renderedHero, start.x, start.y);
 
@@ -1584,6 +1592,9 @@ class PhaserMapScene extends Phaser.Scene {
           },
           onComplete: () => {
             this.updateRenderedHeroPosition(renderedHero, end.x, end.y);
+            if (!toWater && fromWater) {
+              this.setRenderedHeroSurface(renderedHero, false, "walk");
+            }
             index += 1;
             moveNext();
           },
@@ -1634,6 +1645,10 @@ class PhaserMapScene extends Phaser.Scene {
     };
   }
 
+  private isWaterPosition(position: Position) {
+    return this.map?.tiles[position.y]?.[position.x]?.terrain === TerrainType.WATER;
+  }
+
   private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number) {
     renderedHero.sprite.x = x;
     renderedHero.sprite.setDepth(y);
@@ -1643,11 +1658,11 @@ class PhaserMapScene extends Phaser.Scene {
     this.objectLayer.sort("depth");
   }
 
-  private createHeroAnimations() {
-    for (const sheet of Object.values(HERO_SPRITESHEETS)) {
+  private createDirectionalAnimations() {
+    for (const sheet of DIRECTIONAL_SPRITESHEETS) {
       for (const [directionIndex, direction] of HERO_DIRECTIONS.entries()) {
         const rowOffset = directionIndex * sheet.columns;
-        const directionIdleKey = getHeroAnimationKey(sheet.faction, direction, "idle");
+        const directionIdleKey = getDirectionalAnimationKey(sheet, direction, "idle");
         if (!this.anims.exists(directionIdleKey)) {
           this.anims.create({
             key: directionIdleKey,
@@ -1657,7 +1672,7 @@ class PhaserMapScene extends Phaser.Scene {
           });
         }
 
-        const directionWalkKey = getHeroAnimationKey(sheet.faction, direction, "walk");
+        const directionWalkKey = getDirectionalAnimationKey(sheet, direction, "walk");
         if (!this.anims.exists(directionWalkKey)) {
           this.anims.create({
             key: directionWalkKey,
@@ -1673,7 +1688,7 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number, direction: HeroDirection) {
-    const sheet = getHeroSpritesheet(object.faction, object.onWater);
+    const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
     if (!sheet) return this.addObjectSprite(object, x, y, getHeroSpritePath(object.faction, object.onWater), width, height);
 
     const sprite = this.add.sprite(x, y, sheet.key, 0);
@@ -1681,16 +1696,50 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDisplaySize(width, height);
     sprite.setDepth(y);
     this.objectLayer.add(sprite);
-    sprite.play(getHeroAnimationKey(sheet.faction, direction, "idle"));
+    sprite.play(getDirectionalAnimationKey(sheet, direction, "idle"));
     return sprite;
   }
 
-  private playHeroAnimation(renderedHero: RenderedHeroObject, state: "idle" | "walk") {
-    const sheet = getHeroSpritesheet(renderedHero.object.faction, renderedHero.object.onWater);
+  private playHeroAnimation(renderedHero: RenderedHeroObject, state: DirectionalSpriteState) {
+    const sheet = renderedHero.object.onWater
+      ? getBoatSpritesheet(renderedHero.object.faction)
+      : getHeroSpritesheet(renderedHero.object.faction);
     if (!sheet || !(renderedHero.sprite instanceof Phaser.GameObjects.Sprite)) return;
-    const key = getHeroAnimationKey(sheet.faction, renderedHero.direction, state);
+    const key = getDirectionalAnimationKey(sheet, renderedHero.direction, state);
     if (renderedHero.sprite.anims.currentAnim?.key === key) return;
     renderedHero.sprite.play(key);
+  }
+
+  private setRenderedHeroSurface(renderedHero: RenderedHeroObject, onWater: boolean, state: DirectionalSpriteState) {
+    const nextOnWater = Boolean(onWater);
+    const surfaceChanged = Boolean(renderedHero.object.onWater) !== nextOnWater;
+    renderedHero.object.onWater = nextOnWater;
+    renderedHero.animation.mode = nextOnWater ? "boat" : renderedHero.object.inTown && state === "idle" ? "idle" : "mounted";
+
+    const metrics = getObjectMetrics(renderedHero.object);
+    if (metrics) {
+      renderedHero.sprite.setDisplaySize(metrics.width, metrics.height);
+      renderedHero.baseDisplayWidth = metrics.width;
+      renderedHero.baseDisplayHeight = metrics.height;
+      renderedHero.animation.baseScaleX = renderedHero.sprite.scaleX;
+      renderedHero.animation.baseScaleY = renderedHero.sprite.scaleY;
+    }
+
+    if (!(renderedHero.sprite instanceof Phaser.GameObjects.Sprite)) return;
+
+    const sheet = nextOnWater
+      ? getBoatSpritesheet(renderedHero.object.faction)
+      : getHeroSpritesheet(renderedHero.object.faction);
+    if (!sheet) return;
+
+    if (surfaceChanged) {
+      const directionIndex = HERO_DIRECTIONS.indexOf(renderedHero.direction);
+      const stateOffset = state === "walk" ? 4 : 0;
+      renderedHero.sprite.stop();
+      renderedHero.sprite.setTexture(sheet.key);
+      renderedHero.sprite.setFrame(directionIndex * sheet.columns + stateOffset);
+    }
+    this.playHeroAnimation(renderedHero, state);
   }
 
   private addObjectSprite(object: MapObjectData, x: number, y: number, path: string | undefined, width: number, height: number) {
@@ -2473,7 +2522,7 @@ function isAllowedDecor(kind: DecorKind) {
 
 function getObjectMetrics(object: MapObjectData) {
   if (object.type === "hero") {
-    const sheet = getHeroSpritesheet(object.faction, object.onWater);
+    const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
     if (sheet) return object.inTown
       ? { width: sheet.townDisplayWidth, height: sheet.townDisplayHeight, offsetY: 27 }
       : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: 10 };
@@ -2514,8 +2563,8 @@ function getHeroDirection(from: Position, to: Position, fallback: HeroDirection)
   return "w";
 }
 
-function getHeroAnimationKey(faction: string, direction: HeroDirection, state: "idle" | "walk") {
-  return `hero-${faction}-${direction}-${state}`;
+function getDirectionalAnimationKey(sheet: DirectionalSpritesheet, direction: HeroDirection, state: DirectionalSpriteState) {
+  return `${sheet.animationPrefix}-${direction}-${state}`;
 }
 
 function animateHeroSprite(hero: HeroSpriteAnimation, time: number) {

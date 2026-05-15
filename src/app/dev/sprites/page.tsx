@@ -6,7 +6,7 @@ import Image from "next/image";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
-import { HERO_DIRECTIONS, HERO_SPRITESHEETS, type HeroDirection, type HeroSpritesheet } from "@/lib/rendering/phaser/assets";
+import { BOAT_SPRITESHEETS, HERO_DIRECTIONS, HERO_SPRITESHEETS, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 import {
   type UnitModelKind,
   UnitSilhouette,
@@ -106,10 +106,11 @@ const FACTION_GROUPS: { label: string; units: UnitType[] }[] = CREATURE_GROUPS.m
 }));
 
 const HERO_SHEET_ENTRIES = Object.values(HERO_SPRITESHEETS);
+const BOAT_SHEET_ENTRIES = Object.values(BOAT_SPRITESHEETS);
 type GalleryTab = "units" | "spritesheets" | "svg" | "webp";
 
 const UNIT_COUNT = FACTION_GROUPS.reduce((total, group) => total + group.units.length, 0);
-const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length;
+const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length + BOAT_SHEET_ENTRIES.length;
 const PUBLIC_SVGS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".svg"));
 const PUBLIC_WEBPS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".webp"));
 
@@ -171,7 +172,7 @@ function HeroSheetPreview({
   direction,
   state,
 }: {
-  sheet: HeroSpritesheet;
+  sheet: DirectionalSpritesheet;
   direction: HeroDirection;
   state: "idle" | "walk";
 }) {
@@ -203,15 +204,15 @@ function HeroSheetPreview({
   );
 }
 
-function HeroSheetCard({ sheet }: { sheet: HeroSpritesheet }) {
+function DirectionalSheetCard({ alt, label, sheet }: { alt: string; label: string; sheet: DirectionalSpritesheet }) {
   return (
     <div className="rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3">
       <div className="flex flex-wrap items-start gap-4">
         <div>
-          <div className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-200">{sheet.faction}</div>
+          <div className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-200">{label}</div>
           <Image
             src={sheet.path}
-            alt={`Spritesheet heros ${sheet.faction}`}
+            alt={alt}
             width={240}
             height={160}
             className="rounded border border-stone-700 bg-stone-950"
@@ -321,10 +322,17 @@ function UnitsTab() {
 function SpritesheetsTab() {
   return (
     <section>
-      <CollapsibleGroup count={SPRITESHEET_COUNT} title="Héros aventure" subtitle="Spritesheets animés : idle et marche par direction">
+      <CollapsibleGroup count={HERO_SHEET_ENTRIES.length} title="Héros aventure" subtitle="Spritesheets animés : idle et marche par direction">
         <div className="grid gap-4">
           {HERO_SHEET_ENTRIES.map((sheet) => (
-            <HeroSheetCard key={sheet.faction} sheet={sheet} />
+            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet heros ${sheet.faction}`} label={sheet.faction} sheet={sheet} />
+          ))}
+        </div>
+      </CollapsibleGroup>
+      <CollapsibleGroup count={BOAT_SHEET_ENTRIES.length} title="Bateaux aventure" subtitle="Galions complets par faction : idle et navigation par direction">
+        <div className="grid gap-4">
+          {BOAT_SHEET_ENTRIES.map((sheet) => (
+            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet bateau ${sheet.faction}`} label={`bateau ${sheet.faction}`} sheet={sheet} />
           ))}
         </div>
       </CollapsibleGroup>

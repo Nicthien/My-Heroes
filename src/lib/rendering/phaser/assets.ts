@@ -73,8 +73,9 @@ export const MAP_SPRITES = {
   } as Record<string, string>,
 };
 
-export type HeroSpritesheet = {
-  faction: string;
+export type DirectionalSpriteState = "idle" | "walk";
+
+export type DirectionalSpritesheet = {
   key: string;
   path: string;
   frameWidth: number;
@@ -84,6 +85,11 @@ export type HeroSpritesheet = {
   townDisplayWidth: number;
   townDisplayHeight: number;
   columns: number;
+  animationPrefix: string;
+};
+
+export type HeroSpritesheet = DirectionalSpritesheet & {
+  faction: string;
 };
 
 export const HERO_DIRECTIONS = ["s", "sw", "w", "nw", "n", "ne", "e", "se"] as const;
@@ -113,9 +119,36 @@ export const HERO_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, facti
     townDisplayWidth: 34,
     townDisplayHeight: 34,
     columns: 12,
+    animationPrefix: `hero-${faction}`,
   };
   return sheets;
 }, {} as Record<string, HeroSpritesheet>);
+
+export type BoatSpritesheet = DirectionalSpritesheet & {
+  faction: string;
+};
+
+export const BOAT_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, faction) => {
+  sheets[faction] = {
+    faction,
+    key: `boat-${faction}`,
+    path: `/assets/sprites/boats/${faction}/adventure.webp`,
+    frameWidth: 80,
+    frameHeight: 80,
+    displayWidth: 58,
+    displayHeight: 54,
+    townDisplayWidth: 58,
+    townDisplayHeight: 54,
+    columns: 12,
+    animationPrefix: `boat-${faction}`,
+  };
+  return sheets;
+}, {} as Record<string, BoatSpritesheet>);
+
+export const DIRECTIONAL_SPRITESHEETS: DirectionalSpritesheet[] = [
+  ...Object.values(HERO_SPRITESHEETS),
+  ...Object.values(BOAT_SPRITESHEETS),
+];
 
 export function getHeroSpritePath(faction: string, onWater = false) {
   if (onWater) return MAP_SPRITES.heroBoat;
@@ -125,6 +158,10 @@ export function getHeroSpritePath(faction: string, onWater = false) {
 export function getHeroSpritesheet(faction: string, onWater = false) {
   if (onWater) return undefined;
   return HERO_SPRITESHEETS[faction];
+}
+
+export function getBoatSpritesheet(faction: string) {
+  return BOAT_SPRITESHEETS[faction] ?? BOAT_SPRITESHEETS.castle;
 }
 
 export function getTownSpritePath(faction: string) {

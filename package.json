@@ -12,8 +12,9 @@
     "start": "next start",
     "lint": "eslint",
     "generate:hero-sprites": "node scripts/generate-hero-spritesheets.mjs",
+    "generate:boat-sprites": "node scripts/generate-boat-spritesheet.mjs",
     "generate:town-sprites": "node scripts/generate-town-sprites.mjs",
-    "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:town-sprites",
+    "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:boat-sprites && npm run generate:town-sprites",
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs"

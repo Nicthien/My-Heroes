@@ -279,17 +279,6 @@ const townSpecs = [
   { file: "town-fortress", title: "Ville forteresse", faction: "fortress", architecture: "fortress" },
 ];
 
-const heroSpecs = [
-  { file: "hero-cavalier", title: "Héros cavalier", faction: "castle", mount: "horse", weapon: "lance", shield: "kite", headgear: "crest" },
-  { file: "hero-rampart", title: "Héros rempart", faction: "rampart", mount: "horse", weapon: "bow", shield: "none", headgear: "leaf" },
-  { file: "hero-tower", title: "Héros tour", faction: "tower", mount: "horse", weapon: "staff", shield: "none", headgear: "turban" },
-  { file: "hero-inferno", title: "Héros Hadès", faction: "inferno", mount: "nightmare", weapon: "trident", shield: "none", headgear: "horns" },
-  { file: "hero-necropolis", title: "Héros nécropole", faction: "necropolis", mount: "nightmare", weapon: "scythe", shield: "kite", headgear: "skull" },
-  { file: "hero-dungeon", title: "Héros donjon", faction: "dungeon", mount: "lizard", weapon: "sword", shield: "kite", headgear: "spikes" },
-  { file: "hero-stronghold", title: "Héros bastion", faction: "stronghold", mount: "boar", weapon: "axe", shield: "round", headgear: "horns" },
-  { file: "hero-fortress", title: "Héros forteresse", faction: "fortress", mount: "lizard", weapon: "spear", shield: "round", headgear: "crest" },
-];
-
 const resourceSpecs = [
   { file: "gold", title: "Or", kind: "gold", c1: "#ffd166", c2: "#9b6405" },
   { file: "wood", title: "Bois", kind: "wood", c1: "#8b4513", c2: "#3d1f0a" },
@@ -925,22 +914,6 @@ function townSvg(spec) {
   return svg({ title: spec.title, desc: `Sprite de ville sur la carte, avec silhouette et détails propres à sa faction : ${spec.title}.`, id, width: 96, height: 96, body });
 }
 
-function heroSvg(spec) {
-  const p = palettes[spec.faction];
-  const id = idFrom(spec.file);
-  return svg({
-    title: spec.title,
-    desc: `Sprite de héros sur la carte, avec monture et équipement de faction : ${spec.title}.`,
-    id,
-    width: 80,
-    height: 80,
-    defs: unitDefs(id, p),
-    body: `<g transform="translate(-8 -13) scale(.98)">
-      ${mounted({ ...spec, kind: "mounted", motif: spec.faction === "castle" ? "cross" : spec.faction === "rampart" ? "leaf" : spec.faction === "tower" ? "rune" : spec.faction === "inferno" ? "flame" : spec.faction === "necropolis" ? "skull" : spec.faction === "dungeon" ? "gem" : spec.faction === "stronghold" ? "fang" : "scale" }, p, id)}
-    </g>`,
-  });
-}
-
 function resourceSvg(spec) {
   const id = idFrom(`resource-${spec.file}`);
   let body = "";
@@ -1075,10 +1048,6 @@ for (const spec of townSpecs) {
   await writeSvg(path.join("map", `${spec.file}.svg`), townSvg(spec));
 }
 
-for (const spec of heroSpecs) {
-  await writeSvg(path.join("map", `${spec.file}.svg`), heroSvg(spec));
-}
-
 for (const spec of resourceSpecs) {
   await writeSvg(path.join("resources", `${spec.file}.svg`), resourceSvg(spec));
 }
@@ -1091,4 +1060,4 @@ for (const spec of decorSpecs) {
   await writeSvg(path.join("map", `${spec.file}.svg`), decorSvg(spec));
 }
 
-console.log(`${units.length + townSpecs.length + heroSpecs.length + resourceSpecs.length + buildingSpecs.length + decorSpecs.length} sprites SVG générés.`);
+console.log(`${units.length + townSpecs.length + resourceSpecs.length + buildingSpecs.length + decorSpecs.length} sprites SVG générés.`);

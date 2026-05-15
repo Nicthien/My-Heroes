@@ -21,22 +21,13 @@ type StaticSpriteAsset = {
 };
 
 const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
-  { path: "/assets/sprites/map/hero-cavalier.svg", label: "Héros cavalier", group: "Factions" },
-  { path: "/assets/sprites/map/hero-boat.svg", label: "Bateau heros", group: "Factions" },
   { path: "/assets/sprites/map/town-castle.webp", label: "Ville château", group: "Factions" },
-  { path: "/assets/sprites/map/hero-rampart.svg", label: "Héros rempart", group: "Factions" },
   { path: "/assets/sprites/map/town-rampart.webp", label: "Ville rempart", group: "Factions" },
-  { path: "/assets/sprites/map/hero-tower.svg", label: "Héros tour", group: "Factions" },
   { path: "/assets/sprites/map/town-tower.webp", label: "Ville tour", group: "Factions" },
-  { path: "/assets/sprites/map/hero-inferno.svg", label: "Héros Hadès", group: "Factions" },
   { path: "/assets/sprites/map/town-inferno.webp", label: "Ville Hadès", group: "Factions" },
-  { path: "/assets/sprites/map/hero-necropolis.svg", label: "Héros nécropole", group: "Factions" },
   { path: "/assets/sprites/map/town-necropolis.webp", label: "Ville nécropole", group: "Factions" },
-  { path: "/assets/sprites/map/hero-dungeon.svg", label: "Héros donjon", group: "Factions" },
   { path: "/assets/sprites/map/town-dungeon.webp", label: "Ville donjon", group: "Factions" },
-  { path: "/assets/sprites/map/hero-stronghold.svg", label: "Héros bastion", group: "Factions" },
   { path: "/assets/sprites/map/town-stronghold.webp", label: "Ville bastion", group: "Factions" },
-  { path: "/assets/sprites/map/hero-fortress.svg", label: "Héros forteresse", group: "Factions" },
   { path: "/assets/sprites/map/town-fortress.webp", label: "Ville forteresse", group: "Factions" },
   { path: "/assets/sprites/map/town-conflux.webp", label: "Ville conflux", group: "Factions" },
   { path: "/assets/sprites/map/alchemist-lab.svg", label: "Laboratoire d'alchimiste", group: "Bâtiments de ressources" },

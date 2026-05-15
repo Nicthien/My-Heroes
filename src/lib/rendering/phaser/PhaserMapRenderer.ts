@@ -5,7 +5,7 @@ import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, 
 import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritePath, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
+import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -75,6 +75,12 @@ const BOARD_THICKNESS = 34;
 const BOARD_LIP_EXTRA_HEIGHT = ELEVATION_SCALE;
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
+const MOVEMENT_SOUNDS = {
+  horse: { key: "movement-horse-trot", path: "/sounds/movement/horse-trot.wav", volume: 0.3, minIntervalMs: 230 },
+  boat: { key: "movement-boat-water", path: "/sounds/movement/boat-water.wav", volume: 0.26, minIntervalMs: 320 },
+} as const;
+
+type MovementSoundKind = keyof typeof MOVEMENT_SOUNDS;
 
 type WaterTileEffect = {
   graphics: Phaser.GameObjects.Graphics;
@@ -157,6 +163,7 @@ class PhaserMapScene extends Phaser.Scene {
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
   private renderedHeroes = new Map<string, RenderedHeroObject>();
   private heroDirections = new Map<string, HeroDirection>();
+  private lastMovementSoundAt: Record<MovementSoundKind, number> = { horse: -Infinity, boat: -Infinity };
 
   constructor() {
     super("MapScene");
@@ -166,6 +173,9 @@ class PhaserMapScene extends Phaser.Scene {
     for (const path of MAP_SPRITE_PATHS) {
       if (path.endsWith(".svg")) this.load.svg(path, path);
       else this.load.image(path, path);
+    }
+    for (const sound of Object.values(MOVEMENT_SOUNDS)) {
+      this.load.audio(sound.key, sound.path);
     }
     for (const sheet of DIRECTIONAL_SPRITESHEETS) {
       this.load.spritesheet(sheet.key, sheet.path, {
@@ -1578,6 +1588,7 @@ class PhaserMapScene extends Phaser.Scene {
         if (toWater && !fromWater) {
           this.setRenderedHeroSurface(renderedHero, true, "walk");
         }
+        this.playMovementSound(this.getMovementSoundKind(fromWater, toWater));
         this.playHeroAnimation(renderedHero, "walk");
         this.updateRenderedHeroPosition(renderedHero, start.x, start.y);
 
@@ -1649,6 +1660,26 @@ class PhaserMapScene extends Phaser.Scene {
     return this.map?.tiles[position.y]?.[position.x]?.terrain === TerrainType.WATER;
   }
 
+  private getMovementSoundKind(fromWater: boolean, toWater: boolean): MovementSoundKind {
+    return fromWater || toWater ? "boat" : "horse";
+  }
+
+  private playMovementSound(kind: MovementSoundKind) {
+    const soundConfig = MOVEMENT_SOUNDS[kind];
+    const now = this.time.now;
+    if (now - this.lastMovementSoundAt[kind] < soundConfig.minIntervalMs) {
+      return;
+    }
+
+    const started = this.sound.play(soundConfig.key, {
+      volume: soundConfig.volume,
+    });
+
+    if (started) {
+      this.lastMovementSoundAt[kind] = now;
+    }
+  }
+
   private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number) {
     renderedHero.sprite.x = x;
     renderedHero.sprite.setDepth(y);
@@ -1689,7 +1720,6 @@ class PhaserMapScene extends Phaser.Scene {
 
   private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number, direction: HeroDirection) {
     const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
-    if (!sheet) return this.addObjectSprite(object, x, y, getHeroSpritePath(object.faction, object.onWater), width, height);
 
     const sprite = this.add.sprite(x, y, sheet.key, 0);
     sprite.setOrigin(0.5, 1);

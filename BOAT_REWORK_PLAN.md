@@ -2,7 +2,7 @@
 
 Objectif: remplacer le bateau statique actuel par un spritesheet anime, aligne sur le systeme des heros aventure: 8 directions, animation idle courte, animation walk pendant le deplacement, et rendu coherent sur l'eau.
 
-Decision de design: le bateau reste un mode visuel du heros quand `object.onWater === true`. La refonte ne change pas les regles de deplacement, le pathfinding, les couts, ni la validation serveur. Elle remplace seulement le rendu statique `/assets/sprites/map/hero-boat.svg` par un asset anime.
+Decision de design: le bateau reste un mode visuel du heros quand `object.onWater === true`. La refonte ne change pas les regles de deplacement, le pathfinding, les couts, ni la validation serveur. Elle remplace le rendu statique historique par un asset anime.
 
 ## 1. Etat actuel
 
@@ -13,11 +13,8 @@ Decision de design: le bateau reste un mode visuel du heros quand `object.onWate
   - frames `0..3` pour idle;
   - frames `4..11` pour walk.
 - Le renderer Phaser cree les animations dans `createHeroAnimations`.
-- Le bateau actuel est statique:
-  - `MAP_SPRITES.heroBoat = "/assets/sprites/map/hero-boat.svg"`;
-  - `getHeroSpritesheet(faction, onWater)` retourne `undefined` sur l'eau;
-  - `addHeroSprite` retombe donc sur `addObjectSprite`;
-  - `animateHeroSprite` ajoute seulement un flottement sinusoidal au sprite statique.
+- Le bateau utilise maintenant `BOAT_SPRITESHEETS` par faction.
+- Les anciens SVG statiques de heros et bateau ont ete retires; les fallbacks pointent vers les spritesheets `castle`.
 
 ## 2. Format cible des assets
 
@@ -81,7 +78,7 @@ Modifier `src/lib/rendering/phaser/assets.ts`:
 - Inclure le path bateau dans le preload:
   - soit via une nouvelle collection `ADVENTURE_SPRITESHEETS`;
   - soit en ajoutant explicitement `BOAT_SPRITESHEET` dans `PhaserMapRenderer.preload`.
-- Garder `MAP_SPRITES.heroBoat` comme fallback statique tant que le spritesheet n'est pas disponible.
+- Utiliser les spritesheets `castle` comme fallback quand une faction inconnue est demandee.
 
 Recommandation: introduire une collection commune `DIRECTIONAL_SPRITESHEETS` pour eviter de dupliquer les boucles Phaser entre heros et bateau.
 
@@ -129,7 +126,7 @@ Modifier `src/app/dev/sprites/page.tsx`:
   - `DirectionalSheetPreview`;
   - `DirectionalSheetCard`.
 - Afficher les 8 directions avec idle/walk, comme les heros.
-- Garder le SVG `hero-boat.svg` dans les assets statiques tant qu'il sert de fallback.
+- Ne pas remettre le SVG `hero-boat.svg` dans les assets statiques: le bateau est couvert par les spritesheets.
 
 ## 8. Validation
 

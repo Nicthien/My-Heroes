@@ -6,20 +6,7 @@ export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) =
 }, {} as Record<UnitType, string>);
 
 export const MAP_SPRITES = {
-  hero: "/assets/sprites/map/hero-cavalier.svg",
-  heroBoat: "/assets/sprites/map/hero-boat.svg",
   town: "/assets/sprites/map/town-castle.webp",
-  heroes: {
-    castle: "/assets/sprites/map/hero-cavalier.svg",
-    rampart: "/assets/sprites/map/hero-rampart.svg",
-    tower: "/assets/sprites/map/hero-tower.svg",
-    inferno: "/assets/sprites/map/hero-inferno.svg",
-    necropolis: "/assets/sprites/map/hero-necropolis.svg",
-    dungeon: "/assets/sprites/map/hero-dungeon.svg",
-    stronghold: "/assets/sprites/map/hero-stronghold.svg",
-    fortress: "/assets/sprites/map/hero-fortress.svg",
-    conflux: "/assets/sprites/map/hero-tower.svg",
-  } as Record<string, string>,
   towns: {
     castle: "/assets/sprites/map/town-castle.webp",
     rampart: "/assets/sprites/map/town-rampart.webp",
@@ -150,14 +137,8 @@ export const DIRECTIONAL_SPRITESHEETS: DirectionalSpritesheet[] = [
   ...Object.values(BOAT_SPRITESHEETS),
 ];
 
-export function getHeroSpritePath(faction: string, onWater = false) {
-  if (onWater) return MAP_SPRITES.heroBoat;
-  return MAP_SPRITES.heroes[faction] ?? MAP_SPRITES.hero;
-}
-
-export function getHeroSpritesheet(faction: string, onWater = false) {
-  if (onWater) return undefined;
-  return HERO_SPRITESHEETS[faction];
+export function getHeroSpritesheet(faction: string) {
+  return HERO_SPRITESHEETS[faction] ?? HERO_SPRITESHEETS.castle;
 }
 
 export function getBoatSpritesheet(faction: string) {
@@ -173,10 +154,7 @@ export function getMonsterSpritePath(unitType: string | undefined) {
 }
 
 export const MAP_SPRITE_PATHS = Array.from(new Set([
-  MAP_SPRITES.hero,
-  MAP_SPRITES.heroBoat,
   MAP_SPRITES.town,
-  ...Object.values(MAP_SPRITES.heroes),
   ...Object.values(MAP_SPRITES.towns),
   ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),

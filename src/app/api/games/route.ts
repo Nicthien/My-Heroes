@@ -5,7 +5,7 @@ import { computeVisibleTiles } from "@/lib/game/engine";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/neutral-armies";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
-import { Faction, GameMap, HeroClass, MapObject, MapTile, TerrainType } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, HeroClass, MapObject, MapTile, TerrainType } from "@/lib/game/types";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
-    buildings: ["castle"],
+    buildings: [BuildingType.VILLAGE_HALL],
     garrison: [],
     is_neutral: false,
   });
@@ -313,7 +313,7 @@ async function createNeutralTowns(
         town_type: f,
         x,
         y,
-        buildings: ["castle"],
+        buildings: [BuildingType.VILLAGE_HALL],
         garrison: [],
         is_neutral: true,
         neutral_garrison: garrison,

@@ -521,8 +521,9 @@ export default function GameMapComponent() {
           }
           return res.json();
         })
-        .then((data) => {
+        .then(async (data) => {
           if (!data) return;
+          await animateHeroMovement(rendererRef.current, heroSrc.id, movePath);
           const interaction = data.interaction as MoveInteraction | null | undefined;
           if (handleMoveInteraction(heroSrc.id, interaction)) {
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
@@ -830,8 +831,9 @@ export default function GameMapComponent() {
             }
             return res.json();
           })
-          .then((data) => {
+          .then(async (data) => {
             if (!data) return;
+            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
             const interaction = data.interaction as MoveInteraction | null | undefined;
             const handledInteraction = handleMoveInteraction(selectedHeroId, interaction);
             if (!handledInteraction) {
@@ -980,8 +982,9 @@ export default function GameMapComponent() {
             }
             return res.json();
           })
-          .then((data) => {
+          .then(async (data) => {
             if (!data) return;
+            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
             handleMoveInteraction(selectedHeroId, data.interaction as MoveInteraction | null | undefined);
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {
@@ -1160,8 +1163,9 @@ export default function GameMapComponent() {
             }
             return res.json();
           })
-          .then((data) => {
+          .then(async (data) => {
             if (!data) return;
+            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
             const interaction = data.interaction as MoveInteraction | null | undefined;
             const handledInteraction = handleMoveInteraction(selectedHeroId, interaction);
             if (!handledInteraction) {
@@ -1232,6 +1236,10 @@ async function getApiErrorMessage(response: Response) {
   }
 
   return "Action impossible pour le moment.";
+}
+
+function animateHeroMovement(renderer: MapRenderer | null, heroId: string, path: Position[]) {
+  return renderer?.animateHeroMovement(heroId, path) ?? Promise.resolve();
 }
 
 function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending: PendingMove): PendingMove | null {

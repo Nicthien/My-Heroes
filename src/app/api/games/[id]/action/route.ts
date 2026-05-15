@@ -23,6 +23,7 @@ import {
   type TavernOffer,
 } from "@/lib/game/heroes";
 import { computeVisibleTiles, getPlayerVisionCenters, isTileTraversable, normalizeMapMovement } from "@/lib/game/engine";
+import { getTownCenterLevel, getTownGoldProduction, hasTownBuilding } from "@/lib/game/town-buildings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -38,6 +39,7 @@ interface MinimalTown {
   id: string;
   x: number;
   y: number;
+  level?: number;
   townType?: string;
   buildings?: string[];
   garrison?: MinimalArmy[];
@@ -335,9 +337,23 @@ export async function POST(
       if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
         return NextResponse.json({ error: "Ce château neutre est gardé" }, { status: 400 });
       }
+      const capturedBuildings = (town.buildings ?? []) as string[];
+      const hasAnotherCapitol = gamePlayer.towns.some((item) => (item.buildings ?? []).includes(BuildingType.CAPITOL));
+      const townOwnershipUpdate: Record<string, unknown> = {
+        game_player_id: gamePlayer.id,
+        is_neutral: false,
+        neutral_garrison: [],
+      };
+      if (hasAnotherCapitol && capturedBuildings.includes(BuildingType.CAPITOL)) {
+        const demotedBuildings = capturedBuildings
+          .filter((item) => item !== BuildingType.CAPITOL)
+          .concat(capturedBuildings.includes(BuildingType.CITY_HALL) ? [] : [BuildingType.CITY_HALL]);
+        townOwnershipUpdate.buildings = demotedBuildings;
+        townOwnershipUpdate.level = getTownCenterLevel(demotedBuildings);
+      }
       await supabase
         .from("towns")
-        .update({ game_player_id: gamePlayer.id, is_neutral: false, neutral_garrison: [] })
+        .update(townOwnershipUpdate)
         .eq("id", town.id);
       await supabase.from("heroes").update({ x: town.x, y: town.y, experience: hero.experience + 250 }).eq("id", hero.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
@@ -352,14 +368,22 @@ export async function POST(
 
       const buildings = (town.buildings ?? []) as string[];
       if (buildings.includes(building)) return NextResponse.json({ error: "Batiment deja construit" }, { status: 400 });
-      const missingRequirement = rule.requires?.find((requirement) => !buildings.includes(requirement));
+      const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(buildings, requirement));
       if (missingRequirement) return NextResponse.json({ error: "Prérequis manquant" }, { status: 400 });
+      if (
+        building === BuildingType.CAPITOL &&
+        gamePlayer.towns.some((item) => item.id !== town.id && (item.buildings ?? []).includes(BuildingType.CAPITOL))
+      ) {
+        return NextResponse.json({ error: "Un seul Capitole est autorisé par joueur" }, { status: 400 });
+      }
       const resources = playerResources(gamePlayer);
       if (!canAfford(resources, rule.cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
       await supabase.from("game_players").update(subtractCost(resources, rule.cost)).eq("id", gamePlayer.id);
+      const nextBuildings = [...buildings, building];
       const townUpdate: Record<string, unknown> = {
-        buildings: [...buildings, building],
+        buildings: nextBuildings,
+        level: getTownCenterLevel(nextBuildings),
         last_built_turn: game.turnNumber,
       };
       if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
@@ -823,7 +847,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
   const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
   const mapData = game.mapData as GameMap | undefined;
   for (const player of alivePlayers) {
-    let goldIncome = 500, woodIncome = 2, oreIncome = 1;
+    let goldIncome = 0, woodIncome = 0, oreIncome = 0;
     let mercuryIncome = 0, crystalsIncome = 0, gemsIncome = 0, sulfurIncome = 0;
 
     for (const building of player.resourceBuildings ?? []) {
@@ -842,6 +866,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
       const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? Faction.CASTLE) as Faction;
+      goldIncome += getTownGoldProduction(buildings);
       for (const building of buildings) {
         const rule = getFactionBuildingRule(townFaction, building);
         goldIncome += rule?.dailyProduction?.gold ?? 0;
@@ -854,7 +879,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
       }
     }
 
-    await supabase.from("game_players").update({
+    await updatePlayerResourcesForIncome(supabase, player.id, {
       gold: player.gold + goldIncome,
       wood: player.wood + woodIncome,
       ore: player.ore + oreIncome,
@@ -862,7 +887,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
       crystals: player.crystals + crystalsIncome,
       gems: (player.gems ?? 0) + gemsIncome,
       sulfur: player.sulfur + sulfurIncome,
-    }).eq("id", player.id);
+    });
     const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
     for (const hero of player.heroes ?? []) {
       const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
@@ -891,6 +916,25 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     turn_number: nextTurnNumber,
     current_turn_player_id: firstPlayer?.id ?? null,
   }).eq("id", gameId);
+}
+
+async function updatePlayerResourcesForIncome(
+  supabase: ReturnType<typeof createAdminClient>,
+  playerId: string,
+  resources: Resources,
+) {
+  const { error } = await supabase.from("game_players").update(resources).eq("id", playerId);
+  if (!error) return;
+
+  if (error.message.toLowerCase().includes("gems")) {
+    const resourcesWithoutGems: Partial<Resources> = { ...resources };
+    delete resourcesWithoutGems.gems;
+    const { error: fallbackError } = await supabase.from("game_players").update(resourcesWithoutGems).eq("id", playerId);
+    if (!fallbackError) return;
+    throw fallbackError;
+  }
+
+  throw error;
 }
 
 function findFirstMoveStop({

@@ -199,7 +199,7 @@ export const BUILDING_RULES: BuildingRule[] = [
   {
     type: BuildingType.RESOURCE_SILO,
     label: "Silo de ressources",
-    description: "+500 pièces d'or à chaque nouveau jour.",
+    description: "Produit une ressource selon la faction de la ville chaque jour.",
     cost: { gold: 1500, wood: 5, ore: 5 },
     requires: [BuildingType.MARKET],
   },

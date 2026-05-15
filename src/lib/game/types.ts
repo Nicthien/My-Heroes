@@ -17,6 +17,10 @@ export enum TerrainType {
 
 export enum BuildingType {
   CASTLE = "castle",
+  VILLAGE_HALL = "village_hall",
+  TOWN_HALL = "town_hall",
+  CITY_HALL = "city_hall",
+  CAPITOL = "capitol",
   TAVERN = "tavern",
   MARKET = "market",
   BARRACKS = "barracks",

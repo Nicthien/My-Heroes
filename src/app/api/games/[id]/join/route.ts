@@ -3,7 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { pickTownName } from "@/lib/game/town-generation";
-import { Faction, GameMap, HeroClass } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, HeroClass } from "@/lib/game/types";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
@@ -123,7 +123,7 @@ export async function POST(
     town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
-    buildings: ["castle"],
+    buildings: [BuildingType.VILLAGE_HALL],
     garrison: [],
   });
 

@@ -65,6 +65,14 @@ const UNIQUE_TYPES: BuildingType[] = [
   BuildingType.UNIQUE_6,
 ];
 
+const TOWN_CENTER_PRODUCTION: Array<{ type: BuildingType; gold: number; level: number }> = [
+  { type: BuildingType.CAPITOL, gold: 4000, level: 4 },
+  { type: BuildingType.CITY_HALL, gold: 2000, level: 3 },
+  { type: BuildingType.TOWN_HALL, gold: 1000, level: 2 },
+  { type: BuildingType.VILLAGE_HALL, gold: 500, level: 1 },
+  { type: BuildingType.CASTLE, gold: 500, level: 1 },
+];
+
 const BASE_DWELLING_COSTS: ResourceCost[] = [
   { gold: 1000, wood: 5 },
   { gold: 1500, wood: 10 },
@@ -174,7 +182,7 @@ const RESOURCE_SILO_PRODUCTION: Record<Faction, ResourceCost> = {
   [Faction.RAMPART]: { crystals: 1 },
   [Faction.TOWER]: { gems: 1 },
   [Faction.INFERNO]: { sulfur: 1 },
-  [Faction.NECROPOLIS]: { wood: 1, ore: 1 },
+  [Faction.NECROPOLIS]: { mercury: 1 },
   [Faction.DUNGEON]: { sulfur: 1 },
   [Faction.STRONGHOLD]: { wood: 1, ore: 1 },
   [Faction.FORTRESS]: { wood: 1, ore: 1 },
@@ -262,6 +270,30 @@ export function getTownBuildingRules(
 
   const common: TownBuildingRule[] = [
     {
+      type: BuildingType.TOWN_HALL,
+      label: "Mairie",
+      description: "Améliore le revenu de cette ville à +1000 or par jour.",
+      category: "common",
+      cost: { gold: 2500 },
+      requires: [BuildingType.VILLAGE_HALL],
+    },
+    {
+      type: BuildingType.CITY_HALL,
+      label: "Hôtel de ville",
+      description: "Améliore le revenu de cette ville à +2000 or par jour.",
+      category: "common",
+      cost: { gold: 5000 },
+      requires: [BuildingType.TOWN_HALL],
+    },
+    {
+      type: BuildingType.CAPITOL,
+      label: "Capitole",
+      description: "Améliore le revenu de cette ville à +4000 or par jour. Limité à un par joueur.",
+      category: "common",
+      cost: { gold: 10000 },
+      requires: [BuildingType.CITY_HALL],
+    },
+    {
       type: BuildingType.TAVERN,
       label: "Taverne",
       description: "Permet de recruter des héros.",
@@ -326,6 +358,35 @@ export function getTownBuildingRules(
   }));
 
   return [...common, ...baseDwellingRules, ...upgradedDwellingRules, ...uniqueRules];
+}
+
+export function getTownGoldProduction(buildings: Array<BuildingType | string>) {
+  const built = new Set(buildings);
+  return TOWN_CENTER_PRODUCTION.find((entry) => built.has(entry.type))?.gold ?? 500;
+}
+
+export function getTownCenterLevel(buildings: Array<BuildingType | string>) {
+  const built = new Set(buildings);
+  return TOWN_CENTER_PRODUCTION.find((entry) => built.has(entry.type))?.level ?? 1;
+}
+
+export function hasTownBuilding(buildings: Array<BuildingType | string>, building: BuildingType | string) {
+  const built = new Set(buildings);
+  if (building === BuildingType.VILLAGE_HALL) {
+    return built.has(BuildingType.VILLAGE_HALL) || built.has(BuildingType.CASTLE);
+  }
+  return built.has(building);
+}
+
+export function normalizeTownBuildings(buildings: Array<BuildingType | string>) {
+  const normalized = buildings.filter((building) => building !== BuildingType.CASTLE) as BuildingType[];
+  const hasTownCenter = normalized.some((building) =>
+    building === BuildingType.VILLAGE_HALL ||
+    building === BuildingType.TOWN_HALL ||
+    building === BuildingType.CITY_HALL ||
+    building === BuildingType.CAPITOL
+  );
+  return hasTownCenter ? normalized : [BuildingType.VILLAGE_HALL, ...normalized];
 }
 
 function formatProduction(production: ResourceCost) {

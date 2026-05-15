@@ -50,7 +50,7 @@ export default function CombatScreen() {
       (combat.attackerPlayerId === myPlayer.id || combat.defenderPlayerId === myPlayer.id || combat.participants?.some((participant) => participant.playerId === myPlayer.id)) &&
       combat.result.winnerPlayerId !== myPlayer.id
     );
-    if (didLose) {
+    if (didLose && myPlayer) {
       const mainTown = myPlayer.towns[0];
       if (mainTown) {
         focusTile(mainTown.position.x, mainTown.position.y);

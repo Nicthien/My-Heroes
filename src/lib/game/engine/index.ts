@@ -11,6 +11,7 @@ import {
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "../economy";
+import { getTownGoldProduction } from "../town-buildings";
 import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
@@ -360,7 +361,7 @@ export function computeReachableTiles(
 }
 
 export function calculateIncome(player: Player): Resources {
-  let gold = 500;
+  let gold = 0;
   let wood = 0;
   let ore = 0;
   let mercury = 0;
@@ -369,9 +370,7 @@ export function calculateIncome(player: Player): Resources {
   let sulfur = 0;
 
   for (const town of player.towns) {
-    gold += 500;
-    wood += 2;
-    ore += 1;
+    gold += getTownGoldProduction(town.buildings);
     for (const building of town.buildings) {
       const rule = getFactionBuildingRule(town.townType ?? town.faction, building);
       gold += rule?.dailyProduction?.gold ?? 0;

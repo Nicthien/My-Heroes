@@ -5,7 +5,7 @@ import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, 
 import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getMonsterSpritePath, getTownSpritePath } from "@/lib/rendering/phaser/assets";
+import { HERO_DIRECTIONS, HERO_SPRITESHEETS, MAP_SPRITES, MAP_SPRITE_PATHS, getHeroSpritePath, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type HeroDirection } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -90,6 +90,25 @@ type LavaTileEffect = {
   seed: number;
 };
 
+type HeroSpriteAnimation = {
+  sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  baseY: number;
+  baseScaleX: number;
+  baseScaleY: number;
+  phase: number;
+  mode: "mounted" | "boat" | "idle";
+};
+
+type RenderedHeroObject = {
+  object: MapObjectData;
+  sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  banner: Phaser.GameObjects.Graphics;
+  animation: HeroSpriteAnimation;
+  baseX: number;
+  baseY: number;
+  direction: HeroDirection;
+};
+
 type FogEdgeSide = "northWest" | "northEast" | "southEast" | "southWest";
 type RoadSide = "northEast" | "southEast" | "southWest" | "northWest";
 type RoadPalette = {
@@ -131,6 +150,8 @@ class PhaserMapScene extends Phaser.Scene {
   private visibleTiles: Set<string> | null = null;
   private waterTiles: WaterTileEffect[] = [];
   private lavaTiles: LavaTileEffect[] = [];
+  private heroSpriteAnimations: HeroSpriteAnimation[] = [];
+  private renderedHeroes = new Map<string, RenderedHeroObject>();
 
   constructor() {
     super("MapScene");
@@ -139,6 +160,12 @@ class PhaserMapScene extends Phaser.Scene {
   preload() {
     for (const path of MAP_SPRITE_PATHS) {
       this.load.svg(path, path);
+    }
+    for (const sheet of Object.values(HERO_SPRITESHEETS)) {
+      this.load.spritesheet(sheet.key, sheet.path, {
+        frameWidth: sheet.frameWidth,
+        frameHeight: sheet.frameHeight,
+      });
     }
   }
 
@@ -166,6 +193,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       this.updateHoverLabel(pointer.x, pointer.y);
     });
+    this.createHeroAnimations();
     this.readyCallback?.();
   }
 
@@ -205,6 +233,10 @@ class PhaserMapScene extends Phaser.Scene {
 
     for (const lava of this.lavaTiles) {
       drawLavaAnimation(lava.graphics, lava.x, lava.y, lava.seed, time);
+    }
+
+    for (const hero of this.heroSpriteAnimations) {
+      animateHeroSprite(hero, time);
     }
   }
 
@@ -1388,6 +1420,8 @@ class PhaserMapScene extends Phaser.Scene {
   private renderObjects() {
     if (!this.map || !this.objectLayer) return;
     this.objectLayer.removeAll(true);
+    this.heroSpriteAnimations = [];
+    this.renderedHeroes.clear();
     this.clearHoverLabel();
 
     for (const object of this.objects) {
@@ -1396,16 +1430,37 @@ class PhaserMapScene extends Phaser.Scene {
       if (object.type === "hero") {
         const metrics = getObjectMetrics(object);
         if (!metrics) continue;
-        this.addObjectSprite(object, iso.x, y + metrics.offsetY, getHeroSpritePath(object.faction), metrics.width, metrics.height);
-        this.addBanner(
-          this.objectLayer,
-          iso.x - (object.inTown ? 10 : 16),
-          y + metrics.offsetY - metrics.height + (object.inTown ? 1 : -3),
-          object.color,
-          object.inTown ? 12 : 16,
-          object.inTown ? 8 : 12,
-          y + metrics.offsetY
-        );
+        const sprite = this.addHeroSprite(object, iso.x, y + metrics.offsetY, metrics.width, metrics.height);
+        if (sprite) {
+          const bannerMetrics = getHeroBannerMetrics(object);
+          const animation = {
+            sprite,
+            baseY: sprite.y,
+            baseScaleX: sprite.scaleX,
+            baseScaleY: sprite.scaleY,
+            phase: hashTile(object.x, object.y) * Math.PI * 2,
+            mode: object.onWater ? "boat" : object.inTown ? "idle" : "mounted",
+          } satisfies HeroSpriteAnimation;
+          const banner = this.addBanner(
+            this.objectLayer,
+            iso.x - bannerMetrics.xOffset,
+            y + metrics.offsetY - metrics.height + bannerMetrics.yOffset,
+            object.color,
+            bannerMetrics.width,
+            bannerMetrics.height,
+            y + metrics.offsetY
+          );
+          this.heroSpriteAnimations.push(animation);
+          this.renderedHeroes.set(object.id, {
+            object,
+            sprite,
+            banner,
+            animation,
+            baseX: sprite.x,
+            baseY: sprite.y,
+            direction: "se",
+          });
+        }
       } else if (object.type === "town") {
         this.addObjectSprite(object, iso.x, y + 20, getTownSpritePath(object.faction), 82, 82);
         this.addBanner(this.objectLayer, iso.x, y - 43, object.color, 18, 12, y + 20);
@@ -1444,13 +1499,132 @@ class PhaserMapScene extends Phaser.Scene {
     this.objectLayer.sort("depth");
   }
 
+  animateHeroMovement(heroId: string, path: Position[]) {
+    const renderedHero = this.renderedHeroes.get(heroId);
+    const metrics = renderedHero ? getObjectMetrics(renderedHero.object) : null;
+    if (!renderedHero || !metrics || path.length < 2) return Promise.resolve();
+
+    renderedHero.animation.mode = renderedHero.object.onWater ? "boat" : "mounted";
+
+    return new Promise<void>((resolve) => {
+      let index = 1;
+      const moveNext = () => {
+        const from = path[index - 1];
+        const to = path[index];
+        if (!from || !to) {
+          renderedHero.animation.mode = renderedHero.object.onWater
+            ? "boat"
+            : renderedHero.object.inTown
+            ? "idle"
+            : "mounted";
+          this.playHeroAnimation(renderedHero, "idle");
+          resolve();
+          return;
+        }
+
+        const start = this.getObjectRenderPoint(from, metrics.offsetY);
+        const end = this.getObjectRenderPoint(to, metrics.offsetY);
+        const tweenState = { x: start.x, y: start.y };
+        renderedHero.direction = getHeroDirection(from, to, renderedHero.direction);
+        this.playHeroAnimation(renderedHero, "walk");
+        this.updateRenderedHeroPosition(renderedHero, start.x, start.y);
+
+        this.tweens.add({
+          targets: tweenState,
+          x: end.x,
+          y: end.y,
+          duration: 140,
+          ease: "Sine.easeInOut",
+          onUpdate: () => {
+            this.updateRenderedHeroPosition(renderedHero, tweenState.x, tweenState.y);
+          },
+          onComplete: () => {
+            this.updateRenderedHeroPosition(renderedHero, end.x, end.y);
+            index += 1;
+            moveNext();
+          },
+        });
+      };
+
+      moveNext();
+    });
+  }
+
+  private getObjectRenderPoint(position: Position, offsetY: number) {
+    const iso = cartToIso(position.x, position.y);
+    return {
+      x: iso.x,
+      y: this.getSurfaceY(position.x, position.y) + offsetY,
+    };
+  }
+
+  private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number) {
+    renderedHero.sprite.x = x;
+    renderedHero.sprite.setDepth(y);
+    renderedHero.animation.baseY = y;
+    renderedHero.banner.setPosition(x - renderedHero.baseX, y - renderedHero.baseY);
+    renderedHero.banner.setDepth(y + 3);
+    this.objectLayer.sort("depth");
+  }
+
+  private createHeroAnimations() {
+    for (const sheet of Object.values(HERO_SPRITESHEETS)) {
+      for (const [directionIndex, direction] of HERO_DIRECTIONS.entries()) {
+        const rowOffset = directionIndex * sheet.columns;
+        const directionIdleKey = getHeroAnimationKey(sheet.faction, direction, "idle");
+        if (!this.anims.exists(directionIdleKey)) {
+          this.anims.create({
+            key: directionIdleKey,
+            frames: this.anims.generateFrameNumbers(sheet.key, { frames: [0, 1, 2, 3, 2, 1].map((frame) => rowOffset + frame) }),
+            frameRate: 5,
+            repeat: -1,
+          });
+        }
+
+        const directionWalkKey = getHeroAnimationKey(sheet.faction, direction, "walk");
+        if (!this.anims.exists(directionWalkKey)) {
+          this.anims.create({
+            key: directionWalkKey,
+            frames: this.anims.generateFrameNumbers(sheet.key, {
+              frames: [4, 5, 6, 7, 8, 9, 10, 11].map((frame) => rowOffset + frame),
+            }),
+            frameRate: 12,
+            repeat: -1,
+          });
+        }
+      }
+    }
+  }
+
+  private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number) {
+    const sheet = getHeroSpritesheet(object.faction, object.onWater);
+    if (!sheet) return this.addObjectSprite(object, x, y, getHeroSpritePath(object.faction, object.onWater), width, height);
+
+    const sprite = this.add.sprite(x, y, sheet.key, 0);
+    sprite.setOrigin(0.5, 1);
+    sprite.setDisplaySize(width, height);
+    sprite.setDepth(y);
+    this.objectLayer.add(sprite);
+    sprite.play(getHeroAnimationKey(sheet.faction, "se", "idle"));
+    return sprite;
+  }
+
+  private playHeroAnimation(renderedHero: RenderedHeroObject, state: "idle" | "walk") {
+    const sheet = getHeroSpritesheet(renderedHero.object.faction, renderedHero.object.onWater);
+    if (!sheet || !(renderedHero.sprite instanceof Phaser.GameObjects.Sprite)) return;
+    const key = getHeroAnimationKey(sheet.faction, renderedHero.direction, state);
+    if (renderedHero.sprite.anims.currentAnim?.key === key) return;
+    renderedHero.sprite.play(key);
+  }
+
   private addObjectSprite(object: MapObjectData, x: number, y: number, path: string | undefined, width: number, height: number) {
-    if (!path) return;
+    if (!path) return null;
     const sprite = this.add.image(x, y, path);
     sprite.setOrigin(0.5, 1);
     sprite.setDisplaySize(width, height);
     sprite.setDepth(y);
     this.objectLayer.add(sprite);
+    return sprite;
   }
 
   private updateHoverLabel(screenX: number, screenY: number) {
@@ -1570,6 +1744,7 @@ class PhaserMapScene extends Phaser.Scene {
     graphics.strokePath();
     graphics.setDepth(depth + 3);
     layer.add(graphics);
+    return graphics;
   }
 
   private addBadge(layer: Phaser.GameObjects.Container, x: number, y: number, textValue: string, color: number, depth: number) {
@@ -1716,6 +1891,10 @@ export class PhaserMapRenderer implements MapRenderer {
 
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
     if (this.isReady()) this.scene?.setFog(visibleTiles, exploredTiles);
+  }
+
+  animateHeroMovement(heroId: string, path: Position[]) {
+    return this.isReady() ? this.scene?.animateHeroMovement(heroId, path) ?? Promise.resolve() : Promise.resolve();
   }
 
   highlightPath(path: Position[]) {
@@ -2181,9 +2360,15 @@ function isAllowedDecor(kind: DecorKind) {
 }
 
 function getObjectMetrics(object: MapObjectData) {
-  if (object.type === "hero") return object.inTown
-    ? { width: 36, height: 36, offsetY: 29 }
-    : { width: 62, height: 62, offsetY: 15 };
+  if (object.type === "hero") {
+    const sheet = getHeroSpritesheet(object.faction, object.onWater);
+    if (sheet) return object.inTown
+      ? { width: sheet.townDisplayWidth, height: sheet.townDisplayHeight, offsetY: 27 }
+      : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: 10 };
+    return object.inTown
+      ? { width: 30, height: 30, offsetY: 27 }
+      : { width: 44, height: 44, offsetY: 10 };
+  }
   if (object.type === "town") return { width: 82, height: 82, offsetY: 20 };
   if (object.type === "building") return { width: 52, height: 52, offsetY: 6 };
   if (object.type === "adventure_building") return object.buildingType === "stargate"
@@ -2191,4 +2376,53 @@ function getObjectMetrics(object: MapObjectData) {
     : { width: 52, height: 52, offsetY: 6 };
   if (object.type === "combat") return { width: 48, height: 48, offsetY: 10 };
   return null;
+}
+
+function getHeroBannerMetrics(object: MapObjectData) {
+  if (object.inTown) return { xOffset: 8, yOffset: 1, width: 10, height: 7 };
+  return { xOffset: 12, yOffset: -2, width: 12, height: 9 };
+}
+
+function getHeroDirection(from: Position, to: Position, fallback: HeroDirection): HeroDirection {
+  const dx = Math.sign(to.x - from.x);
+  const dy = Math.sign(to.y - from.y);
+
+  if (dx === 0 && dy === 0) return fallback;
+  if (dx === 0 && dy > 0) return "sw";
+  if (dx === 0 && dy < 0) return "ne";
+  if (dx > 0 && dy === 0) return "se";
+  if (dx < 0 && dy === 0) return "nw";
+  if (dx > 0 && dy > 0) return "s";
+  if (dx < 0 && dy < 0) return "n";
+  if (dx > 0 && dy < 0) return "e";
+  return "w";
+}
+
+function getHeroAnimationKey(faction: string, direction: HeroDirection, state: "idle" | "walk") {
+  return `hero-${faction}-${direction}-${state}`;
+}
+
+function animateHeroSprite(hero: HeroSpriteAnimation, time: number) {
+  if (hero.mode === "mounted") {
+    const breath = time / 900 + hero.phase;
+    hero.sprite.y = hero.baseY;
+    hero.sprite.angle = Math.sin(breath) * 0.7;
+    hero.sprite.scaleX = hero.baseScaleX;
+    hero.sprite.scaleY = hero.baseScaleY;
+    return;
+  }
+
+  if (hero.mode === "boat") {
+    const wave = time / 700 + hero.phase;
+    hero.sprite.y = hero.baseY + Math.sin(wave) * 1.5;
+    hero.sprite.angle = Math.sin(wave * 0.8) * 1.6;
+    hero.sprite.scaleX = hero.baseScaleX;
+    hero.sprite.scaleY = hero.baseScaleY;
+    return;
+  }
+
+  hero.sprite.y = hero.baseY;
+  hero.sprite.angle = 0;
+  hero.sprite.scaleX = hero.baseScaleX;
+  hero.sprite.scaleY = hero.baseScaleY;
 }

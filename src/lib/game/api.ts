@@ -5,6 +5,7 @@ import {
 } from "./types";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { getDominantUnitType } from "./neutral-armies";
+import { normalizeTownBuildings } from "./town-buildings";
 
 interface ApiPlayer {
   id: string;
@@ -177,7 +178,7 @@ export function mapApiToGameState(
       townType: t.townType as Faction | undefined,
       position: { x: t.x, y: t.y },
       level: t.level,
-      buildings: (t.buildings || []) as BuildingType[],
+      buildings: normalizeTownBuildings((t.buildings || []) as BuildingType[]),
       garrison: (t.garrison || []) as never[],
       neutralGarrison: (t.neutralGarrison ?? []).map((a) => ({
         id: a.id,

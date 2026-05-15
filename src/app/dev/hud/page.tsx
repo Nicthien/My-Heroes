@@ -90,7 +90,7 @@ function buildMockState(): GameState {
             faction: Faction.CASTLE,
             position: { x: 3, y: 12 },
             level: 3,
-            buildings: [BuildingType.CASTLE, BuildingType.TAVERN, BuildingType.BARRACKS, BuildingType.DWELLING_1, BuildingType.DWELLING_2],
+            buildings: [BuildingType.VILLAGE_HALL, BuildingType.TAVERN, BuildingType.BARRACKS, BuildingType.DWELLING_1, BuildingType.DWELLING_2],
             garrison: [],
             availableRecruits: { [UnitType.PIKEMAN]: 12, [UnitType.ARCHER]: 8 },
             lastBuiltTurn: null,

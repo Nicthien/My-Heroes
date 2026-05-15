@@ -19,6 +19,7 @@ import {
   getRecruitableUnitsForFaction,
   subtractCost,
 } from "@/lib/game/economy";
+import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import {
   UnitSilhouette,
   getUnitModel,
@@ -87,7 +88,11 @@ function buildingTypeLabel(building: string, faction: Faction = Faction.CASTLE):
   const factionRule = getFactionBuildingRule(faction, building);
   if (factionRule) return factionRule.label;
   const labels: Record<string, string> = {
-    castle: "Château",
+    castle: "Mairie du village",
+    village_hall: "Mairie du village",
+    town_hall: "Mairie",
+    city_hall: "Hôtel de ville",
+    capitol: "Capitole",
     tavern: "Taverne",
     market: "Marché",
     barracks: "Caserne",
@@ -319,6 +324,7 @@ function HUDContent() {
     tab: "summary",
   });
   const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
+  const [hideMissingRecruitRequirements, setHideMissingRecruitRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
@@ -434,6 +440,13 @@ function HUDContent() {
     const townFaction = (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? Faction.CASTLE) as Faction);
     const rule = getFactionBuildingRule(townFaction, building);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
+    if (
+      building === BuildingType.CAPITOL &&
+      myPlayer.towns.some((town) => town.id !== selectedTown.id && town.buildings.includes(BuildingType.CAPITOL))
+    ) {
+      setCombatMessage("Un seul Capitole est autorisé par joueur.");
+      return;
+    }
 
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
@@ -459,6 +472,7 @@ function HUDContent() {
               ? {
                   ...town,
                   buildings: [...town.buildings, building],
+                  level: getTownCenterLevel([...town.buildings, building]),
                   availableRecruits: addImmediateDwellingGrowth(
                     town.availableRecruits,
                     building,
@@ -701,15 +715,23 @@ function HUDContent() {
     : Faction.CASTLE;
   const selectedTownBuildingRules = getFactionBuildingRules(selectedTownFaction);
   const selectedTownRecruitEntries = getRecruitableUnitsForFaction(selectedTownFaction);
+  const hasPlayerCapitol = Boolean(
+    myPlayer?.towns.some((town) => town.buildings.includes(BuildingType.CAPITOL))
+  );
   const buildableBuildings = selectedTown
     ? selectedTownBuildingRules.filter((rule) => {
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
         const missingRequirement = rule.requires?.some(
-          (requirement) => !selectedTown.buildings.includes(requirement)
+          (requirement) => !hasTownBuilding(selectedTown.buildings, requirement)
         );
+        const blockedByCapitolLimit =
+          rule.type === BuildingType.CAPITOL &&
+          hasPlayerCapitol &&
+          !selectedTown.buildings.includes(BuildingType.CAPITOL);
         return (
           !alreadyBuilt &&
           !missingRequirement &&
+          !blockedByCapitolLimit &&
           selectedTown.lastBuiltTurn !== gameState.turnNumber &&
           Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost))
         );
@@ -737,9 +759,14 @@ function HUDContent() {
     : "summary";
   const displayedBuildRules = selectedTown && hideMissingBuildRequirements
     ? selectedTownBuildingRules.filter((rule) =>
-        !rule.requires?.some((requirement) => !selectedTown.buildings.includes(requirement))
+        !rule.requires?.some((requirement) => !hasTownBuilding(selectedTown.buildings, requirement))
       )
     : selectedTownBuildingRules;
+  const displayedRecruitEntries = selectedTown && hideMissingRecruitRequirements
+    ? selectedTownRecruitEntries.filter(({ dwelling }) =>
+        selectedTown.buildings.includes(dwelling)
+      )
+    : selectedTownRecruitEntries;
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -1203,11 +1230,16 @@ function HUDContent() {
                 </label>
                 {displayedBuildRules.map((rule) => {
                   const alreadyBuilt = selectedTown.buildings.includes(rule.type);
-                  const missingRequirement = rule.requires?.find((requirement) => !selectedTown.buildings.includes(requirement));
+                  const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(selectedTown.buildings, requirement));
+                  const blockedByCapitolLimit =
+                    rule.type === BuildingType.CAPITOL &&
+                    hasPlayerCapitol &&
+                    !selectedTown.buildings.includes(BuildingType.CAPITOL);
                   const disabled =
                     alreadyBuilt ||
                     selectedTown.lastBuiltTurn === gameState.turnNumber ||
                     Boolean(missingRequirement) ||
+                    blockedByCapitolLimit ||
                     !myPlayer ||
                     !canAfford(myPlayer.resources, rule.cost) ||
                     !canAct ||
@@ -1223,6 +1255,9 @@ function HUDContent() {
                           <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
                           {missingRequirement && (
                             <div className="mt-1 text-xs text-red-300">Prérequis manquant : {buildingTypeLabel(missingRequirement, selectedTownFaction)}</div>
+                          )}
+                          {blockedByCapitolLimit && (
+                            <div className="mt-1 text-xs text-red-300">Limite atteinte : un seul Capitole par joueur.</div>
                           )}
                         </div>
                         <button
@@ -1264,7 +1299,16 @@ function HUDContent() {
 
             {displayedTownTab === "recruit" && (
               <div className="space-y-2">
-                {selectedTownRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
+                <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-amber-500"
+                    checked={hideMissingRecruitRequirements}
+                    onChange={(event) => setHideMissingRecruitRequirements(event.currentTarget.checked)}
+                  />
+                  <span>Masquer les prerequis manquants</span>
+                </label>
+                {displayedRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
                   const hasDwelling = selectedTown.buildings.includes(dwelling);
                   const available = selectedTown.availableRecruits[rule.type] ?? 0;
                   const disabled =

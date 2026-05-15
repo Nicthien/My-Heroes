@@ -7,6 +7,7 @@ export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) =
 
 export const MAP_SPRITES = {
   hero: "/assets/sprites/map/hero-cavalier.svg",
+  heroBoat: "/assets/sprites/map/hero-boat.svg",
   town: "/assets/sprites/map/town-castle.svg",
   heroes: {
     castle: "/assets/sprites/map/hero-cavalier.svg",
@@ -72,8 +73,58 @@ export const MAP_SPRITES = {
   } as Record<string, string>,
 };
 
-export function getHeroSpritePath(faction: string) {
+export type HeroSpritesheet = {
+  faction: string;
+  key: string;
+  path: string;
+  frameWidth: number;
+  frameHeight: number;
+  displayWidth: number;
+  displayHeight: number;
+  townDisplayWidth: number;
+  townDisplayHeight: number;
+  columns: number;
+};
+
+export const HERO_DIRECTIONS = ["s", "sw", "w", "nw", "n", "ne", "e", "se"] as const;
+export type HeroDirection = (typeof HERO_DIRECTIONS)[number];
+
+const HERO_SPRITESHEET_FACTIONS = [
+  "castle",
+  "rampart",
+  "tower",
+  "inferno",
+  "necropolis",
+  "dungeon",
+  "stronghold",
+  "fortress",
+] as const;
+
+export const HERO_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, faction) => {
+  sheets[faction] = {
+    faction,
+    key: `hero-${faction}`,
+    path: `/assets/sprites/heroes/${faction}/adventure.png`,
+    frameWidth: 80,
+    frameHeight: 80,
+    displayWidth: 44,
+    displayHeight: 44,
+    townDisplayWidth: 30,
+    townDisplayHeight: 30,
+    columns: 12,
+  };
+  return sheets;
+}, {} as Record<string, HeroSpritesheet>);
+
+export function getHeroSpritePath(faction: string, onWater = false) {
+  if (onWater) return MAP_SPRITES.heroBoat;
   return MAP_SPRITES.heroes[faction] ?? MAP_SPRITES.hero;
+}
+
+export function getHeroSpritesheet(faction: string, onWater = false) {
+  if (onWater) return undefined;
+  if (faction === "conflux") return HERO_SPRITESHEETS.tower;
+  return HERO_SPRITESHEETS[faction];
 }
 
 export function getTownSpritePath(faction: string) {
@@ -86,6 +137,7 @@ export function getMonsterSpritePath(unitType: string | undefined) {
 
 export const MAP_SPRITE_PATHS = Array.from(new Set([
   MAP_SPRITES.hero,
+  MAP_SPRITES.heroBoat,
   MAP_SPRITES.town,
   ...Object.values(MAP_SPRITES.heroes),
   ...Object.values(MAP_SPRITES.towns),

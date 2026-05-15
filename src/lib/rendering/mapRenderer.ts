@@ -21,6 +21,7 @@ export interface MapRenderer {
   renderMap(map: GameMap): void;
   setObjects(objects: MapObjectData[]): void;
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>): void;
+  animateHeroMovement(heroId: string, path: Position[]): Promise<void>;
   highlightPath(path: Position[]): void;
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string): void;
   highlightTiles(tiles: Position[], color?: number, alpha?: number): void;

@@ -8,7 +8,7 @@ export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) =
 export const MAP_SPRITES = {
   hero: "/assets/sprites/map/hero-cavalier.svg",
   heroBoat: "/assets/sprites/map/hero-boat.svg",
-  town: "/assets/sprites/map/town-castle.svg",
+  town: "/assets/sprites/map/town-castle.png",
   heroes: {
     castle: "/assets/sprites/map/hero-cavalier.svg",
     rampart: "/assets/sprites/map/hero-rampart.svg",
@@ -21,15 +21,15 @@ export const MAP_SPRITES = {
     conflux: "/assets/sprites/map/hero-tower.svg",
   } as Record<string, string>,
   towns: {
-    castle: "/assets/sprites/map/town-castle.svg",
-    rampart: "/assets/sprites/map/town-rampart.svg",
-    tower: "/assets/sprites/map/town-tower.svg",
-    inferno: "/assets/sprites/map/town-inferno.svg",
-    necropolis: "/assets/sprites/map/town-necropolis.svg",
-    dungeon: "/assets/sprites/map/town-dungeon.svg",
-    stronghold: "/assets/sprites/map/town-stronghold.svg",
-    fortress: "/assets/sprites/map/town-fortress.svg",
-    conflux: "/assets/sprites/map/town-tower.svg",
+    castle: "/assets/sprites/map/town-castle.png",
+    rampart: "/assets/sprites/map/town-rampart.png",
+    tower: "/assets/sprites/map/town-tower.png",
+    inferno: "/assets/sprites/map/town-inferno.png",
+    necropolis: "/assets/sprites/map/town-necropolis.png",
+    dungeon: "/assets/sprites/map/town-dungeon.png",
+    stronghold: "/assets/sprites/map/town-stronghold.png",
+    fortress: "/assets/sprites/map/town-fortress.png",
+    conflux: "/assets/sprites/map/town-conflux.png",
   } as Record<string, string>,
   resources: {
     gold: "/assets/sprites/resources/gold.svg",

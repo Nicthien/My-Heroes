@@ -1049,7 +1049,13 @@ export default function GameMapComponent() {
       const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
       if (!isTileTraversable(targetTile)) {
         rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
-        setCombatMessage(targetTile?.object?.type === "wall" ? "Passage bloque par un mur." : "Terrain infranchissable.");
+        setCombatMessage(
+          targetTile?.object?.type === "wall"
+            ? "Passage bloque par un mur."
+            : targetTile?.object?.type === "town_footprint"
+            ? "La porte du chateau se trouve au sud."
+            : "Terrain infranchissable."
+        );
         setTimeout(() => rendererRef.current?.clearHighlights(), 650);
         return;
       }

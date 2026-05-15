@@ -164,7 +164,8 @@ class PhaserMapScene extends Phaser.Scene {
 
   preload() {
     for (const path of MAP_SPRITE_PATHS) {
-      this.load.svg(path, path);
+      if (path.endsWith(".svg")) this.load.svg(path, path);
+      else this.load.image(path, path);
     }
     for (const sheet of Object.values(HERO_SPRITESHEETS)) {
       this.load.spritesheet(sheet.key, sheet.path, {
@@ -1490,8 +1491,10 @@ class PhaserMapScene extends Phaser.Scene {
           });
         }
       } else if (object.type === "town") {
-        this.addObjectSprite(object, iso.x, y + 20, getTownSpritePath(object.faction), 82, 82);
-        this.addBanner(this.objectLayer, iso.x, y - 43, object.color, 18, 12, y + 20);
+        const metrics = getObjectMetrics(object);
+        if (!metrics) continue;
+        this.addObjectSprite(object, iso.x, y + metrics.offsetY, getTownSpritePath(object.faction), metrics.width, metrics.height);
+        this.addBanner(this.objectLayer, iso.x, y - 68, object.color, 20, 13, y + metrics.offsetY);
       } else if (object.type === "building" && object.buildingType) {
         this.addObjectSprite(object, iso.x, y + 6, MAP_SPRITES.buildings[object.buildingType], 52, 52);
         if (object.playerId) {
@@ -2476,7 +2479,7 @@ function getObjectMetrics(object: MapObjectData) {
       ? { width: 30, height: 30, offsetY: 27 }
       : { width: 44, height: 44, offsetY: 10 };
   }
-  if (object.type === "town") return { width: 82, height: 82, offsetY: 20 };
+  if (object.type === "town") return { width: 152, height: 114, offsetY: 16 };
   if (object.type === "building") return { width: 52, height: 52, offsetY: 6 };
   if (object.type === "adventure_building") return object.buildingType === "stargate"
     ? { width: 58, height: 58, offsetY: 6 }

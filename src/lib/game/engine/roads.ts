@@ -86,6 +86,7 @@ function findForcedRoadPath(
     for (const n of neighbors) {
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const tile = tiles[n.y][n.x];
+      if (isTownFootprint(tile)) continue;
       const waterCost = tile.terrain === TerrainType.WATER ? 4 : 0;
       const wallCost = tile.object?.type === "wall" ? 8 : 0;
       const blockingDecorCost = tile.decor?.blocking ? 4 : 0;
@@ -175,6 +176,10 @@ function isLandForBridge(tile: MapTile | undefined): boolean {
   return Boolean(tile && tile.terrain !== TerrainType.WATER && tile.isPassable);
 }
 
+function isTownFootprint(tile: MapTile | undefined): boolean {
+  return tile?.object?.type === "town_footprint";
+}
+
 export function paintRoad(
   tiles: MapTile[][],
   path: Position[],
@@ -182,6 +187,7 @@ export function paintRoad(
 ): void {
   for (const p of path) {
     const tile = tiles[p.y][p.x];
+    if (isTownFootprint(tile)) continue;
     if (tile.object?.type === "wall") tile.object = undefined;
     if (tile.decor?.blocking) tile.decor = undefined;
     tile.isPassable = true;

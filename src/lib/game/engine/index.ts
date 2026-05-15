@@ -63,7 +63,13 @@ export function effectiveMovementCost(tile: MapTile): number {
 }
 
 export function isTileTraversable(tile: MapTile | undefined): boolean {
-  return Boolean(tile && tile.isPassable && tile.object?.type !== "wall" && !tile.decor?.blocking);
+  return Boolean(
+    tile &&
+    tile.isPassable &&
+    tile.object?.type !== "wall" &&
+    tile.object?.type !== "town_footprint" &&
+    !tile.decor?.blocking
+  );
 }
 
 function getAdventureNeighbors(pos: Position): Position[] {
@@ -150,7 +156,7 @@ export function getDailyAdventureMovement(heroArmies: Pick<UnitStack, "unitType"
 export function normalizeMapMovement(map: GameMap): GameMap {
   for (const row of map.tiles) {
     for (const tile of row) {
-      const blockedByObject = tile.object?.type === "wall";
+      const blockedByObject = tile.object?.type === "wall" || tile.object?.type === "town_footprint";
       const blockedByDecor = tile.decor?.blocking === true;
       tile.isPassable = isPassable(tile.terrain) && !blockedByObject && !blockedByDecor;
       tile.movementCost = tile.isPassable ? getMovementCost(tile.terrain) : 999;

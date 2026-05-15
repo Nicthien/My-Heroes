@@ -17,6 +17,7 @@ interface MapStats {
   roads: number;
   bridges: number;
   towns: number;
+  townFootprints: number;
   buildings: number;
   resources: number;
   adventureBuildings: number;
@@ -33,6 +34,12 @@ const seeds = Array.from({ length: samplesPerTemplate }, (_, index) => `RMG${Str
 
 const issues: ValidationIssue[] = [];
 const summaries: string[] = [];
+const TOWN_FOOTPRINT_OFFSETS = [
+  { x: -1, y: -2 },
+  { x: 0, y: -2 },
+  { x: -1, y: -1 },
+  { x: 0, y: -1 },
+] as const;
 
 for (const playerCount of playerCounts) {
   const templates = listTemplatesForPlayers(playerCount);
@@ -142,6 +149,31 @@ function validateMap(
       if (tile.object?.type === "town" && !connected.has(`${tile.x},${tile.y}`)) {
         addIssue("warning", templateId, seed, playerCount, size, `town ${tile.object.id} is not connected to player 1`);
       }
+      if (tile.object?.type === "town") {
+        const key = `${tile.x},${tile.y}`;
+        if (!tile.isPassable) {
+          addIssue("error", templateId, seed, playerCount, size, `town door ${tile.object.id} is not passable at ${tile.x},${tile.y}`);
+        }
+        if (!tile.road) {
+          addIssue("error", templateId, seed, playerCount, size, `town door ${tile.object.id} has no south road at ${tile.x},${tile.y}`);
+        } else if (!connectedRoads.has(key)) {
+          addIssue("error", templateId, seed, playerCount, size, `town door ${tile.object.id} road is not connected at ${tile.x},${tile.y}`);
+        }
+        for (const footprint of getTownFootprintTiles(map, tile.x, tile.y)) {
+          if (footprint?.object?.type !== "town_footprint" || footprint.object.targetId !== tile.object.id) {
+            addIssue("error", templateId, seed, playerCount, size, `town ${tile.object.id} is missing a 2x2 footprint near ${tile.x},${tile.y}`);
+            break;
+          }
+        }
+      }
+      if (tile.object?.type === "town_footprint") {
+        if (tile.isPassable) {
+          addIssue("error", templateId, seed, playerCount, size, `town footprint ${tile.object.id} is passable at ${tile.x},${tile.y}`);
+        }
+        if (tile.road) {
+          addIssue("error", templateId, seed, playerCount, size, `road crosses town footprint ${tile.object.id} at ${tile.x},${tile.y}`);
+        }
+      }
       if (tile.object?.type === "building") {
         const key = `${tile.x},${tile.y}`;
         if (!tile.road) {
@@ -161,7 +193,7 @@ function validateMap(
       if (tile.object?.type === "wall" && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `wall placed on water at ${tile.x},${tile.y}`);
       }
-      if ((tile.object?.type === "town" || tile.object?.type === "building") && tile.terrain === TerrainType.WATER) {
+      if ((tile.object?.type === "town" || tile.object?.type === "town_footprint" || tile.object?.type === "building") && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} placed on water at ${tile.x},${tile.y}`);
       }
     }
@@ -175,6 +207,7 @@ function collectStats(map: GameMap): MapStats {
     roads: 0,
     bridges: 0,
     towns: 0,
+    townFootprints: 0,
     buildings: 0,
     resources: 0,
     adventureBuildings: 0,
@@ -194,6 +227,7 @@ function collectStats(map: GameMap): MapStats {
       if (tile.decor) stats.decor++;
       if (tile.decor?.blocking) stats.blockingDecor++;
       if (tile.object?.type === "town") stats.towns++;
+      if (tile.object?.type === "town_footprint") stats.townFootprints++;
       if (tile.object?.type === "building") stats.buildings++;
       if (tile.object?.type === "resource") stats.resources++;
       if (tile.object?.type === "adventure_building") stats.adventureBuildings++;
@@ -202,6 +236,10 @@ function collectStats(map: GameMap): MapStats {
   }
 
   return stats;
+}
+
+function getTownFootprintTiles(map: GameMap, doorX: number, doorY: number) {
+  return TOWN_FOOTPRINT_OFFSETS.map((offset) => map.tiles[doorY + offset.y]?.[doorX + offset.x]);
 }
 
 function floodReachable(map: GameMap, start: { x: number; y: number }): Set<string> {

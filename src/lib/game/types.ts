@@ -444,6 +444,7 @@ export interface MapObject {
     | "combat"
     | "wall"
     | "gate"
+    | "town_footprint"
     | "adventure_building";
   id: string;
   subtype?: string;

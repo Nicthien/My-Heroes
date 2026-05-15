@@ -12,6 +12,13 @@ import { RNG, randInt, shuffle, weightedPick } from "./rng";
 import { Chokepoint } from "./connections";
 import { GUARD_MULTIPLIER, MONSTER_STRENGTH_MULTIPLIER } from "./template";
 
+const TOWN_FOOTPRINT_OFFSETS = [
+  { x: -1, y: -2 },
+  { x: 0, y: -2 },
+  { x: -1, y: -1 },
+  { x: 0, y: -1 },
+] as const;
+
 export interface PlacementContext {
   tiles: MapTile[][];
   zoneGrid: ZoneGrid;
@@ -54,7 +61,7 @@ function hasMajorObjectNearby(
       const ny = y + dy;
       if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) continue;
       const t = ctx.tiles[ny][nx];
-      if (t.object?.type === "building" || t.object?.type === "town") return true;
+      if (t.object?.type === "building" || t.object?.type === "town" || t.object?.type === "town_footprint") return true;
     }
   }
   return false;
@@ -122,10 +129,7 @@ export function placeTownInZone(
   const meta = ctx.zoneGrid.meta[zoneId];
   // Trouver tile passable au plus près du centre
   const candidates = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
-    .filter((p) => {
-      const tile = ctx.tiles[p.y][p.x];
-      return tile.isPassable && tile.terrain !== TerrainType.WATER && !tile.object;
-    })
+    .filter((p) => canPlaceTownAtDoor(ctx, zoneId, p.x, p.y))
     .sort(
       (a, b) =>
         (a.x - meta.centerX) ** 2 +
@@ -135,18 +139,65 @@ export function placeTownInZone(
   if (candidates.length === 0) return null;
   const c = candidates[0];
   const tile = ctx.tiles[c.y][c.x];
+  const townId = isNeutral
+    ? `neutral-town-${meta.templateZoneId}-${c.x}-${c.y}`
+    : `player-town-${ownerIndex}-${c.x}-${c.y}`;
+
+  for (const [index, offset] of TOWN_FOOTPRINT_OFFSETS.entries()) {
+    const footprint = ctx.tiles[c.y + offset.y][c.x + offset.x];
+    footprint.terrain = downgradeWildTerrain(footprint.terrain);
+    footprint.movementCost = 999;
+    footprint.elevation = 0;
+    footprint.isPassable = false;
+    footprint.object = {
+      type: "town_footprint",
+      id: `${townId}-footprint-${index}`,
+      subtype: isNeutral ? "neutral" : `player-${ownerIndex}`,
+      targetId: townId,
+    };
+  }
+
   // Force tile passable (mais on n'a déjà gardé que les passable)
   tile.terrain = downgradeWildTerrain(tile.terrain);
   tile.movementCost = 100;
   tile.elevation = 0;
+  tile.isPassable = true;
   tile.object = {
     type: "town",
-    id: isNeutral
-      ? `neutral-town-${meta.templateZoneId}-${c.x}-${c.y}`
-      : `player-town-${ownerIndex}-${c.x}-${c.y}`,
+    id: townId,
     subtype: isNeutral ? "neutral" : `player-${ownerIndex}`,
   };
   return tile;
+}
+
+function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y: number): boolean {
+  const door = ctx.tiles[y]?.[x];
+  if (!isTownDoorTileFree(door)) return false;
+
+  for (const offset of TOWN_FOOTPRINT_OFFSETS) {
+    const nx = x + offset.x;
+    const ny = y + offset.y;
+    if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) return false;
+    if (ctx.zoneGrid.tilesZone[ny][nx] !== zoneId) return false;
+    if (!isTownFootprintTileFree(ctx.tiles[ny][nx])) return false;
+  }
+
+  return true;
+}
+
+function isTownDoorTileFree(tile: MapTile | undefined): tile is MapTile {
+  return Boolean(tile && tile.isPassable && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor);
+}
+
+function isTownFootprintTileFree(tile: MapTile | undefined): tile is MapTile {
+  return Boolean(
+    tile &&
+    tile.isPassable &&
+    tile.terrain !== TerrainType.WATER &&
+    tile.terrain !== TerrainType.LAVA &&
+    !tile.object &&
+    !tile.decor
+  );
 }
 
 function downgradeWildTerrain(t: TerrainType): TerrainType {

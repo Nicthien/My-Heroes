@@ -5,7 +5,7 @@ import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, 
 import { UNIT_RULES } from "@/lib/game/units";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
+import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, UNIT_SPRITES, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 
 const TERRAIN_TOP: Record<TerrainType, number> = {
   grass: 0x6dbf58,
@@ -182,6 +182,10 @@ class PhaserMapScene extends Phaser.Scene {
         frameWidth: sheet.frameWidth,
         frameHeight: sheet.frameHeight,
       });
+    }
+    for (const path of Object.values(UNIT_SPRITES)) {
+      if (path.endsWith(".svg")) this.load.svg(path, path);
+      else this.load.image(path, path);
     }
   }
 

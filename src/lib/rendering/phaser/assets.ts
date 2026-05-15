@@ -1,7 +1,40 @@
 import { UnitType } from "@/lib/game/types";
 
+const UNIT_SPRITE_VERSION = "static-unit-v2";
+
+export const CONVERTED_UNIT_WEBP_TYPES = [
+  UnitType.PIKEMAN,
+  UnitType.HALBERDIER,
+  UnitType.ARCHER,
+  UnitType.MARKSMAN,
+  UnitType.GRIFFIN,
+  UnitType.ROYAL_GRIFFIN,
+  UnitType.SWORDSMAN,
+  UnitType.CRUSADER,
+  UnitType.MONK,
+  UnitType.ZEALOT,
+  UnitType.CAVALIER,
+  UnitType.CHAMPION,
+  UnitType.ANGEL,
+  UnitType.ARCHANGEL,
+] as const;
+
+const CONVERTED_UNIT_WEBP_SET = new Set<UnitType>(CONVERTED_UNIT_WEBP_TYPES);
+
+export function hasUnitWebp(unitType: UnitType | string | undefined): unitType is UnitType {
+  return CONVERTED_UNIT_WEBP_SET.has(unitType as UnitType);
+}
+
+export function getUnitSpritePath(unitType: UnitType | string | undefined) {
+  const safeUnitType = (unitType as UnitType | undefined) ?? UnitType.PIKEMAN;
+  if (hasUnitWebp(safeUnitType)) {
+    return `/assets/sprites/units/${safeUnitType}.webp?v=${UNIT_SPRITE_VERSION}`;
+  }
+  return `/assets/sprites/units/${safeUnitType}.svg`;
+}
+
 export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) => {
-  sprites[unitType] = `/assets/sprites/units/${unitType}.svg`;
+  sprites[unitType] = getUnitSpritePath(unitType);
   return sprites;
 }, {} as Record<UnitType, string>);
 
@@ -150,13 +183,12 @@ export function getTownSpritePath(faction: string) {
 }
 
 export function getMonsterSpritePath(unitType: string | undefined) {
-  return UNIT_SPRITES[unitType as UnitType] ?? UNIT_SPRITES[UnitType.PIKEMAN];
+  return getUnitSpritePath(unitType);
 }
 
 export const MAP_SPRITE_PATHS = Array.from(new Set([
   MAP_SPRITES.town,
   ...Object.values(MAP_SPRITES.towns),
-  ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),
   ...Object.values(MAP_SPRITES.buildings),
   ...Object.values(MAP_SPRITES.adventureBuildings),

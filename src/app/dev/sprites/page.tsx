@@ -6,8 +6,9 @@ import Image from "next/image";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
-import { BOAT_SPRITESHEETS, HERO_DIRECTIONS, HERO_SPRITESHEETS, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
+import { BOAT_SPRITESHEETS, CONVERTED_UNIT_WEBP_TYPES, HERO_DIRECTIONS, HERO_SPRITESHEETS, getUnitSpritePath, hasUnitWebp, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 import {
+  UnitSpriteView,
   type UnitModelKind,
   UnitSilhouette,
   getUnitModel,
@@ -88,6 +89,7 @@ function mockUnit(unitType: UnitType, side: "attacker" | "defender"): CombatBoar
     hasRetaliated: false,
     defended: false,
     waited: false,
+    facing: side === "attacker" ? "e" : "w",
   };
 }
 
@@ -101,6 +103,7 @@ const BOAT_SHEET_ENTRIES = Object.values(BOAT_SPRITESHEETS);
 type GalleryTab = "units" | "spritesheets" | "svg" | "webp";
 
 const UNIT_COUNT = FACTION_GROUPS.reduce((total, group) => total + group.units.length, 0);
+const CONVERTED_UNIT_COUNT = CONVERTED_UNIT_WEBP_TYPES.length;
 const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length + BOAT_SHEET_ENTRIES.length;
 const PUBLIC_SVGS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".svg"));
 const PUBLIC_WEBPS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".webp"));
@@ -121,23 +124,31 @@ function UnitCard({ unitType }: { unitType: UnitType }) {
   const unit = mockUnit(unitType, "attacker");
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
-  const svgPath = `/assets/sprites/units/${unitType}.svg`;
+  const assetPath = getUnitSpritePath(unitType);
+  const converted = hasUnitWebp(unitType);
 
   return (
     <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset]">
-      <div className="relative grid h-[148px] w-[112px] place-items-center">
-        <div className="h-[122px] w-[92px]">
-          <UnitSilhouette kind={model} palette={palette} ranged={rule.ranged ?? false} unitType={unitType} />
+      <div className="relative grid h-[132px] w-[132px] place-items-center rounded bg-stone-950/45">
+        <div className="h-[118px] w-[118px]">
+          <UnitSpriteView
+            unitType={unitType}
+            className="h-full w-full"
+            fallback={<UnitSilhouette kind={model} palette={palette} ranged={rule.ranged ?? false} unitType={unitType} />}
+          />
         </div>
       </div>
       <div className="text-center">
         <div className="text-sm font-black text-amber-200">{rule.label}</div>
         <div className="text-[10px] uppercase tracking-wider text-stone-400">{MODEL_LABELS[model]}</div>
+        <div className={`mt-1 text-[10px] font-bold uppercase tracking-wider ${converted ? "text-emerald-300" : "text-stone-500"}`}>
+          {converted ? "WebP statique" : "SVG legacy"}
+        </div>
         <div className="mt-1 text-[10px] text-stone-500">
           Att/Déf {rule.attack}/{rule.defense} · Dégâts {rule.minDamage}-{rule.maxDamage}
         </div>
         <div className="mt-1 max-w-[124px] break-all text-[10px] leading-tight text-stone-500">
-          {svgPath}
+          {assetPath}
         </div>
       </div>
     </div>
@@ -234,7 +245,7 @@ function TabButton({
   onClick,
 }: {
   active: boolean;
-  count: number;
+  count: ReactNode;
   label: string;
   onClick: () => void;
 }) {
@@ -297,7 +308,7 @@ function UnitsTab() {
           count={group.units.length}
           defaultOpen={index < 2}
           title={group.label}
-          subtitle="Unités SVG"
+          subtitle="Une image par unité : WebP statique si convertie, SVG legacy sinon"
         >
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7">
             {group.units.map((unitType) => (
@@ -362,11 +373,11 @@ export default function SpritesGalleryPage() {
           <div>
             <h1 className="text-3xl font-black text-amber-200">Galerie des sprites</h1>
             <p className="mt-1 text-sm text-stone-400">
-              Inventaire visuel : unités SVG, spritesheets et fichiers statiques de <code>public/</code>.
+              Inventaire visuel : unités statiques, spritesheets héros/bateaux et fichiers de <code>public/</code>.
             </p>
           </div>
           <nav aria-label="Types de ressources" className="flex flex-wrap gap-2">
-            <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités SVG" onClick={() => setActiveTab("units")} />
+            <TabButton active={activeTab === "units"} count={`${CONVERTED_UNIT_COUNT}/${UNIT_COUNT}`} label="Unités" onClick={() => setActiveTab("units")} />
             <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
             <TabButton active={activeTab === "svg"} count={PUBLIC_SVGS.length} label="SVG carte" onClick={() => setActiveTab("svg")} />
             <TabButton active={activeTab === "webp"} count={PUBLIC_WEBPS.length} label="WebP carte" onClick={() => setActiveTab("webp")} />

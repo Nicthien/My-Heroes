@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { COMBAT_COLS, COMBAT_ROWS, getHexDistance } from "@/lib/game/combat/persistent";
+import { getUnitSpritePath } from "@/lib/rendering/phaser/assets";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
@@ -244,7 +246,6 @@ function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCo
   const occupied = useMemo(() => new Set(units.map((unit) => `${unit.q},${unit.r}`)), [units]);
   const blocked = useMemo(() => new Set(terrain.map((feature) => `${feature.q},${feature.r}`)), [terrain]);
   const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
-
   const cells = [];
   for (let r = 0; r < COMBAT_ROWS; r++) {
     for (let q = 0; q < COMBAT_COLS; q++) {
@@ -298,7 +299,15 @@ function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCo
             active={combat.currentUnitId === unit?.id}
           />
           {feature && <TerrainModel feature={feature} />}
-          {unit && <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} lifted depthScale={depthScale} />}
+          {unit && (
+            <UnitModel
+              unit={unit}
+              active={combat.currentUnitId === unit.id}
+              attackable={attackable}
+              lifted
+              depthScale={depthScale}
+            />
+          )}
         </button>
       );
     }
@@ -462,7 +471,6 @@ function UnitModel({
 }) {
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
-  const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
 
   return (
     <span
@@ -478,9 +486,13 @@ function UnitModel({
     >
       <span
         className="absolute left-1/2 top-0 block h-[92px] w-[70px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
-        style={{ transform: `translateX(-50%) ${sideFlip}` }}
+        style={{ transform: "translateX(-50%)" }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+        <UnitSpriteView
+          unitType={unit.unitType}
+          className="h-full w-full"
+          fallback={<UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />}
+        />
       </span>
       <span
         className={`absolute left-1/2 top-[78px] grid h-5 min-w-8 -translate-x-1/2 place-items-center rounded-sm border px-1 text-center text-[10px] font-black leading-none shadow-lg ${unit.side === "attacker" ? "border-blue-200/70 bg-blue-950/95 text-blue-50" : "border-red-200/70 bg-red-950/95 text-red-50"}`}
@@ -492,6 +504,35 @@ function UnitModel({
           {unit.shots}
         </span>
       )}
+    </span>
+  );
+}
+
+export function UnitSpriteView({
+  className = "",
+  fallback,
+  unitType,
+}: {
+  className?: string;
+  fallback?: ReactNode;
+  unitType: string;
+}) {
+  const path = getUnitSpritePath(unitType);
+  const [failed, setFailed] = useState(false);
+
+  if (failed && fallback) return <>{fallback}</>;
+
+  return (
+    <span className={`relative block overflow-hidden ${className}`} aria-hidden="true">
+      <Image
+        src={path}
+        alt=""
+        fill
+        sizes="96px"
+        className="object-contain"
+        unoptimized
+        onError={() => setFailed(true)}
+      />
     </span>
   );
 }
@@ -1428,15 +1469,18 @@ function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
 function UnitPortrait({ unit }: { unit: CombatBoardUnit }) {
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
-  const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
 
   return (
     <div className="relative h-full w-full">
       <span
         className="absolute left-1/2 top-1/2 block h-[92px] w-[70px] drop-shadow-[0_8px_8px_rgba(0,0,0,0.55)]"
-        style={{ transform: `translate(-50%, -50%) scale(0.85) ${sideFlip}`, transformOrigin: "50% 50%" }}
+        style={{ transform: "translate(-50%, -50%) scale(0.85)", transformOrigin: "50% 50%" }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+        <UnitSpriteView
+          unitType={unit.unitType}
+          className="h-full w-full"
+          fallback={<UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />}
+        />
       </span>
     </div>
   );

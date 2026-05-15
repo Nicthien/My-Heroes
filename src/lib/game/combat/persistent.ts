@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
+import { CombatBoardUnit, CombatSide, CombatSummary, CombatTerrainFeature, CombatUnitFacing, CombatVisualEvent, Hero, UnitStack, UnitType } from "../types";
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 
@@ -69,6 +69,7 @@ function addUnits(
       hasRetaliated: false,
       defended: false,
       waited: false,
+      facing: side === "attacker" ? "e" : "w",
     });
   });
 }
@@ -130,10 +131,11 @@ export function executeManualCombatAction(params: {
   defenderStats: { attack: number; defense: number };
 }) {
   const log: string[] = [];
+  const visualEvents: CombatVisualEvent[] = [];
   let didAct = false;
   const units = params.units.map((unit) => ({ ...unit }));
   const actor = units.find((unit) => unit.id === params.currentUnitId);
-  if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
+  if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, visualEvents, result: null };
 
   if (params.action.type === "MOVE") {
     const q = Number(params.action.q);
@@ -141,9 +143,12 @@ export function executeManualCombatAction(params: {
     if (isInside(q, r) && !isTerrainBlocked(q, r, params.terrain) && !units.some((unit) => unit.q === q && unit.r === r)) {
       const path = findPath(actor, { q, r }, units, params.terrain ?? []);
       if (path.length > 1 && path.length - 1 <= actor.speed) {
+        const from = { q: actor.q, r: actor.r };
+        actor.facing = getCombatFacing(from, { q, r }, actor.facing);
         actor.q = q;
         actor.r = r;
         didAct = true;
+        visualEvents.push(createVisualEvent("move", actor.id, { from, to: { q, r }, facing: actor.facing }));
         log.push(`${getUnitRule(actor.unitType).label} se déplace.`);
       }
     }
@@ -154,12 +159,16 @@ export function executeManualCombatAction(params: {
       const canShoot = params.action.type === "SHOOT" && actor.ranged && actor.shots > 0;
       if (distance <= 1 || canShoot) {
         if (canShoot) actor.shots = Math.max(0, actor.shots - 1);
+        actor.facing = getCombatFacing(actor, target, actor.facing);
+        visualEvents.push(createVisualEvent(canShoot ? "shoot" : "attack", actor.id, { targetUnitId: target.id, facing: actor.facing }));
         applyDamage(actor, target, {
           attack: getStats(actor.side, params).attack,
           defense: getStats(target.side, params).defense,
         }, log);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
+          target.facing = getCombatFacing(target, actor, target.facing);
+          visualEvents.push(createVisualEvent("retaliate", target.id, { targetUnitId: actor.id, facing: target.facing }));
           applyDamage(target, actor, {
             attack: getStats(target.side, params).attack,
             defense: getStats(actor.side, params).defense,
@@ -171,10 +180,12 @@ export function executeManualCombatAction(params: {
   } else if (params.action.type === "DEFEND") {
     actor.defended = true;
     didAct = true;
+    visualEvents.push(createVisualEvent("defend", actor.id, { facing: actor.facing }));
     log.push(`${getUnitRule(actor.unitType).label} se défend.`);
   } else if (params.action.type === "WAIT") {
     actor.waited = true;
     didAct = true;
+    visualEvents.push(createVisualEvent("wait", actor.id, { facing: actor.facing }));
     log.push(`${getUnitRule(actor.unitType).label} attend.`);
   }
 
@@ -186,13 +197,14 @@ export function executeManualCombatAction(params: {
       currentPlayerId: actor.ownerPlayerId,
       round: params.round,
       log: ["Action impossible."],
+      visualEvents: [],
       result: null,
     };
   }
 
   const livingUnits = units.filter((unit) => unit.count > 0);
   const result = getCombatResult(livingUnits);
-  if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result };
+  if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, visualEvents, result };
 
   const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round);
   return {
@@ -202,8 +214,38 @@ export function executeManualCombatAction(params: {
     currentPlayerId: livingUnits.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
     round: next.round,
     log,
+    visualEvents,
     result: null,
   };
+}
+
+function createVisualEvent(
+  type: CombatVisualEvent["type"],
+  unitId: string,
+  details: Omit<CombatVisualEvent, "id" | "type" | "unitId" | "createdAt">
+): CombatVisualEvent {
+  return {
+    id: `${Date.now()}-${unitId}-${type}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    unitId,
+    createdAt: Date.now(),
+    ...details,
+  };
+}
+
+function getCombatFacing(
+  from: { q: number; r: number },
+  to: { q: number; r: number },
+  fallback: CombatUnitFacing = "e"
+): CombatUnitFacing {
+  const fromX = from.q + (from.r % 2) * 0.5;
+  const toX = to.q + (to.r % 2) * 0.5;
+  const dx = toX - fromX;
+  const dr = to.r - from.r;
+  if (Math.abs(dx) >= Math.abs(dr) * 1.15) return dx >= 0 ? "e" : "w";
+  if (dr < 0) return dx >= 0 ? "ne" : "nw";
+  if (dr > 0) return dx >= 0 ? "se" : "sw";
+  return fallback;
 }
 
 function applyDamage(attacker: CombatBoardUnit, defender: CombatBoardUnit, stats: { attack: number; defense: number }, log: string[], retaliation = false) {

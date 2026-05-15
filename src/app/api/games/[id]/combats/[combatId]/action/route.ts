@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { executeManualCombatAction, getHexDistance, getHexNeighbors, isTerrainBlocked } from "@/lib/game/combat/persistent";
-import { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, CombatVisualEvent } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 
@@ -53,7 +53,7 @@ export async function POST(
     : { data: null, error: null };
   if (defenderError) return NextResponse.json({ error: defenderError.message }, { status: 500 });
 
-  const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+  const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[]; visualEvents?: CombatVisualEvent[] };
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
   if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayer.id) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
@@ -82,7 +82,7 @@ export async function POST(
   const { data, error } = await supabase
     .from("combats")
     .update({
-      board_state: { ...boardState, units: execution.units },
+      board_state: { ...boardState, units: execution.units, visualEvents: execution.visualEvents },
       turn_queue: execution.turnQueue,
       current_unit_id: execution.currentUnitId,
       current_player_id: result ? null : execution.currentPlayerId,
@@ -120,6 +120,7 @@ function executeActionThenNeutralTurns(params: {
   let currentPlayerId = units.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
   let result: "attacker" | "defender" | null = null;
   const log: string[] = [];
+  const visualEvents: CombatVisualEvent[] = [];
   const maxSteps = 30;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -153,6 +154,7 @@ function executeActionThenNeutralTurns(params: {
     currentPlayerId = execution.currentPlayerId;
     result = execution.result;
     log.push(...execution.log);
+    visualEvents.push(...execution.visualEvents);
 
     if (result) break;
 
@@ -163,7 +165,7 @@ function executeActionThenNeutralTurns(params: {
     }
   }
 
-  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log };
+  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log, visualEvents };
 }
 
 function chooseNeutralAction(

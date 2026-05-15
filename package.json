@@ -14,7 +14,10 @@
     "generate:hero-sprites": "node scripts/generate-hero-spritesheets.mjs",
     "generate:boat-sprites": "node scripts/generate-boat-spritesheet.mjs",
     "generate:town-sprites": "node scripts/generate-town-sprites.mjs",
-    "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:boat-sprites && npm run generate:town-sprites",
+    "generate:unit-ai-prompts": "node scripts/generate-unit-ai-prompts.mjs",
+    "generate:unit-sprites": "node scripts/generate-unit-spritesheets.mjs",
+    "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:boat-sprites && npm run generate:town-sprites && npm run generate:unit-sprites",
+    "validate:unit-sprites": "node scripts/validate-unit-spritesheets.mjs",
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs"

@@ -457,6 +457,19 @@ export interface MapObject {
 export type CombatMode = "AUTO" | "MANUAL";
 export type PersistentCombatStatus = "ACTIVE" | "RESOLVED";
 export type CombatSide = "attacker" | "defender";
+export type CombatUnitFacing = "e" | "ne" | "nw" | "w" | "sw" | "se";
+export type CombatVisualEventType = "move" | "attack" | "shoot" | "retaliate" | "defend" | "wait";
+
+export interface CombatVisualEvent {
+  id: string;
+  type: CombatVisualEventType;
+  unitId: string;
+  targetUnitId?: string;
+  from?: { q: number; r: number };
+  to?: { q: number; r: number };
+  facing?: CombatUnitFacing;
+  createdAt: number;
+}
 
 export interface CombatBoardUnit extends UnitStack {
   side: CombatSide;
@@ -474,6 +487,7 @@ export interface CombatBoardUnit extends UnitStack {
   hasRetaliated: boolean;
   defended: boolean;
   waited: boolean;
+  facing?: CombatUnitFacing;
 }
 
 export type CombatTerrainType = "rock" | "water";
@@ -505,7 +519,7 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[]; visualEvents?: CombatVisualEvent[] };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];

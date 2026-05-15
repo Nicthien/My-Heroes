@@ -21,6 +21,7 @@ import {
 } from "@/lib/game/economy";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import {
+  UnitSpriteView,
   UnitSilhouette,
   getUnitModel,
   getUnitPalette,
@@ -180,6 +181,7 @@ function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: Un
     hasRetaliated: false,
     defended: false,
     waited: false,
+    facing: side === "attacker" ? "e" : "w",
   };
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
@@ -190,9 +192,12 @@ function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: Un
     <span className={`relative grid shrink-0 place-items-center overflow-hidden rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black shadow-inner shadow-black/50 ${frameSize}`}>
       <span
         className={`block drop-shadow-[0_5px_5px_rgba(0,0,0,0.55)] ${spriteSize}`}
-        style={{ transform: side === "defender" ? "scaleX(-1)" : undefined }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} />
+        <UnitSpriteView
+          unitType={unitType}
+          className="h-full w-full"
+          fallback={<UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unitType} />}
+        />
       </span>
     </span>
   );

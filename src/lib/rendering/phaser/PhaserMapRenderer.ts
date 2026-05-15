@@ -1801,9 +1801,11 @@ class PhaserMapScene extends Phaser.Scene {
   ) {
     const bannerColor = parseHexColor(color) ?? 0x808080;
     const graphics = this.add.graphics();
-    graphics.lineStyle(2, 0x222222, 1);
+    const poleWidth = width <= 10 ? 1.35 : 2;
+    const poleExtension = width <= 10 ? height + 13 : 0;
+    graphics.lineStyle(poleWidth, 0x222222, 1);
     graphics.beginPath();
-    graphics.moveTo(x, y);
+    graphics.moveTo(x, y + poleExtension);
     graphics.lineTo(x, y - height - 8);
     graphics.strokePath();
 
@@ -2493,8 +2495,8 @@ function getHeroTravelMetrics(object: MapObjectData) {
 }
 
 function getHeroBannerMetrics(object: MapObjectData) {
-  if (object.inTown) return { xOffset: 8, yOffset: 1, width: 10, height: 7 };
-  return { xOffset: 12, yOffset: -2, width: 12, height: 9 };
+  if (object.inTown) return { xOffset: 5, yOffset: 9, width: 8, height: 6 };
+  return { xOffset: 7, yOffset: 12, width: 10, height: 7 };
 }
 
 function getHeroDirection(from: Position, to: Position, fallback: HeroDirection): HeroDirection {

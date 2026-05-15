@@ -25,6 +25,7 @@ const FACTIONS = [
   { faction: "dungeon", clothHue: 266, clothSat: 1.06, clothLight: 0.78, accentHue: 188, horseHue: 270, horseSat: 0.38, horseLight: 0.66 },
   { faction: "stronghold", clothHue: 27, clothSat: 1.18, clothLight: 0.82, accentHue: 45, horseHue: 22, horseSat: 1, horseLight: 0.78 },
   { faction: "fortress", clothHue: 88, clothSat: 0.74, clothLight: 0.72, accentHue: 82, horseHue: 92, horseSat: 0.38, horseLight: 0.68 },
+  { faction: "conflux", clothHue: 188, clothSat: 0.92, clothLight: 1.16, accentHue: 48, horseHue: 258, horseSat: 0.42, horseLight: 1.08 },
 ];
 
 const IDLE_MOTION = [
@@ -334,25 +335,98 @@ async function recolorFrame(frame, spec) {
     if (data[i + 3] === 0) continue;
 
     const [h, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-    if (isBlueCloth(h, s, l)) {
-      const [r, g, b] = hslToRgb(spec.clothHue, Math.min(1, s * spec.clothSat), clamp(l * spec.clothLight, 0.05, 0.88));
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-    } else if (isGoldTrim(h, s, l)) {
-      const [r, g, b] = hslToRgb(spec.accentHue, Math.min(1, s * 0.95), clamp(l * 1.06, 0.1, 0.9));
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-    } else if (isHorse(h, s, l)) {
-      const [r, g, b] = hslToRgb(spec.horseHue, Math.min(1, s * spec.horseSat), clamp(l * spec.horseLight, 0.06, 0.72));
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
+    const [r, g, b] = stylizePixel(h, s, l, spec);
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+  }
+
+  const stylized = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+  const outlined = await addSpriteOutline(stylized);
+  return addGroundShadow(outlined);
+}
+
+function stylizePixel(h, s, l, spec) {
+  if (l < 0.07) return [17, 22, 27];
+  if (isBlueCloth(h, s, l)) return hslToRgb(spec.clothHue, 0.72, toonLight(l, 0.17, 0.31, 0.46, 0.62) * spec.clothLight);
+  if (isHorse(h, s, l)) return hslToRgb(spec.horseHue, 0.54 * spec.horseSat, toonLight(l, 0.17, 0.27, 0.39, 0.52) * spec.horseLight);
+  if (isGoldTrim(h, s, l)) return hslToRgb(spec.accentHue, 0.66, toonLight(l, 0.28, 0.4, 0.54, 0.68));
+  if (isSkin(h, s, l)) return hslToRgb(28, 0.58, toonLight(l, 0.38, 0.51, 0.64, 0.78));
+  if (isMetal(h, s, l)) return hslToRgb(212, 0.18, toonLight(l, 0.34, 0.48, 0.64, 0.82));
+  if (s < 0.18) return hslToRgb(h, 0.12, toonLight(l, 0.18, 0.3, 0.43, 0.6));
+  return hslToRgb(h, Math.min(0.76, s * 0.82), toonLight(l, 0.18, 0.32, 0.48, 0.64));
+}
+
+function toonLight(l, shadow, mid, light, highlight) {
+  if (l < 0.24) return shadow;
+  if (l < 0.48) return mid;
+  if (l < 0.72) return light;
+  return highlight;
+}
+
+async function addSpriteOutline(frame) {
+  const { data, info } = await sharp(frame).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const outline = Buffer.alloc(info.width * info.height * 4);
+  const radius = 1;
+
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const index = (y * info.width + x) * 4;
+      if (data[index + 3] > 32) continue;
+
+      let nearSprite = false;
+      for (let oy = -radius; oy <= radius && !nearSprite; oy++) {
+        for (let ox = -radius; ox <= radius; ox++) {
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || nx >= info.width || ny < 0 || ny >= info.height) continue;
+          if (data[(ny * info.width + nx) * 4 + 3] > 64) {
+            nearSprite = true;
+            break;
+          }
+        }
+      }
+
+      if (!nearSprite) continue;
+      outline[index] = 20;
+      outline[index + 1] = 24;
+      outline[index + 2] = 30;
+      outline[index + 3] = 210;
     }
   }
 
-  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+  return sharp(outline, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .composite([{ input: frame, left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+}
+
+async function addGroundShadow(frame) {
+  const { info } = await sharp(frame).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const shadow = Buffer.alloc(info.width * info.height * 4);
+  const cx = Math.round(info.width / 2);
+  const cy = info.height - 8;
+  const rx = 23;
+  const ry = 6;
+
+  for (let y = cy - ry; y <= cy + ry; y++) {
+    for (let x = cx - rx; x <= cx + rx; x++) {
+      if (x < 0 || x >= info.width || y < 0 || y >= info.height) continue;
+      const distance = ((x - cx) ** 2) / (rx ** 2) + ((y - cy) ** 2) / (ry ** 2);
+      if (distance > 1) continue;
+      const alpha = Math.round((1 - distance) * 72);
+      const index = (y * info.width + x) * 4;
+      shadow[index] = 0;
+      shadow[index + 1] = 0;
+      shadow[index + 2] = 0;
+      shadow[index + 3] = alpha;
+    }
+  }
+
+  return sharp(shadow, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .composite([{ input: frame, left: 0, top: 0 }])
+    .png()
+    .toBuffer();
 }
 
 function isBlueCloth(h, s, l) {
@@ -360,11 +434,19 @@ function isBlueCloth(h, s, l) {
 }
 
 function isGoldTrim(h, s, l) {
-  return h >= 30 && h <= 62 && s > 0.26 && l > 0.14 && l < 0.88;
+  return h >= 38 && h <= 62 && s > 0.28 && l > 0.26 && l < 0.88;
 }
 
 function isHorse(h, s, l) {
   return h >= 12 && h <= 38 && s > 0.18 && l > 0.06 && l < 0.48;
+}
+
+function isSkin(h, s, l) {
+  return h >= 8 && h <= 42 && s > 0.18 && l >= 0.48 && l < 0.86;
+}
+
+function isMetal(h, s, l) {
+  return s < 0.24 && l >= 0.42;
 }
 
 function rgbToHsl(r, g, b) {
@@ -416,8 +498,4 @@ function hslToRgb(h, s, l) {
     Math.round((g1 + m) * 255),
     Math.round((b1 + m) * 255),
   ];
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }

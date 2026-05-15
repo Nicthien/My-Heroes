@@ -98,6 +98,7 @@ const HERO_SPRITESHEET_FACTIONS = [
   "dungeon",
   "stronghold",
   "fortress",
+  "conflux",
 ] as const;
 
 export const HERO_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, faction) => {
@@ -107,10 +108,10 @@ export const HERO_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, facti
     path: `/assets/sprites/heroes/${faction}/adventure.png`,
     frameWidth: 80,
     frameHeight: 80,
-    displayWidth: 44,
-    displayHeight: 44,
-    townDisplayWidth: 30,
-    townDisplayHeight: 30,
+    displayWidth: 52,
+    displayHeight: 52,
+    townDisplayWidth: 34,
+    townDisplayHeight: 34,
     columns: 12,
   };
   return sheets;
@@ -123,7 +124,6 @@ export function getHeroSpritePath(faction: string, onWater = false) {
 
 export function getHeroSpritesheet(faction: string, onWater = false) {
   if (onWater) return undefined;
-  if (faction === "conflux") return HERO_SPRITESHEETS.tower;
   return HERO_SPRITESHEETS[faction];
 }
 

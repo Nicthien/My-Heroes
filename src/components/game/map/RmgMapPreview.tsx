@@ -166,7 +166,9 @@ function drawPreviewRoad(
     ? { edge: "#4a2f18", fill: "#b8793d", highlight: "rgba(255,224,176,0.55)", grit: "rgba(54,32,17,0.45)" }
     : road === "paved"
       ? { edge: "#4d4237", fill: "#d8c9ae", highlight: "rgba(255,248,226,0.5)", grit: "rgba(72,62,51,0.45)" }
-      : { edge: "#4f351d", fill: "#b9823e", highlight: "rgba(255,218,145,0.45)", grit: "rgba(61,40,21,0.5)" };
+      : road === "gravel"
+        ? { edge: "#4a4a45", fill: "#aaa396", highlight: "rgba(236,232,220,0.45)", grit: "rgba(63,61,57,0.45)" }
+        : { edge: "#4f351d", fill: "#b9823e", highlight: "rgba(255,218,145,0.45)", grit: "rgba(61,40,21,0.5)" };
   const sides = [
     { dx: 0, dy: -1, tx: 0, ty: -0.5 },
     { dx: 1, dy: 0, tx: 0.5, ty: 0 },

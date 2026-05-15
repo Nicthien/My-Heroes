@@ -71,8 +71,8 @@ function getMapObjectHoverText(object: MapObject) {
 const MIN_CAMERA_ZOOM = 0.65;
 const MAX_CAMERA_ZOOM = 1.85;
 const CAMERA_ZOOM_STEP = 1.15;
-const BOARD_BORDER_WIDTH = 42;
 const BOARD_THICKNESS = 34;
+const BOARD_LIP_EXTRA_HEIGHT = ELEVATION_SCALE;
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
 
@@ -106,6 +106,8 @@ type RenderedHeroObject = {
   animation: HeroSpriteAnimation;
   baseX: number;
   baseY: number;
+  baseDisplayWidth: number;
+  baseDisplayHeight: number;
   direction: HeroDirection;
 };
 
@@ -136,6 +138,7 @@ class PhaserMapScene extends Phaser.Scene {
   readyCallback?: () => void;
 
   private boardLayer!: Phaser.GameObjects.Container;
+  private boardLipLayer!: Phaser.GameObjects.Container;
   private mapLayer!: Phaser.GameObjects.Container;
   private decorLayer!: Phaser.GameObjects.Container;
   private mapObjectLayer!: Phaser.GameObjects.Container;
@@ -148,10 +151,12 @@ class PhaserMapScene extends Phaser.Scene {
   private hoverLabelText?: Phaser.GameObjects.Text;
   private hoverLabelKey: string | null = null;
   private visibleTiles: Set<string> | null = null;
+  private fogPlaneDepth = BASE_HEIGHT;
   private waterTiles: WaterTileEffect[] = [];
   private lavaTiles: LavaTileEffect[] = [];
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
   private renderedHeroes = new Map<string, RenderedHeroObject>();
+  private heroDirections = new Map<string, HeroDirection>();
 
   constructor() {
     super("MapScene");
@@ -172,6 +177,7 @@ class PhaserMapScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x1a1a2e);
     this.boardLayer = this.add.container(0, 0);
+    this.boardLipLayer = this.add.container(0, 0);
     this.mapLayer = this.add.container(0, 0);
     this.decorLayer = this.add.container(0, 0);
     this.mapObjectLayer = this.add.container(0, 0);
@@ -187,6 +193,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.highlightLayer.setDepth(2);
     this.decorLayer.setDepth(3);
     this.mapObjectLayer.setDepth(4);
+    this.boardLipLayer.setDepth(25);
     this.objectLayer.setDepth(10);
     this.fogLayer.setDepth(20);
     this.hoverLabelLayer.setDepth(30);
@@ -199,9 +206,11 @@ class PhaserMapScene extends Phaser.Scene {
 
   renderMap(map: GameMap) {
     this.map = map;
+    this.fogPlaneDepth = getMaxTileDepth(map);
     this.waterTiles = [];
     this.lavaTiles = [];
     this.boardLayer.removeAll(true);
+    this.boardLipLayer.removeAll(true);
     this.mapLayer.removeAll(true);
     this.decorLayer.removeAll(true);
     this.mapObjectLayer.removeAll(true);
@@ -242,8 +251,11 @@ class PhaserMapScene extends Phaser.Scene {
 
   private renderBoardFrame(map: GameMap) {
     const corners = getMapOuterCorners(map);
-    const outer = expandPolygon(corners, BOARD_BORDER_WIDTH);
-    const side = outer.map((point) => ({ x: point.x, y: point.y + BOARD_THICKNESS }));
+    const boardLift = getMaxTileDepth(map) + BOARD_LIP_EXTRA_HEIGHT;
+    const outerBase = getMapOuterCorners(map, 1);
+    const outerTop = liftPolygon(outerBase, boardLift);
+    const innerTop = liftPolygon(corners, boardLift);
+    const side = outerBase.map((point) => ({ x: point.x, y: point.y + BOARD_THICKNESS }));
 
     const shadow = this.add.graphics();
     shadow.fillStyle(0x050307, 0.32);
@@ -251,40 +263,50 @@ class PhaserMapScene extends Phaser.Scene {
     shadow.fillPath();
     this.boardLayer.add(shadow);
 
-    const base = this.add.graphics();
-    base.fillStyle(0x3a2112, 1);
-    base.lineStyle(2, 0x170b05, 0.85);
-    for (let i = 0; i < outer.length; i++) {
-      const next = (i + 1) % outer.length;
-      base.beginPath();
-      base.moveTo(outer[i].x, outer[i].y);
-      base.lineTo(outer[next].x, outer[next].y);
-      base.lineTo(side[next].x, side[next].y);
-      base.lineTo(side[i].x, side[i].y);
-      base.closePath();
-      base.fillPath();
-      base.strokePath();
+    const outerWall = this.add.graphics();
+    outerWall.fillStyle(0x3a2112, 1);
+    outerWall.lineStyle(2, 0x170b05, 0.85);
+    for (let i = 0; i < outerTop.length; i++) {
+      const next = (i + 1) % outerTop.length;
+      outerWall.beginPath();
+      outerWall.moveTo(outerTop[i].x, outerTop[i].y);
+      outerWall.lineTo(outerTop[next].x, outerTop[next].y);
+      outerWall.lineTo(side[next].x, side[next].y);
+      outerWall.lineTo(side[i].x, side[i].y);
+      outerWall.closePath();
+      outerWall.fillPath();
+      outerWall.strokePath();
     }
-    this.boardLayer.add(base);
+    this.boardLayer.add(outerWall);
+
+    const innerWall = this.add.graphics();
+    innerWall.fillStyle(0x281509, 1);
+    innerWall.lineStyle(2, 0x120803, 0.82);
+    for (let i = 0; i < innerTop.length; i++) {
+      const next = (i + 1) % innerTop.length;
+      innerWall.beginPath();
+      innerWall.moveTo(innerTop[i].x, innerTop[i].y);
+      innerWall.lineTo(innerTop[next].x, innerTop[next].y);
+      innerWall.lineTo(corners[next].x, corners[next].y);
+      innerWall.lineTo(corners[i].x, corners[i].y);
+      innerWall.closePath();
+      innerWall.fillPath();
+      innerWall.strokePath();
+    }
+    this.boardLipLayer.add(innerWall);
 
     const top = this.add.graphics();
     top.fillStyle(0x7a4a25, 1);
     top.lineStyle(3, 0x261308, 1);
-    drawPolygonPath(top, outer);
-    top.fillPath();
-    top.strokePath();
-
-    top.fillStyle(0x2a180c, 1);
-    drawPolygonPath(top, corners);
-    top.fillPath();
+    drawRingPath(top, outerTop, innerTop);
 
     top.lineStyle(2, 0xb77a3b, 0.55);
-    drawPolygonPath(top, corners);
+    drawPolygonPath(top, innerTop);
     top.strokePath();
 
-    this.drawWoodGrain(top, outer, corners);
-    this.drawCornerBolts(top, outer);
-    this.boardLayer.add(top);
+    this.drawWoodGrain(top, outerTop, innerTop);
+    this.drawCornerBolts(top, outerTop);
+    this.boardLipLayer.add(top);
   }
 
   private drawWoodGrain(graphics: Phaser.GameObjects.Graphics, outer: Position[], inner: Position[]) {
@@ -1419,6 +1441,9 @@ class PhaserMapScene extends Phaser.Scene {
 
   private renderObjects() {
     if (!this.map || !this.objectLayer) return;
+    for (const [id, hero] of this.renderedHeroes) {
+      this.heroDirections.set(id, hero.direction);
+    }
     this.objectLayer.removeAll(true);
     this.heroSpriteAnimations = [];
     this.renderedHeroes.clear();
@@ -1430,7 +1455,8 @@ class PhaserMapScene extends Phaser.Scene {
       if (object.type === "hero") {
         const metrics = getObjectMetrics(object);
         if (!metrics) continue;
-        const sprite = this.addHeroSprite(object, iso.x, y + metrics.offsetY, metrics.width, metrics.height);
+        const direction = this.heroDirections.get(object.id) ?? "se";
+        const sprite = this.addHeroSprite(object, iso.x, y + metrics.offsetY, metrics.width, metrics.height, direction);
         if (sprite) {
           const bannerMetrics = getHeroBannerMetrics(object);
           const animation = {
@@ -1458,7 +1484,9 @@ class PhaserMapScene extends Phaser.Scene {
             animation,
             baseX: sprite.x,
             baseY: sprite.y,
-            direction: "se",
+            baseDisplayWidth: sprite.displayWidth,
+            baseDisplayHeight: sprite.displayHeight,
+            direction,
           });
         }
       } else if (object.type === "town") {
@@ -1504,6 +1532,17 @@ class PhaserMapScene extends Phaser.Scene {
     const metrics = renderedHero ? getObjectMetrics(renderedHero.object) : null;
     if (!renderedHero || !metrics || path.length < 2) return Promise.resolve();
 
+    const startPosition = path[0];
+    const firstStep = path[1];
+    const leavingTown = Boolean(
+      renderedHero.object.inTown &&
+      firstStep &&
+      (firstStep.x !== startPosition.x || firstStep.y !== startPosition.y)
+    );
+    const travelMetrics = leavingTown
+      ? getHeroTravelMetrics(renderedHero.object)
+      : metrics;
+
     renderedHero.animation.mode = renderedHero.object.onWater ? "boat" : "mounted";
 
     return new Promise<void>((resolve) => {
@@ -1517,15 +1556,17 @@ class PhaserMapScene extends Phaser.Scene {
             : renderedHero.object.inTown
             ? "idle"
             : "mounted";
+          this.heroDirections.set(heroId, renderedHero.direction);
           this.playHeroAnimation(renderedHero, "idle");
           resolve();
           return;
         }
 
-        const start = this.getObjectRenderPoint(from, metrics.offsetY);
-        const end = this.getObjectRenderPoint(to, metrics.offsetY);
+        const start = this.getObjectRenderPoint(from, travelMetrics.offsetY);
+        const end = this.getObjectRenderPoint(to, travelMetrics.offsetY);
         const tweenState = { x: start.x, y: start.y };
         renderedHero.direction = getHeroDirection(from, to, renderedHero.direction);
+        this.heroDirections.set(heroId, renderedHero.direction);
         this.playHeroAnimation(renderedHero, "walk");
         this.updateRenderedHeroPosition(renderedHero, start.x, start.y);
 
@@ -1546,7 +1587,39 @@ class PhaserMapScene extends Phaser.Scene {
         });
       };
 
-      moveNext();
+      if (leavingTown) {
+        const start = this.getObjectRenderPoint(startPosition, travelMetrics.offsetY);
+        this.promoteHeroFromTown(renderedHero, start.x, start.y, travelMetrics).then(moveNext);
+      } else {
+        moveNext();
+      }
+    });
+  }
+
+  private promoteHeroFromTown(renderedHero: RenderedHeroObject, x: number, y: number, metrics: NonNullable<ReturnType<typeof getObjectMetrics>>) {
+    const previousScaleX = renderedHero.sprite.scaleX;
+    const previousScaleY = renderedHero.sprite.scaleY;
+    renderedHero.object.inTown = false;
+    renderedHero.sprite.setDisplaySize(metrics.width, metrics.height);
+    renderedHero.baseDisplayWidth = metrics.width;
+    renderedHero.baseDisplayHeight = metrics.height;
+    const targetScaleX = renderedHero.sprite.scaleX;
+    const targetScaleY = renderedHero.sprite.scaleY;
+    renderedHero.sprite.scaleX = previousScaleX;
+    renderedHero.sprite.scaleY = previousScaleY;
+    renderedHero.animation.baseScaleX = targetScaleX;
+    renderedHero.animation.baseScaleY = targetScaleY;
+    this.updateRenderedHeroPosition(renderedHero, x, y);
+
+    return new Promise<void>((resolve) => {
+      this.tweens.add({
+        targets: renderedHero.sprite,
+        scaleX: targetScaleX,
+        scaleY: targetScaleY,
+        duration: 90,
+        ease: "Sine.easeOut",
+        onComplete: () => resolve(),
+      });
     });
   }
 
@@ -1596,7 +1669,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
   }
 
-  private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number) {
+  private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number, direction: HeroDirection) {
     const sheet = getHeroSpritesheet(object.faction, object.onWater);
     if (!sheet) return this.addObjectSprite(object, x, y, getHeroSpritePath(object.faction, object.onWater), width, height);
 
@@ -1605,7 +1678,7 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDisplaySize(width, height);
     sprite.setDepth(y);
     this.objectLayer.add(sprite);
-    sprite.play(getHeroAnimationKey(sheet.faction, "se", "idle"));
+    sprite.play(getHeroAnimationKey(sheet.faction, direction, "idle"));
     return sprite;
   }
 
@@ -1779,7 +1852,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   private drawFogTile(layer: Phaser.GameObjects.Container, x: number, y: number, explored: boolean) {
     const iso = cartToIso(x, y);
-    const ySurface = this.getSurfaceY(x, y);
+    const ySurface = this.getFogSurfaceY(x, y);
     const jitter = hashTile(x, y);
     const graphics = this.add.graphics();
 
@@ -1807,7 +1880,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   private drawFogFrontierEdge(layer: Phaser.GameObjects.Container, x: number, y: number, side: FogEdgeSide) {
     const iso = cartToIso(x, y);
-    const ySurface = this.getSurfaceY(x, y);
+    const ySurface = this.getFogSurfaceY(x, y);
     const points = getDiamondPoints(iso.x, ySurface);
     const edge = getFogEdge(points, side);
     const graphics = this.add.graphics();
@@ -1831,6 +1904,11 @@ class PhaserMapScene extends Phaser.Scene {
     const tile = this.map.tiles[y]?.[x];
     if (!tile) return iso.y;
     return iso.y - getTileDepth(tile);
+  }
+
+  private getFogSurfaceY(x: number, y: number): number {
+    const iso = cartToIso(x, y);
+    return iso.y - this.fogPlaneDepth;
   }
 }
 
@@ -1954,6 +2032,16 @@ function getTileDepth(tile: MapTile) {
   return tile.terrain === TerrainType.WATER
     ? 2
     : BASE_HEIGHT + Math.max(0, tile.elevation) * ELEVATION_SCALE;
+}
+
+function getMaxTileDepth(map: GameMap) {
+  let maxDepth = 0;
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      maxDepth = Math.max(maxDepth, getTileDepth(tile));
+    }
+  }
+  return maxDepth || BASE_HEIGHT;
 }
 
 function drawDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
@@ -2098,6 +2186,17 @@ function getRoadPalette(road: RoadType, isBridge: boolean): RoadPalette {
     };
   }
 
+  if (road === "gravel") {
+    return {
+      shadow: 0x171717,
+      edge: 0x4a4a45,
+      fill: 0x8f897f,
+      highlight: 0xd4cec1,
+      grit: 0x3f3d39,
+      alpha: 0.83,
+    };
+  }
+
   return {
     shadow: 0x1b1209,
     edge: 0x4f351d,
@@ -2175,11 +2274,28 @@ function drawPolygonPath(graphics: Phaser.GameObjects.Graphics, points: Position
   graphics.closePath();
 }
 
-function getMapOuterCorners(map: GameMap): Position[] {
-  const top = cartToIso(0, 0);
-  const right = cartToIso(map.width - 1, 0);
-  const bottom = cartToIso(map.width - 1, map.height - 1);
-  const left = cartToIso(0, map.height - 1);
+function drawRingPath(graphics: Phaser.GameObjects.Graphics, outer: Position[], inner: Position[]) {
+  for (let i = 0; i < outer.length; i++) {
+    const next = (i + 1) % outer.length;
+    graphics.beginPath();
+    graphics.moveTo(outer[i].x, outer[i].y);
+    graphics.lineTo(outer[next].x, outer[next].y);
+    graphics.lineTo(inner[next].x, inner[next].y);
+    graphics.lineTo(inner[i].x, inner[i].y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
+  }
+}
+
+function getMapOuterCorners(map: GameMap, paddingTiles = 0): Position[] {
+  const min = -paddingTiles;
+  const maxX = map.width - 1 + paddingTiles;
+  const maxY = map.height - 1 + paddingTiles;
+  const top = cartToIso(min, min);
+  const right = cartToIso(maxX, min);
+  const bottom = cartToIso(maxX, maxY);
+  const left = cartToIso(min, maxY);
 
   return [
     { x: top.x, y: top.y - TILE_HEIGHT / 2 },
@@ -2189,17 +2305,8 @@ function getMapOuterCorners(map: GameMap): Position[] {
   ];
 }
 
-function expandPolygon(points: Position[], amount: number): Position[] {
-  const center = getPolygonCenter(points);
-  return points.map((point) => {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    const length = Math.hypot(dx, dy) || 1;
-    return {
-      x: point.x + (dx / length) * amount,
-      y: point.y + (dy / length) * amount,
-    };
-  });
+function liftPolygon(points: Position[], height: number): Position[] {
+  return points.map((point) => ({ x: point.x, y: point.y - height }));
 }
 
 function getPolygonCenter(points: Position[]): Position {
@@ -2376,6 +2483,10 @@ function getObjectMetrics(object: MapObjectData) {
     : { width: 52, height: 52, offsetY: 6 };
   if (object.type === "combat") return { width: 48, height: 48, offsetY: 10 };
   return null;
+}
+
+function getHeroTravelMetrics(object: MapObjectData) {
+  return getObjectMetrics({ ...object, inTown: false }) ?? getObjectMetrics(object)!;
 }
 
 function getHeroBannerMetrics(object: MapObjectData) {

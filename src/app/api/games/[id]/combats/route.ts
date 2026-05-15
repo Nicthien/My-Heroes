@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
-import { computeVisibleTiles, getPlayerVisionCenters, isTileTraversable, normalizeMapMovement } from "@/lib/game/engine";
+import {
+  canMoveAdventureStep,
+  computeVisibleTiles,
+  getAdventureStepCost,
+  getPlayerVisionCenters,
+  normalizeMapMovement,
+} from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
@@ -85,28 +91,28 @@ export async function POST(
   if (Array.isArray(body.path) && body.path.length >= 2) {
     const mapData = normalizeMapMovement(game.mapData as GameMap);
     const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, body.path, attacker.movement ?? 10);
-    if (validation.ok) {
-      const lastPos = body.path[body.path.length - 1] as { x: number; y: number };
-      await supabase.from("heroes").update({
-        x: lastPos.x,
-        y: lastPos.y,
-        movement: Math.max(0, (attacker.movement ?? 10) - validation.usedMovement),
-      }).eq("id", attacker.id);
-      attacker.x = lastPos.x;
-      attacker.y = lastPos.y;
+    if (!validation.ok) return NextResponse.json({ error: "Chemin de combat invalide" }, { status: 400 });
 
-      const newlyVisible = computeVisibleTiles(
-        mapData,
-        getPlayerVisionCenters({
-          heroes: [{ position: { x: lastPos.x, y: lastPos.y } }],
-          towns: (gamePlayer.towns ?? []).map((t) => ({ position: { x: t.x, y: t.y } })),
-        }),
-        5
-      );
-      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-      for (const key of newlyVisible) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-    }
+    const lastPos = body.path[body.path.length - 1] as { x: number; y: number };
+    await supabase.from("heroes").update({
+      x: lastPos.x,
+      y: lastPos.y,
+      movement: Math.max(0, (attacker.movement ?? 10) - validation.usedMovement),
+    }).eq("id", attacker.id);
+    attacker.x = lastPos.x;
+    attacker.y = lastPos.y;
+
+    const newlyVisible = computeVisibleTiles(
+      mapData,
+      getPlayerVisionCenters({
+        heroes: [{ position: { x: lastPos.x, y: lastPos.y } }],
+        towns: (gamePlayer.towns ?? []).map((t) => ({ position: { x: t.x, y: t.y } })),
+      }),
+      5
+    );
+    const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+    for (const key of newlyVisible) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
   }
 
   const defender = getDefender({
@@ -346,12 +352,10 @@ function validateCombatPath(
   for (let i = 1; i < path.length; i++) {
     const prev = path[i - 1];
     const curr = path[i];
-    if (Math.abs(prev.x - curr.x) + Math.abs(prev.y - curr.y) !== 1) return { ok: false };
-    const tile = map.tiles[curr.y]?.[curr.x];
-    // Allow the final tile even if occupied by a monster/enemy (that's the combat target)
-    if (!tile || tile.object?.type === "wall") return { ok: false };
-    if (!isTileTraversable(tile) && i < path.length - 1) return { ok: false };
-    usedMovement += tile.movementCost ?? 1;
+    if (!canMoveAdventureStep(map, prev, curr)) return { ok: false };
+    const stepCost = getAdventureStepCost(map, prev, curr);
+    if (!Number.isFinite(stepCost)) return { ok: false };
+    usedMovement += stepCost;
   }
   if (usedMovement > movement) return { ok: false };
   return { ok: true, usedMovement };

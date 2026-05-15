@@ -22,7 +22,16 @@ import {
   startingArmyForFaction,
   type TavernOffer,
 } from "@/lib/game/heroes";
-import { computeVisibleTiles, getPlayerVisionCenters, isTileTraversable, normalizeMapMovement } from "@/lib/game/engine";
+import {
+  canMoveAdventureStep,
+  computeVisibleTiles,
+  getAdventurePathCost,
+  getAdventureStepCost,
+  getDailyAdventureMovement,
+  getPlayerVisionCenters,
+  isTileTraversable,
+  normalizeMapMovement,
+} from "@/lib/game/engine";
 import { getTownCenterLevel, getTownGoldProduction, hasTownBuilding } from "@/lib/game/town-buildings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -286,7 +295,7 @@ export async function POST(
         }
       }
 
-      return NextResponse.json({ success: true, interaction, stoppedAt: firstStop ? lastPos : null });
+      return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
     }
 
     if (action.type === "CAPTURE_BUILDING") {
@@ -295,9 +304,23 @@ export async function POST(
         .find((item) => item.id === action.buildingId)
         ?? await getResourceBuilding(supabase, id, String(action.buildingId ?? ""));
       if (!hero || !building) return NextResponse.json({ error: "Capture invalide" }, { status: 400 });
+      if (Number(building.guardianPower ?? 0) > 0) {
+        return NextResponse.json({ error: "Ce batiment est garde" }, { status: 400 });
+      }
+
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const movement = await validateAndApplyActionPath({
+        supabase,
+        mapData,
+        gamePlayer,
+        hero,
+        path: action.path,
+        destination: { x: building.x, y: building.y },
+      });
+      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
 
       await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
-      await supabase.from("heroes").update({ x: building.x, y: building.y, experience: hero.experience + 150 }).eq("id", hero.id);
+      await supabase.from("heroes").update({ experience: hero.experience + 150 }).eq("id", hero.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_BUILDING", buildingType: building.buildingType } });
     }
 
@@ -337,6 +360,17 @@ export async function POST(
       if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
         return NextResponse.json({ error: "Ce château neutre est gardé" }, { status: 400 });
       }
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const movement = await validateAndApplyActionPath({
+        supabase,
+        mapData,
+        gamePlayer,
+        hero,
+        path: action.path,
+        destination: { x: town.x, y: town.y },
+      });
+      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
+
       const capturedBuildings = (town.buildings ?? []) as string[];
       const hasAnotherCapitol = gamePlayer.towns.some((item) => (item.buildings ?? []).includes(BuildingType.CAPITOL));
       const townOwnershipUpdate: Record<string, unknown> = {
@@ -355,7 +389,7 @@ export async function POST(
         .from("towns")
         .update(townOwnershipUpdate)
         .eq("id", town.id);
-      await supabase.from("heroes").update({ x: town.x, y: town.y, experience: hero.experience + 250 }).eq("id", hero.id);
+      await supabase.from("heroes").update({ experience: hero.experience + 250 }).eq("id", hero.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }
 
@@ -429,6 +463,7 @@ export async function POST(
 
       const stats = CLASS_STARTING_STATS[template.class as HeroClass];
       const army = startingArmyForFaction(template.faction);
+      const dailyMovement = getDailyAdventureMovement([{ unitType: army.unitType }]);
 
       await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
 
@@ -445,6 +480,8 @@ export async function POST(
           knowledge: stats.knowledge,
           x: town.x,
           y: town.y,
+          movement: dailyMovement,
+          max_movement: dailyMovement,
         })
         .select("*")
         .single();
@@ -891,7 +928,7 @@ async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>
     const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
     for (const hero of player.heroes ?? []) {
       const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
-      const dailyMovement = isOnWater ? 10 + lighthouseCount * 500 : 10;
+      const dailyMovement = getDailyAdventureMovement(hero.armies) + (isOnWater ? lighthouseCount * 500 : 0);
       await supabase.from("heroes").update({
         movement: dailyMovement,
         max_movement: dailyMovement,
@@ -988,11 +1025,62 @@ function findFirstMoveStop({
   return null;
 }
 
+async function validateAndApplyActionPath({
+  supabase,
+  mapData,
+  gamePlayer,
+  hero,
+  path,
+  destination,
+}: {
+  supabase: ReturnType<typeof createAdminClient>;
+  mapData: GameMap;
+  gamePlayer: MinimalPlayer;
+  hero: MinimalHero;
+  path: unknown;
+  destination: Position;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Array.isArray(path) || path.length < 2) {
+    if (hero.x === destination.x && hero.y === destination.y) return { ok: true };
+    return { ok: false, error: "Chemin requis pour cette capture" };
+  }
+
+  const typedPath = path as Array<{ x: number; y: number }>;
+  const lastPos = typedPath[typedPath.length - 1];
+  if (lastPos?.x !== destination.x || lastPos?.y !== destination.y) {
+    return { ok: false, error: "Le chemin ne termine pas sur la cible" };
+  }
+
+  const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, typedPath, hero.movement);
+  if (!validation.ok) return validation;
+
+  const { error: heroUpdateError } = await supabase.from("heroes").update({
+    x: destination.x,
+    y: destination.y,
+    movement: Math.max(0, hero.movement - validation.usedMovement),
+  }).eq("id", hero.id);
+  if (heroUpdateError) return { ok: false, error: `Erreur mise a jour heros: ${heroUpdateError.message}` };
+
+  const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
+    item.id === hero.id ? { ...hero, x: destination.x, y: destination.y } : item
+  );
+  const newlyVisible = computeVisibleTiles(
+    mapData,
+    getPlayerVisionCenters({
+      heroes: movedHeroes.map((h) => ({ position: { x: h.x, y: h.y } })),
+      towns: gamePlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+    }),
+    5
+  );
+  const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+  for (const key of newlyVisible) explored.add(key);
+  await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+
+  return { ok: true };
+}
+
 function getPathMovementCost(map: GameMap, path: Position[]) {
-  return path.slice(1).reduce((total, position) => {
-    const tile = map.tiles[position.y]?.[position.x];
-    return total + (tile?.movementCost ?? 1);
-  }, 0);
+  return getAdventurePathCost(map, path);
 }
 
 function validateMovePath(
@@ -1008,12 +1096,12 @@ function validateMovePath(
   for (let i = 1; i < path.length; i++) {
     const previous = path[i - 1];
     const current = path[i];
-    if (Math.abs(previous.x - current.x) + Math.abs(previous.y - current.y) !== 1) {
+    if (!canMoveAdventureStep(map, previous, current)) {
       return { ok: false, error: "Chemin invalide" };
     }
-    const tile = map.tiles[current.y]?.[current.x];
-    if (!isTileTraversable(tile)) return { ok: false, error: "Terrain infranchissable" };
-    usedMovement += tile.movementCost;
+    const stepCost = getAdventureStepCost(map, previous, current);
+    if (!Number.isFinite(stepCost)) return { ok: false, error: "Terrain infranchissable" };
+    usedMovement += stepCost;
   }
   if (usedMovement > movement) return { ok: false, error: "Deplacement insuffisant" };
   return { ok: true, usedMovement };

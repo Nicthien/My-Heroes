@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
-import { computeVisibleTiles } from "@/lib/game/engine";
+import { computeVisibleTiles, getDailyAdventureMovement } from "@/lib/game/engine";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/neutral-armies";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
@@ -33,6 +33,13 @@ function buildStarterArmy(faction: Faction, heroId: string) {
       position: i,
     };
   });
+}
+
+function getStarterArmyMovement(faction: Faction) {
+  const tiers = FACTION_UNITS[faction] ?? FACTION_UNITS[Faction.CASTLE];
+  return getDailyAdventureMovement(
+    STARTER_ARMY_COUNTS.map((_, i) => ({ unitType: tiers[i] }))
+  );
 }
 
 export async function GET(request: Request) {
@@ -140,6 +147,7 @@ export async function POST(request: Request) {
     : null;
   const heroClass = (startingHero?.class ?? HeroClass.KNIGHT) as HeroClass;
   const heroStats = CLASS_STARTING_STATS[heroClass];
+  const dailyMovement = getStarterArmyMovement(factionKey);
 
   const heroInsert: Record<string, unknown> = {
     game_player_id: playerRow.id,
@@ -152,6 +160,8 @@ export async function POST(request: Request) {
     knowledge: heroStats.knowledge,
     x: startPos.x,
     y: startPos.y,
+    movement: dailyMovement,
+    max_movement: dailyMovement,
   };
 
   let { data: heroRow, error: heroError } = await supabase

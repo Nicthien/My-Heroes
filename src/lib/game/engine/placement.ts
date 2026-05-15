@@ -137,7 +137,7 @@ export function placeTownInZone(
   const tile = ctx.tiles[c.y][c.x];
   // Force tile passable (mais on n'a déjà gardé que les passable)
   tile.terrain = downgradeWildTerrain(tile.terrain);
-  tile.movementCost = 1;
+  tile.movementCost = 100;
   tile.elevation = 0;
   tile.object = {
     type: "town",

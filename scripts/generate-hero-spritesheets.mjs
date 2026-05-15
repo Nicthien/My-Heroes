@@ -61,7 +61,17 @@ async function loadSourceCells() {
     });
   }
 
+  cells[3] = await mirrorSourceCell(cells[5]);
+  cells[6] = await mirrorSourceCell(cells[2]);
+
   return cells;
+}
+
+async function mirrorSourceCell(cell) {
+  return {
+    idle: await Promise.all(cell.idle.map((frame) => sharp(frame).flop().png().toBuffer())),
+    walk: await Promise.all(cell.walk.map((frame) => sharp(frame).flop().png().toBuffer())),
+  };
 }
 
 async function createKeyedBase() {

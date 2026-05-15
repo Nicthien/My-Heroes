@@ -66,8 +66,8 @@ create table public.heroes (
   defense integer not null default 1,
   spell_power integer not null default 1,
   knowledge integer not null default 1,
-  movement numeric not null default 10,
-  max_movement numeric not null default 10,
+  movement numeric not null default 1500,
+  max_movement numeric not null default 1500,
   x integer not null,
   y integer not null,
   is_moving boolean not null default false

@@ -7,7 +7,15 @@ import { GameState, PersistentCombat, Position, ResourceBuilding } from "@/lib/g
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { findPath, computeReachableTiles, computeVisibleTiles, getPlayerVisionCenters, isTileTraversable } from "@/lib/game/engine";
+import {
+  findPath,
+  computeReachableTiles,
+  computeVisibleTiles,
+  getAdventurePathCost,
+  getAdventureStepCost,
+  getPlayerVisionCenters,
+  isTileTraversable,
+} from "@/lib/game/engine";
 import { refreshGameState } from "@/lib/game/refresh";
 
 const REACHABLE_TILE_COLOR = 0x2f80ff;
@@ -424,12 +432,7 @@ export default function GameMapComponent() {
       let fullPath = findPath(gameState.map, heroSrc.position, destination, Number.POSITIVE_INFINITY);
       if (fullPath.length <= 1) {
         // Destination impassable / disconnected: try adjacent tiles
-        const candidates = [
-          { x: destination.x + 1, y: destination.y },
-          { x: destination.x - 1, y: destination.y },
-          { x: destination.x, y: destination.y + 1 },
-          { x: destination.x, y: destination.y - 1 },
-        ];
+        const candidates = getAdjacentPositions(destination);
         let best: Position[] = [];
         for (const c of candidates) {
           if (c.x < 0 || c.x >= gameState.map.width || c.y < 0 || c.y >= gameState.map.height) continue;
@@ -446,8 +449,7 @@ export default function GameMapComponent() {
       let usedCost = 0;
       let splitIndex = 0;
       for (let i = 1; i < fullPath.length; i++) {
-        const t = gameState.map.tiles[fullPath[i].y]?.[fullPath[i].x];
-        const c = t?.movementCost ?? 1;
+        const c = getAdventureStepCost(gameState.map, fullPath[i - 1], fullPath[i]);
         if (usedCost + c > heroSrc.movement) break;
         usedCost += c;
         splitIndex = i;
@@ -523,7 +525,8 @@ export default function GameMapComponent() {
         })
         .then(async (data) => {
           if (!data) return;
-          await animateHeroMovement(rendererRef.current, heroSrc.id, movePath);
+          const acceptedPath = getAcceptedMovePath(data, movePath);
+          await animateHeroMovement(rendererRef.current, heroSrc.id, acceptedPath);
           const interaction = data.interaction as MoveInteraction | null | undefined;
           if (handleMoveInteraction(heroSrc.id, interaction)) {
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
@@ -727,6 +730,7 @@ export default function GameMapComponent() {
             type: "CAPTURE_TOWN",
             heroId: selectedHeroId,
             townId: obj.id,
+            path: path.map((p: Position) => ({ x: p.x, y: p.y })),
           }),
         })
           .then(async (response) => {
@@ -747,10 +751,12 @@ export default function GameMapComponent() {
             }
             return response.json();
           })
-          .then((data) => {
+          .then(async (data) => {
             if (!data) return;
             pendingAttackRef.current = null;
             rendererRef.current?.clearHighlights();
+          const acceptedPath = getAcceptedMovePath(data, path);
+          await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
 
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((state) => {
               if (state) useGameStore.getState().setGameState(state);
@@ -833,7 +839,8 @@ export default function GameMapComponent() {
           })
           .then(async (data) => {
             if (!data) return;
-            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
+            const acceptedPath = getAcceptedMovePath(data, path);
+            await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
             const interaction = data.interaction as MoveInteraction | null | undefined;
             const handledInteraction = handleMoveInteraction(selectedHeroId, interaction);
             if (!handledInteraction) {
@@ -912,11 +919,18 @@ export default function GameMapComponent() {
         fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: obj.id }),
+          body: JSON.stringify({
+            type: "CAPTURE_BUILDING",
+            heroId: selectedHeroId,
+            buildingId: obj.id,
+            path: path.map((p: Position) => ({ x: p.x, y: p.y })),
+          }),
         })
           .then(async (r) => (r.ok ? r.json() : null))
-          .then((data) => {
+          .then(async (data) => {
             if (!data) return;
+            const acceptedPath = getAcceptedMovePath(data, path);
+            await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((s) => {
               if (s) useGameStore.getState().setGameState(s);
             });
@@ -984,7 +998,8 @@ export default function GameMapComponent() {
           })
           .then(async (data) => {
             if (!data) return;
-            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
+            const acceptedPath = getAcceptedMovePath(data, path);
+            await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
             handleMoveInteraction(selectedHeroId, data.interaction as MoveInteraction | null | undefined);
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {
@@ -1093,7 +1108,12 @@ export default function GameMapComponent() {
             fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "CAPTURE_BUILDING", heroId: selectedHeroId, buildingId: targetTile.object.id }),
+              body: JSON.stringify({
+                type: "CAPTURE_BUILDING",
+                heroId: selectedHeroId,
+                buildingId: targetTile.object.id,
+                path: path.map((p: Position) => ({ x: p.x, y: p.y })),
+              }),
             })
               .then(async (response) => {
                 if (!response.ok) {
@@ -1105,8 +1125,10 @@ export default function GameMapComponent() {
                 }
                 return response.json();
               })
-              .then((data) => {
+              .then(async (data) => {
                 if (!data) return;
+                const acceptedPath = getAcceptedMovePath(data, path);
+                await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
                 refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap }).then((state) => {
                   if (state) useGameStore.getState().setGameState(state);
                 });
@@ -1165,7 +1187,8 @@ export default function GameMapComponent() {
           })
           .then(async (data) => {
             if (!data) return;
-            await animateHeroMovement(rendererRef.current, selectedHeroId, path);
+            const acceptedPath = getAcceptedMovePath(data, path);
+            await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
             const interaction = data.interaction as MoveInteraction | null | undefined;
             const handledInteraction = handleMoveInteraction(selectedHeroId, interaction);
             if (!handledInteraction) {
@@ -1242,6 +1265,17 @@ function animateHeroMovement(renderer: MapRenderer | null, heroId: string, path:
   return renderer?.animateHeroMovement(heroId, path) ?? Promise.resolve();
 }
 
+function getAcceptedMovePath(data: unknown, fallbackPath: Position[]): Position[] {
+  const path = (data as { path?: unknown })?.path;
+  if (!Array.isArray(path) || path.length < 2) return fallbackPath;
+  return path
+    .map((position) => ({
+      x: Number((position as Position).x),
+      y: Number((position as Position).y),
+    }))
+    .filter((position) => Number.isFinite(position.x) && Number.isFinite(position.y));
+}
+
 function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending: PendingMove): PendingMove | null {
   const hero = gameState.players.flatMap((player) => player.heroes).find((item) => item.id === pending.heroId);
   if (!hero) {
@@ -1264,8 +1298,7 @@ function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending:
   let usedCost = 0;
   let splitIndex = 0;
   for (let i = 1; i < fullPath.length; i++) {
-    const tile = gameState.map.tiles[fullPath[i].y]?.[fullPath[i].x];
-    const cost = tile?.movementCost ?? 1;
+    const cost = getAdventureStepCost(gameState.map, fullPath[i - 1], fullPath[i]);
     if (usedCost + cost > hero.movement) break;
     usedCost += cost;
     splitIndex = i;
@@ -1324,10 +1357,18 @@ function selectObjectOnTile(
 }
 
 function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[]) {
-  return path.slice(1).reduce((total, position) => {
-    const tile = map.tiles[position.y]?.[position.x];
-    return total + (tile?.movementCost ?? 1);
-  }, 0);
+  return getAdventurePathCost(map, path);
+}
+
+function getAdjacentPositions(position: Position): Position[] {
+  const positions: Position[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      positions.push({ x: position.x + dx, y: position.y + dy });
+    }
+  }
+  return positions;
 }
 
 function getMapRenderKey(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"]) {

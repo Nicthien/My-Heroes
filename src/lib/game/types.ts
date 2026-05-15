@@ -361,7 +361,7 @@ export interface MapTile {
   road?: RoadType;
 }
 
-export type RoadType = "paved" | "dirt";
+export type RoadType = "paved" | "gravel" | "dirt";
 
 export interface DecorItem {
   type: DecorKind;

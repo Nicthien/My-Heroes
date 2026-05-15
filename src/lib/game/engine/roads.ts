@@ -10,7 +10,8 @@ function findRoadPath(
 ): Position[] {
   const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
   const closed = new Set<string>();
-  const h = (a: Position, b: Position) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const best = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const h = (a: Position, b: Position) => (Math.abs(a.x - b.x) + Math.abs(a.y - b.y)) * 50;
   openSet.push({ pos: start, g: 0, f: h(start, end), path: [start] });
 
   while (openSet.length > 0) {
@@ -40,6 +41,9 @@ function findRoadPath(
       const bridgeCost = t.terrain === TerrainType.WATER ? 6 : 0;
       const cost = (t.movementCost === 999 ? 5 : t.movementCost) + bridgeCost + wobble;
       const g = cur.g + cost;
+      const nKey = `${n.x},${n.y}`;
+      if (g >= (best.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
+      best.set(nKey, g);
       openSet.push({
         pos: n,
         g,
@@ -59,8 +63,8 @@ function findForcedRoadPath(
   end: Position,
 ): Position[] {
   const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
-  const best = new Map<string, number>();
-  const h = (a: Position, b: Position) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const best = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const h = (a: Position, b: Position) => (Math.abs(a.x - b.x) + Math.abs(a.y - b.y)) * 50;
   openSet.push({ pos: start, g: 0, f: h(start, end), path: [start] });
 
   while (openSet.length > 0) {
@@ -69,7 +73,7 @@ function findForcedRoadPath(
     if (cur.pos.x === end.x && cur.pos.y === end.y) return cur.path;
 
     const key = `${cur.pos.x},${cur.pos.y}`;
-    if (cur.g >= (best.get(key) ?? Number.POSITIVE_INFINITY)) continue;
+    if (cur.g > (best.get(key) ?? Number.POSITIVE_INFINITY)) continue;
     best.set(key, cur.g);
 
     const neighbors: Position[] = [
@@ -87,6 +91,9 @@ function findForcedRoadPath(
       const blockingDecorCost = tile.decor?.blocking ? 4 : 0;
       const cost = (tile.movementCost === 999 ? 3 : tile.movementCost) + waterCost + wallCost + blockingDecorCost;
       const g = cur.g + cost;
+      const nKey = `${n.x},${n.y}`;
+      if (g >= (best.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
+      best.set(nKey, g);
       openSet.push({ pos: n, g, f: g + h(n, end), path: [...cur.path, n] });
     }
   }
@@ -101,14 +108,14 @@ function findPathToNearestRoad(
   start: Position,
 ): Position[] {
   const openSet: { pos: Position; g: number; path: Position[] }[] = [];
-  const best = new Map<string, number>();
+  const best = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
   openSet.push({ pos: start, g: 0, path: [start] });
 
   while (openSet.length > 0) {
     openSet.sort((a, b) => a.g - b.g);
     const cur = openSet.shift()!;
     const key = `${cur.pos.x},${cur.pos.y}`;
-    if (cur.g >= (best.get(key) ?? Number.POSITIVE_INFINITY)) continue;
+    if (cur.g > (best.get(key) ?? Number.POSITIVE_INFINITY)) continue;
     best.set(key, cur.g);
 
     const tile = tiles[cur.pos.y][cur.pos.x];
@@ -130,7 +137,11 @@ function findPathToNearestRoad(
       const wobble = ((n.x * 928371 + n.y * 523111) % 7) * 0.035;
       const bridgeCost = nextTile.terrain === TerrainType.WATER ? 6 : 0;
       const cost = (nextTile.movementCost === 999 ? 5 : nextTile.movementCost) + bridgeCost + wobble;
-      openSet.push({ pos: n, g: cur.g + cost, path: [...cur.path, n] });
+      const g = cur.g + cost;
+      const nKey = `${n.x},${n.y}`;
+      if (g >= (best.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
+      best.set(nKey, g);
+      openSet.push({ pos: n, g, path: [...cur.path, n] });
     }
   }
 
@@ -174,7 +185,7 @@ export function paintRoad(
     if (tile.object?.type === "wall") tile.object = undefined;
     if (tile.decor?.blocking) tile.decor = undefined;
     tile.isPassable = true;
-    if (tile.movementCost === 999) tile.movementCost = tile.terrain === TerrainType.WATER ? 2 : 1;
+    if (tile.movementCost === 999) tile.movementCost = tile.terrain === TerrainType.WATER ? 200 : 100;
     // N'overwrite pas une route paved par une dirt
     if (tile.road === "paved" && type === "dirt") continue;
     tile.road = type;

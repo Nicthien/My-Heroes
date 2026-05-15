@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { computeVisibleTiles, placePlayerStart } from "@/lib/game/engine";
+import { computeVisibleTiles, getDailyAdventureMovement, placePlayerStart } from "@/lib/game/engine";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { pickTownName } from "@/lib/game/town-generation";
 import { BuildingType, Faction, GameMap, HeroClass } from "@/lib/game/types";
@@ -69,6 +69,9 @@ export async function POST(
     : null;
   const heroClass = (startingHero?.class ?? HeroClass.KNIGHT) as HeroClass;
   const heroStats = CLASS_STARTING_STATS[heroClass];
+  const tiers = FACTION_UNITS[factionKey];
+  const starterCounts: [number, number, number] = [20, 12, 4];
+  const dailyMovement = getDailyAdventureMovement(tiers.slice(0, starterCounts.length).map((unitType) => ({ unitType })));
 
   const heroInsert: Record<string, unknown> = {
     game_player_id: playerRow.id,
@@ -81,6 +84,8 @@ export async function POST(
     knowledge: heroStats.knowledge,
     x: startPos.x,
     y: startPos.y,
+    movement: dailyMovement,
+    max_movement: dailyMovement,
   };
 
   let { data: heroRow, error: heroError } = await supabase
@@ -100,8 +105,6 @@ export async function POST(
   }
 
   if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
-  const tiers = FACTION_UNITS[factionKey];
-  const starterCounts: [number, number, number] = [20, 12, 4];
   await supabase.from("armies").insert(
     starterCounts.map((count, i) => {
       const unitType = tiers[i];

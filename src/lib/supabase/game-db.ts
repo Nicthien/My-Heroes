@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getDailyAdventureMovement } from "@/lib/game/engine";
+import { UnitType } from "@/lib/game/types";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 type DbRow = Record<string, unknown>;
@@ -57,6 +59,10 @@ export function toPlayer(row: DbRow) {
 }
 
 export function toHero(row: DbRow) {
+  const armies = rows(row.armies).map(toArmy);
+  const movement = normalizeLegacyHeroMovement(row.movement, armies);
+  const maxMovement = normalizeLegacyHeroMovement(row.max_movement, armies);
+
   return {
     id: row.id,
     gamePlayerId: row.game_player_id,
@@ -69,13 +75,19 @@ export function toHero(row: DbRow) {
     defense: row.defense,
     spellPower: row.spell_power,
     knowledge: row.knowledge,
-    movement: row.movement,
-    maxMovement: row.max_movement,
+    movement,
+    maxMovement,
     x: row.x,
     y: row.y,
     isMoving: row.is_moving,
-    armies: rows(row.armies).map(toArmy),
+    armies,
   };
+}
+
+function normalizeLegacyHeroMovement(value: unknown, armies: ReturnType<typeof toArmy>[]) {
+  const movement = Number(value ?? 0);
+  if (movement > 20) return movement;
+  return getDailyAdventureMovement(armies.map((army) => ({ unitType: army.unitType as UnitType })));
 }
 
 export function toArmy(row: DbRow) {

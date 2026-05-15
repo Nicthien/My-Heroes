@@ -8,10 +8,12 @@ import {
   TerrainType,
   Position,
   Resources,
+  UnitStack,
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "../economy";
 import { getTownGoldProduction } from "../town-buildings";
+import { getUnitRule } from "../units";
 import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
@@ -32,31 +34,117 @@ function getMovementCost(terrain: TerrainType): number {
   switch (terrain) {
     case TerrainType.GRASS:
     case TerrainType.DIRT:
-      return 1;
+      return 100;
     case TerrainType.SAND:
     case TerrainType.FOREST:
-      return 1.5;
-    case TerrainType.SWAMP:
     case TerrainType.SNOW:
+      return 150;
+    case TerrainType.SWAMP:
+      return 175;
     case TerrainType.WATER:
-      return 2;
+      return 200;
     case TerrainType.MOUNTAIN:
-      return 2.5;
+      return 250;
     default:
       return 999;
   }
 }
 
 /** Coût de déplacement effectif d'une tile : les routes priment sur le terrain. */
+const ORTHOGONAL_BASE = 100;
+const DIAGONAL_BASE = 141;
+
 export function effectiveMovementCost(tile: MapTile): number {
   if (!isTileTraversable(tile)) return 999;
-  if (tile.road === "paved") return 0.75;
-  if (tile.road === "dirt") return 1.0;
-  return tile.movementCost;
+  if (tile.road === "paved") return 50;
+  if (tile.road === "gravel") return 65;
+  if (tile.road === "dirt") return 75;
+  return getMovementCost(tile.terrain);
 }
 
 export function isTileTraversable(tile: MapTile | undefined): boolean {
   return Boolean(tile && tile.isPassable && tile.object?.type !== "wall" && !tile.decor?.blocking);
+}
+
+function getAdventureNeighbors(pos: Position): Position[] {
+  const neighbors: Position[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      neighbors.push({ x: pos.x + dx, y: pos.y + dy });
+    }
+  }
+  return neighbors;
+}
+
+function isInsideMap(map: GameMap, pos: Position): boolean {
+  return pos.x >= 0 && pos.x < map.width && pos.y >= 0 && pos.y < map.height;
+}
+
+export function canMoveAdventureStep(map: GameMap, from: Position, to: Position): boolean {
+  if (!isInsideMap(map, from) || !isInsideMap(map, to)) return false;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  if (absDx > 1 || absDy > 1 || (absDx === 0 && absDy === 0)) return false;
+
+  const targetTile = map.tiles[to.y]?.[to.x];
+  if (!isTileTraversable(targetTile)) return false;
+
+  if (absDx === 1 && absDy === 1) {
+    const sideA = map.tiles[from.y]?.[from.x + dx];
+    const sideB = map.tiles[from.y + dy]?.[from.x];
+    if (!isTileTraversable(sideA) || !isTileTraversable(sideB)) return false;
+  }
+
+  return true;
+}
+
+export function getAdventureStepCost(map: GameMap, from: Position, to: Position): number {
+  if (!canMoveAdventureStep(map, from, to)) return Number.POSITIVE_INFINITY;
+
+  const targetTile = map.tiles[to.y]?.[to.x];
+  if (!targetTile) return Number.POSITIVE_INFINITY;
+
+  const surfaceCost = effectiveMovementCost(targetTile);
+  const isDiagonal = from.x !== to.x && from.y !== to.y;
+  return isDiagonal ? Math.floor(surfaceCost * DIAGONAL_BASE / ORTHOGONAL_BASE) : surfaceCost;
+}
+
+export function getAdventurePathCost(map: GameMap, path: Position[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    const stepCost = getAdventureStepCost(map, path[i - 1], path[i]);
+    if (!Number.isFinite(stepCost)) return Number.POSITIVE_INFINITY;
+    total += stepCost;
+  }
+  return total;
+}
+
+export function getDailyAdventureMovement(heroArmies: Pick<UnitStack, "unitType">[] | undefined | null): number {
+  if (!heroArmies || heroArmies.length === 0) return 2000;
+
+  const slowestSpeed = heroArmies.reduce((slowest, army) => {
+    const speed = getUnitRule(army.unitType).speed;
+    return Math.min(slowest, speed);
+  }, Number.POSITIVE_INFINITY);
+
+  if (!Number.isFinite(slowestSpeed)) return 2000;
+  if (slowestSpeed <= 3) return 1500;
+  if (slowestSpeed >= 11) return 2000;
+
+  const movementBySpeed: Record<number, number> = {
+    4: 1560,
+    5: 1630,
+    6: 1700,
+    7: 1760,
+    8: 1830,
+    9: 1900,
+    10: 1960,
+  };
+  return movementBySpeed[Math.floor(slowestSpeed)] ?? 1500;
 }
 
 export function normalizeMapMovement(map: GameMap): GameMap {
@@ -111,7 +199,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
         terrain: TerrainType.GRASS,
         elevation: 0,
         isPassable: true,
-        movementCost: 1,
+        movementCost: 100,
       };
     }
   }
@@ -248,9 +336,15 @@ export function findPath(
 ): Position[] {
   const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
   const closedSet = new Set<string>();
+  const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
 
-  const heuristic = (a: Position, b: Position) =>
-    Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const heuristic = (a: Position, b: Position) => {
+    const dx = Math.abs(a.x - b.x);
+    const dy = Math.abs(a.y - b.y);
+    const diagonal = Math.min(dx, dy);
+    const straight = Math.max(dx, dy) - diagonal;
+    return diagonal * 70 + straight * 50;
+  };
 
   openSet.push({
     pos: start,
@@ -268,34 +362,24 @@ export function findPath(
     }
 
     const key = `${current.pos.x},${current.pos.y}`;
+    if (current.g > (bestCost.get(key) ?? Number.POSITIVE_INFINITY)) continue;
     if (closedSet.has(key)) continue;
     closedSet.add(key);
 
-    const neighbors = [
-      { x: current.pos.x + 1, y: current.pos.y },
-      { x: current.pos.x - 1, y: current.pos.y },
-      { x: current.pos.x, y: current.pos.y + 1 },
-      { x: current.pos.x, y: current.pos.y - 1 },
-    ];
+    const neighbors = getAdventureNeighbors(current.pos);
 
     for (const neighbor of neighbors) {
-      if (
-        neighbor.x < 0 ||
-        neighbor.x >= map.width ||
-        neighbor.y < 0 ||
-        neighbor.y >= map.height
-      )
-        continue;
-
-      const tile = map.tiles[neighbor.y][neighbor.x];
-      if (!isTileTraversable(tile)) continue;
+      if (!isInsideMap(map, neighbor)) continue;
+      if (!canMoveAdventureStep(map, current.pos, neighbor)) continue;
 
       const nKey = `${neighbor.x},${neighbor.y}`;
       if (closedSet.has(nKey)) continue;
 
-      const g = current.g + effectiveMovementCost(tile);
+      const g = current.g + getAdventureStepCost(map, current.pos, neighbor);
       if (g > maxMovement) continue;
+      if (g >= (bestCost.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
 
+      bestCost.set(nKey, g);
       const f = g + heuristic(neighbor, end);
 
       openSet.push({
@@ -325,27 +409,13 @@ export function computeReachableTiles(
     const currentKey = `${current.pos.x},${current.pos.y}`;
     if (current.cost > (bestCost.get(currentKey) ?? Number.POSITIVE_INFINITY)) continue;
 
-    const neighbors = [
-      { x: current.pos.x + 1, y: current.pos.y },
-      { x: current.pos.x - 1, y: current.pos.y },
-      { x: current.pos.x, y: current.pos.y + 1 },
-      { x: current.pos.x, y: current.pos.y - 1 },
-    ];
+    const neighbors = getAdventureNeighbors(current.pos);
 
     for (const neighbor of neighbors) {
-      if (
-        neighbor.x < 0 ||
-        neighbor.x >= map.width ||
-        neighbor.y < 0 ||
-        neighbor.y >= map.height
-      ) {
-        continue;
-      }
+      if (!isInsideMap(map, neighbor)) continue;
+      if (!canMoveAdventureStep(map, current.pos, neighbor)) continue;
 
-      const tile = map.tiles[neighbor.y]?.[neighbor.x];
-      if (!tile || !isTileTraversable(tile)) continue;
-
-      const nextCost = current.cost + effectiveMovementCost(tile);
+      const nextCost = current.cost + getAdventureStepCost(map, current.pos, neighbor);
       if (nextCost > maxMovement) continue;
 
       const neighborKey = `${neighbor.x},${neighbor.y}`;
@@ -472,10 +542,7 @@ export function processAction(state: GameState, action: GameAction): GameState {
           heroes: p.heroes.map((h: Hero) => {
             if (h.id !== action.heroId) return h;
             const lastPos = action.path[action.path.length - 1];
-            const usedMovement = action.path.reduce((sum: number, _: Position, i: number) => {
-              if (i === 0) return 0;
-              return sum + state.map.tiles[action.path[i].y][action.path[i].x].movementCost;
-            }, 0);
+            const usedMovement = getAdventurePathCost(state.map, action.path);
             return {
               ...h,
               position: lastPos,

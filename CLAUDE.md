@@ -59,7 +59,7 @@ Key fields:
 
 **Map & Movement** (src/lib/game/engine/index.ts):
 - generateMap() - Simplex noise terrain with 8 types (grass, water, mountain, forest, dirt, sand, snow, swamp, lava), elevation levels, resource placement
-- findPath() - A* with terrain-based movement costs (grass=1, mountain=2.5, water=2)
+- findPath() - A* on the adventure square grid with 8 directions, road-aware PM costs, and strict diagonal corner blocking. Read `ADVENTURE_MOVEMENT_RULES.md` before changing this.
 - computeVisibleTiles() - Vision radius around heroes/towns; exploredTiles accumulate for fog of war
 - calculateIncome() - Per-turn resource generation from towns and resource buildings
 - processAction() - Immutable state updates for MOVE_HERO, END_TURN, etc.; advances turn order

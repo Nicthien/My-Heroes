@@ -77,10 +77,7 @@ export default function SidePanel() {
                         <TowerIcon className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <span className="flex items-center gap-1">
-                      <HourglassIcon className="h-3 w-3" />
-                      {h.movement}/{h.maxMovement}
-                    </span>
+                    <MiniMovementGauge movement={h.movement} maxMovement={h.maxMovement} />
                   </div>
                 }
               />
@@ -157,6 +154,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     >
       {children}
     </CollapsiblePanel>
+  );
+}
+
+function MiniMovementGauge({ movement, maxMovement }: { movement: number; maxMovement: number }) {
+  const ratio = maxMovement > 0 ? Math.max(0, Math.min(1, movement / maxMovement)) : 0;
+  const fillColor = ratio > 0.35 ? "bg-emerald-300" : ratio > 0 ? "bg-amber-300" : "bg-red-400";
+
+  return (
+    <span className="min-w-20">
+      <span className="flex items-center gap-1 tabular-nums">
+        <HourglassIcon className="h-3 w-3" />
+        {movement}/{maxMovement}
+      </span>
+      <span className="mt-0.5 block h-1 overflow-hidden rounded-full bg-black/60">
+        <span className={`block h-full rounded-full ${fillColor}`} style={{ width: `${ratio * 100}%` }} />
+      </span>
+    </span>
   );
 }
 

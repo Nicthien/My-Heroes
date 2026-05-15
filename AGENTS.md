@@ -13,6 +13,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Map Generation Design
 
+- Before changing adventure movement, pathfinding, route costs, map road generation, or server validation for adventure movement, read `ADVENTURE_MOVEMENT_RULES.md` and use the shared helpers in `src/lib/game/engine`.
 - Keep resource-producing map buildings separate from adventure buildings.
 - Resource buildings use `MapObject.type === "building"` and are economic objectives: mines, sawmills, pits, labs, etc. They should be eligible for road connection so players can read the economy routes clearly.
 - Adventure buildings use `MapObject.type === "adventure_building"` and reward exploration: observatories, campfires, lighthouses, Stargates, and future adventure objects. They should not be connected by generated roads.

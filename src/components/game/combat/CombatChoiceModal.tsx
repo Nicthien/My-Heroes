@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
+import { getAdventurePathCost } from "@/lib/game/engine";
 import { GameState, Hero, UnitStack, UnitType } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -22,10 +23,7 @@ export default function CombatChoiceModal() {
     // Optimistic hero movement to combat destination
     if (pendingCombat.destination && pendingCombat.path) {
       const { destination, path } = pendingCombat;
-      const usedMovement = path.slice(1).reduce((total, p) => {
-        const t = gameState.map.tiles[p.y]?.[p.x];
-        return total + (t?.movementCost ?? 1);
-      }, 0);
+      const usedMovement = getAdventurePathCost(gameState.map, path);
       setGameState({
         ...gameState,
         players: gameState.players.map((player) => ({

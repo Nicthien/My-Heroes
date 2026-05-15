@@ -1,0 +1,66 @@
+import {
+  canMoveAdventureStep,
+  computeReachableTiles,
+  findPath,
+  getAdventurePathCost,
+  getAdventureStepCost,
+  getDailyAdventureMovement,
+} from "../src/lib/game/engine";
+import { GameMap, MapTile, TerrainType, UnitType } from "../src/lib/game/types";
+
+function tile(x: number, y: number, terrain = TerrainType.GRASS): MapTile {
+  return {
+    x,
+    y,
+    terrain,
+    elevation: 0,
+    isPassable: terrain !== TerrainType.LAVA,
+    movementCost: terrain === TerrainType.GRASS ? 100 : 999,
+  };
+}
+
+function map(width: number, height: number): GameMap {
+  return {
+    width,
+    height,
+    tiles: Array.from({ length: height }, (_, y) =>
+      Array.from({ length: width }, (_, x) => tile(x, y))
+    ),
+  };
+}
+
+function assert(condition: unknown, message: string): void {
+  if (!condition) throw new Error(message);
+}
+
+const diagonalMap = map(2, 2);
+assert(getAdventureStepCost(diagonalMap, { x: 0, y: 0 }, { x: 1, y: 1 }) === 141, "grass diagonal should cost 141 PM");
+
+const roadMap = map(2, 2);
+roadMap.tiles[0][1].road = "paved";
+roadMap.tiles[1][1].road = "paved";
+assert(getAdventureStepCost(roadMap, { x: 0, y: 0 }, { x: 1, y: 0 }) === 50, "paved orthogonal should cost 50 PM");
+assert(getAdventureStepCost(roadMap, { x: 0, y: 0 }, { x: 1, y: 1 }) === 70, "paved diagonal should cost 70 PM");
+
+const routeMap = map(5, 2);
+for (const x of [1, 2, 3]) routeMap.tiles[0][x].road = "paved";
+const routePath = findPath(routeMap, { x: 0, y: 1 }, { x: 4, y: 1 }, Number.POSITIVE_INFINITY);
+assert(routePath.some((p) => p.y === 0), "pathfinding should prefer cheaper road detour");
+assert(getAdventurePathCost(routeMap, routePath) < 400, "road detour should be cheaper than straight grass");
+
+const blockedMap = map(2, 2);
+blockedMap.tiles[0][1].object = { type: "wall", id: "wall-a" };
+blockedMap.tiles[0][1].isPassable = false;
+blockedMap.tiles[1][0].object = { type: "wall", id: "wall-b" };
+blockedMap.tiles[1][0].isPassable = false;
+assert(!canMoveAdventureStep(blockedMap, { x: 0, y: 0 }, { x: 1, y: 1 }), "diagonal through touching obstacles should be blocked");
+
+const reachable = computeReachableTiles(diagonalMap, { x: 0, y: 0 }, 100);
+assert(reachable.has("1,0"), "orthogonal grass tile should be reachable with 100 PM");
+assert(!reachable.has("1,1"), "diagonal grass tile should not be reachable with only 100 PM");
+
+assert(getDailyAdventureMovement([{ unitType: UnitType.DWARF }]) === 1500, "slow army should get 1500 PM");
+assert(getDailyAdventureMovement([{ unitType: UnitType.ARCHANGEL }]) === 2000, "fast army should get 2000 PM");
+assert(getDailyAdventureMovement([]) === 2000, "empty army should get 2000 PM");
+
+console.log("Adventure movement rules validated.");

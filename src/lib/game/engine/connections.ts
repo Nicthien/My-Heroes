@@ -178,16 +178,18 @@ function movementCostFor(t: TerrainType): number {
   switch (t) {
     case TerrainType.GRASS:
     case TerrainType.DIRT:
-      return 1;
+      return 100;
     case TerrainType.SAND:
     case TerrainType.FOREST:
-      return 1.5;
-    case TerrainType.SWAMP:
+      return 150;
     case TerrainType.SNOW:
+      return 150;
+    case TerrainType.SWAMP:
+      return 175;
     case TerrainType.WATER:
-      return 2;
+      return 200;
     case TerrainType.MOUNTAIN:
-      return 2.5;
+      return 250;
     default:
       return 999;
   }

@@ -149,11 +149,11 @@ function softenBanks(
     if (tile.terrain === TerrainType.GRASS && rng() > 0.45) {
       tile.terrain = TerrainType.SWAMP;
       tile.elevation = 0;
-      tile.movementCost = 2;
+      tile.movementCost = 175;
     } else if (tile.terrain === TerrainType.DIRT && rng() > 0.5) {
       tile.terrain = TerrainType.GRASS;
       tile.elevation = 0;
-      tile.movementCost = 1;
+      tile.movementCost = 100;
     }
   }
 }
@@ -163,7 +163,7 @@ function setWater(tile: MapTile, elevation: number): void {
   tile.terrain = TerrainType.WATER;
   tile.elevation = elevation;
   tile.isPassable = true;
-  tile.movementCost = 2;
+  tile.movementCost = 200;
 }
 
 function hasNearbyWater(

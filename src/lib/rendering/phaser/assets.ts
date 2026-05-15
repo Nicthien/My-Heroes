@@ -8,7 +8,7 @@ export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) =
 export const MAP_SPRITES = {
   hero: "/assets/sprites/map/hero-cavalier.svg",
   heroBoat: "/assets/sprites/map/hero-boat.svg",
-  town: "/assets/sprites/map/town-castle.png",
+  town: "/assets/sprites/map/town-castle.webp",
   heroes: {
     castle: "/assets/sprites/map/hero-cavalier.svg",
     rampart: "/assets/sprites/map/hero-rampart.svg",
@@ -21,15 +21,15 @@ export const MAP_SPRITES = {
     conflux: "/assets/sprites/map/hero-tower.svg",
   } as Record<string, string>,
   towns: {
-    castle: "/assets/sprites/map/town-castle.png",
-    rampart: "/assets/sprites/map/town-rampart.png",
-    tower: "/assets/sprites/map/town-tower.png",
-    inferno: "/assets/sprites/map/town-inferno.png",
-    necropolis: "/assets/sprites/map/town-necropolis.png",
-    dungeon: "/assets/sprites/map/town-dungeon.png",
-    stronghold: "/assets/sprites/map/town-stronghold.png",
-    fortress: "/assets/sprites/map/town-fortress.png",
-    conflux: "/assets/sprites/map/town-conflux.png",
+    castle: "/assets/sprites/map/town-castle.webp",
+    rampart: "/assets/sprites/map/town-rampart.webp",
+    tower: "/assets/sprites/map/town-tower.webp",
+    inferno: "/assets/sprites/map/town-inferno.webp",
+    necropolis: "/assets/sprites/map/town-necropolis.webp",
+    dungeon: "/assets/sprites/map/town-dungeon.webp",
+    stronghold: "/assets/sprites/map/town-stronghold.webp",
+    fortress: "/assets/sprites/map/town-fortress.webp",
+    conflux: "/assets/sprites/map/town-conflux.webp",
   } as Record<string, string>,
   resources: {
     gold: "/assets/sprites/resources/gold.svg",
@@ -105,7 +105,7 @@ export const HERO_SPRITESHEETS = HERO_SPRITESHEET_FACTIONS.reduce((sheets, facti
   sheets[faction] = {
     faction,
     key: `hero-${faction}`,
-    path: `/assets/sprites/heroes/${faction}/adventure.png`,
+    path: `/assets/sprites/heroes/${faction}/adventure.webp`,
     frameWidth: 80,
     frameHeight: 80,
     displayWidth: 52,

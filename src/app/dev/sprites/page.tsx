@@ -14,25 +14,31 @@ import {
   getUnitPalette,
 } from "@/components/game/combat/CombatScreen";
 
-const PUBLIC_SVGS: { path: string; label: string; group: string }[] = [
+type StaticSpriteAsset = {
+  path: string;
+  label: string;
+  group: string;
+};
+
+const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/hero-cavalier.svg", label: "Héros cavalier", group: "Factions" },
   { path: "/assets/sprites/map/hero-boat.svg", label: "Bateau heros", group: "Factions" },
-  { path: "/assets/sprites/map/town-castle.png", label: "Ville château", group: "Factions" },
+  { path: "/assets/sprites/map/town-castle.webp", label: "Ville château", group: "Factions" },
   { path: "/assets/sprites/map/hero-rampart.svg", label: "Héros rempart", group: "Factions" },
-  { path: "/assets/sprites/map/town-rampart.png", label: "Ville rempart", group: "Factions" },
+  { path: "/assets/sprites/map/town-rampart.webp", label: "Ville rempart", group: "Factions" },
   { path: "/assets/sprites/map/hero-tower.svg", label: "Héros tour", group: "Factions" },
-  { path: "/assets/sprites/map/town-tower.png", label: "Ville tour", group: "Factions" },
+  { path: "/assets/sprites/map/town-tower.webp", label: "Ville tour", group: "Factions" },
   { path: "/assets/sprites/map/hero-inferno.svg", label: "Héros Hadès", group: "Factions" },
-  { path: "/assets/sprites/map/town-inferno.png", label: "Ville Hadès", group: "Factions" },
+  { path: "/assets/sprites/map/town-inferno.webp", label: "Ville Hadès", group: "Factions" },
   { path: "/assets/sprites/map/hero-necropolis.svg", label: "Héros nécropole", group: "Factions" },
-  { path: "/assets/sprites/map/town-necropolis.png", label: "Ville nécropole", group: "Factions" },
+  { path: "/assets/sprites/map/town-necropolis.webp", label: "Ville nécropole", group: "Factions" },
   { path: "/assets/sprites/map/hero-dungeon.svg", label: "Héros donjon", group: "Factions" },
-  { path: "/assets/sprites/map/town-dungeon.png", label: "Ville donjon", group: "Factions" },
+  { path: "/assets/sprites/map/town-dungeon.webp", label: "Ville donjon", group: "Factions" },
   { path: "/assets/sprites/map/hero-stronghold.svg", label: "Héros bastion", group: "Factions" },
-  { path: "/assets/sprites/map/town-stronghold.png", label: "Ville bastion", group: "Factions" },
+  { path: "/assets/sprites/map/town-stronghold.webp", label: "Ville bastion", group: "Factions" },
   { path: "/assets/sprites/map/hero-fortress.svg", label: "Héros forteresse", group: "Factions" },
-  { path: "/assets/sprites/map/town-fortress.png", label: "Ville forteresse", group: "Factions" },
-  { path: "/assets/sprites/map/town-conflux.png", label: "Ville conflux", group: "Factions" },
+  { path: "/assets/sprites/map/town-fortress.webp", label: "Ville forteresse", group: "Factions" },
+  { path: "/assets/sprites/map/town-conflux.webp", label: "Ville conflux", group: "Factions" },
   { path: "/assets/sprites/map/alchemist-lab.svg", label: "Laboratoire d'alchimiste", group: "Bâtiments de ressources" },
   { path: "/assets/sprites/map/crystal-cavern.svg", label: "Caverne de cristaux", group: "Bâtiments de ressources" },
   { path: "/assets/sprites/map/gem-pond.svg", label: "Bassin de gemmes", group: "Bâtiments de ressources" },
@@ -100,10 +106,12 @@ const FACTION_GROUPS: { label: string; units: UnitType[] }[] = CREATURE_GROUPS.m
 }));
 
 const HERO_SHEET_ENTRIES = Object.values(HERO_SPRITESHEETS);
-type GalleryTab = "units" | "spritesheets" | "svg";
+type GalleryTab = "units" | "spritesheets" | "svg" | "webp";
 
 const UNIT_COUNT = FACTION_GROUPS.reduce((total, group) => total + group.units.length, 0);
 const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length;
+const PUBLIC_SVGS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".svg"));
+const PUBLIC_WEBPS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".webp"));
 
 const MODEL_LABELS: Record<UnitModelKind, string> = {
   infantry: "Infanterie",
@@ -144,7 +152,7 @@ function UnitCard({ unitType }: { unitType: UnitType }) {
   );
 }
 
-function FileSvgCard({ path, label }: { path: string; label: string }) {
+function StaticSpriteCard({ path, label }: { path: string; label: string }) {
   return (
     <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3">
       <div className="grid h-[96px] w-[96px] place-items-center rounded bg-stone-950/60">
@@ -324,16 +332,16 @@ function SpritesheetsTab() {
   );
 }
 
-function SvgTab({ fileGroups }: { fileGroups: string[] }) {
+function StaticSpriteTab({ assets, fileGroups }: { assets: StaticSpriteAsset[]; fileGroups: string[] }) {
   return (
     <section>
       {fileGroups.map((group, index) => {
-        const entries = PUBLIC_SVGS.filter((entry) => entry.group === group);
+        const entries = assets.filter((entry) => entry.group === group);
         return (
           <CollapsibleGroup key={group} count={entries.length} defaultOpen={index < 2} title={group}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
               {entries.map((entry) => (
-                <FileSvgCard key={entry.path} path={entry.path} label={entry.label} />
+                <StaticSpriteCard key={entry.path} path={entry.path} label={entry.label} />
               ))}
             </div>
           </CollapsibleGroup>
@@ -345,7 +353,8 @@ function SvgTab({ fileGroups }: { fileGroups: string[] }) {
 
 export default function SpritesGalleryPage() {
   const [activeTab, setActiveTab] = useState<GalleryTab>("units");
-  const fileGroups = Array.from(new Set(PUBLIC_SVGS.map((entry) => entry.group)));
+  const svgGroups = Array.from(new Set(PUBLIC_SVGS.map((entry) => entry.group)));
+  const webpGroups = Array.from(new Set(PUBLIC_WEBPS.map((entry) => entry.group)));
 
   return (
     <div className="h-screen overflow-y-auto bg-[#151712] px-4 py-6 text-stone-100 sm:px-8 sm:py-10">
@@ -361,6 +370,7 @@ export default function SpritesGalleryPage() {
             <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités SVG" onClick={() => setActiveTab("units")} />
             <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
             <TabButton active={activeTab === "svg"} count={PUBLIC_SVGS.length} label="SVG carte" onClick={() => setActiveTab("svg")} />
+            <TabButton active={activeTab === "webp"} count={PUBLIC_WEBPS.length} label="WebP carte" onClick={() => setActiveTab("webp")} />
           </nav>
         </div>
       </header>
@@ -368,7 +378,8 @@ export default function SpritesGalleryPage() {
       <main className="mx-auto mt-6 max-w-7xl">
         {activeTab === "units" ? <UnitsTab /> : null}
         {activeTab === "spritesheets" ? <SpritesheetsTab /> : null}
-        {activeTab === "svg" ? <SvgTab fileGroups={fileGroups} /> : null}
+        {activeTab === "svg" ? <StaticSpriteTab assets={PUBLIC_SVGS} fileGroups={svgGroups} /> : null}
+        {activeTab === "webp" ? <StaticSpriteTab assets={PUBLIC_WEBPS} fileGroups={webpGroups} /> : null}
       </main>
     </div>
   );

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = path.join(ROOT, "public", "assets", "sprites", "heroes", "source", "castle-ai-reference.png");
+const SOURCE = path.join(ROOT, "assets", "source", "sprites", "heroes", "castle-ai-reference.png");
 const OUT_ROOT = path.join(ROOT, "public", "assets", "sprites", "heroes");
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -263,7 +263,7 @@ function getAlphaBounds(data, width, height) {
 
 async function writeFactionSheet(spec) {
   const outDir = path.join(OUT_ROOT, spec.faction);
-  const outFile = path.join(outDir, "adventure.png");
+  const outFile = path.join(outDir, "adventure.webp");
   const frameBuffers = [];
 
   for (let row = 0; row < ROWS; row++) {
@@ -293,7 +293,7 @@ async function writeFactionSheet(spec) {
     .png()
     .toBuffer();
 
-  await sharp(sheet).png().toFile(outFile);
+  await sharp(sheet).webp({ lossless: true, effort: 6 }).toFile(outFile);
 
   const metadata = await sharp(outFile).metadata();
   if (metadata.width !== WIDTH || metadata.height !== HEIGHT) {

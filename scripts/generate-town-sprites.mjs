@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import zlib from "node:zlib";
+import sharp from "sharp";
 
 const OUT_DIR = path.join(process.cwd(), "public", "assets", "sprites", "map");
 const WIDTH = 512;
@@ -422,53 +422,14 @@ function addHighlights(c) {
   c.ellipse(256, 340, 124, 8, "#ffffff", 0.08);
 }
 
-function pngChunk(type, data) {
-  const typeBuffer = Buffer.from(type);
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
-  return Buffer.concat([length, typeBuffer, data, crc]);
-}
-
-function encodePng(width, height, rgba) {
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y++) {
-    const rowStart = y * (width * 4 + 1);
-    raw[rowStart] = 0;
-    Buffer.from(rgba.buffer, rgba.byteOffset + y * width * 4, width * 4).copy(raw, rowStart + 1);
-  }
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header[8] = 8;
-  header[9] = 6;
-  header[10] = 0;
-  header[11] = 0;
-  header[12] = 0;
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", header),
-    pngChunk("IDAT", zlib.deflateSync(raw, { level: 9 })),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-const CRC_TABLE = new Uint32Array(256).map((_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-
-function crc32(buffer) {
-  let c = 0xffffffff;
-  for (const byte of buffer) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
 fs.mkdirSync(OUT_DIR, { recursive: true });
 for (const faction of Object.keys(FACTIONS)) {
-  const file = path.join(OUT_DIR, `town-${faction}.png`);
-  fs.writeFileSync(file, encodePng(WIDTH, HEIGHT, drawSprite(faction)));
+  const file = path.join(OUT_DIR, `town-${faction}.webp`);
+  const rgba = drawSprite(faction);
+  await sharp(Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength), {
+    raw: { width: WIDTH, height: HEIGHT, channels: 4 },
+  })
+    .webp({ lossless: true, effort: 6 })
+    .toFile(file);
   console.log(`generated ${path.relative(process.cwd(), file)}`);
 }

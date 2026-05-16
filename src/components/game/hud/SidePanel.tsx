@@ -150,7 +150,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <CollapsiblePanel
       title={title}
       className={ornateFrame}
-      bodyClassName="max-h-64 space-y-1 overflow-y-auto px-2 py-2"
+      expandedClassName="shrink-0 overflow-hidden"
+      collapsedClassName="shrink-0 overflow-hidden"
+      bodyClassName="max-h-32 space-y-1 overflow-y-auto overscroll-contain px-2 py-2"
     >
       {children}
     </CollapsiblePanel>

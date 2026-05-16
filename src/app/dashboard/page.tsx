@@ -20,8 +20,10 @@ import {
 
 interface PlayerInfo {
   id: string;
-  userId: string;
-  user: { name: string | null };
+  userId: string | null;
+  user?: { name: string | null };
+  isAi?: boolean;
+  aiName?: string | null;
   faction: string;
   isAlive: boolean;
   color: string;
@@ -724,7 +726,7 @@ export default function DashboardPage() {
                           key={i}
                           className="h-6 w-6 rounded-full ring-2 ring-amber-300/60"
                           style={{ backgroundColor: p.color }}
-                          title={factionLabel(p.faction)}
+                          title={`${p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur"} - ${factionLabel(p.faction)}`}
                         />
                       ))}
                       <button
@@ -809,9 +811,9 @@ export default function DashboardPage() {
                             backgroundColor: p.color,
                             boxShadow: `inset 0 0 0 2px ${p.isAlive ? "rgba(252,211,77,0.6)" : "rgba(239,68,68,0.6)"}`,
                           }}
-                          title={factionLabel(p.faction)}
+                          title={`${p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur"} - ${factionLabel(p.faction)}`}
                         >
-                          {p.user.name?.[0]?.toUpperCase() || "?"}
+                          {p.isAi ? "IA" : p.user?.name?.[0]?.toUpperCase() || "?"}
                         </div>
                       ))}
                     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "@/lib/auth/client";
+import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { PersistentCombat } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -23,7 +24,9 @@ export default function ActiveCombatsPanel() {
     <CollapsiblePanel
       title={`Combats (${combats.length})`}
       className={ornateFrame}
-      bodyClassName="max-h-64 space-y-1 overflow-y-auto px-2 py-2"
+      expandedClassName="shrink-0 overflow-hidden"
+      collapsedClassName="shrink-0 overflow-hidden"
+      bodyClassName="max-h-32 space-y-1 overflow-y-auto overscroll-contain px-2 py-2"
     >
       {combats.map((combat) => (
         <CombatRow
@@ -55,7 +58,8 @@ function CombatRow({
       combat.defenderPlayerId === myPlayerId ||
       combat.participants?.some((participant) => participant.playerId === myPlayerId))
   );
-  const isMyTurn = combat.currentPlayerId === myPlayerId;
+  const currentPlayerId = getCurrentCombatPlayerId(combat.boardState, combat.currentUnitId, combat.currentPlayerId);
+  const isMyTurn = currentPlayerId === myPlayerId;
 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-amber-700/20 bg-black/30 px-2 py-1.5 transition hover:border-amber-500/50 hover:bg-amber-900/15">

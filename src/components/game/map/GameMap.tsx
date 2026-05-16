@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
-import { GameState, PersistentCombat, Position, ResourceBuilding } from "@/lib/game/types";
+import { GameState, Position, ResourceBuilding } from "@/lib/game/types";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -29,7 +30,7 @@ type PendingMove = {
 };
 
 type MoveInteraction =
-  | { type: "COLLECT"; resource: string; gold?: number; destination?: Position }
+  | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: Position }
@@ -74,6 +75,10 @@ export default function GameMapComponent() {
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
   const { gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, activeCombat, cameraTarget, zoomRequest, devRevealMap } = useGameStore();
+  const activeCombatHeroIds = useMemo(
+    () => getActiveCombatHeroIds(gameState?.activeCombats),
+    [gameState?.activeCombats]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -176,6 +181,10 @@ export default function GameMapComponent() {
       rendererRef.current.clearReachable();
       return;
     }
+    if (activeCombatHeroIds.has(hero.id)) {
+      rendererRef.current.clearReachable();
+      return;
+    }
 
     const reachableTiles = Array.from(computeReachableTiles(gameState.map, hero.position, hero.movement))
       .map((key) => {
@@ -188,7 +197,7 @@ export default function GameMapComponent() {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap]);
+  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds]);
 
   useEffect(() => {
     if (!cameraTarget) return;
@@ -253,13 +262,13 @@ export default function GameMapComponent() {
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
     );
-    const firstHero = currentPlayer?.heroes[0];
+    const firstHero = currentPlayer?.heroes.find((hero) => !activeCombatHeroIds.has(hero.id));
     if (!firstHero) return;
 
     didAutoSelectActiveHero.current = true;
     selectHero(firstHero.id);
     rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion, activeCombatHeroIds]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2 || e.button === 1) {
@@ -328,9 +337,10 @@ export default function GameMapComponent() {
     rendererRef.current?.clearHighlights();
 
     if (interaction.type === "COLLECT") {
+      const amount = getCollectInteractionAmount(interaction);
       const msg = interaction.resource === "gold"
-        ? `+${interaction.gold ?? 500} Or trouve !`
-        : `+${interaction.resource === "wood" || interaction.resource === "ore" ? 2 : 1} ${formatResourceName(interaction.resource)} collecte(e) !`;
+        ? `+${amount} Or trouve !`
+        : `+${amount} ${formatResourceName(interaction.resource)} collecte(e) !`;
       setCombatMessage(msg);
       return true;
     }
@@ -415,8 +425,14 @@ export default function GameMapComponent() {
       ? "Vous avez déjà terminé votre tour."
       : "Vous ne pouvez pas jouer pour le moment.";
 
-    const objects = rendererRef.current.getObjectsAtScreen(screenX, screenY);
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
+    const targetTile = tile ? gameState.map.tiles[tile.y]?.[tile.x] : undefined;
+    const objects = filterClickThroughTownSpriteHits(
+      rendererRef.current.getObjectsAtScreen(screenX, screenY),
+      tile,
+      targetTile,
+      selectedHeroId
+    );
 
     if (isSyncingMoveRef.current) {
       return;
@@ -425,6 +441,13 @@ export default function GameMapComponent() {
     const handleOutOfRange = (heroSrc: { id: string; position: Position; movement: number; maxMovement: number }, destination: Position): "handled" | "inaccessible" => {
       const renderer = rendererRef.current;
       if (!renderer || !gameState) return "inaccessible";
+      if (activeCombatHeroIds.has(heroSrc.id)) {
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        renderer.clearHighlights();
+        setCombatMessage("Ce heros est deja engage dans un combat.");
+        return "handled";
+      }
       if (destination.x === heroSrc.position.x && destination.y === heroSrc.position.y) {
         return "inaccessible";
       }
@@ -568,6 +591,15 @@ export default function GameMapComponent() {
       return "handled";
     };
 
+    const blockIfHeroInCombat = (heroId: string) => {
+      if (!activeCombatHeroIds.has(heroId)) return false;
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      rendererRef.current?.clearHighlights();
+      setCombatMessage("Ce heros est deja engage dans un combat.");
+      return true;
+    };
+
       if (objects.length > 0) {
       const selectedObject = selectObjectOnTile(
         objects,
@@ -592,6 +624,17 @@ export default function GameMapComponent() {
         if (selectedHeroId && myPlayer) {
           const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
           if (!hero) return;
+          if (activeCombatHeroIds.has(hero.id)) {
+            pendingMoveRef.current = null;
+            pendingAttackRef.current = null;
+            rendererRef.current.clearHighlights();
+            if (getCombatHeroIds(combat).has(hero.id)) {
+              setActiveCombat(combat);
+            } else {
+              setCombatMessage("Ce heros est deja engage dans un combat.");
+            }
+            return;
+          }
           const destination = { x: obj.x, y: obj.y };
           const path = findPath(gameState.map, hero.position, destination, hero.movement);
           if (path.length <= 1) {
@@ -641,6 +684,7 @@ export default function GameMapComponent() {
       if (isEnemyHero && selectedHeroId) {
         const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
         if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
@@ -686,6 +730,7 @@ export default function GameMapComponent() {
       if (isEnemyTown && selectedHeroId) {
         const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
         if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
@@ -730,6 +775,7 @@ export default function GameMapComponent() {
             type: "CAPTURE_TOWN",
             heroId: selectedHeroId,
             townId: obj.id,
+            destination,
             path: path.map((p: Position) => ({ x: p.x, y: p.y })),
           }),
         })
@@ -771,6 +817,7 @@ export default function GameMapComponent() {
       if (obj.type === "town" && selectedHeroId && myPlayer && obj.playerId === myPlayer.id) {
         const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
         if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
         if (destination.x === hero.position.x && destination.y === hero.position.y) {
@@ -872,6 +919,7 @@ export default function GameMapComponent() {
       if (isNeutralOrEnemyBuilding && selectedHeroId) {
         const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
         if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
@@ -944,6 +992,7 @@ export default function GameMapComponent() {
       if (obj.type === "adventure_building" && selectedHeroId && myPlayer) {
         const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
         if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
         const destination = { x: obj.x, y: obj.y };
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
         if (path.length <= 1) {
@@ -1045,6 +1094,7 @@ export default function GameMapComponent() {
         .flatMap((p) => p.heroes)
         .find((h) => h.id === selectedHeroId);
       if (!hero) return;
+      if (blockIfHeroInCombat(hero.id)) return;
 
       const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
       if (!isTileTraversable(targetTile)) {
@@ -1240,7 +1290,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, activeCombatHeroIds]);
 
   return (
     <div
@@ -1282,9 +1332,28 @@ function getAcceptedMovePath(data: unknown, fallbackPath: Position[]): Position[
     .filter((position) => Number.isFinite(position.x) && Number.isFinite(position.y));
 }
 
+function getCollectInteractionAmount(interaction: Extract<MoveInteraction, { type: "COLLECT" }>) {
+  if (Number.isFinite(interaction.amount) && Number(interaction.amount) > 0) return Number(interaction.amount);
+  if (interaction.resource === "gold") return interaction.gold ?? 500;
+  if (interaction.resource === "wood" || interaction.resource === "ore") return 5;
+  if (
+    interaction.resource === "mercury" ||
+    interaction.resource === "crystals" ||
+    interaction.resource === "gems" ||
+    interaction.resource === "sulfur"
+  ) {
+    return 3;
+  }
+  return 1;
+}
+
 function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending: PendingMove): PendingMove | null {
   const hero = gameState.players.flatMap((player) => player.heroes).find((item) => item.id === pending.heroId);
   if (!hero) {
+    renderer.clearHighlights();
+    return null;
+  }
+  if (getActiveCombatHeroIds(gameState.activeCombats).has(hero.id)) {
     renderer.clearHighlights();
     return null;
   }
@@ -1362,6 +1431,20 @@ function selectObjectOnTile(
   return hero ?? town ?? objects[0];
 }
 
+function filterClickThroughTownSpriteHits(
+  objects: MapObjectData[],
+  tile: Position | null,
+  targetTile: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"]["tiles"][number][number] | undefined,
+  selectedHeroId: string | null
+) {
+  if (!selectedHeroId || !tile || !targetTile || !isTileTraversable(targetTile)) return objects;
+
+  return objects.filter((object) =>
+    object.type !== "town" ||
+    (object.x === tile.x && object.y === tile.y)
+  );
+}
+
 function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[]) {
   return getAdventurePathCost(map, path);
 }
@@ -1428,11 +1511,24 @@ function buildObjects(
   for (const player of gameState.players) {
     const isCurrentPlayer = player.id === currentPlayer?.id;
     const townPositions = new Set(player.towns.map((town) => `${town.position.x},${town.position.y}`));
+    const heroesByTown = new Map<string, typeof player.heroes>();
+    for (const town of player.towns) {
+      const key = `${town.position.x},${town.position.y}`;
+      heroesByTown.set(
+        key,
+        player.heroes.filter((hero) => hero.position.x === town.position.x && hero.position.y === town.position.y)
+      );
+    }
 
     if (gameState.status !== "PENDING") {
       for (const hero of player.heroes) {
         const key = `${hero.position.x},${hero.position.y}`;
         if (!isCurrentPlayer && !visiblePositions.has(key)) continue;
+        const townHeroes = heroesByTown.get(key) ?? [];
+        const townHeroIndex = townHeroes.findIndex((item) => item.id === hero.id);
+        const townHeroOffset = townHeroIndex >= 0
+          ? getTownHeroRenderOffset(townHeroIndex, townHeroes.length)
+          : null;
         objects.push({
           type: "hero",
           id: hero.id,
@@ -1444,6 +1540,8 @@ function buildObjects(
           name: hero.name,
           onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
           inTown: townPositions.has(key),
+          renderOffsetX: townHeroOffset?.x,
+          renderOffsetY: townHeroOffset?.y,
         });
       }
     }
@@ -1586,13 +1684,17 @@ function buildObjects(
   return objects;
 }
 
-function getCombatHeroIds(combat: PersistentCombat) {
-  const heroIds = new Set<string>();
-  heroIds.add(combat.attackerHeroId);
-  if (combat.defenderHeroId) heroIds.add(combat.defenderHeroId);
-  for (const participant of combat.participants ?? []) {
-    heroIds.add(participant.heroId);
-  }
+function getTownHeroRenderOffset(index: number, total: number) {
+  const clampedTotal = Math.max(1, total);
+  const rowSize = clampedTotal <= 5 ? clampedTotal : Math.ceil(clampedTotal / 2);
+  const row = Math.floor(index / rowSize);
+  const column = index % rowSize;
+  const itemsInRow = row === 0 ? Math.min(rowSize, clampedTotal) : clampedTotal - rowSize;
+  const centered = column - (Math.max(1, itemsInRow) - 1) / 2;
 
-  return heroIds;
+  return {
+    x: centered * 18,
+    y: row * 13,
+  };
 }
+

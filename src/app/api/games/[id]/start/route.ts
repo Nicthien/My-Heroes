@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
+import { createGamePlayerSetup, PLAYER_COLORS, pickAiFaction, pickAiName } from "@/lib/game/server/player-setup";
+import { GameMap } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -16,7 +19,7 @@ export async function POST(
 
   if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
 
-  const players = game.players as unknown as Array<{ id: string; userId: string; turnOrder: number }>;
+  const players = game.players as unknown as Array<{ id: string; userId: string | null; isAi?: boolean; turnOrder: number }>;
   const currentUserPlayer = players.find((player) => player.userId === user.id);
   if (!currentUserPlayer) {
     return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
@@ -28,7 +31,34 @@ export async function POST(
     return NextResponse.json({ error: "Seul le createur peut demarrer la partie" }, { status: 403 });
   }
 
-  const firstPlayer = [...players].sort((a, b) => a.turnOrder - b.turnOrder)[0];
+  const maxPlayers = Number(game.maxPlayers);
+  const existingTurnOrders = new Set(players.map((player) => Number(player.turnOrder)));
+  const mapData = game.mapData as GameMap;
+
+  for (let turnOrder = 0; turnOrder < maxPlayers; turnOrder++) {
+    if (existingTurnOrders.has(turnOrder)) continue;
+    try {
+      await createGamePlayerSetup({
+        supabase,
+        gameId: id,
+        mapData,
+        turnOrder,
+        isAi: true,
+        aiName: pickAiName(turnOrder),
+        aiDifficulty: "simple",
+        faction: pickAiFaction(turnOrder),
+        color: PLAYER_COLORS[turnOrder] || "#ffffff",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Impossible de creer les joueurs IA";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
+
+  const gameWithAi = await getGameWithRelations(supabase, id);
+  if (!gameWithAi) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
+  const activePlayers = gameWithAi.players as unknown as Array<{ id: string; turnOrder: number }>;
+  const firstPlayer = [...activePlayers].sort((a, b) => a.turnOrder - b.turnOrder)[0];
   if (!firstPlayer) return NextResponse.json({ error: "Aucun joueur dans la partie" }, { status: 400 });
 
   const { error } = await supabase
@@ -39,6 +69,7 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await runAiTurnsUntilHuman(supabase, id);
   const updatedGame = await getGameWithRelations(supabase, id);
   return NextResponse.json(updatedGame);
 }

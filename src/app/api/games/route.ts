@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
-import { computeVisibleTiles, getDailyAdventureMovement } from "@/lib/game/engine";
-import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/neutral-armies";
+import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
-import { BuildingType, Faction, GameMap, HeroClass, MapObject, MapTile, TerrainType } from "@/lib/game/types";
-import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
+import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/game/types";
+import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
-
-const STARTER_ARMY_COUNTS: [number, number, number] = [20, 12, 4];
 
 const MAP_SIZES: Record<string, number> = {
   S: 36,
@@ -18,29 +15,6 @@ const MAP_SIZES: Record<string, number> = {
   L: 108,
   XL: 144,
 };
-
-function buildStarterArmy(faction: Faction, heroId: string) {
-  const tiers = FACTION_UNITS[faction] ?? FACTION_UNITS[Faction.CASTLE];
-  return STARTER_ARMY_COUNTS.map((count, i) => {
-    const unitType = tiers[i];
-    const rule = UNIT_RULES[unitType];
-    return {
-      hero_id: heroId,
-      unit_type: unitType,
-      count,
-      health: rule.health * count,
-      max_health: rule.health,
-      position: i,
-    };
-  });
-}
-
-function getStarterArmyMovement(faction: Faction) {
-  const tiers = FACTION_UNITS[faction] ?? FACTION_UNITS[Faction.CASTLE];
-  return getDailyAdventureMovement(
-    STARTER_ARMY_COUNTS.map((_, i) => ({ unitType: tiers[i] }))
-  );
-}
 
 export async function GET(request: Request) {
   const { user, response } = await requireCurrentUser(request);
@@ -91,7 +65,7 @@ export async function POST(request: Request) {
 
   const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
 
-  const { generateMap, placePlayerStart } = await import("@/lib/game/engine");
+  const { generateMap } = await import("@/lib/game/engine");
   const mapData = generateMap({
     width: size,
     height: size,
@@ -102,8 +76,6 @@ export async function POST(request: Request) {
   prefixMonsterIds(mapData, randomUUID());
   assignMonsterSubtypes(mapData);
   assignNeutralTownTraits(mapData);
-  const startPos = placePlayerStart(mapData, 0);
-  const initialExplored = computeVisibleTiles(mapData, [{ x: startPos.x, y: startPos.y }], 5);
   const profileName = await getProfileName(supabase, user.id);
 
   const { data: gameRow, error: gameError } = await supabase
@@ -125,77 +97,20 @@ export async function POST(request: Request) {
 
   if (gameError) return NextResponse.json({ error: gameError.message }, { status: 500 });
 
-  const { data: playerRow, error: playerError } = await supabase
-    .from("game_players")
-    .insert({
-      game_id: gameRow.id,
-      user_id: user.id,
+  try {
+    await createGamePlayerSetup({
+      supabase,
+      gameId: gameRow.id,
+      userId: user.id,
       faction,
       color: "#3b82f6",
-      turn_order: 0,
-      explored_tiles: Array.from(initialExplored),
-    })
-    .select("*")
-    .single();
-
-  if (playerError) return NextResponse.json({ error: playerError.message }, { status: 500 });
-
-  const factionKey = (faction as Faction) in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
-  const factionHeroes = HERO_ROSTER.filter((h) => h.faction === factionKey);
-  const startingHero = factionHeroes.length > 0
-    ? factionHeroes[Math.floor(Math.random() * factionHeroes.length)]
-    : null;
-  const heroClass = (startingHero?.class ?? HeroClass.KNIGHT) as HeroClass;
-  const heroStats = CLASS_STARTING_STATS[heroClass];
-  const dailyMovement = getStarterArmyMovement(factionKey);
-
-  const heroInsert: Record<string, unknown> = {
-    game_player_id: playerRow.id,
-    name: startingHero?.name ?? "Sire Christian",
-    hero_class: heroClass,
-    specialty: startingHero?.specialty ?? null,
-    attack: heroStats.attack,
-    defense: heroStats.defense,
-    spell_power: heroStats.spellPower,
-    knowledge: heroStats.knowledge,
-    x: startPos.x,
-    y: startPos.y,
-    movement: dailyMovement,
-    max_movement: dailyMovement,
-  };
-
-  let { data: heroRow, error: heroError } = await supabase
-    .from("heroes")
-    .insert(heroInsert)
-    .select("*")
-    .single();
-
-  if (heroError) {
-    delete heroInsert.hero_class;
-    delete heroInsert.specialty;
-    ({ data: heroRow, error: heroError } = await supabase
-      .from("heroes")
-      .insert(heroInsert)
-      .select("*")
-      .single());
+      turnOrder: 0,
+      mapData,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Impossible de creer le joueur";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  if (heroError) return NextResponse.json({ error: heroError.message }, { status: 500 });
-  const { error: armyError } = await supabase.from("armies").insert(buildStarterArmy(factionKey, heroRow.id));
-  if (armyError) return NextResponse.json({ error: armyError.message }, { status: 500 });
-
-  const { error: townError } = await supabase.from("towns").insert({
-    game_id: gameRow.id,
-    game_player_id: playerRow.id,
-    name: pickTownName(factionKey, `${gameRow.id}:${playerRow.id}:0`),
-    town_type: factionKey,
-    x: startPos.x,
-    y: startPos.y,
-    buildings: [BuildingType.VILLAGE_HALL],
-    garrison: [],
-    is_neutral: false,
-  });
-  if (townError) return NextResponse.json({ error: townError.message }, { status: 500 });
 
   await createNeutralArmies(supabase, gameRow.id, mapData);
   await createResourceBuildings(supabase, gameRow.id, mapData);
@@ -301,20 +216,6 @@ async function createNeutralTowns(
         ? tile.object.subtype
         : pickTownFactionForTerrain(terrain, seed);
       const townName = tile.object.name ?? pickTownName(f, seed);
-      // Garnison neutre simple : 1 stack de tier 4-5 de la faction
-      const tierUnit = FACTION_UNITS[f][3];
-      const rule = UNIT_RULES[tierUnit];
-      const count = 10;
-      const garrison = [
-        {
-          id: randomUUID(),
-          unitType: tierUnit,
-          count,
-          health: rule.health * count,
-          maxHealth: rule.health,
-          position: 0,
-        },
-      ];
 
       await supabase.from("towns").insert({
         game_id: gameId,
@@ -326,7 +227,7 @@ async function createNeutralTowns(
         buildings: [BuildingType.VILLAGE_HALL],
         garrison: [],
         is_neutral: true,
-        neutral_garrison: garrison,
+        neutral_garrison: createNeutralTownGarrison(f),
       });
     }
   }

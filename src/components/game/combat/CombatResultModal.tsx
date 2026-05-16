@@ -9,6 +9,7 @@ export default function CombatResultModal() {
   const result = useGameStore((state) => state.lastCombatResult);
   const gameState = useGameStore((state) => state.gameState);
   const setCombatResult = useGameStore((state) => state.setCombatResult);
+  const setActiveCombat = useGameStore((state) => state.setActiveCombat);
   if (!result) return null;
 
   const myPlayer = gameState?.players.find((p) => p.userId === session?.user?.id);
@@ -42,7 +43,13 @@ export default function CombatResultModal() {
             {result.log.slice(-8).map((line, index) => <div key={index}>{line}</div>)}
           </div>
         )}
-        <button className={`mt-6 rounded px-5 py-2 font-bold text-white ${buttonColor}`} onClick={() => setCombatResult(null)}>
+        <button
+          className={`mt-6 rounded px-5 py-2 font-bold text-white ${buttonColor}`}
+          onClick={() => {
+            setActiveCombat(null);
+            setCombatResult(null);
+          }}
+        >
           Retour à la carte
         </button>
       </div>

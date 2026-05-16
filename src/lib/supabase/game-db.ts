@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getDailyAdventureMovement } from "@/lib/game/engine";
-import { UnitType } from "@/lib/game/types";
+import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
+import { MINIMUM_ADVENTURE_STEP_COST, getDailyAdventureMovement } from "@/lib/game/engine";
+import { type CombatBoardUnit, UnitType } from "@/lib/game/types";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 type DbRow = Record<string, unknown>;
@@ -39,6 +40,9 @@ export function toPlayer(row: DbRow) {
     gameId: row.game_id,
     userId: row.user_id,
     user: profile ? { name: profile.name ?? null } : undefined,
+    isAi: row.is_ai ?? false,
+    aiName: row.ai_name ?? null,
+    aiDifficulty: row.ai_difficulty ?? null,
     faction: row.faction,
     color: row.color,
     gold: row.gold,
@@ -60,8 +64,8 @@ export function toPlayer(row: DbRow) {
 
 export function toHero(row: DbRow) {
   const armies = rows(row.armies).map(toArmy);
-  const movement = normalizeLegacyHeroMovement(row.movement, armies);
-  const maxMovement = normalizeLegacyHeroMovement(row.max_movement, armies);
+  const maxMovement = normalizeLegacyHeroMaxMovement(row.max_movement, armies);
+  const movement = normalizeHeroCurrentMovement(row.movement, row.max_movement, maxMovement);
 
   return {
     id: row.id,
@@ -84,10 +88,20 @@ export function toHero(row: DbRow) {
   };
 }
 
-function normalizeLegacyHeroMovement(value: unknown, armies: ReturnType<typeof toArmy>[]) {
+function normalizeLegacyHeroMaxMovement(value: unknown, armies: ReturnType<typeof toArmy>[]) {
   const movement = Number(value ?? 0);
   if (movement > 20) return movement;
   return getDailyAdventureMovement(armies.map((army) => ({ unitType: army.unitType as UnitType })));
+}
+
+function normalizeHeroCurrentMovement(value: unknown, rawMaxValue: unknown, normalizedMaxMovement: number) {
+  const movement = Number(value ?? 0);
+  if (movement <= 0) return 0;
+
+  const maxMovement = Number(rawMaxValue ?? 0);
+  if (maxMovement > 0 && maxMovement <= 20 && movement === maxMovement) return normalizedMaxMovement;
+  if (movement < MINIMUM_ADVENTURE_STEP_COST) return 0;
+  return movement;
 }
 
 export function toArmy(row: DbRow) {
@@ -169,6 +183,9 @@ export function toNeutralArmyStack(row: DbRow) {
 }
 
 export function toCombat(row: DbRow) {
+  const boardState = row.board_state as { units?: CombatBoardUnit[] } | null;
+  const currentUnitId = row.current_unit_id as string | null;
+
   return {
     id: row.id,
     gameId: row.game_id,
@@ -179,8 +196,8 @@ export function toCombat(row: DbRow) {
     attackerHeroId: row.attacker_hero_id,
     defenderHeroId: row.defender_hero_id,
     neutralArmyId: row.neutral_army_id,
-    currentPlayerId: row.current_player_id,
-    currentUnitId: row.current_unit_id,
+    currentPlayerId: getCurrentCombatPlayerId(boardState, currentUnitId, row.current_player_id as string | null),
+    currentUnitId,
     round: row.round,
     x: row.x,
     y: row.y,

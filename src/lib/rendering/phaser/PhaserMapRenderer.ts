@@ -44,13 +44,13 @@ const TERRAIN_SIDE_DARK: Record<TerrainType, number> = {
 };
 
 const RESOURCE_LABELS: Record<string, string> = {
-  gold: "OR",
-  wood: "BOIS",
-  ore: "MIN",
-  mercury: "MER",
-  crystals: "CRI",
-  gems: "GEM",
-  sulfur: "SOU",
+  gold: "Or",
+  wood: "Bois",
+  ore: "Minerai",
+  mercury: "Mercure",
+  crystals: "Cristaux",
+  gems: "Gemmes",
+  sulfur: "Soufre",
 };
 
 function getMapObjectHoverText(object: MapObject) {
@@ -66,6 +66,10 @@ function getMapObjectHoverText(object: MapObject) {
   if (object.type === "artifact") return "Artefact";
 
   return null;
+}
+
+function isEmptyPassableTile(tile: MapTile) {
+  return tile.isPassable && !tile.object && !tile.decor?.blocking;
 }
 
 const MIN_CAMERA_ZOOM = 0.65;
@@ -151,6 +155,7 @@ class PhaserMapScene extends Phaser.Scene {
   private reachableLayer!: Phaser.GameObjects.Container;
   private highlightLayer!: Phaser.GameObjects.Container;
   private objectLayer!: Phaser.GameObjects.Container;
+  private movementLabelLayer!: Phaser.GameObjects.Container;
   private fogLayer!: Phaser.GameObjects.Container;
   private hoverLabelLayer!: Phaser.GameObjects.Container;
   private hoverLabelBackground?: Phaser.GameObjects.Graphics;
@@ -195,6 +200,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.reachableLayer = this.add.container(0, 0);
     this.highlightLayer = this.add.container(0, 0);
     this.objectLayer = this.add.container(0, 0);
+    this.movementLabelLayer = this.add.container(0, 0);
     this.fogLayer = this.add.container(0, 0);
     this.hoverLabelLayer = this.add.container(0, 0);
 
@@ -206,6 +212,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.mapObjectLayer.setDepth(4);
     this.boardLipLayer.setDepth(25);
     this.objectLayer.setDepth(10);
+    this.movementLabelLayer.setDepth(12);
     this.fogLayer.setDepth(20);
     this.hoverLabelLayer.setDepth(30);
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -859,6 +866,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   highlightPath(path: Position[]) {
     this.highlightLayer.removeAll(true);
+    this.movementLabelLayer.removeAll(true);
     for (const pos of path) {
       this.drawDiamond(this.highlightLayer, pos.x, pos.y, 0xffff00, 0.3);
     }
@@ -866,6 +874,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string) {
     this.highlightLayer.removeAll(true);
+    this.movementLabelLayer.removeAll(true);
     for (const pos of reachable) {
       this.drawDiamond(this.highlightLayer, pos.x, pos.y, 0xffff00, 0.3);
     }
@@ -882,7 +891,7 @@ class PhaserMapScene extends Phaser.Scene {
       badge.lineStyle(2, 0xffd166, 0.95);
       badge.fillCircle(iso.x, centerY, 12);
       badge.strokeCircle(iso.x, centerY, 12);
-      this.highlightLayer.add(badge);
+      this.movementLabelLayer.add(badge);
 
       const text = this.add.text(iso.x, centerY, turnsLabel, {
         color: "#ffffff",
@@ -892,7 +901,7 @@ class PhaserMapScene extends Phaser.Scene {
         strokeThickness: 2,
       });
       text.setOrigin(0.5);
-      this.highlightLayer.add(text);
+      this.movementLabelLayer.add(text);
     }
   }
 
@@ -905,11 +914,13 @@ class PhaserMapScene extends Phaser.Scene {
 
   highlightTile(x: number, y: number, color = 0x00ff00) {
     this.highlightLayer.removeAll(true);
+    this.movementLabelLayer.removeAll(true);
     this.drawDiamond(this.highlightLayer, x, y, color, 0.4);
   }
 
   clearHighlights() {
     this.highlightLayer.removeAll(true);
+    this.movementLabelLayer.removeAll(true);
   }
 
   clearReachable() {
@@ -1006,10 +1017,11 @@ class PhaserMapScene extends Phaser.Scene {
     const metrics = getObjectMetrics(object);
     if (!metrics) return null;
 
-    const bottom = surfaceY + metrics.offsetY;
+    const renderX = iso.x + (object.renderOffsetX ?? 0);
+    const bottom = surfaceY + metrics.offsetY + (object.renderOffsetY ?? 0);
     return {
-      left: iso.x - metrics.width / 2,
-      right: iso.x + metrics.width / 2,
+      left: renderX - metrics.width / 2,
+      right: renderX + metrics.width / 2,
       top: bottom - metrics.height,
       bottom,
     };
@@ -1017,7 +1029,7 @@ class PhaserMapScene extends Phaser.Scene {
 
   private getObjectDepth(object: MapObjectData) {
     const metrics = getObjectMetrics(object);
-    return this.getSurfaceY(object.x, object.y) + (metrics?.offsetY ?? 0);
+    return this.getSurfaceY(object.x, object.y) + (metrics?.offsetY ?? 0) + (object.renderOffsetY ?? 0);
   }
 
   private renderTile(tile: MapTile, isoX: number, isoY: number) {
@@ -1467,7 +1479,9 @@ class PhaserMapScene extends Phaser.Scene {
         const metrics = getObjectMetrics(object);
         if (!metrics) continue;
         const direction = this.heroDirections.get(object.id) ?? "se";
-        const sprite = this.addHeroSprite(object, iso.x, y + metrics.offsetY, metrics.width, metrics.height, direction);
+        const renderX = iso.x + (object.renderOffsetX ?? 0);
+        const renderY = y + metrics.offsetY + (object.renderOffsetY ?? 0);
+        const sprite = this.addHeroSprite(object, renderX, renderY, metrics.width, metrics.height, direction);
         if (sprite) {
           const bannerMetrics = getHeroBannerMetrics(object);
           const animation = {
@@ -1480,12 +1494,12 @@ class PhaserMapScene extends Phaser.Scene {
           } satisfies HeroSpriteAnimation;
           const banner = this.addBanner(
             this.objectLayer,
-            iso.x - bannerMetrics.xOffset,
-            y + metrics.offsetY - metrics.height + bannerMetrics.yOffset,
+            renderX - bannerMetrics.xOffset,
+            renderY - metrics.height + bannerMetrics.yOffset,
             object.color,
             bannerMetrics.width,
             bannerMetrics.height,
-            y + metrics.offsetY
+            renderY
           );
           this.heroSpriteAnimations.push(animation);
           this.renderedHeroes.set(object.id, {
@@ -1831,8 +1845,31 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private getHoverLabel(screenX: number, screenY: number) {
+    const tile = this.getTileAtScreen(screenX, screenY);
+    const tileData = tile ? this.map?.tiles[tile.y]?.[tile.x] : undefined;
+    const mapObject = tileData?.object;
+
+    if (tile && mapObject) {
+      if (this.visibleTiles && !this.visibleTiles.has(`${tile.x},${tile.y}`)) return null;
+
+      const text = getMapObjectHoverText(mapObject);
+      if (text) {
+        const iso = cartToIso(tile.x, tile.y);
+        const surfaceY = this.getSurfaceY(tile.x, tile.y);
+        return {
+          key: `map:${mapObject.id}`,
+          text,
+          x: iso.x,
+          y: surfaceY - 34,
+        };
+      }
+    }
+
     const objects = this.getObjectsAtScreen(screenX, screenY);
-    const object = objects.find((item) => item.name.trim().length > 0);
+    const object = objects.find((item) =>
+      item.name.trim().length > 0 &&
+      (!tileData || !isEmptyPassableTile(tileData) || (item.x === tile?.x && item.y === tile?.y))
+    );
     if (object) {
       const bounds = this.getObjectBounds(object);
       if (!bounds) return null;
@@ -1840,27 +1877,11 @@ class PhaserMapScene extends Phaser.Scene {
       return {
         key: `object:${object.id}`,
         text: object.name,
-        x: iso.x,
+        x: iso.x + (object.renderOffsetX ?? 0),
         y: bounds.top - 8,
       };
     }
-
-    const tile = this.getTileAtScreen(screenX, screenY);
-    const mapObject = tile ? this.map?.tiles[tile.y]?.[tile.x]?.object : undefined;
-    if (!tile || !mapObject) return null;
-    if (this.visibleTiles && !this.visibleTiles.has(`${tile.x},${tile.y}`)) return null;
-
-    const text = getMapObjectHoverText(mapObject);
-    if (!text) return null;
-
-    const iso = cartToIso(tile.x, tile.y);
-    const surfaceY = this.getSurfaceY(tile.x, tile.y);
-    return {
-      key: `map:${mapObject.id}`,
-      text,
-      x: iso.x,
-      y: surfaceY - 34,
-    };
+    return null;
   }
 
   private clearHoverLabel() {

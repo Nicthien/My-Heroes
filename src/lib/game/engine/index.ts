@@ -53,6 +53,7 @@ function getMovementCost(terrain: TerrainType): number {
 /** Coût de déplacement effectif d'une tile : les routes priment sur le terrain. */
 const ORTHOGONAL_BASE = 100;
 const DIAGONAL_BASE = 141;
+export const MINIMUM_ADVENTURE_STEP_COST = 50;
 
 export function effectiveMovementCost(tile: MapTile): number {
   if (!isTileTraversable(tile)) return 999;
@@ -127,6 +128,28 @@ export function getAdventurePathCost(map: GameMap, path: Position[]): number {
     total += stepCost;
   }
   return total;
+}
+
+export function getMinimumAdjacentAdventureStepCost(map: GameMap, position: Position): number | null {
+  let minimum = Number.POSITIVE_INFINITY;
+
+  for (const neighbor of getAdventureNeighbors(position)) {
+    if (!isInsideMap(map, neighbor)) continue;
+    if (!canMoveAdventureStep(map, position, neighbor)) continue;
+
+    const stepCost = getAdventureStepCost(map, position, neighbor);
+    if (Number.isFinite(stepCost)) minimum = Math.min(minimum, stepCost);
+  }
+
+  return Number.isFinite(minimum) ? minimum : null;
+}
+
+export function getUsableAdventureMovement(map: GameMap, position: Position, movement: number): number {
+  const remaining = Number.isFinite(movement) ? Math.max(0, movement) : 0;
+  if (remaining === 0) return 0;
+
+  const minimumStepCost = getMinimumAdjacentAdventureStepCost(map, position);
+  return minimumStepCost !== null && remaining < minimumStepCost ? 0 : remaining;
 }
 
 export function getDailyAdventureMovement(heroArmies: Pick<UnitStack, "unitType">[] | undefined | null): number {
@@ -255,8 +278,9 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   applyChokepointGuards({ tiles, zoneGrid, width, height, rng }, chokepoints);
 
   // 5) Routes : pavées entre châteaux, dirt vers les mines
-  buildRoads(tiles, width, height, townPositions, "paved");
-  buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10);
+  const roadOptions = { allowWaterRoads: fullTemplate.allowRoadBridges !== false };
+  buildRoads(tiles, width, height, townPositions, "paved", roadOptions);
+  buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10, roadOptions);
 
   // Batiments d'aventure hors route pour recompenser l'exploration.
   placeAdventureBuildings({ tiles, zoneGrid, width, height, rng });
@@ -552,7 +576,7 @@ export function processAction(state: GameState, action: GameAction): GameState {
             return {
               ...h,
               position: lastPos,
-              movement: Math.max(0, h.movement - usedMovement),
+              movement: getUsableAdventureMovement(state.map, lastPos, h.movement - usedMovement),
             };
           }),
         };

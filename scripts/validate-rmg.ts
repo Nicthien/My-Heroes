@@ -95,6 +95,7 @@ function validateMap(
   const landRatio = stats.land / total;
   const template = TEMPLATES.find((item) => item.id === templateId);
   const expectsArchipelago = template?.landStyle === "volcanic-crown" || templateId === "archipelago";
+  const allowsSplitRoadNetworks = template?.allowRoadBridges === false;
 
   if (stats.towns < playerCount) {
     addIssue("error", templateId, seed, playerCount, size, `expected at least ${playerCount} towns, got ${stats.towns}`);
@@ -122,7 +123,8 @@ function validateMap(
 
   if (expectsArchipelago) {
     if (waterRatio < 0.22) addIssue("warning", templateId, seed, playerCount, size, `water ratio low for archipelago: ${percent(waterRatio)}`);
-    if (waterRatio > 0.62) addIssue("error", templateId, seed, playerCount, size, `water ratio too high: ${percent(waterRatio)}`);
+    const maxWaterRatio = allowsSplitRoadNetworks ? 0.68 : 0.62;
+    if (waterRatio > maxWaterRatio) addIssue("error", templateId, seed, playerCount, size, `water ratio too high: ${percent(waterRatio)}`);
   } else {
     if (waterRatio > 0.58) addIssue("warning", templateId, seed, playerCount, size, `water ratio high: ${percent(waterRatio)}`);
   }
@@ -156,7 +158,7 @@ function validateMap(
         }
         if (!tile.road) {
           addIssue("error", templateId, seed, playerCount, size, `town door ${tile.object.id} has no south road at ${tile.x},${tile.y}`);
-        } else if (!connectedRoads.has(key)) {
+        } else if (!allowsSplitRoadNetworks && !connectedRoads.has(key)) {
           addIssue("error", templateId, seed, playerCount, size, `town door ${tile.object.id} road is not connected at ${tile.x},${tile.y}`);
         }
         for (const footprint of getTownFootprintTiles(map, tile.x, tile.y)) {
@@ -178,7 +180,7 @@ function validateMap(
         const key = `${tile.x},${tile.y}`;
         if (!tile.road) {
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} has no access path at ${tile.x},${tile.y}`);
-        } else if (!connectedRoads.has(key)) {
+        } else if (!allowsSplitRoadNetworks && !connectedRoads.has(key)) {
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} path is not connected to the road network at ${tile.x},${tile.y}`);
         }
       }
@@ -195,6 +197,9 @@ function validateMap(
       }
       if ((tile.object?.type === "town" || tile.object?.type === "town_footprint" || tile.object?.type === "building") && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} placed on water at ${tile.x},${tile.y}`);
+      }
+      if (allowsSplitRoadNetworks && tile.road && tile.terrain === TerrainType.WATER) {
+        addIssue("error", templateId, seed, playerCount, size, `road bridge placed on water at ${tile.x},${tile.y}`);
       }
     }
   }

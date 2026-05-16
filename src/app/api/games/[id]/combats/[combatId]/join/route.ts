@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
-import { addReinforcementUnits, buildTurnQueue, cloneCombatUnits } from "@/lib/game/combat/persistent";
+import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
+import { addReinforcementUnits, buildTurnQueue, cloneCombatUnits, getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import type { CombatBoardUnit, CombatSide, CombatTerrainFeature, UnitStack } from "@/lib/game/types";
 
 export async function POST(
@@ -30,6 +31,16 @@ export async function POST(
   const hero = gamePlayer?.heroes.find((item) => item.id === String(body.heroId));
 
   if (!gamePlayer || !hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+
+  const { data: activeCombats, error: activeCombatsError } = await supabase
+    .from("combats")
+    .select("*, combat_participants(*)")
+    .eq("game_id", id)
+    .eq("status", "ACTIVE");
+  if (activeCombatsError) return NextResponse.json({ error: activeCombatsError.message }, { status: 500 });
+  if (isHeroInActiveCombat((activeCombats ?? []).map(toCombat), hero.id)) {
+    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+  }
 
   const side: CombatSide = body.side === "defender" ? "defender" : "attacker";
 
@@ -90,6 +101,7 @@ export async function POST(
           board_state: { ...boardState, units, initialUnits, terrain },
           turn_queue: turnQueue,
           current_unit_id: currentUnitId,
+          current_player_id: getCurrentCombatPlayerId({ units }, currentUnitId),
         })
         .eq("id", combatId);
 

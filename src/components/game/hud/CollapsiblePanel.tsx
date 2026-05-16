@@ -14,6 +14,8 @@ type CollapsiblePanelProps = {
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  expandedClassName?: string;
+  collapsedClassName?: string;
   defaultCollapsed?: boolean;
   right?: ReactNode;
 };
@@ -23,14 +25,24 @@ export default function CollapsiblePanel({
   children,
   className,
   bodyClassName,
+  expandedClassName,
+  collapsedClassName,
   defaultCollapsed = false,
   right,
 }: CollapsiblePanelProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const collapseLabel = collapsed ? "Déplier" : "Replier";
 
+  const rootClassName = [
+    "relative",
+    className ?? ornateFrame,
+    collapsed ? collapsedClassName : expandedClassName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`relative ${className ?? ornateFrame}`}>
+    <div className={rootClassName}>
       <CornerOrnaments />
       <ParchmentBackground />
       <div className="relative z-10 flex items-center justify-between gap-2 border-b border-amber-700/40 px-4 py-2">

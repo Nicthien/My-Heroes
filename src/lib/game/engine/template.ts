@@ -4,7 +4,7 @@ import { shuffle, type RNG } from "./rng";
 export type GuardStrength = "weak" | "normal" | "strong" | "veryStrong";
 export type WallType = "natural" | "brick";
 export type MonsterStrength = "weak" | "normal" | "strong";
-export type LandStyle = "islands" | "volcanic-crown";
+export type LandStyle = "islands" | "large-islands" | "volcanic-crown";
 
 export interface ZoneTemplate {
   id: string;
@@ -34,6 +34,8 @@ export interface MapTemplate {
   minPlayers: number;
   maxPlayers: number;
   landStyle?: LandStyle;
+  sealZoneBorders?: boolean;
+  allowRoadBridges?: boolean;
   zones: ZoneTemplate[];
   connections: ConnectionTemplate[];
 }
@@ -236,6 +238,9 @@ const ARCHIPELAGO: MapTemplate = {
   name: "Archipelago",
   minPlayers: 2,
   maxPlayers: 4,
+  landStyle: "large-islands",
+  sealZoneBorders: false,
+  allowRoadBridges: false,
   zones: [
     {
       id: "p1",

@@ -37,6 +37,15 @@ export function cloneCombatUnits(units: CombatBoardUnit[]) {
   return units.map((unit) => ({ ...unit }));
 }
 
+export function getCurrentCombatPlayerId(
+  boardState: { units?: CombatBoardUnit[] } | null | undefined,
+  currentUnitId: string | null | undefined,
+  fallback: string | null | undefined = null
+) {
+  const actor = boardState?.units?.find((unit) => unit.id === currentUnitId);
+  return actor ? actor.ownerPlayerId ?? null : fallback ?? null;
+}
+
 function addUnits(
   units: CombatBoardUnit[],
   armies: UnitStack[],

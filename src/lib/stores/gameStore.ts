@@ -58,7 +58,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   cameraTarget: null,
   zoomRequest: null,
 
-  setGameState: (state) => set((prev) => ({ gameState: state, gameStateVersion: prev.gameStateVersion + 1 })),
+  setGameState: (state) => set((prev) => {
+    const syncedCombat = prev.activeCombat
+      ? state.activeCombats?.find((combat) => combat.id === prev.activeCombat?.id) ?? prev.activeCombat
+      : null;
+
+    return {
+      gameState: state,
+      gameStateVersion: prev.gameStateVersion + 1,
+      activeCombat: syncedCombat,
+      isCombatMode: Boolean(syncedCombat),
+    };
+  }),
   setMovePending: (pending) => set({ isMovePending: pending }),
   focusTile: (x, y) =>
     set((state) => ({

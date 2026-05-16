@@ -27,6 +27,8 @@ export function buildConnectionsAndWalls(
   width: number,
   height: number,
 ): Chokepoint[] {
+  if (template.sealZoneBorders === false) return [];
+
   const templateZoneToZoneId = new Map<string, number>();
   zoneGrid.meta.forEach((m) => templateZoneToZoneId.set(m.templateZoneId, m.id));
 

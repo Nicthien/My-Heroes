@@ -5,6 +5,8 @@ import {
   getAdventurePathCost,
   getAdventureStepCost,
   getDailyAdventureMovement,
+  getMinimumAdjacentAdventureStepCost,
+  getUsableAdventureMovement,
 } from "../src/lib/game/engine";
 import { GameMap, MapTile, TerrainType, UnitType } from "../src/lib/game/types";
 
@@ -58,6 +60,9 @@ assert(!canMoveAdventureStep(blockedMap, { x: 0, y: 0 }, { x: 1, y: 1 }), "diago
 const reachable = computeReachableTiles(diagonalMap, { x: 0, y: 0 }, 100);
 assert(reachable.has("1,0"), "orthogonal grass tile should be reachable with 100 PM");
 assert(!reachable.has("1,1"), "diagonal grass tile should not be reachable with only 100 PM");
+assert(getMinimumAdjacentAdventureStepCost(diagonalMap, { x: 0, y: 0 }) === 100, "cheapest adjacent grass step should cost 100 PM");
+assert(getUsableAdventureMovement(diagonalMap, { x: 0, y: 0 }, 99) === 0, "movement below cheapest adjacent step should be exhausted");
+assert(getUsableAdventureMovement(diagonalMap, { x: 0, y: 0 }, 100) === 100, "movement matching cheapest adjacent step should remain usable");
 
 assert(getDailyAdventureMovement([{ unitType: UnitType.DWARF }]) === 1500, "slow army should get 1500 PM");
 assert(getDailyAdventureMovement([{ unitType: UnitType.ARCHANGEL }]) === 2000, "fast army should get 2000 PM");

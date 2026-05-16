@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
+import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
@@ -7,6 +9,7 @@ import {
   computeVisibleTiles,
   getAdventureStepCost,
   getPlayerVisionCenters,
+  getUsableAdventureMovement,
   normalizeMapMovement,
 } from "@/lib/game/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -48,7 +51,8 @@ export async function POST(
   const game = await getGameWithRelations(supabase, id);
   const players = (game?.players ?? []) as unknown as Array<{
     id: string;
-    userId: string;
+    userId: string | null;
+    isAi?: boolean;
     exploredTiles: string[];
     towns: Array<{ x: number; y: number }>;
     resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
@@ -83,21 +87,21 @@ export async function POST(
 
   const attacker = gamePlayer.heroes.find((hero) => hero.id === body.attackerHeroId);
   if (!attacker) return NextResponse.json({ error: "Héros attaquant invalide" }, { status: 400 });
-  if (body.mode === "AUTO" && body.targetType === "hero") {
-    return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
+  if (isHeroInActiveCombat(game.combats, attacker.id)) {
+    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
   }
 
   // Move hero to combat location if a valid path is provided
   if (Array.isArray(body.path) && body.path.length >= 2) {
     const mapData = normalizeMapMovement(game.mapData as GameMap);
-    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, body.path, attacker.movement ?? 10);
+    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, body.path, attacker.movement ?? 0);
     if (!validation.ok) return NextResponse.json({ error: "Chemin de combat invalide" }, { status: 400 });
 
     const lastPos = body.path[body.path.length - 1] as { x: number; y: number };
     await supabase.from("heroes").update({
       x: lastPos.x,
       y: lastPos.y,
-      movement: Math.max(0, (attacker.movement ?? 10) - validation.usedMovement),
+      movement: getUsableAdventureMovement(mapData, lastPos, (attacker.movement ?? 0) - validation.usedMovement),
     }).eq("id", attacker.id);
     attacker.x = lastPos.x;
     attacker.y = lastPos.y;
@@ -146,7 +150,16 @@ export async function POST(
       details: debug,
     }, { status: 400 });
   }
+  const defenderOwner = targetDefender.playerId ? players.find((player) => player.id === targetDefender.playerId) : null;
+  if (body.mode === "AUTO" && body.targetType === "hero" && !defenderOwner?.isAi) {
+    return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
+  }
+  if (targetDefender.heroId && isHeroInActiveCombat(game.combats, targetDefender.heroId)) {
+    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+  }
 
+  const mapData = normalizeMapMovement(game.mapData as GameMap);
+  const environment = buildCombatEnvironment(mapData, { x: targetDefender.x, y: targetDefender.y });
   const combatStart = createCombatBoard(
     {
       id: attacker.id,
@@ -205,7 +218,7 @@ export async function POST(
       neutral_army_id: targetDefender.neutralArmyId,
       x: targetDefender.x,
       y: targetDefender.y,
-      board_state: combatStart.boardState,
+      board_state: { ...combatStart.boardState, environment },
       current_player_id: result ? null : combatStart.currentPlayerId,
       current_unit_id: result ? null : combatStart.currentUnitId,
       turn_queue: combatStart.turnQueue,
@@ -224,6 +237,9 @@ export async function POST(
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
+      } else if (targetDefender.heroId && targetDefender.playerId) {
+        await supabase.from("armies").delete().eq("hero_id", targetDefender.heroId);
+        await supabase.from("heroes").delete().eq("id", targetDefender.heroId);
       } else if (!targetDefender.playerId) {
         await supabase
           .from("resource_buildings")

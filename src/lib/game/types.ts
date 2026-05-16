@@ -484,6 +484,34 @@ export interface CombatTerrainFeature {
   r: number;
 }
 
+export type CombatEnvironmentTheme =
+  | "grass"
+  | "forest"
+  | "dirt"
+  | "sand"
+  | "snow"
+  | "swamp"
+  | "lava"
+  | "mountain"
+  | "water"
+  | "coast"
+  | "road"
+  | "settlement"
+  | "building";
+
+export interface CombatEnvironment {
+  terrain: TerrainType;
+  elevation: number;
+  road?: RoadType;
+  objectType?: MapObject["type"];
+  objectSubtype?: string;
+  nearbyTerrains: Partial<Record<TerrainType, number>>;
+  hasNearbyWater: boolean;
+  hasNearbyForest: boolean;
+  hasNearbyMountain: boolean;
+  theme: CombatEnvironmentTheme;
+}
+
 export interface CombatParticipant {
   id: string;
   playerId: string;
@@ -505,7 +533,7 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[]; environment?: CombatEnvironment };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
@@ -552,8 +580,9 @@ export interface ZoneMeta {
 
 export interface Player {
   id: string;
-  userId: string;
+  userId: string | null;
   name: string;
+  isAi: boolean;
   faction: Faction;
   color: string;
   resources: Resources;
@@ -573,6 +602,7 @@ export type GameAction =
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }

@@ -26,6 +26,7 @@ create table public.games (
   map_data jsonb not null,
   game_config jsonb not null default '{}',
   map_state jsonb not null default '{}',
+  ai_runner_locked_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -33,9 +34,12 @@ create table public.games (
 create table public.game_players (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete cascade,
-  user_id uuid not null references public.profiles(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
   faction text not null,
   color text not null,
+  is_ai boolean not null default false,
+  ai_name text,
+  ai_difficulty text not null default 'simple',
   gold integer not null default 500,
   wood integer not null default 20,
   ore integer not null default 10,

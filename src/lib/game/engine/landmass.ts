@@ -1,6 +1,6 @@
 import { createNoise2D } from "simplex-noise";
 import { LandStyle } from "./template";
-import { RNG, randRange } from "./rng";
+import { RNG, randInt, randRange } from "./rng";
 
 export interface Landmass {
   land: boolean[][];
@@ -18,9 +18,12 @@ interface IslandBlob {
 
 export function generateLandmass(width: number, height: number, rng: RNG, style: LandStyle = "islands"): Landmass {
   const noise = createNoise2D(rng);
-  const blobs = style === "volcanic-crown"
-    ? buildVolcanicCrownBlobs(rng)
-    : buildIslandBlobs(width, height, rng);
+  const blobs =
+    style === "volcanic-crown"
+      ? buildVolcanicCrownBlobs(rng)
+      : style === "large-islands"
+        ? buildLargeIslandBlobs(rng)
+        : buildIslandBlobs(width, height, rng);
 
   const land: boolean[][] = [];
   const water: boolean[][] = [];
@@ -44,15 +47,19 @@ export function generateLandmass(width: number, height: number, rng: RNG, style:
       const detail =
         noise(x * 0.095, y * 0.095) * 0.18 +
         noise(x * 0.23 + 41.7, y * 0.23 - 12.4) * 0.06;
-      const threshold = style === "volcanic-crown" ? 0.11 : 0.08;
-      const isLand = shape + detail + edgeFade * 0.16 > threshold && edge > 0.03;
+      const threshold = landThresholdFor(style, width, height);
+      const edgeBonus = edgeBonusFor(style, width, height);
+      const isLand = shape + detail + edgeFade * edgeBonus > threshold && edge > 0.03;
       land[y][x] = isLand;
       water[y][x] = !isLand;
       coast[y][x] = false;
     }
   }
 
-  addSmallIslands(land, water, width, height, rng, noise, style === "volcanic-crown" ? 2.2 : 1);
+  addSmallIslands(land, water, width, height, rng, noise, smallIslandMultiplierFor(style, width, height));
+  if (style === "large-islands") {
+    carveArchipelagoStraits(land, water, width, height, rng, noise);
+  }
   smoothSingles(land, water, width, height);
   markCoast(land, coast, width, height);
 
@@ -87,6 +94,78 @@ function buildIslandBlobs(width: number, height: number, rng: RNG): IslandBlob[]
   return blobs;
 }
 
+function buildLargeIslandBlobs(rng: RNG): IslandBlob[] {
+  const jitter = (value: number, amount: number) => randRange(rng, value - amount, value + amount);
+  const blobs: IslandBlob[] = [
+    largeBlob(rng, jitter(0.2, 0.025), jitter(0.22, 0.025)),
+    largeBlob(rng, jitter(0.8, 0.025), jitter(0.24, 0.025)),
+    largeBlob(rng, jitter(0.22, 0.025), jitter(0.78, 0.025)),
+    largeBlob(rng, jitter(0.78, 0.025), jitter(0.76, 0.025)),
+  ];
+
+  const optionalIslands = [
+    { x: jitter(0.5, 0.03), y: jitter(0.5, 0.03), chance: 0.7, size: "large" },
+    { x: jitter(0.5, 0.035), y: jitter(0.2, 0.025), chance: 0.55, size: "small" },
+    { x: jitter(0.5, 0.035), y: jitter(0.8, 0.025), chance: 0.55, size: "small" },
+    { x: jitter(0.2, 0.035), y: jitter(0.5, 0.035), chance: 0.35, size: "small" },
+    { x: jitter(0.8, 0.035), y: jitter(0.5, 0.035), chance: 0.35, size: "small" },
+  ] as const;
+
+  for (const island of optionalIslands) {
+    if (rng() > island.chance) continue;
+    blobs.push(island.size === "large" ? centralBlob(rng, island.x, island.y) : smallBlob(rng, island.x, island.y));
+  }
+
+  return blobs;
+}
+
+function landThresholdFor(style: LandStyle, width: number, height: number): number {
+  if (style === "volcanic-crown") return 0.11;
+  if (style === "large-islands") return Math.min(width, height) <= 40 ? 0 : 0.14;
+  return 0.08;
+}
+
+function edgeBonusFor(style: LandStyle, width: number, height: number): number {
+  if (style === "large-islands") return Math.min(width, height) <= 40 ? 0.16 : 0.06;
+  return 0.16;
+}
+
+function smallIslandMultiplierFor(style: LandStyle, width: number, height: number): number {
+  if (style === "volcanic-crown") return 2.2;
+  if (style === "large-islands") return Math.min(width, height) <= 40 ? 4.5 : 2;
+  return 1;
+}
+
+function largeBlob(rng: RNG, cx: number, cy: number): IslandBlob {
+  return {
+    cx,
+    cy,
+    rx: randRange(rng, 0.15, 0.2),
+    ry: randRange(rng, 0.14, 0.19),
+    power: randRange(rng, 1.05, 1.2),
+  };
+}
+
+function centralBlob(rng: RNG, cx: number, cy: number): IslandBlob {
+  return {
+    cx,
+    cy,
+    rx: randRange(rng, 0.16, 0.21),
+    ry: randRange(rng, 0.15, 0.2),
+    power: randRange(rng, 1.05, 1.2),
+  };
+}
+
+function smallBlob(rng: RNG, cx: number, cy: number): IslandBlob {
+  return {
+    cx,
+    cy,
+    rx: randRange(rng, 0.14, 0.17),
+    ry: randRange(rng, 0.13, 0.16),
+    power: randRange(rng, 0.98, 1.1),
+  };
+}
+
 function buildVolcanicCrownBlobs(rng: RNG): IslandBlob[] {
   return [
     { cx: randRange(rng, 0.47, 0.53), cy: randRange(rng, 0.46, 0.55), rx: 0.27, ry: 0.35, power: 1.14 },
@@ -97,6 +176,51 @@ function buildVolcanicCrownBlobs(rng: RNG): IslandBlob[] {
     { cx: 0.13, cy: 0.5, rx: 0.11, ry: 0.12, power: 0.85 },
     { cx: 0.87, cy: 0.5, rx: 0.11, ry: 0.12, power: 0.85 },
   ];
+}
+
+function carveArchipelagoStraits(
+  land: boolean[][],
+  water: boolean[][],
+  width: number,
+  height: number,
+  rng: RNG,
+  noise: ReturnType<typeof createNoise2D>,
+): void {
+  const compactMap = Math.min(width, height) <= 40;
+  const channelCount = randInt(rng, compactMap ? 0 : 1, compactMap ? 1 : 2);
+  const channels = Array.from({ length: channelCount }, (_, index) => {
+    const angle = randRange(rng, 0, Math.PI * 2);
+    const length = compactMap || index > 0 ? randRange(rng, 0.28, 0.58) : randRange(rng, 0.82, 1.12);
+    const centerMin = compactMap || index > 0 ? 0.28 : 0.42;
+    const centerMax = compactMap || index > 0 ? 0.72 : 0.58;
+    const cx = randRange(rng, centerMin, centerMax);
+    const cy = randRange(rng, centerMin, centerMax);
+    const dx = Math.cos(angle) * length * 0.5;
+    const dy = Math.sin(angle) * length * 0.5;
+    return {
+      ax: clamp(cx - dx, 0.06, 0.94),
+      ay: clamp(cy - dy, 0.06, 0.94),
+      bx: clamp(cx + dx, 0.06, 0.94),
+      by: clamp(cy + dy, 0.06, 0.94),
+      width: randRange(rng, compactMap ? 0.006 : 0.008, compactMap ? 0.012 : 0.016),
+    };
+  });
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const nx = width <= 1 ? 0.5 : x / (width - 1);
+      const ny = height <= 1 ? 0.5 : y / (height - 1);
+      for (const channel of channels) {
+        const distance = distanceToSegment(nx, ny, channel.ax, channel.ay, channel.bx, channel.by);
+        const roughness = noise(x * 0.13 + 19.7, y * 0.13 - 8.4) * 0.012;
+        if (distance < channel.width + roughness) {
+          land[y][x] = false;
+          water[y][x] = true;
+          break;
+        }
+      }
+    }
+  }
 }
 
 function addSmallIslands(
@@ -123,6 +247,18 @@ function addSmallIslands(
       }
     }
   }
+}
+
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const wx = px - ax;
+  const wy = py - ay;
+  const lengthSq = vx * vx + vy * vy;
+  const t = lengthSq === 0 ? 0 : clamp((wx * vx + wy * vy) / lengthSq, 0, 1);
+  const cx = ax + vx * t;
+  const cy = ay + vy * t;
+  return Math.hypot(px - cx, py - cy);
 }
 
 function smoothSingles(land: boolean[][], water: boolean[][], width: number, height: number): void {

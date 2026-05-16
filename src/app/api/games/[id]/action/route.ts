@@ -2,22 +2,22 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import {
-  RESOURCE_BUILDING_RULES,
   UNIT_RULES,
   canAfford,
   getFactionBuildingRule,
-  getGrowthForBuiltTownBuilding,
   subtractCost,
 } from "@/lib/game/economy";
 import { createCampfireReward, addVisit, hasPlayerVisited, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
+import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { makeRng } from "@/lib/game/engine/rng";
 import { AdventureBuildingType, BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import {
   CLASS_STARTING_STATS,
   HERO_RECRUIT_COST_GOLD,
   MAX_HEROES_PER_PLAYER,
-  TAVERN_OFFER_SIZE,
   getHeroTemplate,
+  getRecruitedHeroTemplateIds,
   pickTavernOffer,
   startingArmyForFaction,
   type TavernOffer,
@@ -29,12 +29,18 @@ import {
   getAdventureStepCost,
   getDailyAdventureMovement,
   getPlayerVisionCenters,
+  getUsableAdventureMovement,
   isTileTraversable,
   normalizeMapMovement,
 } from "@/lib/game/engine";
-import { getTownCenterLevel, getTownGoldProduction, hasTownBuilding } from "@/lib/game/town-buildings";
+import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
+import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
+import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
+import { completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
+
+type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
 interface MinimalBuilding {
   id: string;
@@ -46,6 +52,7 @@ interface MinimalBuilding {
 
 interface MinimalTown {
   id: string;
+  gamePlayerId?: string | null;
   x: number;
   y: number;
   level?: number;
@@ -80,6 +87,9 @@ interface MinimalArmy {
 
 interface MinimalHero {
   id: string;
+  name?: string | null;
+  class?: string | null;
+  specialty?: string | null;
   x: number;
   y: number;
   movement: number;
@@ -106,13 +116,15 @@ interface MinimalPlayer {
 }
 
 type MoveInteraction =
-  | { type: "COLLECT"; resource: string; gold?: number; destination: Position }
+  | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "STOP"; message: string; destination: Position };
+
+const HERO_IN_COMBAT_ERROR = "Ce heros est deja engage dans un combat.";
 
 export async function POST(
   request: Request,
@@ -153,6 +165,9 @@ export async function POST(
       if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
       const mapData = normalizeMapMovement(game.mapData as GameMap);
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
       const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
@@ -173,13 +188,16 @@ export async function POST(
         killed,
         visitedAdventureBuildings,
       });
+      if (firstStop?.hero && isHeroInActiveCombat(game.combats, firstStop.hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
       const movePath = firstStop ? action.path.slice(0, firstStop.pathIndex + 1) : action.path;
       const usedMovement = getPathMovementCost(mapData, movePath);
       const lastPos = movePath[movePath.length - 1];
       const { error: heroUpdateError } = await supabase.from("heroes").update({
         x: lastPos.x,
         y: lastPos.y,
-        movement: Math.max(0, hero.movement - usedMovement),
+        movement: getUsableAdventureMovement(mapData, lastPos, hero.movement - usedMovement),
       }).eq("id", hero.id);
       if (heroUpdateError) {
         console.error("heroes.update failed:", heroUpdateError, { heroId: hero.id, x: lastPos.x, y: lastPos.y, movement: hero.movement, used: usedMovement });
@@ -216,10 +234,10 @@ export async function POST(
       if (tile?.object?.type === "resource" && !collected.has(tile.object.id)) {
         collected.add(tile.object.id);
         const resourceType = tile.object.subtype ?? "gold";
-        const amount = resourceType === "gold" ? 500 : 2;
+        const amount = getResourcePileAmount(tile.object);
         await incrementPlayerResource(supabase, gamePlayer.id, resourceType, amount);
         await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected) } }).eq("id", id);
-        interaction = { type: "COLLECT", resource: resourceType, gold: resourceType === "gold" ? amount : undefined, destination: lastPos };
+        interaction = { type: "COLLECT", resource: resourceType, amount, gold: resourceType === "gold" ? amount : undefined, destination: lastPos };
       }
 
       if (firstStop?.hero) {
@@ -236,12 +254,10 @@ export async function POST(
         const building = players.flatMap((player) => player.resourceBuildings)
           .find((item) => item.id === tile.object?.id || (item.x === lastPos.x && item.y === lastPos.y))
           ?? await getResourceBuilding(supabase, id, tile.object.id);
-        const owner = players.find((player) =>
-          player.resourceBuildings.some((item) => item.id === building?.id || (item.x === lastPos.x && item.y === lastPos.y))
-        );
+        const owner = findResourceBuildingOwner(players, tile.object, lastPos);
         const guardianPower = Number(building?.guardianPower ?? tile.object.guardianPower ?? 0);
         if (owner?.id === gamePlayer.id) {
-          interaction = { type: "STOP", message: "Batiment deja controle.", destination: lastPos };
+          interaction = null;
         } else if (guardianPower > 0) {
           interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "building", destination: lastPos };
         } else if (building) {
@@ -304,6 +320,9 @@ export async function POST(
         .find((item) => item.id === action.buildingId)
         ?? await getResourceBuilding(supabase, id, String(action.buildingId ?? ""));
       if (!hero || !building) return NextResponse.json({ error: "Capture invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
       if (Number(building.guardianPower ?? 0) > 0) {
         return NextResponse.json({ error: "Ce batiment est garde" }, { status: 400 });
       }
@@ -329,34 +348,53 @@ export async function POST(
       let town = players.flatMap((player) => player.towns).find((item) => item.id === action.townId);
       if (!town) {
         const mapData = game.mapData as GameMap;
+        const pathDestination = getActionPosition(action.destination) ?? getActionPathDestination(action.path);
+        const heroPosition = hero ? { x: hero.x, y: hero.y } : null;
         const mapTownTile = mapData.tiles
           .flatMap((row) => row)
-          .find((tile) => tile.object?.type === "town" && tile.object.id === action.townId);
+          .find((tile) =>
+            tile.object?.type === "town" &&
+            (
+              tile.object.id === action.townId ||
+              tile.object.targetId === action.townId ||
+              (pathDestination && tile.x === pathDestination.x && tile.y === pathDestination.y) ||
+              (heroPosition && tile.x === heroPosition.x && tile.y === heroPosition.y)
+            )
+          );
 
-        if (mapTownTile) {
-          const { data: neutralTown } = await supabase
-            .from("towns")
-            .select("id,x,y,town_type,buildings,neutral_garrison,is_neutral")
-            .eq("game_id", id)
-            .eq("x", mapTownTile.x)
-            .eq("y", mapTownTile.y)
-            .eq("is_neutral", true)
-            .maybeSingle();
+        let townRow = await findTownForCapture(supabase, id, String(action.townId ?? ""), [
+          mapTownTile ? { x: mapTownTile.x, y: mapTownTile.y } : null,
+          pathDestination,
+          heroPosition,
+        ]);
+        if (!townRow && mapTownTile) {
+          townRow = await createNeutralTownForMapTile(supabase, id, mapData, mapTownTile);
+        }
+        if (townRow?.is_neutral && (townRow.neutral_garrison?.length ?? 0) === 0) {
+          townRow = await ensureNeutralTownGarrison(supabase, townRow);
+        }
 
-          if (neutralTown) {
-            town = {
-              id: neutralTown.id,
-              x: neutralTown.x,
-              y: neutralTown.y,
-              townType: neutralTown.town_type,
-              buildings: neutralTown.buildings ?? [],
-              isNeutral: neutralTown.is_neutral,
-              neutralGarrison: neutralTown.neutral_garrison ?? [],
-            };
-          }
+        if (townRow) {
+          town = {
+            id: townRow.id,
+            gamePlayerId: townRow.game_player_id,
+            x: townRow.x,
+            y: townRow.y,
+            level: townRow.level,
+            townType: townRow.town_type,
+            buildings: townRow.buildings ?? [],
+            isNeutral: townRow.is_neutral,
+            neutralGarrison: townRow.neutral_garrison ?? [],
+          };
         }
       }
       if (!hero || !town) return NextResponse.json({ error: "Chateau invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+      if (!town.isNeutral && town.gamePlayerId === gamePlayer.id) {
+        return NextResponse.json({ error: "Ce château vous appartient déjà" }, { status: 400 });
+      }
       if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
         return NextResponse.json({ error: "Ce château neutre est gardé" }, { status: 400 });
       }
@@ -422,7 +460,7 @@ export async function POST(
       };
       if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
         const townFaction = ((town.townType ?? gamePlayer.faction ?? "castle") as Faction);
-        townUpdate.tavern_offer = pickTavernOffer(townFaction);
+        townUpdate.tavern_offer = pickTavernOffer(townFaction, getRecruitedHeroTemplateIds(gamePlayer.heroes ?? []));
       }
       let { error: townErr } = await supabase.from("towns").update(townUpdate).eq("id", town.id);
       if (townErr && "tavern_offer" in townUpdate) {
@@ -502,13 +540,7 @@ export async function POST(
       }
 
       const remaining = offer.filter((entry) => entry.templateId !== action.templateId);
-      const excludeIds = remaining.map((entry) => entry.templateId);
-      const replacements = pickTavernOffer(
-        ((town.townType ?? gamePlayer.faction ?? "castle") as Faction),
-        excludeIds,
-        Math.max(0, TAVERN_OFFER_SIZE - remaining.length)
-      );
-      await supabase.from("towns").update({ tavern_offer: [...remaining, ...replacements] }).eq("id", town.id);
+      await supabase.from("towns").update({ tavern_offer: remaining }).eq("id", town.id);
 
       return NextResponse.json({ success: true });
     }
@@ -577,8 +609,40 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    if (action.type === "TRANSFER_HERO_TO_GARRISON") {
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const rule = UNIT_RULES[unitType];
+      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
+      if (hero.x !== town.x || hero.y !== town.y) {
+        return NextResponse.json({ error: "Le heros doit etre au chateau pour deposer des unites" }, { status: 400 });
+      }
+
+      const source = hero.armies.find((army) => army.unitType === unitType);
+      if (!source || source.count < count) {
+        return NextResponse.json({ error: "Armee insuffisante" }, { status: 400 });
+      }
+
+      const nextGarrison = addUnitsToStackList(town.garrison ?? [], unitType, count, rule.health);
+      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
+
+      if (source.count === count) {
+        await supabase.from("armies").delete().eq("id", source.id);
+      } else {
+        await supabase.from("armies").update({
+          count: source.count - count,
+          health: Math.max(0, source.health - rule.health * count),
+        }).eq("id", source.id);
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
     if (action.type === "END_TURN") {
       await completePlayerTurn(supabase, id, Number(game.turnNumber), gamePlayer.id);
+      await runAiTurnsUntilHuman(supabase, id);
       return NextResponse.json({ success: true });
     }
 
@@ -648,6 +712,26 @@ async function incrementPlayerResource(supabase: ReturnType<typeof createAdminCl
   if (!game) return;
   const current = Number(game[resource] ?? 0);
   await supabase.from("game_players").update({ [resource]: current + amount }).eq("id", playerId);
+}
+
+function getResourcePileAmount(object: MapObject) {
+  const amount = Number(object.amount);
+  if (Number.isFinite(amount) && amount > 0) return amount;
+
+  switch (object.subtype) {
+    case "gold":
+      return 500;
+    case "wood":
+    case "ore":
+      return 5;
+    case "mercury":
+    case "crystals":
+    case "gems":
+    case "sulfur":
+      return 3;
+    default:
+      return 1;
+  }
 }
 
 async function getGameRowForPlayer(supabase: ReturnType<typeof createAdminClient>, playerId: string) {
@@ -726,13 +810,14 @@ async function handleAdventureBuildingVisit({
     }
 
     visitedAdventureBuildings.add(object.id);
-    await supabase.from("game_players").update(resourceUpdate).eq("id", gamePlayer.id);
-    await supabase.from("games").update({
+    await updatePlayerResources(supabase, gamePlayer.id, resourceUpdate);
+    const { error: mapStateUpdateError } = await supabase.from("games").update({
       map_state: {
         ...mapState,
         visitedAdventureBuildings: Array.from(visitedAdventureBuildings),
       },
     }).eq("id", gameId);
+    if (mapStateUpdateError) throw mapStateUpdateError;
 
     return {
       type: "ADVENTURE_BUILDING",
@@ -847,130 +932,148 @@ function findTeleportLanding(map: GameMap, target: Position): Position | null {
   return null;
 }
 
-async function completePlayerTurn(supabase: ReturnType<typeof createAdminClient>, gameId: string, turnNumber: number, gamePlayerId: string) {
-  await supabase.from("turns").upsert({
-    game_id: gameId,
-    game_player_id: gamePlayerId,
-    turn_number: turnNumber,
-    actions: [],
-    is_completed: true,
-  }, { onConflict: "game_id,game_player_id,turn_number" });
-
-  const game = await getGameWithRelations(supabase, gameId);
-  if (!game) return;
-  const alivePlayers = (game.players as unknown as MinimalPlayer[]).filter((player) => player.isAlive);
-  const turns = game.turns as MinimalTurn[];
-  const completedPlayerIds = new Set(
-    turns
-      .filter((turn) => turn.turnNumber === turnNumber && turn.isCompleted)
-      .map((turn) => turn.gamePlayerId)
-  );
-  if (completedPlayerIds.size < alivePlayers.length) {
-    const sortedPlayers = [...alivePlayers].sort((a, b) => Number(a.turnOrder ?? 0) - Number(b.turnOrder ?? 0));
-    const currentIndex = sortedPlayers.findIndex((player) => player.id === gamePlayerId);
-    const nextPlayer = sortedPlayers
-      .slice(currentIndex + 1)
-      .concat(sortedPlayers.slice(0, Math.max(0, currentIndex + 1)))
-      .find((player) => !completedPlayerIds.has(player.id));
-
-    await supabase.from("games").update({
-      current_turn_player_id: nextPlayer?.id ?? null,
-    }).eq("id", gameId);
-    return;
-  }
-
-  const nextTurnNumber = turnNumber + 1;
-  const mapState = (game.mapState as Record<string, unknown>) ?? {};
-  const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
-  const mapData = game.mapData as GameMap | undefined;
-  for (const player of alivePlayers) {
-    let goldIncome = 0, woodIncome = 0, oreIncome = 0;
-    let mercuryIncome = 0, crystalsIncome = 0, gemsIncome = 0, sulfurIncome = 0;
-
-    for (const building of player.resourceBuildings ?? []) {
-      const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === building.buildingType);
-      if (rule) {
-        goldIncome += rule.production.gold ?? 0;
-        woodIncome += rule.production.wood ?? 0;
-        oreIncome += rule.production.ore ?? 0;
-        mercuryIncome += rule.production.mercury ?? 0;
-        crystalsIncome += rule.production.crystals ?? 0;
-        gemsIncome += rule.production.gems ?? 0;
-        sulfurIncome += rule.production.sulfur ?? 0;
-      }
-    }
-
-    for (const town of player.towns ?? []) {
-      const buildings = (town.buildings ?? []) as string[];
-      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? Faction.CASTLE) as Faction;
-      goldIncome += getTownGoldProduction(buildings);
-      for (const building of buildings) {
-        const rule = getFactionBuildingRule(townFaction, building);
-        goldIncome += rule?.dailyProduction?.gold ?? 0;
-        woodIncome += rule?.dailyProduction?.wood ?? 0;
-        oreIncome += rule?.dailyProduction?.ore ?? 0;
-        mercuryIncome += rule?.dailyProduction?.mercury ?? 0;
-        crystalsIncome += rule?.dailyProduction?.crystals ?? 0;
-        gemsIncome += rule?.dailyProduction?.gems ?? 0;
-        sulfurIncome += rule?.dailyProduction?.sulfur ?? 0;
-      }
-    }
-
-    await updatePlayerResourcesForIncome(supabase, player.id, {
-      gold: player.gold + goldIncome,
-      wood: player.wood + woodIncome,
-      ore: player.ore + oreIncome,
-      mercury: player.mercury + mercuryIncome,
-      crystals: player.crystals + crystalsIncome,
-      gems: (player.gems ?? 0) + gemsIncome,
-      sulfur: player.sulfur + sulfurIncome,
-    });
-    const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
-    for (const hero of player.heroes ?? []) {
-      const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
-      const dailyMovement = getDailyAdventureMovement(hero.armies) + (isOnWater ? lighthouseCount * 500 : 0);
-      await supabase.from("heroes").update({
-        movement: dailyMovement,
-        max_movement: dailyMovement,
-      }).eq("id", hero.id);
-    }
-
-    for (const town of player.towns ?? []) {
-      const buildings = (town.buildings ?? []) as string[];
-      const recruits: Record<string, number> = { ...(town.availableRecruits ?? {}) };
-      const townFaction = ((town as { townType?: string }).townType ?? player.faction ?? Faction.CASTLE) as Faction;
-      for (const building of buildings) {
-        const growth = getGrowthForBuiltTownBuilding(townFaction, building);
-        for (const [unitType, amount] of Object.entries(growth)) {
-          recruits[unitType] = (recruits[unitType] ?? 0) + (amount ?? 0);
-        }
-      }
-      await supabase.from("towns").update({ available_recruits: recruits }).eq("id", town.id);
-    }
-  }
-  const firstPlayer = alivePlayers.sort((a, b) => Number(a.turnOrder ?? 0) - Number(b.turnOrder ?? 0))[0];
-  await supabase.from("games").update({
-    turn_number: nextTurnNumber,
-    current_turn_player_id: firstPlayer?.id ?? null,
-  }).eq("id", gameId);
+interface CaptureTownRow {
+  id: string;
+  game_player_id: string | null;
+  x: number;
+  y: number;
+  level?: number;
+  town_type?: string;
+  buildings?: string[];
+  neutral_garrison?: unknown[];
+  is_neutral?: boolean;
 }
 
-async function updatePlayerResourcesForIncome(
+async function findTownForCapture(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  townId: string,
+  positions: Array<Position | null>
+): Promise<CaptureTownRow | null> {
+  const selectFields = "id,game_player_id,x,y,level,town_type,buildings,neutral_garrison,is_neutral";
+
+  if (isUuid(townId)) {
+    const { data } = await supabase
+      .from("towns")
+      .select(selectFields)
+      .eq("game_id", gameId)
+      .eq("id", townId)
+      .maybeSingle();
+    if (data) return data as CaptureTownRow;
+  }
+
+  const seen = new Set<string>();
+  for (const position of positions) {
+    if (!position) continue;
+    const key = `${position.x},${position.y}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const { data } = await supabase
+      .from("towns")
+      .select(selectFields)
+      .eq("game_id", gameId)
+      .eq("x", position.x)
+      .eq("y", position.y)
+      .maybeSingle();
+    if (data) return data as CaptureTownRow;
+  }
+
+  return null;
+}
+
+async function createNeutralTownForMapTile(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapData: GameMap,
+  tile: GameMap["tiles"][number][number]
+): Promise<CaptureTownRow | null> {
+  if (tile.object?.type !== "town") return null;
+
+  const seed = `${mapData.seed ?? gameId}:${tile.object.id}:${tile.x}:${tile.y}`;
+  const terrain = tile.zoneId !== undefined
+    ? mapData.zones?.[tile.zoneId]?.baseTerrain ?? tile.terrain
+    : tile.terrain;
+  const townType = isFaction(tile.object.subtype)
+    ? tile.object.subtype
+    : pickTownFactionForTerrain(terrain, seed);
+  const name = tile.object.name ?? pickTownName(townType, seed);
+
+  const { data, error } = await supabase
+    .from("towns")
+    .insert({
+      game_id: gameId,
+      game_player_id: null,
+      name,
+      town_type: townType,
+      x: tile.x,
+      y: tile.y,
+      buildings: [BuildingType.VILLAGE_HALL],
+      garrison: [],
+      is_neutral: true,
+      neutral_garrison: createNeutralTownGarrison(townType),
+    })
+    .select("id,game_player_id,x,y,level,town_type,buildings,neutral_garrison,is_neutral")
+    .maybeSingle();
+
+  if (!error && data) return data as CaptureTownRow;
+
+  const { data: existing } = await supabase
+    .from("towns")
+    .select("id,game_player_id,x,y,level,town_type,buildings,neutral_garrison,is_neutral")
+    .eq("game_id", gameId)
+    .eq("x", tile.x)
+    .eq("y", tile.y)
+    .maybeSingle();
+
+  return (existing as CaptureTownRow | null) ?? null;
+}
+
+async function ensureNeutralTownGarrison(
+  supabase: SupabaseAdminClient,
+  town: CaptureTownRow
+): Promise<CaptureTownRow> {
+  const townType = isFaction(town.town_type) ? town.town_type : Faction.CASTLE;
+  const neutralGarrison = createNeutralTownGarrison(townType);
+
+  const { data } = await supabase
+    .from("towns")
+    .update({ neutral_garrison: neutralGarrison })
+    .eq("id", town.id)
+    .eq("is_neutral", true)
+    .select("id,game_player_id,x,y,level,town_type,buildings,neutral_garrison,is_neutral")
+    .maybeSingle();
+
+  return (data as CaptureTownRow | null) ?? { ...town, neutral_garrison: neutralGarrison };
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getActionPosition(value: unknown): Position | null {
+  if (!value || typeof value !== "object") return null;
+  const position = value as { x?: unknown; y?: unknown };
+  const x = Number(position.x);
+  const y = Number(position.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function getActionPathDestination(path: unknown): Position | null {
+  if (!Array.isArray(path) || path.length === 0) return null;
+  const destination = path[path.length - 1] as { x?: unknown; y?: unknown };
+  const x = Number(destination?.x);
+  const y = Number(destination?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+async function updatePlayerResources(
   supabase: ReturnType<typeof createAdminClient>,
   playerId: string,
-  resources: Resources,
+  resources: Partial<Resources>,
 ) {
   const { error } = await supabase.from("game_players").update(resources).eq("id", playerId);
   if (!error) return;
-
-  if (error.message.toLowerCase().includes("gems")) {
-    const resourcesWithoutGems: Partial<Resources> = { ...resources };
-    delete resourcesWithoutGems.gems;
-    const { error: fallbackError } = await supabase.from("game_players").update(resourcesWithoutGems).eq("id", playerId);
-    if (!fallbackError) return;
-    throw fallbackError;
-  }
-
   throw error;
 }
 
@@ -991,6 +1094,7 @@ function findFirstMoveStop({
   players: Array<{
     id: string;
     resourceBuildings: MinimalBuilding[];
+    towns?: MinimalTown[];
     heroes?: MinimalHero[];
   }>;
   collected: Set<string>;
@@ -1010,19 +1114,44 @@ function findFirstMoveStop({
     if (object.type === "monster" && killed.has(object.id)) continue;
     if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
     if (object.type === "wall" || object.type === "gate") continue;
+    if (object.type === "town") {
+      const owner = findTownOwner(players, object, position);
+      if (owner?.id === movingPlayerId) continue;
+      return { pathIndex: i, object };
+    }
     if (object.type === "building") {
-      const owner = players.find((player) =>
-        player.id === movingPlayerId &&
-        player.resourceBuildings.some((building) =>
-          building.id === object.id || (building.x === position.x && building.y === position.y)
-        )
-      );
-      if (owner) return { pathIndex: i, object };
+      const owner = findResourceBuildingOwner(players, object, position);
+      if (owner?.id === movingPlayerId) continue;
+      return { pathIndex: i, object };
     }
     return { pathIndex: i, object };
   }
 
   return null;
+}
+
+function findTownOwner(
+  players: Array<{ id: string; towns?: MinimalTown[] }>,
+  object: MapObject,
+  position: Position
+) {
+  return players.find((player) =>
+    (player.towns ?? []).some((town) =>
+      town.id === object.id || (town.x === position.x && town.y === position.y)
+    )
+  );
+}
+
+function findResourceBuildingOwner(
+  players: Array<{ id: string; resourceBuildings: MinimalBuilding[] }>,
+  object: MapObject,
+  position: Position
+) {
+  return players.find((player) =>
+    player.resourceBuildings.some((building) =>
+      building.id === object.id || (building.x === position.x && building.y === position.y)
+    )
+  );
 }
 
 async function validateAndApplyActionPath({
@@ -1057,7 +1186,7 @@ async function validateAndApplyActionPath({
   const { error: heroUpdateError } = await supabase.from("heroes").update({
     x: destination.x,
     y: destination.y,
-    movement: Math.max(0, hero.movement - validation.usedMovement),
+    movement: getUsableAdventureMovement(mapData, destination, hero.movement - validation.usedMovement),
   }).eq("id", hero.id);
   if (heroUpdateError) return { ok: false, error: `Erreur mise a jour heros: ${heroUpdateError.message}` };
 

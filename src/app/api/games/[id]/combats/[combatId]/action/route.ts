@@ -55,6 +55,22 @@ export async function POST(
 
   const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
+  const expectedCurrentUnitId = typeof action.expectedCurrentUnitId === "string" ? action.expectedCurrentUnitId : null;
+  const expectedRound = Number(action.expectedRound);
+  const expectedActionLogLength = Number(action.expectedActionLogLength);
+  const hasStaleClientState =
+    (expectedCurrentUnitId !== null && expectedCurrentUnitId !== combat.current_unit_id) ||
+    (Number.isInteger(expectedRound) && expectedRound !== (combat.round ?? 1)) ||
+    (Number.isInteger(expectedActionLogLength) && expectedActionLogLength !== (combat.action_log ?? []).length);
+
+  if (hasStaleClientState) {
+    return NextResponse.json({
+      error: "Etat de combat perime",
+      combat: toCombat(combat),
+      result: combat.result ?? null,
+    }, { status: 409 });
+  }
+
   if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayer.id) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }

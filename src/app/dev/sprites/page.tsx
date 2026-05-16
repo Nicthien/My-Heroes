@@ -5,19 +5,31 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { UNIT_RULES } from "@/lib/game/units";
+import type { UnitRule } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
-import { BOAT_SPRITESHEETS, HERO_DIRECTIONS, HERO_SPRITESHEETS, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
+import { BOAT_SPRITESHEETS, HERO_DIRECTIONS, HERO_SPRITESHEETS, getUnitSpritePath, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 import {
   type UnitModelKind,
-  UnitSilhouette,
   getUnitModel,
-  getUnitPalette,
 } from "@/components/game/combat/CombatScreen";
 
 type StaticSpriteAsset = {
   path: string;
   label: string;
   group: string;
+};
+
+type SelectedSprite = {
+  path: string;
+  label: string;
+  detail?: string;
+  width: number;
+  height: number;
+  unitType?: UnitType;
+  unit?: {
+    model: string;
+    rule: UnitRule;
+  };
 };
 
 const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
@@ -30,13 +42,13 @@ const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/town-stronghold.webp", label: "Ville bastion", group: "Factions" },
   { path: "/assets/sprites/map/town-fortress.webp", label: "Ville forteresse", group: "Factions" },
   { path: "/assets/sprites/map/town-conflux.webp", label: "Ville conflux", group: "Factions" },
-  { path: "/assets/sprites/map/alchemist-lab.svg", label: "Laboratoire d'alchimiste", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/crystal-cavern.svg", label: "Caverne de cristaux", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/gem-pond.svg", label: "Bassin de gemmes", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/gold-mine.svg", label: "Mine d'or", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/ore-pit.svg", label: "Mine de minerai", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/sawmill.svg", label: "Scierie", group: "Bâtiments de ressources" },
-  { path: "/assets/sprites/map/sulfur-dune.svg", label: "Dune de soufre", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/alchemist-lab.webp", label: "Laboratoire d'alchimiste", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/crystal-cavern.webp", label: "Caverne de cristaux", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/gem-pond.webp", label: "Bassin de gemmes", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/gold-mine.webp", label: "Mine d'or", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/ore-pit.webp", label: "Mine de minerai", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/sawmill.webp", label: "Scierie", group: "Bâtiments de ressources" },
+  { path: "/assets/sprites/map/sulfur-dune.webp", label: "Dune de soufre", group: "Bâtiments de ressources" },
   { path: "/assets/sprites/map/adventure-observatory.svg", label: "Observatoire", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-campfire.svg", label: "Feu de camp", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-lighthouse.svg", label: "Phare", group: "Aventures" },
@@ -91,16 +103,19 @@ function mockUnit(unitType: UnitType, side: "attacker" | "defender"): CombatBoar
   };
 }
 
-const FACTION_GROUPS: { label: string; units: UnitType[] }[] = CREATURE_GROUPS.map((group) => ({
+const FACTION_GROUPS: { key: string; label: string; units: UnitType[] }[] = CREATURE_GROUPS.map((group) => ({
+  key: group.key,
   label: group.label,
   units: group.units,
 }));
+const FEATURED_UNIT_GROUPS = new Set(["cove", "factory", "bulwark", "neutral"]);
 
 const HERO_SHEET_ENTRIES = Object.values(HERO_SPRITESHEETS);
 const BOAT_SHEET_ENTRIES = Object.values(BOAT_SPRITESHEETS);
 type GalleryTab = "units" | "spritesheets" | "svg" | "webp";
 
 const UNIT_COUNT = FACTION_GROUPS.reduce((total, group) => total + group.units.length, 0);
+const UNIT_TYPES = FACTION_GROUPS.flatMap((group) => group.units);
 const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length + BOAT_SHEET_ENTRIES.length;
 const PUBLIC_SVGS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".svg"));
 const PUBLIC_WEBPS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".webp"));
@@ -116,19 +131,47 @@ const MODEL_LABELS: Record<UnitModelKind, string> = {
   undead: "Mort-vivant",
 };
 
-function UnitCard({ unitType }: { unitType: UnitType }) {
+function buildUnitSprite(unitType: UnitType): SelectedSprite {
   const rule = UNIT_RULES[unitType];
   const unit = mockUnit(unitType, "attacker");
   const model = getUnitModel(unit);
-  const palette = getUnitPalette(unit);
-  const svgPath = `/assets/sprites/units/${unitType}.svg`;
+  const spritePath = getUnitSpritePath(unitType);
+
+  return {
+    path: spritePath,
+    label: rule.label,
+    detail: MODEL_LABELS[model],
+    width: 480,
+    height: 480,
+    unitType,
+    unit: {
+      model: MODEL_LABELS[model],
+      rule,
+    },
+  };
+}
+
+function UnitCard({ onSelect, unitType }: { onSelect: (sprite: SelectedSprite) => void; unitType: UnitType }) {
+  const rule = UNIT_RULES[unitType];
+  const unit = mockUnit(unitType, "attacker");
+  const model = getUnitModel(unit);
+  const spritePath = getUnitSpritePath(unitType);
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset]">
-      <div className="relative grid h-[148px] w-[112px] place-items-center">
-        <div className="h-[122px] w-[92px]">
-          <UnitSilhouette kind={model} palette={palette} ranged={rule.ranged ?? false} unitType={unitType} />
-        </div>
+    <button
+      type="button"
+      onClick={() => onSelect(buildUnitSprite(unitType))}
+      className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 text-left shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset] transition hover:border-amber-400/70 hover:shadow-[0_0_22px_rgba(251,191,36,0.14)] focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+    >
+      <div className="grid h-[148px] w-[112px] place-items-center rounded bg-[linear-gradient(45deg,#1f1f1f_25%,transparent_25%),linear-gradient(-45deg,#1f1f1f_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f1f1f_75%),linear-gradient(-45deg,transparent_75%,#1f1f1f_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0]">
+        <Image
+          src={spritePath}
+          alt={rule.label}
+          width={124}
+          height={124}
+          className="h-[124px] w-[124px] object-contain drop-shadow-[0_6px_5px_rgba(0,0,0,0.65)]"
+          unoptimized
+        />
       </div>
       <div className="text-center">
         <div className="text-sm font-black text-amber-200">{rule.label}</div>
@@ -137,16 +180,20 @@ function UnitCard({ unitType }: { unitType: UnitType }) {
           Att/Déf {rule.attack}/{rule.defense} · Dégâts {rule.minDamage}-{rule.maxDamage}
         </div>
         <div className="mt-1 max-w-[124px] break-all text-[10px] leading-tight text-stone-500">
-          {svgPath}
+          {spritePath}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
-function StaticSpriteCard({ path, label }: { path: string; label: string }) {
+function StaticSpriteCard({ onSelect, path, label }: { onSelect: (sprite: SelectedSprite) => void; path: string; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3">
+    <button
+      type="button"
+      onClick={() => onSelect({ path, label, width: 560, height: 560 })}
+      className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 text-center transition hover:border-amber-400/70 hover:shadow-[0_0_22px_rgba(251,191,36,0.14)] focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+    >
       <div className="grid h-[96px] w-[96px] place-items-center rounded bg-stone-950/60">
         <Image src={path} alt={label} width={80} height={80} unoptimized />
       </div>
@@ -154,7 +201,7 @@ function StaticSpriteCard({ path, label }: { path: string; label: string }) {
         <div className="text-sm font-bold text-amber-200">{label}</div>
         <div className="text-[10px] text-stone-500">{path}</div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -195,20 +242,37 @@ function HeroSheetPreview({
   );
 }
 
-function DirectionalSheetCard({ alt, label, sheet }: { alt: string; label: string; sheet: DirectionalSpritesheet }) {
+function DirectionalSheetCard({
+  alt,
+  label,
+  onSelect,
+  sheet,
+}: {
+  alt: string;
+  label: string;
+  onSelect: (sprite: SelectedSprite) => void;
+  sheet: DirectionalSpritesheet;
+}) {
   return (
     <div className="rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3">
       <div className="flex flex-wrap items-start gap-4">
         <div>
           <div className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-200">{label}</div>
-          <Image
-            src={sheet.path}
-            alt={alt}
-            width={240}
-            height={160}
-            className="rounded border border-stone-700 bg-stone-950"
-            unoptimized
-          />
+          <button
+            type="button"
+            onClick={() =>
+              onSelect({
+                path: sheet.path,
+                label,
+                detail: `${sheet.frameWidth}x${sheet.frameHeight} par frame`,
+                width: 960,
+                height: 640,
+              })
+            }
+            className="rounded border border-stone-700 bg-stone-950 transition hover:border-amber-400/70 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+          >
+            <Image src={sheet.path} alt={alt} width={240} height={160} className="rounded" unoptimized />
+          </button>
           <div className="mt-1 max-w-[240px] break-all text-[10px] text-stone-500">{sheet.path}</div>
         </div>
         <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
@@ -224,6 +288,150 @@ function DirectionalSheetCard({ alt, label, sheet }: { alt: string; label: strin
         </div>
       </div>
     </div>
+  );
+}
+
+function SpriteLightbox({
+  onClose,
+  onNext,
+  onPrevious,
+  sprite,
+}: {
+  onClose: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  sprite: SelectedSprite;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      } else if (event.key === "ArrowLeft" && onPrevious) {
+        onPrevious();
+      } else if (event.key === "ArrowRight" && onNext) {
+        onNext();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, onNext, onPrevious]);
+
+  const showUnitNavigation = Boolean(onPrevious && onNext);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Apercu agrandi de ${sprite.label}`}
+      onClick={onClose}
+    >
+      <div
+        className="grid max-h-[92vh] w-full max-w-5xl grid-rows-[auto_1fr_auto] gap-4 rounded-md border border-amber-500/40 bg-stone-950 p-4 shadow-2xl shadow-black/60"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-black text-amber-100">{sprite.label}</h2>
+            {sprite.detail ? <p className="mt-1 text-xs uppercase tracking-wider text-stone-500">{sprite.detail}</p> : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-xl leading-none text-stone-300 transition hover:border-amber-400/70 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+            aria-label="Fermer l'apercu"
+          >
+            x
+          </button>
+        </div>
+        <div className={["grid min-h-0 gap-4 overflow-auto", sprite.unit ? "lg:grid-cols-[minmax(0,1fr)_300px]" : ""].join(" ")}>
+          <div className="relative grid min-h-[280px] place-items-center rounded bg-stone-900/80 p-4">
+            {showUnitNavigation ? (
+              <button
+                type="button"
+                onClick={onPrevious}
+                className="absolute left-6 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded border border-stone-700 bg-black/70 text-3xl leading-none text-amber-100 shadow-lg transition hover:border-amber-400/70 hover:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+                aria-label="Unite precedente"
+                title="Unite precedente"
+              >
+                &lsaquo;
+              </button>
+            ) : null}
+            <Image
+              src={sprite.path}
+              alt={sprite.label}
+              width={sprite.width}
+              height={sprite.height}
+              className="h-auto max-h-[64vh] w-auto max-w-full object-contain"
+              unoptimized
+            />
+            {showUnitNavigation ? (
+              <button
+                type="button"
+                onClick={onNext}
+                className="absolute right-6 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded border border-stone-700 bg-black/70 text-3xl leading-none text-amber-100 shadow-lg transition hover:border-amber-400/70 hover:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+                aria-label="Unite suivante"
+                title="Unite suivante"
+              >
+                &rsaquo;
+              </button>
+            ) : null}
+          </div>
+          {sprite.unit ? <UnitDetails unit={sprite.unit} /> : null}
+        </div>
+        <div className="break-all rounded border border-stone-800 bg-black/40 px-3 py-2 font-mono text-xs text-stone-400">{sprite.path}</div>
+      </div>
+    </div>
+  );
+}
+
+function UnitStat({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded border border-stone-800 bg-black/30 px-3 py-2">
+      <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{label}</div>
+      <div className="mt-1 text-sm font-black text-amber-100">{value}</div>
+    </div>
+  );
+}
+
+function UnitDetails({ unit }: { unit: NonNullable<SelectedSprite["unit"]> }) {
+  const { rule } = unit;
+
+  return (
+    <aside className="rounded border border-stone-800 bg-stone-950/80 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Type</div>
+          <div className="text-sm font-black text-amber-100">{unit.model}</div>
+        </div>
+        <div className="rounded border border-amber-700/40 bg-amber-400/10 px-2 py-1 font-mono text-xs text-amber-100">
+          {rule.type}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <UnitStat label="PV" value={rule.health} />
+        <UnitStat label="Deplacement" value={rule.speed} />
+        <UnitStat label="Attaque" value={rule.attack} />
+        <UnitStat label="Defense" value={rule.defense} />
+        <UnitStat label="Degats" value={`${rule.minDamage}-${rule.maxDamage}`} />
+        <UnitStat label="Puissance" value={rule.power} />
+        <UnitStat label="Combat" value={rule.ranged ? "Distance" : "Melee"} />
+        <UnitStat label="Tirs" value={rule.ranged ? (rule.shots ?? 0) : "-"} />
+      </div>
+      {rule.abilities?.length ? (
+        <div className="mt-3 rounded border border-stone-800 bg-black/30 px-3 py-2">
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Capacites</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {rule.abilities.map((ability) => (
+              <span key={ability} className="rounded border border-stone-700 bg-stone-900 px-2 py-1 text-xs font-bold text-stone-200">
+                {ability}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </aside>
   );
 }
 
@@ -288,20 +496,20 @@ function CollapsibleGroup({
   );
 }
 
-function UnitsTab() {
+function UnitsTab({ onSelect }: { onSelect: (sprite: SelectedSprite) => void }) {
   return (
     <section>
       {FACTION_GROUPS.map((group, index) => (
         <CollapsibleGroup
           key={group.label}
           count={group.units.length}
-          defaultOpen={index < 2}
+          defaultOpen={index < 2 || FEATURED_UNIT_GROUPS.has(group.key)}
           title={group.label}
-          subtitle="Unités SVG"
+          subtitle="Unites WebP"
         >
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7">
             {group.units.map((unitType) => (
-              <UnitCard key={unitType} unitType={unitType} />
+              <UnitCard key={unitType} onSelect={onSelect} unitType={unitType} />
             ))}
           </div>
         </CollapsibleGroup>
@@ -310,20 +518,20 @@ function UnitsTab() {
   );
 }
 
-function SpritesheetsTab() {
+function SpritesheetsTab({ onSelect }: { onSelect: (sprite: SelectedSprite) => void }) {
   return (
     <section>
       <CollapsibleGroup count={HERO_SHEET_ENTRIES.length} title="Héros aventure" subtitle="Spritesheets animés : idle et marche par direction">
         <div className="grid gap-4">
           {HERO_SHEET_ENTRIES.map((sheet) => (
-            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet heros ${sheet.faction}`} label={sheet.faction} sheet={sheet} />
+            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet heros ${sheet.faction}`} label={sheet.faction} onSelect={onSelect} sheet={sheet} />
           ))}
         </div>
       </CollapsibleGroup>
       <CollapsibleGroup count={BOAT_SHEET_ENTRIES.length} title="Bateaux aventure" subtitle="Galions complets par faction : idle et navigation par direction">
         <div className="grid gap-4">
           {BOAT_SHEET_ENTRIES.map((sheet) => (
-            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet bateau ${sheet.faction}`} label={`bateau ${sheet.faction}`} sheet={sheet} />
+            <DirectionalSheetCard key={sheet.faction} alt={`Spritesheet bateau ${sheet.faction}`} label={`bateau ${sheet.faction}`} onSelect={onSelect} sheet={sheet} />
           ))}
         </div>
       </CollapsibleGroup>
@@ -331,7 +539,15 @@ function SpritesheetsTab() {
   );
 }
 
-function StaticSpriteTab({ assets, fileGroups }: { assets: StaticSpriteAsset[]; fileGroups: string[] }) {
+function StaticSpriteTab({
+  assets,
+  fileGroups,
+  onSelect,
+}: {
+  assets: StaticSpriteAsset[];
+  fileGroups: string[];
+  onSelect: (sprite: SelectedSprite) => void;
+}) {
   return (
     <section>
       {fileGroups.map((group, index) => {
@@ -340,7 +556,7 @@ function StaticSpriteTab({ assets, fileGroups }: { assets: StaticSpriteAsset[]; 
           <CollapsibleGroup key={group} count={entries.length} defaultOpen={index < 2} title={group}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
               {entries.map((entry) => (
-                <StaticSpriteCard key={entry.path} path={entry.path} label={entry.label} />
+                <StaticSpriteCard key={entry.path} onSelect={onSelect} path={entry.path} label={entry.label} />
               ))}
             </div>
           </CollapsibleGroup>
@@ -352,8 +568,16 @@ function StaticSpriteTab({ assets, fileGroups }: { assets: StaticSpriteAsset[]; 
 
 export default function SpritesGalleryPage() {
   const [activeTab, setActiveTab] = useState<GalleryTab>("units");
+  const [selectedSprite, setSelectedSprite] = useState<SelectedSprite | null>(null);
   const svgGroups = Array.from(new Set(PUBLIC_SVGS.map((entry) => entry.group)));
   const webpGroups = Array.from(new Set(PUBLIC_WEBPS.map((entry) => entry.group)));
+  const selectedUnitIndex = selectedSprite?.unitType ? UNIT_TYPES.indexOf(selectedSprite.unitType) : -1;
+  const selectAdjacentUnit = (offset: number) => {
+    if (selectedUnitIndex < 0) return;
+
+    const nextIndex = (selectedUnitIndex + offset + UNIT_TYPES.length) % UNIT_TYPES.length;
+    setSelectedSprite(buildUnitSprite(UNIT_TYPES[nextIndex]));
+  };
 
   return (
     <div className="h-screen overflow-y-auto bg-[#151712] px-4 py-6 text-stone-100 sm:px-8 sm:py-10">
@@ -362,11 +586,11 @@ export default function SpritesGalleryPage() {
           <div>
             <h1 className="text-3xl font-black text-amber-200">Galerie des sprites</h1>
             <p className="mt-1 text-sm text-stone-400">
-              Inventaire visuel : unités SVG, spritesheets et fichiers statiques de <code>public/</code>.
+              Inventaire visuel : unités WebP, spritesheets et fichiers statiques de <code>public/</code>.
             </p>
           </div>
           <nav aria-label="Types de ressources" className="flex flex-wrap gap-2">
-            <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités SVG" onClick={() => setActiveTab("units")} />
+            <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités" onClick={() => setActiveTab("units")} />
             <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
             <TabButton active={activeTab === "svg"} count={PUBLIC_SVGS.length} label="SVG carte" onClick={() => setActiveTab("svg")} />
             <TabButton active={activeTab === "webp"} count={PUBLIC_WEBPS.length} label="WebP carte" onClick={() => setActiveTab("webp")} />
@@ -375,11 +599,19 @@ export default function SpritesGalleryPage() {
       </header>
 
       <main className="mx-auto mt-6 max-w-7xl">
-        {activeTab === "units" ? <UnitsTab /> : null}
-        {activeTab === "spritesheets" ? <SpritesheetsTab /> : null}
-        {activeTab === "svg" ? <StaticSpriteTab assets={PUBLIC_SVGS} fileGroups={svgGroups} /> : null}
-        {activeTab === "webp" ? <StaticSpriteTab assets={PUBLIC_WEBPS} fileGroups={webpGroups} /> : null}
+        {activeTab === "units" ? <UnitsTab onSelect={setSelectedSprite} /> : null}
+        {activeTab === "spritesheets" ? <SpritesheetsTab onSelect={setSelectedSprite} /> : null}
+        {activeTab === "svg" ? <StaticSpriteTab assets={PUBLIC_SVGS} fileGroups={svgGroups} onSelect={setSelectedSprite} /> : null}
+        {activeTab === "webp" ? <StaticSpriteTab assets={PUBLIC_WEBPS} fileGroups={webpGroups} onSelect={setSelectedSprite} /> : null}
       </main>
+      {selectedSprite ? (
+        <SpriteLightbox
+          sprite={selectedSprite}
+          onClose={() => setSelectedSprite(null)}
+          onPrevious={selectedUnitIndex >= 0 ? () => selectAdjacentUnit(-1) : undefined}
+          onNext={selectedUnitIndex >= 0 ? () => selectAdjacentUnit(1) : undefined}
+        />
+      ) : null}
     </div>
   );
 }

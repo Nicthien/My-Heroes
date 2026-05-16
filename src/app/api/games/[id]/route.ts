@@ -16,7 +16,7 @@ export async function GET(
 
   if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
 
-  const players = game.players as unknown as Array<{ id: string; userId: string; exploredTiles: string[] }>;
+  const players = game.players as unknown as Array<{ id: string; userId: string | null; exploredTiles: string[] }>;
   const player = players.find((item) => item.userId === user.id);
   const filteredGame = {
     ...game,

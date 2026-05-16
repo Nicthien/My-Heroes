@@ -238,6 +238,21 @@ export function getHeroTemplate(id: string): HeroTemplate | undefined {
   return HERO_BY_ID.get(id);
 }
 
+export function getRecruitedHeroTemplateIds(
+  heroes: Array<{ name?: string | null; class?: string | null; specialty?: string | null }>
+): string[] {
+  return heroes
+    .map((hero) =>
+      HERO_ROSTER.find(
+        (template) =>
+          template.name === hero.name &&
+          template.class === hero.class &&
+          template.specialty === hero.specialty
+      )?.id
+    )
+    .filter((id): id is string => Boolean(id));
+}
+
 export function toTavernOffer(template: HeroTemplate): TavernOffer {
   return {
     templateId: template.id,

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import { AuthContext } from "@/lib/auth/client";
+import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { CombatBoardUnit, Faction, GameState, PersistentCombat, TerrainType, UnitType } from "@/lib/game/types";
 
@@ -62,6 +63,7 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
         id: "p1",
         userId: MOCK_USER_ID,
         name: "Joueur bleu",
+        isAi: false,
         faction: Faction.CASTLE,
         color: "#2563eb",
         resources: { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 },
@@ -77,6 +79,7 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
         id: "p2",
         userId: "other-user",
         name: "Joueur rouge",
+        isAi: false,
         faction: Faction.INFERNO,
         color: "#dc2626",
         resources: { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 },
@@ -117,6 +120,7 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
     position: { x: 4, y: 4 },
     boardState: {
       units,
+      environment: buildCombatEnvironment(gameState.map, { x: 4, y: 4 }),
       terrain: [
         { type: "rock", q: 5, r: 2 },
         { type: "rock", q: 7, r: 6 },

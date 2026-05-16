@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
-import { getAdventurePathCost } from "@/lib/game/engine";
+import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
 import { GameState, Hero, UnitStack, UnitType } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -16,6 +16,13 @@ export default function CombatChoiceModal() {
     () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat) : null,
     [gameState, pendingCombat]
   );
+  const targetHeroOwner = useMemo(
+    () => gameState && pendingCombat?.targetType === "hero"
+      ? gameState.players.find((player) => player.heroes.some((hero) => hero.id === pendingCombat.targetId))
+      : undefined,
+    [gameState, pendingCombat]
+  );
+  const isAiHeroTarget = Boolean(targetHeroOwner?.isAi);
 
   const startCombat = useCallback(async (mode: "AUTO" | "MANUAL") => {
     if (!gameState || !pendingCombat) return;
@@ -30,7 +37,7 @@ export default function CombatChoiceModal() {
           ...player,
           heroes: player.heroes.map((hero) =>
             hero.id === pendingCombat.attackerHeroId
-              ? { ...hero, position: destination, movement: Math.max(0, (hero.movement ?? 0) - usedMovement) }
+              ? { ...hero, position: destination, movement: getUsableAdventureMovement(gameState.map, destination, (hero.movement ?? 0) - usedMovement) }
               : hero
           ),
         })),
@@ -68,14 +75,15 @@ export default function CombatChoiceModal() {
   useEffect(() => {
     if (!pendingCombat || !pendingKey) return;
     if (pendingCombat.targetType !== "hero") return;
+    if (isAiHeroTarget) return;
     if (autoStartedRef.current === pendingKey) return;
     autoStartedRef.current = pendingKey;
     void startCombat("MANUAL");
-  }, [pendingCombat, pendingKey, startCombat]);
+  }, [isAiHeroTarget, pendingCombat, pendingKey, startCombat]);
 
   if (!gameState || !pendingCombat || !encounterInfo) return null;
 
-  if (pendingCombat.targetType === "hero") {
+  if (pendingCombat.targetType === "hero" && !isAiHeroTarget) {
     return (
       <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
         <div className="rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">

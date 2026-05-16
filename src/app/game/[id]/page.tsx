@@ -23,7 +23,7 @@ export default function GamePage() {
   const gameId = params?.id as string;
   const { data: session } = useSession();
   const userId = session?.user?.id;
-  const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat, devRevealMap } = useGameStore();
+  const { setGameState, isLoading, gameState, activeCombat, minimizedCombatIds, setActiveCombat, devRevealMap, lastCombatResult } = useGameStore();
   const [error, setError] = useState("");
   const loadRequestIdRef = useRef(0);
 
@@ -92,7 +92,7 @@ export default function GamePage() {
   }, [gameId, setGameState, userId, devRevealMap]);
 
   useEffect(() => {
-    if (!gameState || activeCombat) return;
+    if (!gameState || activeCombat || lastCombatResult) return;
     const myPlayer = gameState.players.find((player) => player.userId === userId);
     if (!myPlayer) return;
     const combat = gameState.activeCombats?.find((item) => {
@@ -101,7 +101,7 @@ export default function GamePage() {
       return item.attackerPlayerId === myPlayer.id || item.defenderPlayerId === myPlayer.id || item.participants?.some((participant) => participant.playerId === myPlayer.id);
     });
     if (combat) setActiveCombat(combat);
-  }, [gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat]);
+  }, [gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat, lastCombatResult]);
 
   if (error) {
     return (

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sorceress-cloth" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#73abb2"/>
+      <stop offset="0.48" stop-color="#0e6f7a"/>
+      <stop offset="1" stop-color="#09454c"/>
+    </linearGradient>
+    <linearGradient id="sorceress-cloth2" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#65829a"/>
+      <stop offset="1" stop-color="#0c2a41"/>
+    </linearGradient>
+    <linearGradient id="sorceress-metal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f6fbff"/>
+      <stop offset="0.48" stop-color="#9fb3bd"/>
+      <stop offset="1" stop-color="#4f5b60"/>
+    </linearGradient>
+    <linearGradient id="sorceress-gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff3a5"/>
+      <stop offset="0.55" stop-color="#f0c15b"/>
+      <stop offset="1" stop-color="#8d5720"/>
+    </linearGradient>
+    <linearGradient id="sorceress-skin" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#cda585"/>
+      <stop offset="1" stop-color="#8b6240"/>
+    </linearGradient>
+    <filter id="sorceress-drop" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#05070a" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g filter="url(#sorceress-drop)" stroke="#101921" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(256 282) scale(1)">
+    <path d="M-74,-84 C-108,-38 -110,64 -74,128 L74,128 C106,44 96,-42 66,-88 C28,-62 -28,-62 -74,-84Z" fill="url(#sorceress-cloth2)"/>
+    <path d="M-92,132 C-68,150 68,150 96,132" fill="none" opacity=".28"/>
+    <path d="M-58,-88 C-74,-44 -72,38 -54,108 L-12,116 L-2,20 L26,116 L72,104 C76,42 72,-44 48,-90 C16,-72 -24,-70 -58,-88Z" fill="url(#sorceress-cloth)"/>
+    <path d="M-38,-82 C-30,-52 -26,-16 -28,28 C-12,38 18,40 38,22 C36,-20 30,-56 20,-86Z" fill="url(#sorceress-metal)" stroke-width="7"/>
+    <path d="M-86,-50 L-132,8" fill="none"/>
+    <path d="M58,-48 L110,10" fill="none"/>
+    <path d="M-130,8 L-162,48" fill="none" stroke="#b98255" stroke-width="15"/>
+    <path d="M108,10 L152,-20" fill="none" stroke="#b98255" stroke-width="15"/>
+    <path d="M120,94 L152,-118" fill="none" stroke="#7b4d31" stroke-width="12"/>
+    <circle cx="154" cy="-126" r="24" fill="#35d8ee"/>
+    <path d="M138,-124 C156,-158 188,-142 174,-112" fill="none" stroke="url(#sorceress-gold)" stroke-width="6"/>
+    <path d="M-48,106 L-70,174 L-30,174 L-4,108Z" fill="url(#sorceress-cloth2)"/>
+    <path d="M34,106 L62,174 L104,162 L62,96Z" fill="url(#sorceress-cloth2)"/>
+    <path d="M-72,174 L-18,174" fill="none" stroke-width="12"/>
+    <path d="M62,166 L108,154" fill="none" stroke-width="12"/>
+    <ellipse cx="-10" cy="-146" rx="42" ry="45" fill="url(#sorceress-skin)"/>
+    <path d="M-48,-156 C-22,-182 26,-180 48,-152" fill="none" stroke-width="13"/>
+    <path d="M-28,-140 L20,-140" fill="none" stroke-width="5"/>
+    <path d="M-12,-124 L18,-126" fill="none" stroke-width="5"/>
+    <path d="M-50,-170 C-22,-204 34,-194 54,-164" fill="url(#sorceress-cloth2)"/><path d="M10,-192 L56,-208" fill="none" stroke="#f0c15b" stroke-width="7"/>
+    
+    
+    <g opacity=".9">
+    <circle cx="118" cy="-82" r="46" fill="#35d8ee" opacity=".25" stroke="#35d8ee" stroke-width="5"/>
+    <path d="M72,-82 L164,-82 M118,-128 L118,-36" fill="none" stroke="#35d8ee" stroke-width="5"/>
+    <circle cx="118" cy="-82" r="19" fill="#f6ffff" opacity=".82" stroke-width="4"/>
+  </g>
+    <path d="M-28,-76 L12,-34 L48,-80" fill="none" stroke="url(#sorceress-gold)" stroke-width="8"/>
+  </g>
+  </g>
+</svg>

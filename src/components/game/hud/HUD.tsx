@@ -1,11 +1,12 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useReportWebVitals } from "next/web-vitals";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { Resources, Faction, BuildingType, UnitStack, UnitType, type CombatBoardUnit, type Hero } from "@/lib/game/types";
+import { Resources, Faction, BuildingType, UnitStack, UnitType, type CombatBoardUnit, type GameState, type Hero, type PersistentCombat, type Player } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
 import { UNIT_RULES as COMBAT_UNIT_RULES } from "@/lib/game/units";
@@ -18,6 +19,7 @@ import {
   getGrowthForBuiltTownBuilding,
   getRecruitableUnitsForFaction,
   subtractCost,
+  type ResourceCost,
 } from "@/lib/game/economy";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import {
@@ -51,9 +53,53 @@ const RESOURCE_ITEMS = [
 
 const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
+const PERFORMANCE_SAMPLE_MS = 1000;
+const SLOW_FRAME_MS = 34;
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
+type ReportWebVitalsCallback = Parameters<typeof useReportWebVitals>[0];
+type DevWebVital = {
+  name: string;
+  value: number;
+  rating?: string;
+  navigationType?: string;
+};
+type DevPerformanceStats = {
+  hasFrameSample: boolean;
+  fps: number;
+  avgFrameMs: number;
+  worstFrameMs: number;
+  droppedFrames: number;
+  longTasks: number;
+  longTaskMs: number;
+  longTaskTotal: number;
+  longTaskTotalMs: number;
+  heapUsedMb: number | null;
+  heapLimitMb: number | null;
+  vitals: Record<string, DevWebVital>;
+};
+type PerformanceWithMemory = Performance & {
+  memory?: {
+    usedJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  };
+};
+
+const DEFAULT_DEV_PERFORMANCE_STATS: DevPerformanceStats = {
+  hasFrameSample: false,
+  fps: 0,
+  avgFrameMs: 0,
+  worstFrameMs: 0,
+  droppedFrames: 0,
+  longTasks: 0,
+  longTaskMs: 0,
+  longTaskTotal: 0,
+  longTaskTotalMs: 0,
+  heapUsedMb: null,
+  heapLimitMb: null,
+  vitals: {},
+};
 
 function getNotificationPromptDismissed() {
   if (typeof window === "undefined") return false;
@@ -63,6 +109,175 @@ function getNotificationPromptDismissed() {
 function getDevPanelVisible() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_PANEL_VISIBLE_KEY) === "true";
+}
+
+async function showBrowserNotification(title: string, options: NotificationOptions) {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") return;
+
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration();
+    if (registration) {
+      await registration.showNotification(title, options);
+      return;
+    }
+
+    new Notification(title, options);
+  } catch (error) {
+    console.warn("Unable to show browser notification.", error);
+  }
+}
+
+function readHeapMemoryStats() {
+  if (typeof performance === "undefined") {
+    return { heapUsedMb: null, heapLimitMb: null };
+  }
+
+  const memory = (performance as PerformanceWithMemory).memory;
+  if (!memory) {
+    return { heapUsedMb: null, heapLimitMb: null };
+  }
+
+  return {
+    heapUsedMb: memory.usedJSHeapSize / 1024 / 1024,
+    heapLimitMb: memory.jsHeapSizeLimit / 1024 / 1024,
+  };
+}
+
+function useDevPerformanceStats(enabled: boolean) {
+  const [stats, setStats] = useState<DevPerformanceStats>(DEFAULT_DEV_PERFORMANCE_STATS);
+  const longTaskRef = useRef({ count: 0, durationMs: 0, totalCount: 0, totalDurationMs: 0 });
+
+  const handleWebVitals = useCallback<ReportWebVitalsCallback>((metric) => {
+    setStats((current) => ({
+      ...current,
+      vitals: {
+        ...current.vitals,
+        [metric.name]: {
+          name: metric.name,
+          value: metric.value,
+          rating: metric.rating,
+          navigationType: metric.navigationType,
+        },
+      },
+    }));
+  }, []);
+
+  useReportWebVitals(handleWebVitals);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window === "undefined") return;
+
+    let animationFrameId = 0;
+    let lastFrameAt: number | null = null;
+    let sampleStartedAt = performance.now();
+    let frames = 0;
+    let totalFrameMs = 0;
+    let worstFrameMs = 0;
+    let droppedFrames = 0;
+
+    const tick = (now: number) => {
+      if (lastFrameAt === null) {
+        setStats((current) => ({
+          ...current,
+          hasFrameSample: false,
+          fps: 0,
+          avgFrameMs: 0,
+          worstFrameMs: 0,
+          droppedFrames: 0,
+          longTasks: 0,
+          longTaskMs: 0,
+          longTaskTotal: 0,
+          longTaskTotalMs: 0,
+          ...readHeapMemoryStats(),
+        }));
+        longTaskRef.current = { count: 0, durationMs: 0, totalCount: 0, totalDurationMs: 0 };
+        lastFrameAt = now;
+        sampleStartedAt = now;
+        animationFrameId = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      const frameMs = now - lastFrameAt;
+      lastFrameAt = now;
+      frames += 1;
+      totalFrameMs += frameMs;
+      worstFrameMs = Math.max(worstFrameMs, frameMs);
+
+      if (frameMs > SLOW_FRAME_MS) {
+        droppedFrames += Math.max(1, Math.round(frameMs / 16.67) - 1);
+      }
+
+      const sampleMs = now - sampleStartedAt;
+      if (sampleMs >= PERFORMANCE_SAMPLE_MS) {
+        const memoryStats = readHeapMemoryStats();
+        const nextFps = frames > 0 ? frames * 1000 / sampleMs : 0;
+        const nextAvgFrameMs = frames > 0 ? totalFrameMs / frames : 0;
+        const nextWorstFrameMs = Math.max(worstFrameMs, nextAvgFrameMs);
+        const longTaskSnapshot = longTaskRef.current;
+        longTaskRef.current = {
+          ...longTaskRef.current,
+          count: 0,
+          durationMs: 0,
+        };
+
+        setStats((current) => ({
+          ...current,
+          hasFrameSample: true,
+          fps: current.fps > 0 ? current.fps * 0.55 + nextFps * 0.45 : nextFps,
+          avgFrameMs: current.avgFrameMs > 0 ? current.avgFrameMs * 0.55 + nextAvgFrameMs * 0.45 : nextAvgFrameMs,
+          worstFrameMs: nextWorstFrameMs,
+          droppedFrames,
+          longTasks: longTaskSnapshot.count,
+          longTaskMs: longTaskSnapshot.durationMs,
+          longTaskTotal: longTaskSnapshot.totalCount,
+          longTaskTotalMs: longTaskSnapshot.totalDurationMs,
+          ...memoryStats,
+        }));
+
+        sampleStartedAt = now;
+        frames = 0;
+        totalFrameMs = 0;
+        worstFrameMs = 0;
+        droppedFrames = 0;
+      }
+
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof PerformanceObserver === "undefined") return;
+    if (!PerformanceObserver.supportedEntryTypes.includes("longtask")) return;
+
+    const observer = new PerformanceObserver((list) => {
+      let taskCount = 0;
+      let taskMs = 0;
+
+      for (const entry of list.getEntries()) {
+        taskCount += 1;
+        taskMs += entry.duration;
+      }
+
+      if (taskCount === 0) return;
+      longTaskRef.current = {
+        count: longTaskRef.current.count + taskCount,
+        durationMs: longTaskRef.current.durationMs + taskMs,
+        totalCount: longTaskRef.current.totalCount + taskCount,
+        totalDurationMs: longTaskRef.current.totalDurationMs + taskMs,
+      };
+    });
+
+    observer.observe({ type: "longtask" });
+    return () => observer.disconnect();
+  }, [enabled]);
+
+  return stats;
 }
 
 function factionLabel(f: Faction): string {
@@ -156,6 +371,102 @@ function ResourceIcon({ item, size = "sm" }: { item: ResourceItem; size?: "sm" |
   );
 }
 
+function PlayerProgressGauge({
+  player,
+  gameState,
+  className = "mt-1 h-2 w-full",
+}: {
+  player: Player;
+  gameState: GameState;
+  className?: string;
+}) {
+  const { ratio, activeCombatCount } = getPlayerTurnProgress(player, gameState);
+  const percent = Math.round(ratio * 100);
+  const fill = ratio > 0.55
+    ? "from-emerald-300 via-lime-300 to-amber-300"
+    : ratio > 0.18
+      ? "from-amber-300 via-orange-300 to-red-300"
+      : "from-red-500 via-red-400 to-rose-300";
+  const title = activeCombatCount > 0
+    ? `Avancement du tour : ${percent}% restant, ${activeCombatCount} combat(s) actif(s)`
+    : `Avancement du tour : ${percent}% restant`;
+
+  return (
+    <div
+      className={`${className} overflow-hidden rounded-sm border border-amber-700/45 bg-black/65 shadow-inner shadow-black/70`}
+      role="progressbar"
+      aria-label={`Avancement de ${player.name}`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+      title={title}
+    >
+      <div
+        className={`h-full bg-gradient-to-r ${fill} shadow-[0_0_10px_rgba(251,191,36,0.25)] transition-[width] duration-500 ease-out`}
+        style={{ width: `${percent}%` }}
+      />
+    </div>
+  );
+}
+
+function TurnStatusIcon({ ended }: { ended: boolean }) {
+  if (ended) {
+    return (
+      <span
+        className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full border border-emerald-400/45 bg-emerald-950/55 text-emerald-300"
+        title="Tour termine"
+        aria-label="Tour termine"
+      >
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M5 12.5 L10 17 L19 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full border border-amber-500/45 bg-black/45 text-amber-300"
+      title="Tour en cours"
+      aria-label="Tour en cours"
+    >
+      <HourglassIcon className="h-3 w-3" />
+    </span>
+  );
+}
+
+function getPlayerTurnProgress(player: Player, gameState: GameState) {
+  if (!player.isAlive || player.hasEndedTurn) return { ratio: 0, activeCombatCount: 0 };
+
+  const heroTotal = player.heroes.length;
+  const heroRemaining = player.heroes.reduce((total, hero) => {
+    if (hero.maxMovement <= 0) return total;
+    return total + Math.max(0, Math.min(1, hero.movement / hero.maxMovement));
+  }, 0);
+  const townTotal = player.towns.length;
+  const townRemaining = player.towns.filter((town) => town.lastBuiltTurn !== gameState.turnNumber).length;
+  const baseTotal = heroTotal + townTotal;
+  const baseRatio = baseTotal > 0
+    ? Math.max(0, Math.min(1, (heroRemaining + townRemaining) / baseTotal))
+    : 0;
+  const activeCombatCount = (gameState.activeCombats ?? []).filter((combat) =>
+    combatInvolvesPlayer(combat, player.id)
+  ).length;
+
+  return {
+    ratio: baseRatio === 0 && activeCombatCount > 0 ? 0.08 : baseRatio,
+    activeCombatCount,
+  };
+}
+
+function combatInvolvesPlayer(combat: PersistentCombat, playerId: string) {
+  return (
+    combat.attackerPlayerId === playerId ||
+    combat.defenderPlayerId === playerId ||
+    Boolean(combat.participants?.some((participant) => participant.playerId === playerId))
+  );
+}
+
 function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: UnitType; side?: "attacker" | "defender"; size?: "xs" | "sm" }) {
   const rule = COMBAT_UNIT_RULES[unitType];
   const unit: CombatBoardUnit = {
@@ -192,10 +503,116 @@ function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: Un
         className={`block drop-shadow-[0_5px_5px_rgba(0,0,0,0.55)] ${spriteSize}`}
         style={{ transform: side === "defender" ? "scaleX(-1)" : undefined }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} />
+        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unitType} />
       </span>
     </span>
   );
+}
+
+function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
+  const fpsTone = stats.fps >= 50 ? "good" : stats.fps >= 30 ? "warn" : "bad";
+  const frameTone = stats.worstFrameMs <= SLOW_FRAME_MS ? "good" : stats.worstFrameMs <= 55 ? "warn" : "bad";
+  const droppedTone = stats.droppedFrames === 0 ? "good" : stats.droppedFrames <= 3 ? "warn" : "bad";
+  const fpsText = stats.hasFrameSample ? formatNumber(stats.fps, 0) : "--";
+  const avgFrameText = stats.hasFrameSample ? `${formatNumber(stats.avgFrameMs, 1)} ms` : "--";
+  const worstFrameText = stats.hasFrameSample ? `${formatNumber(stats.worstFrameMs, 1)} ms` : "--";
+  const droppedText = stats.hasFrameSample ? `${stats.droppedFrames}/s` : "--";
+  const longTaskRateText = stats.hasFrameSample ? `${stats.longTasks}/s (${formatNumber(stats.longTaskMs, 0)} ms)` : "--";
+  const memoryText = stats.heapUsedMb === null
+    ? "n/a"
+    : `${formatNumber(stats.heapUsedMb, 0)} / ${formatNumber(stats.heapLimitMb ?? 0, 0)} MB`;
+  const vitalNames = ["LCP", "INP", "CLS", "FCP", "TTFB"];
+
+  return (
+    <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label="Performances">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">Performances</div>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">live</div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <DevPerformanceStat label="FPS" value={fpsText} tone={stats.hasFrameSample ? fpsTone : "idle"} />
+        <DevPerformanceStat label="Frame" value={avgFrameText} tone={stats.hasFrameSample ? frameTone : "idle"} />
+        <DevPerformanceStat label="Pic" value={worstFrameText} tone={stats.hasFrameSample ? frameTone : "idle"} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <DevPerformanceStat label="Saccades" value={droppedText} tone={stats.hasFrameSample ? droppedTone : "idle"} />
+        <DevPerformanceStat label="Taches/s" value={longTaskRateText} tone={!stats.hasFrameSample ? "idle" : stats.longTasks === 0 ? "good" : "warn"} />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2">
+        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Total taches &gt;50ms</span>
+        <span className="font-mono text-[11px] font-bold text-amber-100">
+          {stats.longTaskTotal} ({formatNumber(stats.longTaskTotalMs, 0)} ms)
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2">
+        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Memoire JS</span>
+        <span className="font-mono text-[11px] font-bold text-amber-100">{memoryText}</span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Web Vitals</div>
+        <div className="grid grid-cols-5 gap-1.5">
+          {vitalNames.map((name) => {
+            const vital = stats.vitals[name];
+            return (
+              <div
+                key={name}
+                className={`rounded-md border px-1.5 py-1 text-center ${getVitalToneClasses(vital?.rating)}`}
+                title={vital ? `${name} ${formatWebVitalValue(name, vital.value)} (${vital.rating ?? "n/a"})` : `${name} en attente`}
+              >
+                <div className="text-[9px] font-black uppercase leading-none">{name}</div>
+                <div className="mt-1 font-mono text-[10px] font-bold leading-none">
+                  {vital ? formatWebVitalValue(name, vital.value) : "--"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DevPerformanceStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "good" | "warn" | "bad" | "idle";
+}) {
+  const toneClass = tone === "good"
+    ? "border-emerald-500/35 text-emerald-100"
+    : tone === "warn"
+      ? "border-amber-500/45 text-amber-100"
+      : tone === "bad"
+        ? "border-red-500/45 text-red-100"
+        : "border-amber-900/45 text-amber-200/70";
+
+  return (
+    <div className={`rounded-md border bg-black/30 px-2 py-1.5 ${toneClass}`}>
+      <div className="text-[9px] font-black uppercase tracking-wider opacity-70">{label}</div>
+      <div className="mt-1 font-mono text-[11px] font-bold leading-none">{value}</div>
+    </div>
+  );
+}
+
+function formatNumber(value: number, digits: number) {
+  if (!Number.isFinite(value)) return "0";
+  return value.toFixed(digits);
+}
+
+function formatWebVitalValue(name: string, value: number) {
+  if (name === "CLS") return value.toFixed(3);
+  if (value >= 1000) return `${(value / 1000).toFixed(2)}s`;
+  return `${value.toFixed(0)}ms`;
+}
+
+function getVitalToneClasses(rating: string | undefined) {
+  if (rating === "good") return "border-emerald-500/35 bg-emerald-950/25 text-emerald-100";
+  if (rating === "poor") return "border-red-500/40 bg-red-950/25 text-red-100";
+  if (rating === "needs-improvement") return "border-amber-500/45 bg-amber-950/25 text-amber-100";
+  return "border-amber-900/45 bg-black/25 text-amber-200/70";
 }
 
 function TownTabButton({
@@ -298,6 +715,29 @@ function TransferToHeroIcon({ className }: { className?: string }) {
   );
 }
 
+function TransferToTownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12H10" />
+      <path d="m14 8-4 4 4 4" />
+      <path d="M3 21h12" />
+      <path d="M5 21V9l4-3 4 3v12" />
+      <path d="M8 21v-5h2v5" />
+    </svg>
+  );
+}
+
+function RecruitUnitsIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="9.5" cy="7" r="4" />
+      <path d="M19 8v6" />
+      <path d="M22 11h-6" />
+    </svg>
+  );
+}
+
 export default function HUD() {
   const gameState = useGameStore((state) => state.gameState);
 
@@ -326,6 +766,10 @@ function HUDContent() {
   const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
   const [hideMissingRecruitRequirements, setHideMissingRecruitRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
+  const [recruitDialog, setRecruitDialog] = useState<{ townId: string; unitType: UnitType; count: number } | null>(null);
+  const [transferDialog, setTransferDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
+  const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
+  const devPerformanceStats = useDevPerformanceStats(showDevPanel);
   const lastNotifiedTurnRef = useRef<string | null>(null);
   const {
     gameState: nullableGameState,
@@ -510,11 +954,24 @@ function HUDContent() {
     if (refreshedState) setGameState(refreshedState);
   };
 
-  const handleRecruit = async (unitType: UnitType) => {
+  const handleRecruit = async (unitType: UnitType, count = 1) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
     const rule = UNIT_RULES[unitType];
-    if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
+    if (!rule) return;
+
+    const available = selectedTown.availableRecruits[unitType] ?? 0;
+    const recruitCount = Math.min(
+      Math.max(1, Math.floor(count)),
+      getMaxRecruitCount(myPlayer.resources, rule.cost, available)
+    );
+    if (recruitCount <= 0) {
+      setCombatMessage("Ressources ou recrues insuffisantes.");
+      return;
+    }
+
+    const totalCost = multiplyCost(rule.cost, recruitCount);
+    if (!canAfford(myPlayer.resources, totalCost)) return;
 
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
@@ -523,7 +980,7 @@ function HUDContent() {
         type: "RECRUIT_UNIT",
         townId: selectedTown.id,
         unitType,
-        count: 1,
+        count: recruitCount,
       }),
     });
 
@@ -532,7 +989,8 @@ function HUDContent() {
       return;
     }
 
-    const nextResources = subtractCost(myPlayer.resources, rule.cost);
+    const nextResources = subtractCost(myPlayer.resources, totalCost);
+    setRecruitDialog(null);
 
     setGameState({
       ...gameState,
@@ -545,10 +1003,10 @@ function HUDContent() {
             town.id === selectedTown.id
               ? {
                   ...town,
-                  garrison: addUnitsToLocalStackList(town.garrison, unitType, 1, rule.health),
+                  garrison: addUnitsToLocalStackList(town.garrison, unitType, recruitCount, rule.health),
                   availableRecruits: {
                     ...town.availableRecruits,
-                    [unitType]: Math.max(0, (town.availableRecruits[unitType] ?? 0) - 1),
+                    [unitType]: Math.max(0, (town.availableRecruits[unitType] ?? 0) - recruitCount),
                   },
                 }
               : town
@@ -558,11 +1016,14 @@ function HUDContent() {
     });
   };
 
-  const handleTransferGarrisonToHero = async (unitType: UnitType, targetHero: Hero | undefined = garrisonTargetHero) => {
+  const handleTransferGarrisonToHero = async (unitType: UnitType, count = 1, targetHero: Hero | undefined = garrisonTargetHero) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown || !targetHero) return;
 
     const rule = UNIT_RULES[unitType];
     if (!rule) return;
+    const source = selectedTown.garrison.find((unit) => unit.unitType === unitType);
+    const transferCount = Math.min(Math.max(1, Math.floor(count)), source?.count ?? 0);
+    if (transferCount <= 0) return;
 
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
@@ -572,7 +1033,7 @@ function HUDContent() {
         townId: selectedTown.id,
         heroId: targetHero.id,
         unitType,
-        count: 1,
+        count: transferCount,
       }),
     });
 
@@ -582,6 +1043,7 @@ function HUDContent() {
     }
 
     const targetHeroId = targetHero.id;
+    setTransferDialog(null);
     setGameState({
       ...gameState,
       players: gameState.players.map((player) => {
@@ -592,7 +1054,7 @@ function HUDContent() {
             town.id === selectedTown.id
               ? {
                   ...town,
-                  garrison: removeUnitsFromLocalStackList(town.garrison, unitType, 1, rule.health),
+                  garrison: removeUnitsFromLocalStackList(town.garrison, unitType, transferCount, rule.health),
                 }
               : town
           ),
@@ -600,7 +1062,62 @@ function HUDContent() {
             hero.id === targetHeroId
               ? {
                   ...hero,
-                  armies: addUnitsToLocalStackList(hero.armies, unitType, 1, rule.health),
+                  armies: addUnitsToLocalStackList(hero.armies, unitType, transferCount, rule.health),
+                }
+              : hero
+          ),
+        };
+      }),
+    });
+  };
+
+  const handleTransferHeroToGarrison = async (unitType: UnitType, count = 1, sourceHero: Hero | undefined = garrisonTargetHero) => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown || !sourceHero) return;
+
+    const rule = UNIT_RULES[unitType];
+    if (!rule) return;
+    const source = sourceHero.armies.find((unit) => unit.unitType === unitType);
+    const transferCount = Math.min(Math.max(1, Math.floor(count)), source?.count ?? 0);
+    if (transferCount <= 0) return;
+
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "TRANSFER_HERO_TO_GARRISON",
+        townId: selectedTown.id,
+        heroId: sourceHero.id,
+        unitType,
+        count: transferCount,
+      }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      return;
+    }
+
+    const sourceHeroId = sourceHero.id;
+    setReturnDialog(null);
+    setGameState({
+      ...gameState,
+      players: gameState.players.map((player) => {
+        if (player.id !== myPlayer.id) return player;
+        return {
+          ...player,
+          towns: player.towns.map((town) =>
+            town.id === selectedTown.id
+              ? {
+                  ...town,
+                  garrison: addUnitsToLocalStackList(town.garrison, unitType, transferCount, rule.health),
+                }
+              : town
+          ),
+          heroes: player.heroes.map((hero) =>
+            hero.id === sourceHeroId
+              ? {
+                  ...hero,
+                  armies: removeUnitsFromLocalStackList(hero.armies, unitType, transferCount, rule.health),
                 }
               : hero
           ),
@@ -703,11 +1220,9 @@ function HUDContent() {
 
     lastNotifiedTurnRef.current = turnNotificationKey;
 
-    if (notificationPermission === "granted" && typeof Notification !== "undefined") {
-      new Notification("My Heroes", {
-        body: "C'est à vous de jouer.",
-      });
-    }
+    void showBrowserNotification("My Heroes", {
+      body: "C'est à vous de jouer.",
+    });
   }, [canAct, isPending, notificationPermission, turnNotificationKey]);
 
   const selectedTownFaction = selectedTown
@@ -767,6 +1282,32 @@ function HUDContent() {
         selectedTown.buildings.includes(dwelling)
       )
     : selectedTownRecruitEntries;
+  const activeRecruitEntry = selectedTown && displayedTownTab === "recruit" && recruitDialog?.townId === selectedTown.id
+    ? selectedTownRecruitEntries.find(({ rule }) => rule.type === recruitDialog.unitType)
+    : undefined;
+  const activeRecruitAvailable = selectedTown && activeRecruitEntry
+    ? selectedTown.availableRecruits[activeRecruitEntry.rule.type] ?? 0
+    : 0;
+  const activeRecruitMax = myPlayer && activeRecruitEntry
+    ? getMaxRecruitCount(myPlayer.resources, activeRecruitEntry.rule.cost, activeRecruitAvailable)
+    : 0;
+  const activeRecruitCount = Math.min(Math.max(1, recruitDialog?.count ?? 1), Math.max(1, activeRecruitMax));
+  const activeTransferStack = selectedTown && displayedTownTab === "garrison" && transferDialog?.townId === selectedTown.id
+    ? selectedTown.garrison.find((unit) => unit.unitType === transferDialog.unitType)
+    : undefined;
+  const activeTransferHero = activeTransferStack
+    ? heroesAtSelectedTown.find((hero) => hero.id === transferDialog?.heroId)
+    : undefined;
+  const activeTransferMax = activeTransferStack?.count ?? 0;
+  const activeTransferCount = Math.min(Math.max(1, transferDialog?.count ?? 1), Math.max(1, activeTransferMax));
+  const activeReturnHero = selectedTown && displayedTownTab === "garrison" && returnDialog?.townId === selectedTown.id
+    ? heroesAtSelectedTown.find((hero) => hero.id === returnDialog.heroId)
+    : undefined;
+  const activeReturnStack = activeReturnHero
+    ? activeReturnHero.armies.find((unit) => unit.unitType === returnDialog?.unitType)
+    : undefined;
+  const activeReturnMax = activeReturnStack?.count ?? 0;
+  const activeReturnCount = Math.min(Math.max(1, returnDialog?.count ?? 1), Math.max(1, activeReturnMax));
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -832,7 +1373,7 @@ function HUDContent() {
       </div>
 
       {/* Right column: players + side shortcuts */}
-      <div className="pointer-events-none absolute right-3 top-[7rem] bottom-24 flex w-64 flex-col gap-3 overflow-hidden">
+      <div className="pointer-events-none absolute right-3 top-[7rem] bottom-3 flex w-64 flex-col gap-3 overflow-hidden">
         <CollapsiblePanel
           title="Carte"
           className={`${ornateFrame} pointer-events-auto shrink-0`}
@@ -842,8 +1383,8 @@ function HUDContent() {
         </CollapsiblePanel>
         <CollapsiblePanel
           title="Joueurs"
-          className={`${ornateFrame} pointer-events-auto shrink-0`}
-          bodyClassName="space-y-0.5 px-2 py-2 text-sm"
+          className={`${ornateFrame} pointer-events-auto shrink-0 overflow-hidden`}
+          bodyClassName="max-h-32 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
         >
           {[...gameState.players]
               .sort((a, b) => {
@@ -864,16 +1405,29 @@ function HUDContent() {
                     className="h-3 w-3 rounded-full ring-1 ring-amber-200/60 shadow"
                     style={{ backgroundColor: p.color }}
                   />
-                  <span className={p.isAlive ? "truncate text-amber-100" : "truncate text-stone-600 line-through"}>
+                  <span className={p.isAlive ? "min-w-0 flex-1 truncate text-amber-100" : "min-w-0 flex-1 truncate text-stone-600 line-through"}>
                     {p.name}
                   </span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wider text-amber-300/70">
-                    {p.hasEndedTurn ? "✓" : "…"} {p.heroes.length}H · {p.towns.length}T
+                  {p.isAi && <span className="shrink-0 rounded border border-cyan-400/40 px-1 text-[10px] font-black text-cyan-200">IA</span>}
+                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-amber-300/70">
+                    {p.heroes.length}H / {p.towns.length}C
                   </span>
+                  {/*
+                    {p.heroes.length}H Â· {p.towns.length}C
+                  </span>
+                  */}
+                  <PlayerProgressGauge
+                    player={p}
+                    gameState={gameState}
+                    className="h-2.5 w-20 shrink-0"
+                  />
+                  <TurnStatusIcon ended={p.hasEndedTurn} />{/*
+                    {p.hasEndedTurn ? "✓" : "…"} {p.heroes.length}H · {p.towns.length}T
+                  */}
                 </div>
               ))}
         </CollapsiblePanel>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           <SidePanel />
         </div>
       </div>
@@ -929,7 +1483,7 @@ function HUDContent() {
       )}
 
       {showDevPanel && (
-        <div className="pointer-events-auto absolute bottom-4 left-3 z-50 w-72 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
+        <div className="pointer-events-auto absolute bottom-4 left-3 z-50 max-h-[calc(100vh-2rem)] w-80 overflow-y-auto rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
           <div className="flex items-center justify-between gap-3">
             <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
             <button
@@ -942,7 +1496,8 @@ function HUDContent() {
             </button>
           </div>
           <div className={goldDivider + " my-3"} />
-          <div className="space-y-2">
+          <DevPerformancePanel stats={devPerformanceStats} />
+          <div className="mt-3 space-y-2">
             <button
               type="button"
               className="w-full rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300 disabled:cursor-default disabled:border-emerald-400/50 disabled:bg-emerald-900/70 disabled:text-emerald-100"
@@ -985,8 +1540,8 @@ function HUDContent() {
       {selectedHero && (
         <CollapsiblePanel
           title={selectedHero.name}
-          className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] w-80 max-w-[calc(100vw-2rem)]`}
-          bodyClassName="space-y-3 p-4"
+          className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+          bodyClassName="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4"
           right={
               <button
                 className="rounded text-amber-300/60 transition hover:text-amber-100"
@@ -1151,11 +1706,15 @@ function HUDContent() {
                 {isMyTown && heroesAtSelectedTown.length > 0 && (
                   <div className="rounded-md border border-sky-500/30 bg-sky-950/40 px-3 py-2">
                     <label className="block text-[11px] font-black uppercase tracking-wider text-sky-200/70">
-                      Envoyer vers
+                      Héros au château
                       <select
                         className="mt-2 w-full rounded-md border border-sky-500/40 bg-black/60 px-2 py-1.5 text-sm font-bold text-sky-50 outline-none transition focus:border-sky-300"
                         value={garrisonTargetHero?.id ?? ""}
-                        onChange={(event) => setGarrisonTargetHeroId(event.target.value || null)}
+                        onChange={(event) => {
+                          setGarrisonTargetHeroId(event.target.value || null);
+                          setTransferDialog(null);
+                          setReturnDialog(null);
+                        }}
                       >
                         {heroesAtSelectedTown.map((hero) => (
                           <option key={hero.id} value={hero.id}>
@@ -1169,39 +1728,112 @@ function HUDContent() {
                 {selectedTown.garrison.length === 0 ? (
                   <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucune unité en garnison.</div>
                 ) : (
-                  selectedTown.garrison.map((unit) => {
-                    const disabled = !canAct || !isMyTown || !garrisonTargetHero || isPending;
-                    return (
-                      <div key={unit.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <UnitSprite unitType={unit.unitType} side="defender" />
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
-                              <div className="text-xs text-amber-200/60">En garnison : {unit.count}</div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
-                              disabled
-                                ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
-                                : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
-                            }`}
-                            disabled={disabled}
-                            onClick={() => handleTransferGarrisonToHero(unit.unitType)}
-                            aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
-                            title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
-                          >
-                            <TransferToHeroIcon className="h-5 w-5" />
-                            <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-sky-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-sky-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                              Envoyer
-                            </span>
-                          </button>
-                        </div>
+                  <div className="space-y-2">
+                    {garrisonTargetHero && (
+                      <div className="text-[11px] font-black uppercase tracking-wider text-sky-200/70">
+                        Garnison vers {garrisonTargetHero.name}
                       </div>
-                    );
-                  })
+                    )}
+                    {selectedTown.garrison.map((unit) => {
+                      const disabled = !canAct || !isMyTown || !garrisonTargetHero || isPending;
+                      const activeTransferDialog = transferDialog?.townId === selectedTown.id &&
+                        transferDialog.heroId === garrisonTargetHero?.id &&
+                        transferDialog.unitType === unit.unitType
+                          ? transferDialog
+                          : null;
+                      return (
+                        <div key={unit.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <UnitSprite unitType={unit.unitType} side="defender" />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
+                                <div className="text-xs text-amber-200/60">En garnison : {unit.count}</div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
+                                disabled
+                                  ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                                  : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
+                              }`}
+                              disabled={disabled}
+                              onClick={() => {
+                                setReturnDialog(null);
+                                setTransferDialog(activeTransferDialog || !garrisonTargetHero
+                                  ? null
+                                  : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
+                              }}
+                              aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                              title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                            >
+                              <TransferToHeroIcon className="h-5 w-5" />
+                              <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-sky-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-sky-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                                Envoyer
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {garrisonTargetHero && (
+                  <div className="mt-3 rounded-md border border-amber-700/30 bg-black/30 p-2">
+                    <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-amber-300/80">
+                      Armée de {garrisonTargetHero.name}
+                    </div>
+                    {garrisonTargetHero.armies.length === 0 ? (
+                      <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Ce héros n&apos;a pas d&apos;unités à déposer.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {garrisonTargetHero.armies.map((unit) => {
+                          const disabled = !canAct || !isMyTown || isPending;
+                          const activeReturnDialog = returnDialog?.townId === selectedTown.id &&
+                            returnDialog.heroId === garrisonTargetHero.id &&
+                            returnDialog.unitType === unit.unitType
+                              ? returnDialog
+                              : null;
+                          return (
+                            <div key={unit.id} className="rounded-lg border border-amber-700/35 bg-gradient-to-b from-stone-900/75 to-black/55 p-3 shadow-inner shadow-black/35">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <UnitSprite unitType={unit.unitType} />
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
+                                    <div className="text-xs text-amber-200/60">Avec le héros : {unit.count}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-amber-200/80 ${
+                                    disabled
+                                      ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                                      : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
+                                  }`}
+                                  disabled={disabled}
+                                  onClick={() => {
+                                    setTransferDialog(null);
+                                    setReturnDialog(activeReturnDialog
+                                      ? null
+                                      : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
+                                  }}
+                                  aria-label="Déposer dans la garnison"
+                                  title="Déposer dans la garnison"
+                                >
+                                  <TransferToTownIcon className="h-5 w-5" />
+                                  <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-amber-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                                    Déposer
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1300,17 +1932,18 @@ function HUDContent() {
                 {displayedRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
                   const hasDwelling = selectedTown.buildings.includes(dwelling);
                   const available = selectedTown.availableRecruits[rule.type] ?? 0;
+                  const maxRecruitable = myPlayer ? getMaxRecruitCount(myPlayer.resources, rule.cost, available) : 0;
+                  const activeRecruitDialog = recruitDialog?.townId === selectedTown.id && recruitDialog.unitType === rule.type ? recruitDialog : null;
                   const disabled =
                     !hasDwelling ||
-                    available <= 0 ||
+                    maxRecruitable <= 0 ||
                     !myPlayer ||
-                    !canAfford(myPlayer.resources, rule.cost) ||
                     !canAct ||
                     !isMyTown ||
                     isPending;
 
                   return (
-                    <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                    <div key={rule.type} className="relative rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <UnitSprite unitType={rule.type} />
@@ -1323,15 +1956,17 @@ function HUDContent() {
                           </div>
                         </div>
                         <button
-                          className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black transition ${
+                          className={`grid h-11 w-11 shrink-0 place-items-center rounded-md border transition ${
                             disabled
                               ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
                               : "border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
                           }`}
                           disabled={disabled}
-                          onClick={() => handleRecruit(rule.type)}
+                          title="Recruter"
+                          aria-label={`Recruter ${rule.label}`}
+                          onClick={() => setRecruitDialog(activeRecruitDialog ? null : { townId: selectedTown.id, unitType: rule.type, count: maxRecruitable })}
                         >
-                          +1
+                          <RecruitUnitsIcon className="h-5 w-5" />
                         </button>
                       </div>
                     </div>
@@ -1381,6 +2016,147 @@ function HUDContent() {
         </CollapsiblePanel>
       )}
 
+      {selectedTown && activeRecruitEntry && recruitDialog?.townId === selectedTown.id && activeRecruitMax > 0 && (
+        <form
+          className="pointer-events-auto absolute left-[21.75rem] top-[18rem] z-50 w-56 rounded-md border border-emerald-400/50 bg-stone-950/95 p-3 shadow-2xl shadow-black/70 max-[620px]:bottom-24 max-[620px]:left-4 max-[620px]:right-4 max-[620px]:top-auto max-[620px]:w-auto"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleRecruit(activeRecruitEntry.rule.type, activeRecruitCount);
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-amber-100">
+            <span>Nombre</span>
+            <span className="text-emerald-300">Max {activeRecruitMax}</span>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={activeRecruitMax}
+            value={activeRecruitCount}
+            onChange={(event) => {
+              const next = Math.min(
+                Math.max(1, Math.floor(Number(event.currentTarget.value) || 1)),
+                activeRecruitMax
+              );
+              setRecruitDialog({ townId: selectedTown.id, unitType: activeRecruitEntry.rule.type, count: next });
+            }}
+            className="h-10 w-full rounded-md border border-amber-700/60 bg-black/70 px-3 text-center text-sm font-black tabular-nums text-amber-50 outline-none focus:border-emerald-400"
+          />
+          <div className="mt-2 text-center text-[11px] font-bold text-amber-200/70">
+            Total : {formatCost(multiplyCost(activeRecruitEntry.rule.cost, activeRecruitCount))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-md border border-stone-700 bg-stone-900 text-xs font-black text-stone-300 hover:border-amber-700 hover:text-amber-100"
+              onClick={() => setRecruitDialog(null)}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="h-9 rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-xs font-black text-emerald-50 hover:from-emerald-500 hover:to-emerald-700"
+            >
+              Recruter
+            </button>
+          </div>
+        </form>
+      )}
+
+      {selectedTown && activeTransferStack && activeTransferHero && transferDialog?.townId === selectedTown.id && activeTransferMax > 0 && (
+        <form
+          className="pointer-events-auto absolute left-[21.75rem] top-[18rem] z-50 w-56 rounded-md border border-sky-400/50 bg-stone-950/95 p-3 shadow-2xl shadow-black/70 max-[620px]:bottom-24 max-[620px]:left-4 max-[620px]:right-4 max-[620px]:top-auto max-[620px]:w-auto"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleTransferGarrisonToHero(activeTransferStack.unitType, activeTransferCount, activeTransferHero);
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-sky-100">
+            <span>Nombre</span>
+            <span className="text-sky-300">Max {activeTransferMax}</span>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={activeTransferMax}
+            value={activeTransferCount}
+            onChange={(event) => {
+              const next = Math.min(
+                Math.max(1, Math.floor(Number(event.currentTarget.value) || 1)),
+                activeTransferMax
+              );
+              setTransferDialog({ townId: selectedTown.id, heroId: activeTransferHero.id, unitType: activeTransferStack.unitType, count: next });
+            }}
+            className="h-10 w-full rounded-md border border-sky-700/70 bg-black/70 px-3 text-center text-sm font-black tabular-nums text-sky-50 outline-none focus:border-sky-300"
+          />
+          <div className="mt-2 text-center text-[11px] font-bold text-sky-200/70">
+            Vers : {activeTransferHero.name}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-md border border-stone-700 bg-stone-900 text-xs font-black text-stone-300 hover:border-sky-700 hover:text-sky-100"
+              onClick={() => setTransferDialog(null)}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="h-9 rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-xs font-black text-sky-50 hover:from-sky-500 hover:to-sky-700"
+            >
+              Envoyer
+            </button>
+          </div>
+        </form>
+      )}
+
+      {selectedTown && activeReturnStack && activeReturnHero && returnDialog?.townId === selectedTown.id && activeReturnMax > 0 && (
+        <form
+          className="pointer-events-auto absolute left-[21.75rem] top-[18rem] z-50 w-56 rounded-md border border-amber-400/50 bg-stone-950/95 p-3 shadow-2xl shadow-black/70 max-[620px]:bottom-24 max-[620px]:left-4 max-[620px]:right-4 max-[620px]:top-auto max-[620px]:w-auto"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleTransferHeroToGarrison(activeReturnStack.unitType, activeReturnCount, activeReturnHero);
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-amber-100">
+            <span>Nombre</span>
+            <span className="text-amber-300">Max {activeReturnMax}</span>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={activeReturnMax}
+            value={activeReturnCount}
+            onChange={(event) => {
+              const next = Math.min(
+                Math.max(1, Math.floor(Number(event.currentTarget.value) || 1)),
+                activeReturnMax
+              );
+              setReturnDialog({ townId: selectedTown.id, heroId: activeReturnHero.id, unitType: activeReturnStack.unitType, count: next });
+            }}
+            className="h-10 w-full rounded-md border border-amber-700/70 bg-black/70 px-3 text-center text-sm font-black tabular-nums text-amber-50 outline-none focus:border-amber-300"
+          />
+          <div className="mt-2 text-center text-[11px] font-bold text-amber-200/70">
+            Vers : garnison
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-md border border-stone-700 bg-stone-900 text-xs font-black text-stone-300 hover:border-amber-700 hover:text-amber-100"
+              onClick={() => setReturnDialog(null)}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="h-9 rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-xs font-black text-amber-50 hover:from-amber-500 hover:to-amber-700"
+            >
+              Déposer
+            </button>
+          </div>
+        </form>
+      )}
+
       {/* Bouton de fin de tour */}
       <div className="pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2">
         {isPending ? (
@@ -1393,6 +2169,7 @@ function HUDContent() {
                 <div key={p.id} className="flex items-center gap-2 text-sm">
                   <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                   <span className="text-gray-200 font-medium">{p.name || "Joueur"}</span>
+                  {p.isAi && <span className="rounded border border-cyan-400/50 px-1 text-[10px] font-black text-cyan-200">IA</span>}
                   {p.turnOrder === 0 && <span className="text-xs text-yellow-400">(hôte)</span>}
                 </div>
               ))}
@@ -1523,6 +2300,23 @@ function addUnitsToLocalStackList(
       position: stacks.length,
     },
   ];
+}
+
+function getMaxRecruitCount(resources: Resources, cost: ResourceCost, available: number) {
+  const byResources = Object.entries(cost).reduce((max, [resource, amount]) => {
+    if (!amount || amount <= 0) return max;
+    const owned = resources[resource as keyof Resources] ?? 0;
+    return Math.min(max, Math.floor(owned / amount));
+  }, Number.POSITIVE_INFINITY);
+
+  const resourceLimit = Number.isFinite(byResources) ? byResources : available;
+  return Math.max(0, Math.min(available, resourceLimit));
+}
+
+function multiplyCost(cost: ResourceCost, count: number): ResourceCost {
+  return Object.fromEntries(
+    Object.entries(cost).map(([resource, amount]) => [resource, (amount ?? 0) * count])
+  ) as ResourceCost;
 }
 
 function removeUnitsFromLocalStackList(

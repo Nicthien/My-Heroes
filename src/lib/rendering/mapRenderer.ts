@@ -11,6 +11,8 @@ export interface MapObjectData {
   name: string;
   onWater?: boolean;
   inTown?: boolean;
+  renderOffsetX?: number;
+  renderOffsetY?: number;
   buildingType?: string;
   guardianPower?: number;
 }

@@ -9,8 +9,10 @@ import { normalizeTownBuildings } from "./town-buildings";
 
 interface ApiPlayer {
   id: string;
-  userId: string;
+  userId: string | null;
   user?: { name: string | null };
+  isAi?: boolean;
+  aiName?: string | null;
   faction: string;
   color: string;
   gold: number;
@@ -134,7 +136,8 @@ export function mapApiToGameState(
   const players = (data.players as ApiPlayer[]).map((p): Player => ({
     id: p.id,
     userId: p.userId,
-    name: p.user?.name || "Joueur inconnu",
+    name: p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur inconnu",
+    isAi: p.isAi ?? false,
     faction: p.faction as Faction,
     color: p.color,
     resources: {

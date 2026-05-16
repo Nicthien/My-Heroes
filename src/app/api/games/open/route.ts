@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const games = (data ?? [])
     .map(toGame)
-    .filter((game) => !(game.players as unknown as Array<{ userId: string }>).some((player) => player.userId === user.id));
+    .filter((game) => !(game.players as unknown as Array<{ userId: string | null }>).some((player) => player.userId === user.id));
 
   return NextResponse.json(games);
 }

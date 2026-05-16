@@ -1,0 +1,8 @@
+Remplace le SVG du Gremlin par un webp (ne tiens pas compte du SGV base de toi sur le nom) 
+Le type de rendu : Adult mobile game asset.
+Les traits et contours : Thick dark outlines, clean line art. 
+Les couleurs et ombres : Cel-shading, flat colors, vibrant color palette, crisp highlights.
+Visage : Minimalist facial features, Blank expression.
+Posture : vu en trois-quarts, Orienté vers la droite. posture dynamique.
+Les proportions : Stylized proportions, posture dynamique.
+Format / taille : image WebP 512 x 512, fond transparent, canal alpha présent. Le personnage occupe environ 415 x 384 px.

@@ -1,16 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
-import { CombatBoardUnit, CombatTerrainFeature, PersistentCombat } from "@/lib/game/types";
+import { CombatBoardUnit, CombatEnvironment, CombatTerrainFeature, GameState, PersistentCombat } from "@/lib/game/types";
+import { buildCombatEnvironment } from "@/lib/game/combat/environment";
+import { getCreature } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
-import { COMBAT_COLS, COMBAT_ROWS, getHexDistance } from "@/lib/game/combat/persistent";
+import { buildTurnQueue, COMBAT_COLS, COMBAT_ROWS, getCurrentCombatPlayerId, getHexDistance } from "@/lib/game/combat/persistent";
+import { getUnitSpritePath } from "@/lib/rendering/phaser/assets";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
+import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
 import {
   CornerOrnaments,
+  FleurDeLis,
   ParchmentBackground,
-  goldDivider,
   goldText,
   ornateFrame,
   ornateFramePolished,
@@ -30,15 +35,31 @@ const ISO_GRID_WIDTH = (COMBAT_COLS - 1) * COL_STEP + ROW_STAGGER + TILE_WIDTH +
 const ISO_GRID_HEIGHT = (COMBAT_ROWS - 1) * ROW_STEP + TILE_HEIGHT + UNIT_HEIGHT + BOARD_PADDING_TOP + BOARD_PADDING_BOTTOM;
 const ISO_ORIGIN_X = BOARD_PADDING_X;
 const ISO_ORIGIN_Y = BOARD_PADDING_TOP;
+const MIN_BATTLE_ZOOM = 0.58;
+const MAX_BATTLE_ZOOM = 1.55;
+const RIGHT_DRAG_THRESHOLD = 5;
+const UNIT_RENDER_OFFSET_X = 52;
+const DEFENDER_RENDER_NUDGE_X = -5;
 
 export type UnitModelKind = "infantry" | "archer" | "cavalry" | "winged" | "large" | "caster" | "beast" | "undead";
+
+type DamagePreview = {
+  actorId: string;
+  targetId: string;
+  actionLabel: string;
+  damage: number;
+  kills: number;
+};
 
 export default function CombatScreen() {
   const { data: session } = useSession();
   const { activeCombat, setActiveCombat, setCombatResult, setGameState, gameState, minimizeCombat, focusTile } = useGameStore();
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const isSubmittingActionRef = useRef(false);
   const neutralActionKeyRef = useRef<string | null>(null);
+  const fetchCombatInFlightRef = useRef(false);
+  const activeCombatId = activeCombat?.id;
 
   const resolveCombat = useCallback(async (combat: PersistentCombat) => {
     setActiveCombat(null);
@@ -61,20 +82,59 @@ export default function CombatScreen() {
   }, [focusTile, gameState?.players, session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
 
   useEffect(() => {
-    if (!activeCombat) return;
-    const interval = setInterval(async () => {
-      const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}`);
-      if (!response.ok) return;
-      const data = await response.json();
-      const mapped = mapCombat(data);
-      if (mapped.status === "RESOLVED") {
-        await resolveCombat(mapped);
-        return;
+    if (!activeCombatId) return;
+    const supabase = createClient();
+    let cancelled = false;
+
+    const fetchLatestCombat = async () => {
+      if (fetchCombatInFlightRef.current) return;
+      fetchCombatInFlightRef.current = true;
+      try {
+        const current = useGameStore.getState().activeCombat;
+        if (!current || current.id !== activeCombatId) return;
+        if (current.status !== "ACTIVE") return;
+
+        const response = await fetchWithSupabaseAuth(`/api/games/${current.gameId}/combats/${current.id}`, { cache: "no-store" });
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (cancelled) return;
+        const mapped = mapCombat(data);
+        if (mapped.status === "RESOLVED") {
+          await resolveCombat(mapped);
+          return;
+        }
+        setActiveCombat(mapped);
+      } finally {
+        fetchCombatInFlightRef.current = false;
       }
-      setActiveCombat(mapped);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [activeCombat, resolveCombat, setActiveCombat]);
+    };
+
+    void fetchLatestCombat();
+    const channel = isUsingSupabaseProxy()
+      ? null
+      : supabase
+          .channel(`combat:${activeCombatId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "combats", filter: `id=eq.${activeCombatId}` },
+            () => void fetchLatestCombat()
+          )
+          .subscribe();
+    const interval = setInterval(fetchLatestCombat, isUsingSupabaseProxy() ? 300 : 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [activeCombatId, resolveCombat, setActiveCombat]);
+
+  useEffect(() => {
+    if (!activeCombat || !gameState) return;
+    const syncedCombat = gameState.activeCombats?.find((combat) => combat.id === activeCombat.id);
+    if (!syncedCombat || syncedCombat === activeCombat) return;
+    setActiveCombat(syncedCombat);
+  }, [activeCombat, gameState, setActiveCombat]);
 
   useEffect(() => {
     if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
@@ -136,7 +196,9 @@ export default function CombatScreen() {
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
   const units = activeCombat.boardState.units;
   const currentUnit = units.find((unit) => unit.id === activeCombat.currentUnitId);
-  const isMyAction = Boolean(myPlayer && activeCombat.currentPlayerId === myPlayer.id);
+  const inspectedUnit = units.find((unit) => unit.id === inspectedUnitId) ?? null;
+  const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, activeCombat.currentUnitId, activeCombat.currentPlayerId);
+  const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
   const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction;
 
   const submitAction = async (action: Record<string, unknown>) => {
@@ -148,10 +210,15 @@ export default function CombatScreen() {
       const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action),
+        body: JSON.stringify({
+          ...action,
+          expectedCurrentUnitId: activeCombat.currentUnitId,
+          expectedRound: activeCombat.round,
+          expectedActionLogLength: activeCombat.actionLog.length,
+        }),
       });
-      if (!response.ok) return;
       const data = await response.json();
+      if (!response.ok && !data.combat) return;
       const combatPayload = data.combat ?? data;
       if (!combatPayload) return;
       const mapped = mapCombat(combatPayload);
@@ -187,63 +254,211 @@ export default function CombatScreen() {
         </button>
       </header>
       <div className="relative z-10 flex min-h-0 flex-1">
-        <main className="relative flex min-w-0 flex-1 items-center justify-center overflow-auto px-5 pb-5 pt-3">
-          <IsoBattlefield combat={activeCombat} isMyAction={canSubmitAction} onAction={submitAction} />
-        </main>
-        <aside className="relative z-20 flex w-80 flex-col gap-4 border-l border-amber-700/50 bg-gradient-to-b from-[#1a1208]/95 via-[#120f0a]/95 to-stone-950/95 p-4 shadow-[-14px_0_28px_rgba(0,0,0,0.45)]">
-          <ParchmentBackground />
-          <section className={`relative ${ornateFrame} p-3`}>
-            <CornerOrnaments />
-            <div className={`text-center text-[11px] font-black uppercase tracking-[0.22em] ${goldText}`}>Unite active</div>
-            <div className={`my-2 ${goldDivider}`} />
-            <div className="text-sm text-stone-200">
-              {currentUnit ? <UnitDetails unit={currentUnit} /> : <div className="py-4 text-center text-stone-400">Aucune</div>}
-            </div>
-          </section>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              disabled={!canSubmitAction}
-              onClick={() => submitAction({ type: "WAIT" })}
-              className="rounded-md border border-amber-600/50 bg-gradient-to-b from-stone-800 to-stone-950 px-3 py-2 font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset] transition hover:from-stone-700 hover:to-stone-900 disabled:opacity-40"
-            >
-              Attendre
-            </button>
-            <button
-              type="button"
-              disabled={!canSubmitAction}
-              onClick={() => submitAction({ type: "DEFEND" })}
-              className="rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
-            >
-              Defendre
-            </button>
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          <div className="absolute left-1/2 top-3 z-30 w-[min(760px,calc(100%-7rem))] -translate-x-1/2">
+            <InitiativeQueue combat={activeCombat} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
           </div>
+          <IsoBattlefield
+            combat={activeCombat}
+            gameState={gameState}
+            inspectedUnitId={inspectedUnitId}
+            isMyAction={canSubmitAction}
+            onAction={submitAction}
+            onInspectUnit={setInspectedUnitId}
+          />
+        </main>
+        <aside className="pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
+          <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
+            <div className="text-sm text-stone-200">
+              {(inspectedUnit ?? currentUnit) ? (
+                <UnitDetails unit={(inspectedUnit ?? currentUnit)!} />
+              ) : (
+                <div className="py-4 text-center text-stone-400">Aucune</div>
+              )}
+            </div>
+          </CombatFloatingPanel>
 
-          <section className={`relative flex min-h-0 flex-1 flex-col ${ornateFramePolished} p-3`}>
-            <CornerOrnaments />
-            <div className={`text-center text-[11px] font-black uppercase tracking-[0.22em] ${goldText}`}>Journal</div>
-            <div className={`my-2 ${goldDivider}`} />
+          <CombatFloatingPanel title="Actions" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={!canSubmitAction}
+                onClick={() => submitAction({ type: "WAIT" })}
+                className="rounded-md border border-amber-600/50 bg-gradient-to-b from-stone-800 to-stone-950 px-3 py-2 font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset] transition hover:from-stone-700 hover:to-stone-900 disabled:opacity-40"
+              >
+                Attendre
+              </button>
+              <button
+                type="button"
+                disabled={!canSubmitAction}
+                onClick={() => submitAction({ type: "DEFEND" })}
+                className="rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
+              >
+                Defendre
+              </button>
+            </div>
+          </CombatFloatingPanel>
+
+          <CombatFloatingPanel title="Journal" className={`flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex-1 px-3 pb-3 pt-2">
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 text-sm text-stone-300">
               {activeCombat.actionLog.slice(-20).map((line, index) => (
                 <div key={index} className="border-b border-amber-900/20 pb-1 last:border-b-0">{line}</div>
               ))}
             </div>
-          </section>
+          </CombatFloatingPanel>
         </aside>
       </div>
     </div>
   );
 }
 
-function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCombat; isMyAction: boolean; onAction: (action: Record<string, unknown>) => void }) {
+function CombatFloatingPanel({
+  title,
+  children,
+  className,
+  expandedClassName,
+  bodyClassName,
+  defaultCollapsed = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className: string;
+  expandedClassName?: string;
+  bodyClassName?: string;
+  defaultCollapsed?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  return (
+    <section className={`pointer-events-auto relative overflow-hidden ${className} ${collapsed ? "" : expandedClassName ?? ""}`}>
+      <CornerOrnaments />
+      <ParchmentBackground />
+      <button
+        type="button"
+        className="relative z-10 flex w-full min-w-0 items-center gap-2 border-b border-amber-700/40 px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70"
+        onClick={() => setCollapsed((value) => !value)}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Deplier" : "Replier"}
+      >
+        <FleurDeLis className="h-3 w-3 shrink-0 text-amber-400" />
+        <span className={`min-w-0 flex-1 truncate text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>{title}</span>
+        <FleurDeLis className="h-3 w-3 shrink-0 text-amber-400" />
+        <svg
+          viewBox="0 0 24 24"
+          className={`h-4 w-4 shrink-0 text-amber-300/80 transition ${collapsed ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {!collapsed && (
+        <div className={`relative z-10 ${bodyClassName ?? ""}`}>
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function IsoBattlefield({
+  combat,
+  gameState,
+  inspectedUnitId,
+  isMyAction,
+  onAction,
+  onInspectUnit,
+}: {
+  combat: PersistentCombat;
+  gameState: GameState;
+  inspectedUnitId: string | null;
+  isMyAction: boolean;
+  onAction: (action: Record<string, unknown>) => void;
+  onInspectUnit: (unitId: string | null) => void;
+}) {
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
+  const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
+  const [camera, setCamera] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const units = combat.boardState.units;
   const terrain = useMemo(() => combat.boardState.terrain ?? [], [combat.boardState.terrain]);
+  const environment = useMemo(
+    () => combat.boardState.environment ?? buildCombatEnvironment(gameState.map, combat.position),
+    [combat.boardState.environment, combat.position, gameState.map]
+  );
   const currentUnit = units.find((unit) => unit.id === combat.currentUnitId);
   const occupied = useMemo(() => new Set(units.map((unit) => `${unit.q},${unit.r}`)), [units]);
   const blocked = useMemo(() => new Set(terrain.map((feature) => `${feature.q},${feature.r}`)), [terrain]);
   const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
+  const previewTarget = units.find((unit) => unit.id === (hoveredUnitId ?? inspectedUnitId));
+  const preview = currentUnit && previewTarget && previewTarget.side !== currentUnit.side
+    ? getDamagePreview(currentUnit, previewTarget, combat, gameState)
+    : null;
+
+  const resetCamera = () => setCamera({ zoom: 1, panX: 0, panY: 0 });
+  const zoomCamera = (factor: number) => {
+    const centerX = viewportRef.current?.clientWidth ? viewportRef.current.clientWidth / 2 : 0;
+    const centerY = viewportRef.current?.clientHeight ? viewportRef.current.clientHeight / 2 : 0;
+    setCamera((prev) => {
+      const nextZoom = clamp(prev.zoom * factor, MIN_BATTLE_ZOOM, MAX_BATTLE_ZOOM);
+      if (nextZoom === prev.zoom) return prev;
+      return {
+        zoom: nextZoom,
+        panX: centerX - ((centerX - prev.panX) * nextZoom) / prev.zoom,
+        panY: centerY - ((centerY - prev.panY) * nextZoom) / prev.zoom,
+      };
+    });
+  };
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cursorX = event.clientX - rect.left;
+    const cursorY = event.clientY - rect.top;
+    const factor = event.deltaY < 0 ? 1.12 : 0.89;
+    setCamera((prev) => {
+      const nextZoom = clamp(prev.zoom * factor, MIN_BATTLE_ZOOM, MAX_BATTLE_ZOOM);
+      if (nextZoom === prev.zoom) return prev;
+      return {
+        zoom: nextZoom,
+        panX: cursorX - ((cursorX - prev.panX) * nextZoom) / prev.zoom,
+        panY: cursorY - ((cursorY - prev.panY) * nextZoom) / prev.zoom,
+      };
+    });
+  };
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    rightDragRef.current = {
+      active: true,
+      dragged: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+    };
+  };
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const drag = rightDragRef.current;
+    if (!drag.active) return;
+    const dx = event.clientX - drag.lastX;
+    const dy = event.clientY - drag.lastY;
+    const totalDx = event.clientX - drag.startX;
+    const totalDy = event.clientY - drag.startY;
+    if (Math.hypot(totalDx, totalDy) > RIGHT_DRAG_THRESHOLD) drag.dragged = true;
+    if (drag.dragged && (dx !== 0 || dy !== 0)) {
+      setCamera((prev) => ({ ...prev, panX: prev.panX + dx, panY: prev.panY + dy }));
+    }
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
+  };
+  const stopRightDrag = () => {
+    rightDragRef.current.active = false;
+  };
 
   const cells = [];
   for (let r = 0; r < COMBAT_ROWS; r++) {
@@ -257,7 +472,6 @@ function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCo
       const isPendingPath = Boolean(activePendingMove?.path.some((step) => step.q === q && step.r === r));
       const attackable = Boolean(isMyAction && currentUnit && unit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0)));
       const { x, y } = getIsoPosition(q, r);
-      const depthScale = getDepthScale(r);
       const canClick = isMyAction && !feature && (reachable || attackable);
 
       cells.push(
@@ -273,8 +487,10 @@ function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCo
             zIndex: r * 100 + (unit ? 30 : feature ? 18 : 1),
             cursor: canClick ? "pointer" : "default",
           }}
-          disabled={!canClick}
+          aria-disabled={!canClick}
+          tabIndex={canClick ? 0 : -1}
           onClick={() => {
+            if (!canClick) return;
             if (attackable && unit) {
               setPendingMove(null);
               onAction({ type: distance <= 1 ? "ATTACK" : "SHOOT", targetUnitId: unit.id });
@@ -287,102 +503,204 @@ function IsoBattlefield({ combat, isMyAction, onAction }: { combat: PersistentCo
               setPendingMove({ unitId: currentUnit.id, q, r, path });
             }
           }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (unit && !rightDragRef.current.dragged) onInspectUnit(unit.id);
+          }}
+          onMouseEnter={() => setHoveredUnitId(unit?.id ?? null)}
+          onMouseLeave={() => setHoveredUnitId((prev) => (prev === unit?.id ? null : prev))}
           title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature) : `${q},${r}`}
         >
           <IsoTile
             feature={feature}
+            environment={environment}
             reachable={reachable}
             attackable={attackable}
             pendingDestination={isPendingDestination}
             pendingPath={isPendingPath}
             active={combat.currentUnitId === unit?.id}
+            inspected={inspectedUnitId === unit?.id}
           />
           {feature && <TerrainModel feature={feature} />}
-          {unit && <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} lifted depthScale={depthScale} />}
         </button>
       );
     }
   }
 
+  const unitModels = units.map((unit) => {
+    const { x, y } = getIsoPosition(unit.q, unit.r);
+    const distance = currentUnit ? getHexDistance(currentUnit, unit) : 999;
+    const attackable = Boolean(isMyAction && currentUnit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0)));
+
+    return (
+      <span
+        key={unit.id}
+        className="pointer-events-none absolute block"
+        style={{
+          left: x,
+          top: y + UNIT_HEIGHT,
+          width: TILE_WIDTH,
+          height: TILE_HEIGHT + TILE_DEPTH,
+          zIndex: unit.r * 100 + 30,
+          transition: "left 520ms cubic-bezier(0.22, 1, 0.36, 1), top 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          willChange: "left, top",
+        }}
+      >
+        <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} lifted depthScale={getDepthScale(unit.r)} />
+      </span>
+    );
+  });
+
+  const unitBadges = units.map((unit) => {
+    const { x, y } = getIsoPosition(unit.q, unit.r);
+
+    return (
+      <span
+        key={`${unit.id}-badges`}
+        className="pointer-events-none absolute block overflow-visible"
+        style={{
+          left: x,
+          top: y + UNIT_HEIGHT,
+          width: TILE_WIDTH,
+          height: TILE_HEIGHT + TILE_DEPTH,
+          zIndex: 10000 + unit.r,
+          transition: "left 520ms cubic-bezier(0.22, 1, 0.36, 1), top 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          willChange: "left, top",
+        }}
+      >
+        <UnitBadges unit={unit} lifted depthScale={getDepthScale(unit.r)} />
+      </span>
+    );
+  });
+
   return (
-    <div className="relative min-h-[680px] min-w-[1260px] overflow-hidden">
-      <BattlefieldScenery />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[68%] bg-[linear-gradient(180deg,rgba(55,66,55,0.12),rgba(35,34,27,0.82)_18%,rgba(22,22,18,0.98)_100%)]" />
-      <div className="pointer-events-none absolute left-1/2 top-[58%] h-[520px] w-[1220px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(86,79,58,0.7),rgba(41,42,35,0.68)_55%,transparent_75%)] blur-md" />
+    <div
+      ref={viewportRef}
+      className="relative h-full min-h-[680px] w-full min-w-[860px] cursor-default overflow-hidden"
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={stopRightDrag}
+      onMouseLeave={stopRightDrag}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <BattlefieldScenery environment={environment} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[68%] bg-[linear-gradient(180deg,rgba(55,66,55,0.08),rgba(35,34,27,0.72)_18%,rgba(22,22,18,0.92)_100%)]" />
+      <div className="pointer-events-none absolute left-1/2 top-[58%] h-[520px] w-[1220px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse_at_center,rgba(86,79,58,0.55),rgba(41,42,35,0.5)_55%,transparent_75%)] blur-md" />
+      <div className="absolute left-4 top-4 z-30 flex flex-col gap-1">
+        <button
+          type="button"
+          className="rounded-md border border-amber-500/50 bg-black/55 px-2 py-1 text-xs font-black text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+          onClick={resetCamera}
+        >
+          100%
+        </button>
+        <button
+          type="button"
+          className="grid h-6 w-10 place-items-center rounded-md border border-amber-500/45 bg-black/55 text-sm font-black leading-none text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+          onClick={() => zoomCamera(1.12)}
+          aria-label="Zoom avant"
+          title="Zoom avant"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="grid h-6 w-10 place-items-center rounded-md border border-amber-500/45 bg-black/55 text-sm font-black leading-none text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+          onClick={() => zoomCamera(0.89)}
+          aria-label="Zoom arriere"
+          title="Zoom arriere"
+        >
+          -
+        </button>
+      </div>
+      {preview && <DamagePreviewPanel preview={preview} actor={currentUnit} target={previewTarget} />}
       <div
-        className="relative"
+        className="absolute left-1/2 top-1/2"
         style={{
           width: ISO_GRID_WIDTH,
           height: ISO_GRID_HEIGHT,
+          transform: `translate(calc(-50% + ${camera.panX}px), calc(-50% + ${camera.panY}px)) scale(${camera.zoom})`,
+          transformOrigin: "0 0",
           filter: "drop-shadow(0 20px 28px rgba(0,0,0,0.45))",
         }}
       >
         {cells}
+        {unitModels}
+        {unitBadges}
       </div>
     </div>
   );
 }
 
-function BattlefieldScenery() {
-  const trees = [
-    { left: 5, top: 21, scale: 1.1 },
-    { left: 14, top: 12, scale: 0.86 },
-    { left: 25, top: 18, scale: 1.0 },
-    { left: 66, top: 14, scale: 0.96 },
-    { left: 78, top: 20, scale: 1.2 },
-    { left: 90, top: 15, scale: 0.9 },
-  ];
-  const mountains = [
-    { left: 10, width: 150, height: 94 },
-    { left: 31, width: 210, height: 126 },
-    { left: 59, width: 180, height: 108 },
-    { left: 78, width: 150, height: 86 },
-  ];
+function BattlefieldScenery({ environment }: { environment: CombatEnvironment }) {
+  const preset = getSceneryPreset(environment);
+  const trees = preset.trees;
+  const mountains = preset.mountains;
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-52 bg-[linear-gradient(180deg,rgba(166,183,185,0.42),rgba(102,118,111,0.28)_45%,transparent)]" />
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ background: preset.background }}>
+      <div className="absolute inset-x-0 top-0 h-52" style={{ background: preset.sky }} />
+      <span className="absolute left-0 right-0 top-24 h-36" style={{ background: preset.horizon }} />
       {mountains.map((mountain, index) => (
         <span
           key={index}
-          className="absolute top-2 bg-[linear-gradient(145deg,rgba(74,85,80,0.92),rgba(36,43,39,0.64))] blur-[0.2px] [clip-path:polygon(50%_0,100%_100%,0_100%)]"
-          style={{ left: `${mountain.left}%`, width: mountain.width, height: mountain.height }}
+          className="absolute top-2 blur-[0.2px] [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+          style={{ left: `${mountain.left}%`, width: mountain.width, height: mountain.height, background: preset.mountain }}
         />
       ))}
-      <span className="absolute left-0 right-0 top-28 h-32 bg-[linear-gradient(180deg,rgba(49,69,58,0.55),rgba(41,52,42,0.2),transparent)]" />
       {trees.map((tree, index) => (
         <span
           key={index}
           className="absolute h-36 w-24 origin-bottom"
           style={{ left: `${tree.left}%`, top: `${tree.top}%`, transform: `scale(${tree.scale})` }}
         >
-          <span className="absolute bottom-0 left-1/2 h-16 w-3 -translate-x-1/2 bg-[#3f2c1d]" />
-          <span className="absolute bottom-8 left-1/2 h-24 w-20 -translate-x-1/2 bg-[linear-gradient(160deg,#3f5f45,#182a20)] opacity-90 [clip-path:polygon(50%_0,90%_42%,72%_42%,100%_82%,64%_78%,50%_100%,36%_78%,0_82%,28%_42%,10%_42%)]" />
+          <span className="absolute bottom-0 left-1/2 h-16 w-3 -translate-x-1/2" style={{ background: preset.trunk }} />
+          <span
+            className="absolute bottom-8 left-1/2 h-24 w-20 -translate-x-1/2 opacity-90 [clip-path:polygon(50%_0,90%_42%,72%_42%,100%_82%,64%_78%,50%_100%,36%_78%,0_82%,28%_42%,10%_42%)]"
+            style={{ background: preset.tree }}
+          />
         </span>
       ))}
-      <span className="absolute bottom-0 left-0 h-32 w-56 bg-[radial-gradient(ellipse_at_bottom_left,rgba(24,44,23,0.95),transparent_70%)]" />
-      <span className="absolute bottom-0 right-0 h-36 w-64 bg-[radial-gradient(ellipse_at_bottom_right,rgba(45,37,25,0.96),transparent_72%)]" />
+      {environment.theme === "road" && (
+        <span className="absolute bottom-[10%] left-1/2 h-28 w-[62rem] -translate-x-1/2 skew-x-[-18deg] rounded-[50%] bg-stone-700/45 shadow-[inset_0_0_22px_rgba(250,204,21,0.12)]" />
+      )}
+      {(environment.theme === "coast" || environment.theme === "water") && (
+        <span className="absolute bottom-[13%] left-[8%] h-28 w-[34rem] -skew-x-12 rounded-[50%] bg-cyan-300/18 shadow-[inset_0_0_34px_rgba(125,211,252,0.34)]" />
+      )}
+      {(environment.theme === "settlement" || environment.theme === "building") && (
+        <span className="absolute right-[8%] top-[18%] h-36 w-44 bg-[linear-gradient(145deg,rgba(120,91,54,0.78),rgba(39,25,13,0.58))] shadow-[0_18px_32px_rgba(0,0,0,0.28)] [clip-path:polygon(12%_100%,12%_42%,28%_42%,28%_22%,50%_4%,72%_22%,72%_42%,88%_42%,88%_100%)]" />
+      )}
+      {environment.theme === "lava" && (
+        <span className="absolute bottom-[16%] right-[12%] h-24 w-[28rem] -skew-x-12 rounded-[50%] bg-orange-500/22 shadow-[0_0_42px_rgba(249,115,22,0.35),inset_0_0_22px_rgba(254,240,138,0.35)]" />
+      )}
+      <span className="absolute bottom-0 left-0 h-32 w-56" style={{ background: preset.leftVignette }} />
+      <span className="absolute bottom-0 right-0 h-36 w-64" style={{ background: preset.rightVignette }} />
     </div>
   );
 }
 
 function IsoTile({
   feature,
+  environment,
   reachable,
   attackable,
   pendingDestination,
   pendingPath,
   active,
+  inspected,
 }: {
   feature?: CombatTerrainFeature;
+  environment: CombatEnvironment;
   reachable: boolean;
   attackable: boolean;
   pendingDestination: boolean;
   pendingPath: boolean;
   active: boolean;
+  inspected: boolean;
 }) {
-  const topColor = getTileTopColor(feature, reachable, attackable, pendingDestination, pendingPath, active);
-  const strokeColor = getTileStrokeColor(feature, reachable, attackable, pendingDestination, pendingPath, active);
+  const topColor = getTileTopColor(feature, environment, reachable, attackable, pendingDestination, pendingPath, active, inspected);
+  const strokeColor = getTileStrokeColor(feature, reachable, attackable, pendingDestination, pendingPath, active, inspected);
 
   return (
     <span className="absolute left-0 top-0 block" style={{ width: TILE_WIDTH, height: TILE_HEIGHT + TILE_DEPTH }}>
@@ -404,7 +722,7 @@ function IsoTile({
           points="46,2 90,18 90,46 46,62 2,46 2,18"
           fill="none"
           stroke={strokeColor}
-          strokeWidth={active || attackable || pendingDestination ? 2.4 : reachable || pendingPath ? 2 : 1.15}
+          strokeWidth={active || attackable || pendingDestination || inspected ? 2.4 : reachable || pendingPath ? 2 : 1.15}
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
@@ -463,32 +781,63 @@ function UnitModel({
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
+  const renderOffsetX = getUnitRenderOffsetX(unit);
 
   return (
     <span
-      className={`pointer-events-none absolute block h-[105px] w-[82px] ${
+      className={`pointer-events-none absolute block h-[159px] w-[125px] ${
         active ? "drop-shadow-[0_0_12px_rgba(252,211,77,0.75)]" : attackable ? "drop-shadow-[0_0_12px_rgba(248,113,113,0.65)]" : ""
       }`}
       style={{
-        left: "calc(50% + 26px)",
-        top: lifted ? -48 : 20,
+        left: `calc(50% + ${renderOffsetX}px)`,
+        top: lifted ? -64 : 4,
         transform: `translateX(-50%) scale(${depthScale})`,
         transformOrigin: "50% 100%",
       }}
     >
       <span
-        className="absolute left-1/2 top-0 block h-[92px] w-[70px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
+        className="absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
         style={{ transform: `translateX(-50%) ${sideFlip}` }}
       >
         <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
       </span>
+    </span>
+  );
+}
+
+function UnitBadges({
+  unit,
+  lifted = false,
+  depthScale = 1,
+}: {
+  unit: CombatBoardUnit;
+  lifted?: boolean;
+  depthScale?: number;
+}) {
+  const renderOffsetX = getUnitRenderOffsetX(unit);
+  const badgeOffsetX = renderOffsetX / depthScale;
+
+  return (
+    <span
+      className="absolute block h-[159px] w-[125px]"
+      style={{
+        left: `calc(50% + ${renderOffsetX}px)`,
+        top: lifted ? -64 : 4,
+        transform: `translateX(-50%) scale(${depthScale})`,
+        transformOrigin: "50% 100%",
+      }}
+    >
       <span
-        className={`absolute left-1/2 top-[78px] grid h-5 min-w-8 -translate-x-1/2 place-items-center rounded-sm border px-1 text-center text-[10px] font-black leading-none shadow-lg ${unit.side === "attacker" ? "border-blue-200/70 bg-blue-950/95 text-blue-50" : "border-red-200/70 bg-red-950/95 text-red-50"}`}
+        className={`absolute top-[108px] grid h-[18px] min-w-8 -translate-x-1/2 place-items-center rounded-sm border px-1 text-center text-[10px] font-black leading-none shadow-lg ${unit.side === "attacker" ? "border-blue-200/70 bg-blue-950/95 text-blue-50" : "border-red-200/70 bg-red-950/95 text-red-50"}`}
+        style={{ left: `calc(50% - ${badgeOffsetX}px)` }}
       >
         {unit.count}
       </span>
       {unit.ranged && (
-        <span className="absolute left-1/2 top-[55px] grid h-4 min-w-6 translate-x-4 place-items-center rounded-sm border border-amber-300/60 bg-amber-950/90 px-1 text-[9px] font-black leading-none text-amber-100">
+        <span
+          className="absolute top-[91px] grid h-[14px] min-w-6 -translate-x-1/2 place-items-center rounded-sm border border-amber-300/60 bg-amber-950/90 px-1 text-[9px] font-black leading-none text-amber-100"
+          style={{ left: `calc(50% - ${badgeOffsetX}px)` }}
+        >
           {unit.shots}
         </span>
       )}
@@ -509,10 +858,19 @@ export function UnitSilhouette({
 }) {
   const gradId = `g-${useId().replace(/:/g, "")}`;
   if (unitType) {
+    const spritePath = getUnitSpritePath(unitType);
+
     return (
-      <svg viewBox="0 0 96 96" width="100%" height="100%" className="overflow-visible" aria-hidden="true">
-        <image href={`/assets/sprites/units/${unitType}.svg`} x="0" y="0" width="96" height="96" preserveAspectRatio="xMidYMid meet" />
-      </svg>
+      <Image
+        src={spritePath}
+        alt=""
+        width={96}
+        height={96}
+        unoptimized
+        draggable={false}
+        className="h-full w-full object-contain"
+        aria-hidden="true"
+      />
     );
   }
 
@@ -1374,6 +1732,127 @@ function UndeadSvg({ palette, g, visual }: { palette: ReturnType<typeof getUnitP
   );
 }
 
+function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview; actor?: CombatBoardUnit; target?: CombatBoardUnit }) {
+  if (!actor || !target) return null;
+  const actorRule = getUnitRule(actor.unitType);
+  const targetRule = getUnitRule(target.unitType);
+  return (
+    <div className="pointer-events-none absolute bottom-4 left-4 z-30 w-64 rounded-md border border-amber-500/45 bg-black/65 p-3 text-xs text-stone-200 shadow-xl">
+      <div className={`text-[11px] font-black uppercase tracking-[0.2em] ${goldText}`}>Preview tactique</div>
+      <div className="mt-2 font-bold text-amber-100">{actorRule.label} vers {targetRule.label}</div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <span className="rounded-sm border border-stone-600/60 bg-stone-950/70 px-2 py-1">{preview.actionLabel}</span>
+        <span className="rounded-sm border border-red-500/50 bg-red-950/60 px-2 py-1">{preview.damage} deg.</span>
+        <span className="rounded-sm border border-amber-500/50 bg-amber-950/60 px-2 py-1">{preview.kills} pertes</span>
+      </div>
+    </div>
+  );
+}
+
+function InitiativeQueue({
+  combat,
+  inspectedUnitId,
+  onInspectUnit,
+}: {
+  combat: PersistentCombat;
+  inspectedUnitId: string | null;
+  onInspectUnit: (unitId: string) => void;
+}) {
+  const queueRef = useRef<HTMLDivElement>(null);
+  const [visibleRadius, setVisibleRadius] = useState(3);
+  const unitsById = new Map(combat.boardState.units.map((unit) => [unit.id, unit]));
+  const initiativeOrder = buildTurnQueue(combat.boardState.units, combat.round).filter((id) => unitsById.get(id)?.count);
+  const queue = getCenteredInitiativeSlots(initiativeOrder, combat.currentUnitId, visibleRadius)
+    .map((slot) => {
+      const unit = unitsById.get(slot.id);
+      return unit && unit.count > 0 ? { ...slot, unit } : null;
+    })
+    .filter((slot): slot is { id: string; offset: number; unit: CombatBoardUnit } => Boolean(slot));
+
+  useEffect(() => {
+    const element = queueRef.current;
+    if (!element) return;
+
+    const updateRadius = () => {
+      const width = element.clientWidth;
+      setVisibleRadius(width < 230 ? 1 : width < 420 ? 2 : 3);
+    };
+
+    updateRadius();
+    const observer = new ResizeObserver(updateRadius);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  if (queue.length === 0) return null;
+
+  return (
+    <div ref={queueRef} className="mx-auto flex max-w-full items-center justify-center overflow-hidden">
+      <div className="flex max-w-full items-center gap-1.5 overflow-hidden rounded-md border border-amber-700/50 bg-black/55 px-2 py-1.5 shadow-[0_10px_26px_rgba(0,0,0,0.5),0_0_0_1px_rgba(252,211,77,0.12)_inset] backdrop-blur-sm">
+        {queue.map(({ unit, offset }) => {
+        const rule = getUnitRule(unit.unitType);
+        const active = offset === 0;
+        const inspected = inspectedUnitId === unit.id;
+        const previous = offset < 0;
+        return (
+          <button
+            type="button"
+            key={`${unit.id}-${offset}`}
+            className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${
+              active
+                ? "h-16 w-14 border-amber-200 bg-amber-950/90 shadow-[0_0_18px_rgba(251,191,36,0.68)]"
+                : inspected
+                  ? "h-14 w-12 border-sky-300 bg-sky-950/85 shadow-[0_0_12px_rgba(125,211,252,0.42)]"
+                  : unit.side === "attacker"
+                    ? "h-14 w-12 border-blue-400/55 bg-blue-950/65"
+                    : "h-14 w-12 border-red-400/55 bg-red-950/65"
+            } ${previous ? "opacity-55 saturate-75" : ""}`}
+            title={`${offset === 0 ? "Actuel" : offset < 0 ? `${Math.abs(offset)} precedent` : `${offset} suivant`} - ${rule.label} x${unit.count} / v${unit.speed}`}
+            onClick={() => onInspectUnit(unit.id)}
+          >
+            <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/75 to-black/30`}>
+              <InitiativeMiniature unit={unit} />
+            </span>
+            {active && <span className="absolute inset-x-1 bottom-4 h-px bg-amber-200/80" />}
+            <span className="absolute inset-x-0 bottom-0 grid h-4 place-items-center bg-black/72 px-1 text-[10px] font-black leading-none text-stone-100">
+              x{unit.count}
+            </span>
+          </button>
+        );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getCenteredInitiativeSlots(order: string[], currentUnitId: string | null | undefined, radius: number) {
+  if (order.length === 0) return [];
+  const currentIndex = Math.max(0, currentUnitId ? order.indexOf(currentUnitId) : 0);
+  const offsets = order.length === 1
+    ? [0]
+    : Array.from({ length: radius * 2 + 1 }, (_, index) => index - radius);
+
+  return offsets.map((offset) => ({
+    id: order[(currentIndex + offset + order.length * 4) % order.length],
+    offset,
+  }));
+}
+
+function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
+  const model = getUnitModel(unit);
+  const palette = getUnitPalette(unit);
+  const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
+
+  return (
+    <span
+      className="absolute left-1/2 top-1/2 block h-14 w-12 drop-shadow-[0_6px_5px_rgba(0,0,0,0.65)]"
+      style={{ transform: `translate(-50%, -45%) scale(0.9) ${sideFlip}`, transformOrigin: "50% 50%" }}
+    >
+      <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+    </span>
+  );
+}
+
 function findHexPath(
   start: { q: number; r: number },
   end: { q: number; r: number },
@@ -1406,6 +1885,13 @@ function findHexPath(
 
 function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
   const rule = getUnitRule(unit.unitType);
+  const creature = getCreature(unit.unitType);
+  const states = [
+    unit.defended ? "Defend" : null,
+    unit.waited ? "Attend" : null,
+    unit.hasRetaliated ? "Riposte utilisee" : null,
+  ].filter(Boolean);
+
   return (
     <div className="flex gap-3">
       <div className="relative grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-md border border-amber-700/60 bg-gradient-to-b from-stone-900 to-black shadow-[0_0_0_1px_rgba(252,211,77,0.15)_inset]">
@@ -1413,13 +1899,23 @@ function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className={`font-black ${goldText}`}>{rule.label} x{unit.count}</div>
+        <div className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-stone-400">
+          {unit.side === "attacker" ? "Attaquant" : "Defenseur"}
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-300">
           <span>Att. {rule.attack}</span>
           <span>Def. {rule.defense}</span>
           <span>Vit. {unit.speed}</span>
           <span>Deg. {unit.minDamage}-{unit.maxDamage}</span>
+          <span>PV/u {unit.maxHealth}</span>
+          <span>PV {unit.health}/{unit.maxHealth * unit.count}</span>
         </div>
         {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">Tirs : {unit.shots}</div>}
+        {creature.abilities.length > 0 && (
+          <div className="mt-2 text-xs text-stone-300">{creature.abilities.join(", ")}</div>
+        )}
+        {creature.special && <div className="mt-1 text-xs text-amber-100/85">{creature.special}</div>}
+        {states.length > 0 && <div className="mt-2 text-xs font-bold text-sky-200">{states.join(" | ")}</div>}
       </div>
     </div>
   );
@@ -1433,8 +1929,8 @@ function UnitPortrait({ unit }: { unit: CombatBoardUnit }) {
   return (
     <div className="relative h-full w-full">
       <span
-        className="absolute left-1/2 top-1/2 block h-[92px] w-[70px] drop-shadow-[0_8px_8px_rgba(0,0,0,0.55)]"
-        style={{ transform: `translate(-50%, -50%) scale(0.85) ${sideFlip}`, transformOrigin: "50% 50%" }}
+        className="absolute left-1/2 top-1/2 block h-[104px] w-[80px] drop-shadow-[0_8px_8px_rgba(0,0,0,0.55)]"
+        style={{ transform: `translate(-50%, -50%) scale(0.95) ${sideFlip}`, transformOrigin: "50% 50%" }}
       >
         <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
       </span>
@@ -1453,22 +1949,254 @@ function getDepthScale(r: number) {
   return 0.86 + (r / Math.max(1, COMBAT_ROWS - 1)) * 0.22;
 }
 
+function getUnitRenderOffsetX(unit: CombatBoardUnit) {
+  return UNIT_RENDER_OFFSET_X + (unit.side === "defender" ? DEFENDER_RENDER_NUDGE_X : 0);
+}
+
+function getDamagePreview(
+  actor: CombatBoardUnit,
+  target: CombatBoardUnit,
+  combat: PersistentCombat,
+  gameState: GameState
+): DamagePreview {
+  const distance = getHexDistance(actor, target);
+  const canStrike = distance <= 1 || (actor.ranged && actor.shots > 0);
+  if (!canStrike) {
+    return { actorId: actor.id, targetId: target.id, actionLabel: "Hors portee", damage: 0, kills: 0 };
+  }
+
+  const attackerStats = getCombatSideStats(actor.side, combat, gameState);
+  const defenderStats = getCombatSideStats(target.side, combat, gameState);
+  const damage = estimateDamage(actor, target, attackerStats, defenderStats);
+  const nextHealth = Math.max(0, target.health - damage);
+  const kills = Math.max(0, target.count - (nextHealth > 0 ? Math.ceil(nextHealth / target.maxHealth) : 0));
+
+  return {
+    actorId: actor.id,
+    targetId: target.id,
+    actionLabel: distance <= 1 ? "Melee" : "Tir",
+    damage,
+    kills,
+  };
+}
+
+function estimateDamage(
+  actor: CombatBoardUnit,
+  target: CombatBoardUnit,
+  attackerStats: { attack: number; defense: number },
+  defenderStats: { attack: number; defense: number }
+) {
+  const attackValue = getUnitRule(actor.unitType).attack + attackerStats.attack;
+  const defenseValue = getUnitRule(target.unitType).defense + defenderStats.defense + (target.defended ? 2 : 0);
+  const diff = attackValue - defenseValue;
+  const multiplier = diff >= 0 ? 1 + diff * 0.05 : 1 / (1 + Math.abs(diff) * 0.05);
+  const damagePerUnit = Math.floor((actor.minDamage + actor.maxDamage) / 2);
+  return Math.max(1, Math.floor(damagePerUnit * actor.count * multiplier));
+}
+
+function getCombatSideStats(side: "attacker" | "defender", combat: PersistentCombat, gameState: GameState) {
+  const heroId = side === "attacker" ? combat.attackerHeroId : combat.defenderHeroId;
+  const hero = gameState.players.flatMap((player) => player.heroes).find((item) => item.id === heroId);
+  return {
+    attack: hero?.stats.attack ?? 0,
+    defense: hero?.stats.defense ?? 0,
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+type SceneryPreset = {
+  background: string;
+  sky: string;
+  horizon: string;
+  mountain: string;
+  tree: string;
+  trunk: string;
+  leftVignette: string;
+  rightVignette: string;
+  trees: Array<{ left: number; top: number; scale: number }>;
+  mountains: Array<{ left: number; width: number; height: number }>;
+};
+
+function getSceneryPreset(environment: CombatEnvironment): SceneryPreset {
+  const defaultTrees = [
+    { left: 5, top: 21, scale: 1.1 },
+    { left: 14, top: 12, scale: 0.86 },
+    { left: 25, top: 18, scale: 1.0 },
+    { left: 66, top: 14, scale: 0.96 },
+    { left: 78, top: 20, scale: 1.2 },
+    { left: 90, top: 15, scale: 0.9 },
+  ];
+  const sparseTrees = [
+    { left: 9, top: 23, scale: 0.74 },
+    { left: 82, top: 20, scale: 0.8 },
+  ];
+  const defaultMountains = [
+    { left: 10, width: 150, height: 94 },
+    { left: 31, width: 210, height: 126 },
+    { left: 59, width: 180, height: 108 },
+    { left: 78, width: 150, height: 86 },
+  ];
+  const noMountains: SceneryPreset["mountains"] = [];
+  const base: SceneryPreset = {
+    background: "linear-gradient(180deg,#5d6d68 0%,#636a58 26%,#30352b 56%,#141712 100%)",
+    sky: "linear-gradient(180deg,rgba(177,192,190,0.48),rgba(112,128,116,0.28) 45%,transparent)",
+    horizon: "linear-gradient(180deg,rgba(48,75,55,0.56),rgba(40,53,41,0.2),transparent)",
+    mountain: "linear-gradient(145deg,rgba(86,94,84,0.92),rgba(37,45,39,0.64))",
+    tree: "linear-gradient(160deg,#3f5f45,#182a20)",
+    trunk: "#3f2c1d",
+    leftVignette: "radial-gradient(ellipse at bottom left,rgba(24,44,23,0.95),transparent 70%)",
+    rightVignette: "radial-gradient(ellipse at bottom right,rgba(45,37,25,0.96),transparent 72%)",
+    trees: defaultTrees,
+    mountains: defaultMountains,
+  };
+
+  switch (environment.theme) {
+    case "forest":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#52665c 0%,#36533f 32%,#1f3527 62%,#101812 100%)",
+        horizon: "linear-gradient(180deg,rgba(29,68,43,0.72),rgba(21,54,33,0.42),transparent)",
+        tree: "linear-gradient(160deg,#5f8c52,#102516)",
+        trees: [...defaultTrees, { left: 39, top: 11, scale: 1.08 }, { left: 54, top: 18, scale: 0.92 }],
+      };
+    case "sand":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#9aa2a0 0%,#b99957 30%,#6e572e 62%,#211b13 100%)",
+        horizon: "linear-gradient(180deg,rgba(157,124,52,0.52),rgba(108,82,32,0.28),transparent)",
+        mountain: "linear-gradient(145deg,rgba(151,115,61,0.88),rgba(71,52,27,0.62))",
+        tree: "linear-gradient(160deg,#a3a03a,#4f4b1d)",
+        trunk: "#5b341c",
+        trees: sparseTrees,
+      };
+    case "snow":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#c7d4d8 0%,#9aaeb2 30%,#56666a 62%,#15191b 100%)",
+        sky: "linear-gradient(180deg,rgba(236,249,255,0.62),rgba(188,205,211,0.3) 45%,transparent)",
+        horizon: "linear-gradient(180deg,rgba(203,218,218,0.5),rgba(106,125,124,0.22),transparent)",
+        mountain: "linear-gradient(145deg,rgba(226,232,240,0.9),rgba(91,104,111,0.66))",
+        tree: "linear-gradient(160deg,#dbe7de,#2b4a3a)",
+      };
+    case "swamp":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#67715a 0%,#4f6139 30%,#2f3a24 62%,#11160d 100%)",
+        sky: "linear-gradient(180deg,rgba(149,160,122,0.48),rgba(82,101,62,0.3) 45%,transparent)",
+        horizon: "linear-gradient(180deg,rgba(69,91,42,0.64),rgba(40,57,27,0.28),transparent)",
+        tree: "linear-gradient(160deg,#617f3d,#1f2f16)",
+        trees: [...sparseTrees, { left: 38, top: 24, scale: 0.68 }, { left: 62, top: 23, scale: 0.72 }],
+        mountains: noMountains,
+      };
+    case "lava":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#5b4b43 0%,#5a2b22 32%,#341817 62%,#110909 100%)",
+        sky: "linear-gradient(180deg,rgba(104,71,56,0.58),rgba(90,40,28,0.36) 45%,transparent)",
+        horizon: "linear-gradient(180deg,rgba(126,47,27,0.46),rgba(56,19,15,0.35),transparent)",
+        mountain: "linear-gradient(145deg,rgba(75,52,45,0.92),rgba(29,20,18,0.75))",
+        tree: "linear-gradient(160deg,#3c2b24,#140d0b)",
+        trunk: "#27130e",
+        trees: sparseTrees,
+      };
+    case "mountain":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#8a918b 0%,#686a62 30%,#383b36 62%,#141614 100%)",
+        mountain: "linear-gradient(145deg,rgba(142,145,137,0.94),rgba(53,56,52,0.72))",
+        trees: sparseTrees,
+      };
+    case "water":
+    case "coast":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#7c969d 0%,#557884 32%,#264856 62%,#101923 100%)",
+        horizon: "linear-gradient(180deg,rgba(56,110,127,0.54),rgba(28,73,91,0.3),transparent)",
+        tree: "linear-gradient(160deg,#567a58,#173028)",
+        mountains: environment.theme === "water" ? noMountains : defaultMountains.slice(0, 2),
+        trees: environment.theme === "water" ? sparseTrees.slice(0, 1) : sparseTrees,
+      };
+    case "road":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#69716a 0%,#6b684e 30%,#3d3929 62%,#171510 100%)",
+        horizon: "linear-gradient(180deg,rgba(83,78,48,0.5),rgba(48,44,31,0.24),transparent)",
+        trees: defaultTrees.slice(0, 4),
+      };
+    case "settlement":
+    case "building":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#6b716d 0%,#74664c 30%,#453928 62%,#15110d 100%)",
+        horizon: "linear-gradient(180deg,rgba(94,72,44,0.54),rgba(56,40,25,0.28),transparent)",
+        trees: sparseTrees,
+      };
+    case "dirt":
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#74746b 0%,#826447 30%,#493726 62%,#18120d 100%)",
+        horizon: "linear-gradient(180deg,rgba(104,71,43,0.52),rgba(61,42,27,0.24),transparent)",
+        tree: "linear-gradient(160deg,#647342,#202818)",
+        trees: defaultTrees.slice(0, 5),
+      };
+    case "grass":
+    default:
+      return base;
+  }
+}
+
+function getBattleTileBaseColor(theme: CombatEnvironment["theme"]) {
+  switch (theme) {
+    case "forest":
+      return "#203327";
+    case "sand":
+      return "#4b3d22";
+    case "snow":
+      return "#485153";
+    case "swamp":
+      return "#2b3521";
+    case "lava":
+      return "#341d18";
+    case "mountain":
+      return "#373934";
+    case "water":
+    case "coast":
+      return "#1e3640";
+    case "road":
+      return "#383327";
+    case "settlement":
+    case "building":
+      return "#3b3024";
+    case "dirt":
+      return "#382b20";
+    case "grass":
+    default:
+      return "#232b20";
+  }
+}
+
 function getTileTopColor(
   feature: CombatTerrainFeature | undefined,
+  environment: CombatEnvironment,
   reachable: boolean,
   attackable: boolean,
   pendingDestination: boolean,
   pendingPath: boolean,
-  active: boolean
+  active: boolean,
+  inspected: boolean
 ) {
   if (attackable) return "#3c1e1c";
+  if (inspected) return "#3d3420";
   if (active) return "#3f4648";
   if (pendingDestination) return "#5b4a20";
   if (pendingPath) return "#4a3f24";
   if (reachable) return "#26382b";
   if (feature?.type === "water") return "#213a40";
   if (feature?.type === "rock") return "#3a3934";
-  return "#232620";
+  return getBattleTileBaseColor(environment.theme);
 }
 
 function getTileStrokeColor(
@@ -1477,9 +2205,11 @@ function getTileStrokeColor(
   attackable: boolean,
   pendingDestination: boolean,
   pendingPath: boolean,
-  active: boolean
+  active: boolean,
+  inspected: boolean
 ) {
   if (attackable) return "rgba(244,114,74,0.95)";
+  if (inspected) return "rgba(251,191,36,0.95)";
   if (active) return "rgba(236,244,246,0.95)";
   if (pendingDestination) return "rgba(255,218,96,0.95)";
   if (pendingPath) return "rgba(229,169,57,0.9)";

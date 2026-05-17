@@ -160,6 +160,9 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
+  const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
+  const [dashboardMessage, setDashboardMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [selectedFaction, setSelectedFaction] = useState<string>("castle");
   const [gameName, setGameName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
@@ -307,24 +310,36 @@ export default function DashboardPage() {
     if (showJoin) await loadOpenGames();
   };
 
-  const deleteGame = async (gameId: string) => {
-    if (!confirm("Voulez-vous vraiment supprimer cette partie ? Cette action est définitive.")) return;
+  const deleteGame = async (game: GameInfo) => {
+    setDeletingGameId(game.id);
+    setDashboardMessage(null);
 
-    const response = await fetchWithAuth(`/api/games/${gameId}`, {
+    const response = await fetchWithAuth(`/api/games/${game.id}`, {
       method: "DELETE",
     });
 
     if (!response.ok) {
-      const data = await response.json();
-      alert(data.error || "Impossible de supprimer la partie");
+      const data = await parseJsonResponse(response);
+      setDashboardMessage({
+        kind: "error",
+        text: data?.error || "Impossible de supprimer la partie.",
+      });
+      setDeleteTarget(null);
+      setDeletingGameId(null);
       return;
     }
 
-    if (useGameStore.getState().gameState?.id === gameId) {
+    if (useGameStore.getState().gameState?.id === game.id) {
       useGameStore.getState().resetGame();
     }
     await loadMyGames();
     if (showJoin) await loadOpenGames();
+    setDeleteTarget(null);
+    setDeletingGameId(null);
+    setDashboardMessage({
+      kind: "success",
+      text: `La partie "${game.name}" a bien ete supprimee.`,
+    });
   };
 
   if (status === "loading") {
@@ -757,12 +772,73 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {deleteTarget && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
+            onClick={() => {
+              if (!deletingGameId) setDeleteTarget(null);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-game-title"
+              className={`relative ${ornateFramePolished} w-full max-w-lg p-6`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <CornerOrnaments />
+              <ParchmentBackground />
+              <h2 id="delete-game-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+                Supprimer la partie
+              </h2>
+              <p className="text-sm leading-6 text-amber-100/85">
+                Vous allez supprimer <span className="font-black text-amber-100">{deleteTarget.name}</span>. Cette action est definitive et retirera la partie pour tous les joueurs.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={deletingGameId === deleteTarget.id}
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-md border border-amber-700/40 bg-stone-950/70 px-5 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingGameId === deleteTarget.id}
+                  onClick={() => deleteGame(deleteTarget).catch((error) => {
+                    console.error(error);
+                    setDashboardMessage({ kind: "error", text: "Impossible de supprimer la partie." });
+                    setDeleteTarget(null);
+                    setDeletingGameId(null);
+                  })}
+                  className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-5 py-2 text-sm font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deletingGameId === deleteTarget.id ? "Suppression..." : "Supprimer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Mes parties */}
         <div className={`relative ${ornateFrame}`}>
           <CornerOrnaments />
           <ParchmentBackground />
           <OrnateHeader>Mes parties</OrnateHeader>
           <div className="space-y-3 p-4">
+            {dashboardMessage && (
+              <div
+                role="status"
+                className={`rounded-md border px-4 py-3 text-sm font-semibold ${
+                  dashboardMessage.kind === "success"
+                    ? "border-emerald-400/50 bg-emerald-950/45 text-emerald-100"
+                    : "border-red-400/50 bg-red-950/45 text-red-100"
+                }`}
+              >
+                {dashboardMessage.text}
+              </div>
+            )}
             {games.length === 0 && (
               <div className="py-12 text-center italic text-amber-200/40">
                 Aucune partie. Créez ou rejoignez-en une !
@@ -823,7 +899,8 @@ export default function DashboardPage() {
                           className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800"
                           onClick={(event) => {
                             event.stopPropagation();
-                            deleteGame(game.id).catch(console.error);
+                            setDashboardMessage(null);
+                            setDeleteTarget(game);
                           }}
                         >
                           Supprimer

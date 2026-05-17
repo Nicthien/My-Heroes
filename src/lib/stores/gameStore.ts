@@ -15,6 +15,9 @@ interface GameStore {
   lastCombatResult: CombatSummary | null;
   isCombatMode: boolean;
   isLoading: boolean;
+  loadingProgress: number;
+  loadingMessage: string;
+  loadingNonce: number;
   isMovePending: boolean;
   devRevealMap: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
@@ -36,8 +39,14 @@ interface GameStore {
   dispatchAction: (action: GameAction) => void;
   setCombatMode: (isCombat: boolean) => void;
   setLoading: (loading: boolean) => void;
+  beginLoading: (message?: string, progress?: number) => void;
+  updateLoadingProgress: (progress: number, message?: string) => void;
   setDevRevealMap: (reveal: boolean) => void;
   resetGame: () => void;
+}
+
+function clampProgress(progress: number) {
+  return Math.max(0, Math.min(100, Math.round(progress)));
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -53,6 +62,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastCombatResult: null,
   isCombatMode: false,
   isLoading: false,
+  loadingProgress: 0,
+  loadingMessage: "Chargement de la partie...",
+  loadingNonce: 0,
   isMovePending: false,
   devRevealMap: false,
   cameraTarget: null,
@@ -117,7 +129,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setCombatMode: (isCombat) => set({ isCombatMode: isCombat }),
 
-  setLoading: (loading) => set({ isLoading: loading }),
+  setLoading: (loading) => set((state) => ({
+    isLoading: loading,
+    loadingProgress: loading ? state.loadingProgress : 100,
+  })),
+  beginLoading: (message = "Chargement de la partie...", progress = 0) =>
+    set((state) => ({
+      isLoading: true,
+      loadingMessage: message,
+      loadingProgress: clampProgress(progress),
+      loadingNonce: state.loadingNonce + 1,
+    })),
+  updateLoadingProgress: (progress, message) =>
+    set((state) => ({
+      loadingProgress: Math.max(state.loadingProgress, clampProgress(progress)),
+      loadingMessage: message ?? state.loadingMessage,
+    })),
   setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
 
   resetGame: () =>
@@ -134,6 +161,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastCombatResult: null,
       isCombatMode: false,
       isLoading: false,
+      loadingProgress: 0,
+      loadingMessage: "Chargement de la partie...",
+      loadingNonce: 0,
       isMovePending: false,
       devRevealMap: false,
       cameraTarget: null,

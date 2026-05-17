@@ -267,6 +267,38 @@ export async function getGameWithRelations(supabase: SupabaseAdmin, id: string) 
   return data ? toGame(data) : null;
 }
 
+export async function getGameSyncWithRelations(supabase: SupabaseAdmin, id: string) {
+  const { data, error } = await supabase
+    .from("games")
+    .select(`
+      id,
+      status,
+      max_players,
+      map_width,
+      map_height,
+      turn_number,
+      current_turn_player_id,
+      winner_id,
+      map_state,
+      updated_at,
+      game_players!game_players_game_id_fkey(
+        *,
+        profiles(name),
+        heroes(*, armies(*)),
+        towns(*),
+        resource_buildings(*)
+      ),
+      turns(*),
+      combats(*, combat_participants(*)),
+      neutral_armies(*, neutral_army_stacks(*))
+    `)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? toGame(data) : null;
+}
+
 export async function getGameRow(supabase: SupabaseAdmin, id: string) {
   const { data, error } = await supabase.from("games").select("*").eq("id", id).maybeSingle();
   if (error) throw error;

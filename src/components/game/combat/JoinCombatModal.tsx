@@ -7,7 +7,12 @@ import { useGameStore } from "@/lib/stores/gameStore";
 
 export default function JoinCombatModal() {
   const { data: session } = useSession();
-  const { gameState, pendingJoinCombat, setPendingJoinCombat, setActiveCombat, setGameState, setCombatMessage } = useGameStore();
+  const gameState = useGameStore((state) => state.gameState);
+  const pendingJoinCombat = useGameStore((state) => state.pendingJoinCombat);
+  const setPendingJoinCombat = useGameStore((state) => state.setPendingJoinCombat);
+  const setActiveCombat = useGameStore((state) => state.setActiveCombat);
+  const setGameState = useGameStore((state) => state.setGameState);
+  const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const autoJoinRef = useRef<string | null>(null);
 
   const join = useCallback(async (side: "attacker" | "defender") => {

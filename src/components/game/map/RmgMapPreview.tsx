@@ -146,7 +146,7 @@ export function RmgMapPreview({
 function objectRadius(type: MapObject["type"]): number {
   if (type === "town") return 0.34;
   if (type === "town_footprint") return 0.22;
-  if (type === "building") return 0.28;
+  if (type === "building") return 0.364;
   if (type === "adventure_building") return 0.24;
   if (type === "monster") return 0.25;
   return 0.2;

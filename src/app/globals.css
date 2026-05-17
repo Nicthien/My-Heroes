@@ -43,3 +43,70 @@ body::before {
   border: 2px solid rgba(15, 23, 42, 0.9);
   border-radius: 999px;
 }
+
+@keyframes combat-unit-damage-hit {
+  0% {
+    filter: brightness(1);
+    translate: 0 0;
+  }
+  16% {
+    filter: brightness(1.85) saturate(1.35) drop-shadow(0 0 16px rgba(248, 113, 113, 0.9));
+    translate: -7px -1px;
+  }
+  34% {
+    translate: 6px 0;
+  }
+  52% {
+    translate: -3px 1px;
+  }
+  72% {
+    filter: brightness(1.2) saturate(1.1);
+    translate: 2px 0;
+  }
+  100% {
+    filter: brightness(1);
+    translate: 0 0;
+  }
+}
+
+@keyframes combat-unit-hit-flash {
+  0% {
+    opacity: 0;
+    scale: 0.6;
+  }
+  20% {
+    opacity: 1;
+    scale: 1.05;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.35;
+  }
+}
+
+@keyframes combat-unit-count-hit {
+  0% {
+    border-color: rgba(254, 202, 202, 0.7);
+    scale: 1;
+  }
+  28% {
+    border-color: rgba(248, 113, 113, 1);
+    box-shadow: 0 0 14px rgba(248, 113, 113, 0.9);
+    scale: 1.24;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.combat-unit-damaged {
+  animation: combat-unit-damage-hit 520ms ease-out both;
+}
+
+.combat-unit-hit-flash {
+  animation: combat-unit-hit-flash 520ms ease-out both;
+}
+
+.combat-unit-count-damaged {
+  animation: combat-unit-count-hit 520ms ease-out both;
+}

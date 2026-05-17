@@ -40,6 +40,9 @@ const MAX_BATTLE_ZOOM = 1.55;
 const RIGHT_DRAG_THRESHOLD = 5;
 const UNIT_RENDER_OFFSET_X = 52;
 const DEFENDER_RENDER_NUDGE_X = -5;
+const UNIT_MOVE_TRANSITION_MS = 980;
+const UNIT_MOVE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+const UNIT_DAMAGE_ANIMATION_MS = 520;
 
 export type UnitModelKind = "infantry" | "archer" | "cavalry" | "winged" | "large" | "caster" | "beast" | "undead";
 
@@ -53,7 +56,13 @@ type DamagePreview = {
 
 export default function CombatScreen() {
   const { data: session } = useSession();
-  const { activeCombat, setActiveCombat, setCombatResult, setGameState, gameState, minimizeCombat, focusTile } = useGameStore();
+  const activeCombat = useGameStore((state) => state.activeCombat);
+  const setActiveCombat = useGameStore((state) => state.setActiveCombat);
+  const setCombatResult = useGameStore((state) => state.setCombatResult);
+  const setGameState = useGameStore((state) => state.setGameState);
+  const gameState = useGameStore((state) => state.gameState);
+  const minimizeCombat = useGameStore((state) => state.minimizeCombat);
+  const focusTile = useGameStore((state) => state.focusTile);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const isSubmittingActionRef = useRef(false);
@@ -124,7 +133,7 @@ export default function CombatScreen() {
             () => void fetchLatestCombat()
           )
           .subscribe();
-    const interval = setInterval(fetchLatestCombat, isUsingSupabaseProxy() ? 300 : 1000);
+    const interval = setInterval(fetchLatestCombat, isUsingSupabaseProxy() ? 1000 : 10000);
 
     return () => {
       cancelled = true;
@@ -389,22 +398,68 @@ function IsoBattlefield({
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
   const [camera, setCamera] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const [damagedUnitIds, setDamagedUnitIds] = useState(() => new Set<string>());
   const viewportRef = useRef<HTMLDivElement>(null);
   const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
+  const previousCombatIdRef = useRef<string | null>(null);
+  const previousUnitVitalsRef = useRef(new Map<string, { count: number; health: number }>());
+  const damageTimeoutsRef = useRef<number[]>([]);
+  const combatStateKey = `${combat.id}:${combat.round}:${combat.currentUnitId ?? ""}:${combat.actionLog.length}`;
   const units = combat.boardState.units;
-  const terrain = useMemo(() => combat.boardState.terrain ?? [], [combat.boardState.terrain]);
+  const terrain = useMemo(() => combat.boardState.terrain ?? [], [combatStateKey]);
   const environment = useMemo(
     () => combat.boardState.environment ?? buildCombatEnvironment(gameState.map, combat.position),
-    [combat.boardState.environment, combat.position, gameState.map]
+    [combat.boardState.environment, combat.position, combatStateKey, gameState.map]
   );
-  const currentUnit = units.find((unit) => unit.id === combat.currentUnitId);
-  const occupied = useMemo(() => new Set(units.map((unit) => `${unit.q},${unit.r}`)), [units]);
-  const blocked = useMemo(() => new Set(terrain.map((feature) => `${feature.q},${feature.r}`)), [terrain]);
+  const currentUnit = useMemo(
+    () => units.find((unit) => unit.id === combat.currentUnitId),
+    [combat.currentUnitId, combatStateKey, units]
+  );
+  const occupied = useMemo(() => new Set(units.map((unit) => `${unit.q},${unit.r}`)), [combatStateKey, units]);
+  const blocked = useMemo(() => new Set(terrain.map((feature) => `${feature.q},${feature.r}`)), [combatStateKey, terrain]);
   const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
   const previewTarget = units.find((unit) => unit.id === (hoveredUnitId ?? inspectedUnitId));
   const preview = currentUnit && previewTarget && previewTarget.side !== currentUnit.side
     ? getDamagePreview(currentUnit, previewTarget, combat, gameState)
     : null;
+
+  useEffect(() => {
+    const currentVitals = new Map(units.map((unit) => [unit.id, { count: unit.count, health: unit.health }]));
+
+    if (previousCombatIdRef.current !== combat.id) {
+      previousCombatIdRef.current = combat.id;
+      previousUnitVitalsRef.current = currentVitals;
+      setDamagedUnitIds(new Set());
+      return;
+    }
+
+    const damagedIds = units
+      .filter((unit) => {
+        const previous = previousUnitVitalsRef.current.get(unit.id);
+        return previous && (unit.health < previous.health || unit.count < previous.count);
+      })
+      .map((unit) => unit.id);
+
+    previousUnitVitalsRef.current = currentVitals;
+    if (damagedIds.length === 0) return;
+
+    setDamagedUnitIds((previous) => new Set([...previous, ...damagedIds]));
+    const timeout = window.setTimeout(() => {
+      setDamagedUnitIds((previous) => {
+        const next = new Set(previous);
+        damagedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, UNIT_DAMAGE_ANIMATION_MS);
+    damageTimeoutsRef.current.push(timeout);
+  }, [combat.id, units]);
+
+  useEffect(() => {
+    return () => {
+      damageTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+      damageTimeoutsRef.current = [];
+    };
+  }, []);
 
   const resetCamera = () => setCamera({ zoom: 1, panX: 0, panY: 0 });
   const zoomCamera = (factor: number) => {
@@ -537,6 +592,7 @@ function IsoBattlefield({
     const { x, y } = getIsoPosition(unit.q, unit.r);
     const distance = currentUnit ? getHexDistance(currentUnit, unit) : 999;
     const attackable = Boolean(isMyAction && currentUnit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0)));
+    const damaged = damagedUnitIds.has(unit.id);
 
     return (
       <span
@@ -548,17 +604,18 @@ function IsoBattlefield({
           width: TILE_WIDTH,
           height: TILE_HEIGHT + TILE_DEPTH,
           zIndex: unit.r * 100 + 30,
-          transition: "left 520ms cubic-bezier(0.22, 1, 0.36, 1), top 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          transition: getUnitMoveTransition(UNIT_MOVE_TRANSITION_MS),
           willChange: "left, top",
         }}
       >
-        <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} lifted depthScale={getDepthScale(unit.r)} />
+        <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} damaged={damaged} lifted depthScale={getDepthScale(unit.r)} />
       </span>
     );
   });
 
   const unitBadges = units.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
+    const damaged = damagedUnitIds.has(unit.id);
 
     return (
       <span
@@ -570,11 +627,11 @@ function IsoBattlefield({
           width: TILE_WIDTH,
           height: TILE_HEIGHT + TILE_DEPTH,
           zIndex: 10000 + unit.r,
-          transition: "left 520ms cubic-bezier(0.22, 1, 0.36, 1), top 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+          transition: getUnitMoveTransition(UNIT_MOVE_TRANSITION_MS),
           willChange: "left, top",
         }}
       >
-        <UnitBadges unit={unit} lifted depthScale={getDepthScale(unit.r)} />
+        <UnitBadges unit={unit} damaged={damaged} lifted depthScale={getDepthScale(unit.r)} />
       </span>
     );
   });
@@ -775,12 +832,14 @@ function UnitModel({
   unit,
   active,
   attackable,
+  damaged = false,
   lifted = false,
   depthScale = 1,
 }: {
   unit: CombatBoardUnit;
   active: boolean;
   attackable: boolean;
+  damaged?: boolean;
   lifted?: boolean;
   depthScale?: number;
 }) {
@@ -791,7 +850,7 @@ function UnitModel({
 
   return (
     <span
-      className={`pointer-events-none absolute block h-[159px] w-[125px] ${
+      className={`pointer-events-none absolute block h-[159px] w-[125px] ${damaged ? "combat-unit-damaged" : ""} ${
         active ? "drop-shadow-[0_0_12px_rgba(252,211,77,0.75)]" : attackable ? "drop-shadow-[0_0_12px_rgba(248,113,113,0.65)]" : ""
       }`}
       style={{
@@ -807,16 +866,19 @@ function UnitModel({
       >
         <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
       </span>
+      {damaged && <span className="combat-unit-hit-flash absolute left-1/2 top-4 h-24 w-24 -translate-x-1/2 rounded-full bg-red-500/35 blur-sm" />}
     </span>
   );
 }
 
 function UnitBadges({
   unit,
+  damaged = false,
   lifted = false,
   depthScale = 1,
 }: {
   unit: CombatBoardUnit;
+  damaged?: boolean;
   lifted?: boolean;
   depthScale?: number;
 }) {
@@ -834,7 +896,7 @@ function UnitBadges({
       }}
     >
       <span
-        className={`absolute top-[108px] grid h-[18px] min-w-8 -translate-x-1/2 place-items-center rounded-sm border px-1 text-center text-[10px] font-black leading-none shadow-lg ${unit.side === "attacker" ? "border-blue-200/70 bg-blue-950/95 text-blue-50" : "border-red-200/70 bg-red-950/95 text-red-50"}`}
+        className={`absolute top-[108px] grid h-[18px] min-w-8 -translate-x-1/2 place-items-center rounded-sm border px-1 text-center text-[10px] font-black leading-none shadow-lg ${damaged ? "combat-unit-count-damaged" : ""} ${unit.side === "attacker" ? "border-blue-200/70 bg-blue-950/95 text-blue-50" : "border-red-200/70 bg-red-950/95 text-red-50"}`}
         style={{ left: `calc(50% - ${badgeOffsetX}px)` }}
       >
         {unit.count}
@@ -2011,6 +2073,11 @@ function getCombatSideStats(side: "attacker" | "defender", combat: PersistentCom
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function getUnitMoveTransition(durationMs: number) {
+  if (durationMs <= 0) return "none";
+  return `left ${durationMs}ms ${UNIT_MOVE_EASING}, top ${durationMs}ms ${UNIT_MOVE_EASING}`;
 }
 
 type SceneryPreset = {

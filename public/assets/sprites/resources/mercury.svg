@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-labelledby="resource-mercury-title resource-mercury-desc">
-  <title id="resource-mercury-title">Mercure</title>
-  <desc id="resource-mercury-desc">Sprite de ressource Mercure, avec formes et matières dédiées.</desc>
-  
-  <ellipse cx="24" cy="40" rx="15" ry="5" fill="#000" opacity=".25"/><path d="M19 8 H29 V20 H19 Z" fill="#ddd6fe" stroke="#fff" stroke-width="2"/><path d="M15 19 H33 L39 36 C40 42 8 42 9 36 Z" fill="#a855f7" stroke="#4c1d95" stroke-width="2.5"/><path d="M12 31 C19 35 29 35 37 30 L39 36 C40 42 8 42 9 36 Z" fill="#d8d8e8" opacity=".9"/><path d="M18 24 C23 26 29 26 34 24 M21 12 H27" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="29" cy="33" r="3" fill="#f5f5ff" opacity=".9"/>
-</svg>

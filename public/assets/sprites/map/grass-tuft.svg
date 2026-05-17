@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="grass-tuft-title grass-tuft-desc">
-  <title id="grass-tuft-title">Touffe d'herbe</title>
-  <desc id="grass-tuft-desc">Sprite de décor de carte : Touffe d'herbe.</desc>
-  
-  <ellipse cx="32" cy="58" rx="22" ry="5" fill="#000" opacity=".24"/>
-  <path d="M18 56 C20 47 22 42 26 35 M27 57 C28 47 31 40 34 32 M37 57 C37 47 40 41 44 35 M46 56 C45 49 47 45 51 40" fill="none" stroke="#5f9f46" stroke-width="2.3" stroke-linecap="round"/>
-  <path d="M22 53 C28 48 36 48 44 53 M16 57 C27 52 41 52 52 57" fill="none" stroke="#a8d56f" stroke-width="1.5" opacity=".62"/>
-</svg>

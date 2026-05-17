@@ -9,7 +9,13 @@ import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
 
 export default function CombatChoiceModal() {
-  const { gameState, pendingCombat, setPendingCombat, setActiveCombat, setCombatResult, setGameState, setCombatMessage } = useGameStore();
+  const gameState = useGameStore((state) => state.gameState);
+  const pendingCombat = useGameStore((state) => state.pendingCombat);
+  const setPendingCombat = useGameStore((state) => state.setPendingCombat);
+  const setActiveCombat = useGameStore((state) => state.setActiveCombat);
+  const setCombatResult = useGameStore((state) => state.setCombatResult);
+  const setGameState = useGameStore((state) => state.setGameState);
+  const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const autoStartedRef = useRef<string | null>(null);
   const pendingKey = pendingCombat ? `${pendingCombat.attackerHeroId}:${pendingCombat.targetId}:${pendingCombat.targetType}` : null;
   const encounterInfo = useMemo(

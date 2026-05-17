@@ -42,13 +42,13 @@ import {
 } from "./theme";
 
 const RESOURCE_ITEMS = [
-  { key: "gold", label: "Or", short: "Or", src: "/assets/sprites/resources/gold.svg", text: "text-yellow-200", ring: "ring-yellow-300/50", glow: "shadow-yellow-500/25", bg: "from-yellow-300 to-amber-600" },
-  { key: "wood", label: "Bois", short: "Bois", src: "/assets/sprites/resources/wood.svg", text: "text-orange-200", ring: "ring-orange-300/40", glow: "shadow-orange-700/25", bg: "from-amber-700 to-orange-950" },
-  { key: "ore", label: "Minerai", short: "Min.", src: "/assets/sprites/resources/ore.svg", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
-  { key: "mercury", label: "Mercure", short: "Merc.", src: "/assets/sprites/resources/mercury.svg", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
-  { key: "crystals", label: "Cristaux", short: "Crist.", src: "/assets/sprites/resources/crystals.svg", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
-  { key: "gems", label: "Gemmes", short: "Gem.", src: "/assets/sprites/resources/gems.svg", text: "text-pink-100", ring: "ring-pink-300/50", glow: "shadow-pink-400/30", bg: "from-pink-200 to-rose-700" },
-  { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.svg", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
+  { key: "gold", label: "Or", short: "Or", src: "/assets/sprites/resources/gold.webp", text: "text-yellow-200", ring: "ring-yellow-300/50", glow: "shadow-yellow-500/25", bg: "from-yellow-300 to-amber-600" },
+  { key: "wood", label: "Bois", short: "Bois", src: "/assets/sprites/resources/wood.webp", text: "text-orange-200", ring: "ring-orange-300/40", glow: "shadow-orange-700/25", bg: "from-amber-700 to-orange-950" },
+  { key: "ore", label: "Minerai", short: "Min.", src: "/assets/sprites/resources/ore.webp", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
+  { key: "mercury", label: "Mercure", short: "Merc.", src: "/assets/sprites/resources/mercury.webp", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
+  { key: "crystals", label: "Cristaux", short: "Crist.", src: "/assets/sprites/resources/crystals.webp", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
+  { key: "gems", label: "Gemmes", short: "Gem.", src: "/assets/sprites/resources/gems.webp", text: "text-pink-100", ring: "ring-pink-300/50", glow: "shadow-pink-400/30", bg: "from-pink-200 to-rose-700" },
+  { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.webp", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
 ] as const;
 
 const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
@@ -913,16 +913,14 @@ function HUDContent() {
   const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   const devPerformanceStats = useDevPerformanceStats(showDevPanel);
   const lastNotifiedTurnRef = useRef<string | null>(null);
-  const {
-    gameState: nullableGameState,
-    selectedHeroId,
-    selectedTownId,
-    combatMessage,
-    setCombatMessage,
-    setGameState,
-    devRevealMap,
-    setDevRevealMap,
-  } = useGameStore();
+  const nullableGameState = useGameStore((state) => state.gameState);
+  const selectedHeroId = useGameStore((state) => state.selectedHeroId);
+  const selectedTownId = useGameStore((state) => state.selectedTownId);
+  const combatMessage = useGameStore((state) => state.combatMessage);
+  const setCombatMessage = useGameStore((state) => state.setCombatMessage);
+  const setGameState = useGameStore((state) => state.setGameState);
+  const devRevealMap = useGameStore((state) => state.devRevealMap);
+  const setDevRevealMap = useGameStore((state) => state.setDevRevealMap);
   const gameState = nullableGameState!;
 
   const myPlayer = gameState.players.find(

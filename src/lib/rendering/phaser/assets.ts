@@ -1,4 +1,4 @@
-import { UnitType } from "@/lib/game/types";
+import { RoadType, TerrainType, UnitType } from "@/lib/game/types";
 
 const UNIT_SPRITE_OVERRIDES: Partial<Record<UnitType, string>> = {
   [UnitType.PIKEMAN]: "/assets/sprites/units/pikeman.webp",
@@ -148,13 +148,13 @@ export const MAP_SPRITES = {
     conflux: "/assets/sprites/map/town-conflux.webp",
   } as Record<string, string>,
   resources: {
-    gold: "/assets/sprites/resources/gold.svg",
-    wood: "/assets/sprites/resources/wood.svg",
-    ore: "/assets/sprites/resources/ore.svg",
-    mercury: "/assets/sprites/resources/mercury.svg",
-    crystals: "/assets/sprites/resources/crystals.svg",
-    gems: "/assets/sprites/resources/gems.svg",
-    sulfur: "/assets/sprites/resources/sulfur.svg",
+    gold: "/assets/sprites/resources/gold.webp",
+    wood: "/assets/sprites/resources/wood.webp",
+    ore: "/assets/sprites/resources/ore.webp",
+    mercury: "/assets/sprites/resources/mercury.webp",
+    crystals: "/assets/sprites/resources/crystals.webp",
+    gems: "/assets/sprites/resources/gems.webp",
+    sulfur: "/assets/sprites/resources/sulfur.webp",
   } as Record<string, string>,
   buildings: {
     gold_mine: "/assets/sprites/map/gold-mine.webp",
@@ -166,28 +166,131 @@ export const MAP_SPRITES = {
     sulfur_dune: "/assets/sprites/map/sulfur-dune.webp",
   } as Record<string, string>,
   adventureBuildings: {
-    observatory: "/assets/sprites/map/adventure-observatory.svg",
-    campfire: "/assets/sprites/map/adventure-campfire.svg",
-    lighthouse: "/assets/sprites/map/adventure-lighthouse.svg",
-    stargate: "/assets/sprites/map/adventure-stargate.svg",
+    observatory: "/assets/sprites/map/adventure-observatory.webp",
+    campfire: "/assets/sprites/map/adventure-campfire.webp",
+    lighthouse: "/assets/sprites/map/adventure-lighthouse.webp",
+    stargate: "/assets/sprites/map/adventure-stargate.webp",
   } as Record<string, string>,
   decor: {
-    wall_brick: "/assets/sprites/map/wall-brick.svg",
-    wall_vegetal: "/assets/sprites/map/wall-vegetal.svg",
-    tree_pine: "/assets/sprites/map/tree-pine.svg",
-    tree_oak: "/assets/sprites/map/tree-oak.svg",
-    tree_dead: "/assets/sprites/map/tree-dead.svg",
-    grove_pine: "/assets/sprites/map/grove-pine.svg",
-    grove_oak: "/assets/sprites/map/grove-oak.svg",
-    grove_dead: "/assets/sprites/map/grove-dead.svg",
-    rock_large: "/assets/sprites/map/rock-large.svg",
-    rock_small: "/assets/sprites/map/rock-small.svg",
-    boulder_cluster: "/assets/sprites/map/boulder-cluster.svg",
-    bush: "/assets/sprites/map/bush.svg",
-    flower: "/assets/sprites/map/flower.svg",
-    grass_tuft: "/assets/sprites/map/grass-tuft.svg",
+    wall_brick: "/assets/sprites/map/wall-brick.webp",
+    wall_rampart: "/assets/sprites/map/wall-rampart-cube.png",
+    wall_vegetal: "/assets/sprites/map/wall-vegetal.webp",
+    grove_pine: "/assets/sprites/map/grove-pine.webp",
+    grove_oak: "/assets/sprites/map/grove-oak.webp",
+    grove_dead: "/assets/sprites/map/grove-dead.webp",
+    boulder_cluster: "/assets/sprites/map/boulder-cluster.webp",
   } as Record<string, string>,
 };
+
+const ROAD_TEXTURE_MASKS = Array.from({ length: 16 }, (_, index) => index);
+
+function buildRoadTextureSet(kind: RoadType | "bridge") {
+  return ROAD_TEXTURE_MASKS.reduce((textures, mask) => {
+    textures[mask] = `/assets/sprites/map/roads-v5/${kind}-${mask}.webp`;
+    return textures;
+  }, {} as Record<number, string>);
+}
+
+export const ROAD_TEXTURES = {
+  dirt: buildRoadTextureSet("dirt"),
+  gravel: buildRoadTextureSet("gravel"),
+  paved: buildRoadTextureSet("paved"),
+  bridge: buildRoadTextureSet("bridge"),
+} satisfies Record<RoadType | "bridge", Record<number, string>>;
+
+export type TerrainTopTexture = {
+  path: string;
+  tags: readonly string[];
+};
+
+export function getTerrainSideTexturePath(path: string, side: "left" | "right") {
+  return path.replace(/\.webp$/, `-side-${side}.webp`);
+}
+
+export const TERRAIN_TOP_TEXTURES = {
+  [TerrainType.GRASS]: [
+    { path: "/assets/textures/terrain/grass/grass-clean.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/grass/grass-dense-herb.webp", tags: ["grass", "dense"] },
+    { path: "/assets/textures/terrain/grass/grass-flowers.webp", tags: ["flower"] },
+    { path: "/assets/textures/terrain/grass/grass-small-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/grass/grass-herb-flowers.webp", tags: ["grass", "flower"] },
+    { path: "/assets/textures/terrain/grass/grass-herb-rocks.webp", tags: ["grass", "rock"] },
+    { path: "/assets/textures/terrain/grass/grass-clover-moss.webp", tags: ["moss", "clover"] },
+    { path: "/assets/textures/terrain/grass/grass-dirt-transition.webp", tags: ["dirt", "transition"] },
+  ],
+  [TerrainType.FOREST]: [
+    { path: "/assets/textures/terrain/forest/forest-leafy-floor.webp", tags: ["clean", "leaf"] },
+    { path: "/assets/textures/terrain/forest/forest-dead-leaves.webp", tags: ["leaf"] },
+    { path: "/assets/textures/terrain/forest/forest-low-roots.webp", tags: ["root"] },
+    { path: "/assets/textures/terrain/forest/forest-moss.webp", tags: ["moss"] },
+    { path: "/assets/textures/terrain/forest/forest-ferns.webp", tags: ["grass", "fern"] },
+    { path: "/assets/textures/terrain/forest/forest-pine-needles.webp", tags: ["needle"] },
+    { path: "/assets/textures/terrain/forest/forest-rare-flowers.webp", tags: ["flower"] },
+    { path: "/assets/textures/terrain/forest/forest-shaded-rocks.webp", tags: ["rock"] },
+  ],
+  [TerrainType.DIRT]: [
+    { path: "/assets/textures/terrain/dirt/dirt-bare.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/dirt/dirt-dry.webp", tags: ["dry"] },
+    { path: "/assets/textures/terrain/dirt/dirt-small-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/dirt/dirt-rare-grass.webp", tags: ["grass"] },
+    { path: "/assets/textures/terrain/dirt/dirt-light-mud.webp", tags: ["mud"] },
+    { path: "/assets/textures/terrain/dirt/dirt-ruts.webp", tags: ["rut"] },
+    { path: "/assets/textures/terrain/dirt/dirt-dark.webp", tags: ["dark"] },
+  ],
+  [TerrainType.SAND]: [
+    { path: "/assets/textures/terrain/sand/sand-clean.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/sand/sand-ripples.webp", tags: ["ripple"] },
+    { path: "/assets/textures/terrain/sand/sand-small-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/sand/sand-shells.webp", tags: ["shell"] },
+    { path: "/assets/textures/terrain/sand/sand-dry.webp", tags: ["dry"] },
+    { path: "/assets/textures/terrain/sand/sand-packed.webp", tags: ["packed"] },
+    { path: "/assets/textures/terrain/sand/sand-rare-grass.webp", tags: ["grass"] },
+  ],
+  [TerrainType.SNOW]: [
+    { path: "/assets/textures/terrain/snow/snow-clean.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/snow/snow-packed.webp", tags: ["packed"] },
+    { path: "/assets/textures/terrain/snow/snow-small-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/snow/snow-blue.webp", tags: ["blue"] },
+    { path: "/assets/textures/terrain/snow/snow-frozen-grass.webp", tags: ["grass"] },
+    { path: "/assets/textures/terrain/snow/snow-soft-tracks.webp", tags: ["track"] },
+    { path: "/assets/textures/terrain/snow/snow-hard-ice.webp", tags: ["ice"] },
+  ],
+  [TerrainType.SWAMP]: [
+    { path: "/assets/textures/terrain/swamp/swamp-green-mud.webp", tags: ["clean", "mud"] },
+    { path: "/assets/textures/terrain/swamp/swamp-wet-moss.webp", tags: ["moss"] },
+    { path: "/assets/textures/terrain/swamp/swamp-low-reeds.webp", tags: ["grass", "reed"] },
+    { path: "/assets/textures/terrain/swamp/swamp-dark-puddles.webp", tags: ["puddle"] },
+    { path: "/assets/textures/terrain/swamp/swamp-roots.webp", tags: ["root"] },
+    { path: "/assets/textures/terrain/swamp/swamp-marsh-grass.webp", tags: ["grass"] },
+    { path: "/assets/textures/terrain/swamp/swamp-wet-rocks.webp", tags: ["rock"] },
+  ],
+  [TerrainType.MOUNTAIN]: [
+    { path: "/assets/textures/terrain/mountain/mountain-clean-rock.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/mountain/mountain-cracked-rock.webp", tags: ["crack"] },
+    { path: "/assets/textures/terrain/mountain/mountain-small-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/mountain/mountain-rare-moss.webp", tags: ["moss", "grass"] },
+    { path: "/assets/textures/terrain/mountain/mountain-dark-rock.webp", tags: ["dark"] },
+    { path: "/assets/textures/terrain/mountain/mountain-light-rock.webp", tags: ["light"] },
+    { path: "/assets/textures/terrain/mountain/mountain-gravel.webp", tags: ["gravel"] },
+  ],
+  [TerrainType.LAVA]: [
+    { path: "/assets/textures/terrain/lava/lava-volcanic-rock.webp", tags: ["clean", "rock"] },
+    { path: "/assets/textures/terrain/lava/lava-ash.webp", tags: ["ash"] },
+    { path: "/assets/textures/terrain/lava/lava-hot-cracks.webp", tags: ["crack"] },
+    { path: "/assets/textures/terrain/lava/lava-embers.webp", tags: ["ember"] },
+    { path: "/assets/textures/terrain/lava/lava-black-rock.webp", tags: ["dark"] },
+    { path: "/assets/textures/terrain/lava/lava-dry-flow.webp", tags: ["flow"] },
+    { path: "/assets/textures/terrain/lava/lava-burnt-edge.webp", tags: ["edge"] },
+  ],
+} as const satisfies Partial<Record<TerrainType, readonly TerrainTopTexture[]>>;
+
+export const TERRAIN_TEXTURE_PATHS = Object.values(TERRAIN_TOP_TEXTURES)
+  .flat()
+  .flatMap((texture) => [
+    texture.path,
+    getTerrainSideTexturePath(texture.path, "left"),
+    getTerrainSideTexturePath(texture.path, "right"),
+  ]);
 
 export type DirectionalSpriteState = "idle" | "walk";
 
@@ -294,4 +397,6 @@ export const MAP_SPRITE_PATHS = Array.from(new Set([
   ...Object.values(MAP_SPRITES.buildings),
   ...Object.values(MAP_SPRITES.adventureBuildings),
   ...Object.values(MAP_SPRITES.decor),
+  ...Object.values(ROAD_TEXTURES).flatMap((textures) => Object.values(textures)),
+  ...TERRAIN_TEXTURE_PATHS,
 ]));

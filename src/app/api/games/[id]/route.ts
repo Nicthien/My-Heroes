@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
+import { getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "./shared";
 
 export async function GET(
   request: Request,
@@ -26,7 +27,7 @@ export async function GET(
   }>;
   const player = players.find((item) => item.userId === user.id);
   const isSpectator = Boolean(player && !player.isAlive);
-  const allTileKeys = isSpectator ? getAllTileKeys(game.mapData as { width?: number; height?: number } | null) : [];
+  const allTileKeys = isSpectator ? getAllTileKeys(Number(game.mapWidth ?? 0), Number(game.mapHeight ?? 0)) : [];
   const filteredGame = {
     ...game,
     players: players.map((item) => ({
@@ -39,75 +40,6 @@ export async function GET(
   };
 
   return NextResponse.json(filteredGame);
-}
-
-function sanitizePlayerForViewer<T extends {
-  id: string;
-  heroes?: Array<Record<string, unknown>>;
-  towns?: Array<Record<string, unknown>>;
-}>(player: T, viewerPlayerId?: string) {
-  if (player.id === viewerPlayerId) return player;
-
-  return {
-    ...player,
-    heroes: (player.heroes ?? []).map((hero) => ({
-      ...hero,
-      movement: 0,
-      maxMovement: 0,
-      attack: 0,
-      defense: 0,
-      spellPower: 0,
-      knowledge: 0,
-      armies: [],
-    })),
-    towns: (player.towns ?? []).map((town) => ({
-      ...town,
-      buildings: [],
-      garrison: [],
-      availableRecruits: {},
-      tavernOffer: [],
-    })),
-  };
-}
-
-function sanitizeCombatForViewer(combat: Record<string, unknown>, viewerPlayerId?: string, isSpectator = false) {
-  if (!viewerPlayerId) return summarizeCombat(combat);
-  if (isSpectator || combatInvolvesPlayer(combat, viewerPlayerId)) {
-    return { ...combat, visibility: "full" };
-  }
-  return summarizeCombat(combat);
-}
-
-function summarizeCombat(combat: Record<string, unknown>) {
-  return {
-    ...combat,
-    visibility: "joinable_summary",
-    boardState: { units: [] },
-    turnQueue: [],
-    actionLog: [],
-    result: null,
-  };
-}
-
-function combatInvolvesPlayer(combat: Record<string, unknown>, playerId: string) {
-  const participants = Array.isArray(combat.participants) ? combat.participants : [];
-  return (
-    combat.attackerPlayerId === playerId ||
-    combat.defenderPlayerId === playerId ||
-    participants.some((participant) => (participant as { playerId?: string }).playerId === playerId)
-  );
-}
-
-function getAllTileKeys(mapData: { width?: number; height?: number } | null) {
-  const keys: string[] = [];
-  const width = Number(mapData?.width ?? 0);
-  const height = Number(mapData?.height ?? 0);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      keys.push(`${x},${y}`);
-    }
-  }
-  return keys;
 }
 
 export async function POST(

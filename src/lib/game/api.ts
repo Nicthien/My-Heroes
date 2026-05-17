@@ -119,195 +119,124 @@ interface ApiCombat {
   visibility?: PersistentCombat["visibility"];
 }
 
-export function mapApiToGameState(
-  data: Record<string, unknown>,
-  currentUserId?: string,
-  options: { revealMap?: boolean } = {}
-): GameState {
-  const turnNumber = data.turnNumber as number;
-  const completedTurnPlayerIds = new Set(
+const staticGameMaps = new Map<string, GameMap>();
+
+function cloneGameMap(map: GameMap) {
+  return structuredClone(map);
+}
+
+export function getCachedStaticGameMap(gameId: string) {
+  return staticGameMaps.get(gameId) ?? null;
+}
+
+function getCompletedTurnPlayerIds(data: Record<string, unknown>, turnNumber: number) {
+  return new Set(
     ((data.turns as ApiTurn[] | undefined) ?? [])
       .filter((turn) => turn.turnNumber === turnNumber && turn.isCompleted)
       .map((turn) => turn.gamePlayerId)
   );
-  const currentPlayer = (data.players as ApiPlayer[]).find(
-    (p) => p.userId === currentUserId
-  );
+}
 
-  const players = (data.players as ApiPlayer[]).map((p): Player => ({
-    id: p.id,
-    userId: p.userId,
-    name: p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur inconnu",
-    isAi: p.isAi ?? false,
-    faction: p.faction as Faction,
-    color: p.color,
+function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
+  const completedTurnPlayerIds = getCompletedTurnPlayerIds(data, turnNumber);
+
+  return ((data.players as ApiPlayer[] | undefined) ?? []).map((player): Player => ({
+    id: player.id,
+    userId: player.userId,
+    name: player.isAi ? player.aiName || "IA" : player.user?.name || "Joueur inconnu",
+    isAi: player.isAi ?? false,
+    faction: player.faction as Faction,
+    color: player.color,
     resources: {
-      gold: p.gold,
-      wood: p.wood,
-      ore: p.ore,
-      mercury: p.mercury,
-      crystals: p.crystals,
-      gems: p.gems ?? 0,
-      sulfur: p.sulfur,
+      gold: player.gold,
+      wood: player.wood,
+      ore: player.ore,
+      mercury: player.mercury,
+      crystals: player.crystals,
+      gems: player.gems ?? 0,
+      sulfur: player.sulfur,
     },
-    heroes: p.heroes.map((h): Hero => ({
-      id: h.id,
-      name: h.name,
-      class: (h.class ?? "knight") as HeroClass,
-      specialty: h.specialty ?? undefined,
-      level: h.level,
-      experience: h.experience,
+    heroes: player.heroes.map((hero): Hero => ({
+      id: hero.id,
+      name: hero.name,
+      class: (hero.class ?? "knight") as HeroClass,
+      specialty: hero.specialty ?? undefined,
+      level: hero.level,
+      experience: hero.experience,
       stats: {
-        attack: h.attack,
-        defense: h.defense,
-        spellPower: h.spellPower,
-        knowledge: h.knowledge,
+        attack: hero.attack,
+        defense: hero.defense,
+        spellPower: hero.spellPower,
+        knowledge: hero.knowledge,
       },
-      position: { x: h.x, y: h.y },
-      movement: h.movement,
-      maxMovement: h.maxMovement,
-      armies: h.armies.map((a) => ({
-        id: a.id,
-        unitType: a.unitType as UnitType,
-        count: a.count,
-        health: a.health,
-        maxHealth: a.maxHealth,
-        position: a.position,
+      position: { x: hero.x, y: hero.y },
+      movement: hero.movement,
+      maxMovement: hero.maxMovement,
+      armies: hero.armies.map((army) => ({
+        id: army.id,
+        unitType: army.unitType as UnitType,
+        count: army.count,
+        health: army.health,
+        maxHealth: army.maxHealth,
+        position: army.position,
       })),
     })),
-    towns: p.towns.map((t): Town => ({
-      id: t.id,
-      name: t.name,
-      faction: p.faction as Faction,
-      townType: t.townType as Faction | undefined,
-      position: { x: t.x, y: t.y },
-      level: t.level,
-      buildings: normalizeTownBuildings((t.buildings || []) as BuildingType[]),
-      garrison: (t.garrison || []) as never[],
-      neutralGarrison: (t.neutralGarrison ?? []).map((a) => ({
-        id: a.id,
-        unitType: a.unitType as UnitType,
-        count: a.count,
-        health: a.health,
-        maxHealth: a.maxHealth,
-        position: a.position,
+    towns: player.towns.map((town): Town => ({
+      id: town.id,
+      name: town.name,
+      faction: player.faction as Faction,
+      townType: town.townType as Faction | undefined,
+      position: { x: town.x, y: town.y },
+      level: town.level,
+      buildings: normalizeTownBuildings((town.buildings || []) as BuildingType[]),
+      garrison: (town.garrison || []) as never[],
+      neutralGarrison: (town.neutralGarrison ?? []).map((army) => ({
+        id: army.id,
+        unitType: army.unitType as UnitType,
+        count: army.count,
+        health: army.health,
+        maxHealth: army.maxHealth,
+        position: army.position,
       })),
-      isNeutral: t.isNeutral ?? false,
-      availableRecruits: (t.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
-      tavernOffer: t.tavernOffer ?? [],
-      lastBuiltTurn: t.lastBuiltTurn ?? null,
+      isNeutral: town.isNeutral ?? false,
+      availableRecruits: (town.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
+      tavernOffer: town.tavernOffer ?? [],
+      lastBuiltTurn: town.lastBuiltTurn ?? null,
     })),
-    resourceBuildings: (p.resourceBuildings ?? []).map((b): ResourceBuilding => ({
-      id: b.id,
-      type: b.buildingType as ResourceBuildingType,
-      position: { x: b.x, y: b.y },
-      ownerId: b.gamePlayerId,
-      guardianPower: b.guardianPower ?? 0,
+    resourceBuildings: (player.resourceBuildings ?? []).map((building): ResourceBuilding => ({
+      id: building.id,
+      type: building.buildingType as ResourceBuildingType,
+      position: { x: building.x, y: building.y },
+      ownerId: building.gamePlayerId,
+      guardianPower: building.guardianPower ?? 0,
     })),
-    isAlive: p.isAlive,
-    turnOrder: p.turnOrder,
-    exploredTiles: p.exploredTiles ?? [],
-    hasEndedTurn: completedTurnPlayerIds.has(p.id),
+    isAlive: player.isAlive,
+    turnOrder: player.turnOrder,
+    exploredTiles: player.exploredTiles ?? [],
+    hasEndedTurn: completedTurnPlayerIds.has(player.id),
   }));
+}
 
-  const mapData = normalizeMapMovement(data.mapData as GameMap);
-  const mapState = (data.mapState as Record<string, unknown>) ?? {};
-  const collected = new Set<string>((mapState.collected as string[]) ?? []);
-  const killed = new Set<string>((mapState.killed as string[]) ?? []);
-  const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
-  const neutralArmies = (data.neutralArmies as ApiNeutralArmy[] | undefined) ?? [];
-  const defeatedNeutralArmies = new Set(
-    neutralArmies
-      .filter((army) => army.status !== "ACTIVE")
-      .map((army) => army.id)
-  );
-  const dominantNeutralUnits = new Map(
-    neutralArmies
-      .filter((army) => army.status === "ACTIVE")
-      .map((army) => [army.id, getDominantUnitType(army.stacks)] as const)
-      .filter((entry): entry is readonly [string, UnitType] => Boolean(entry[1]))
-  );
-
-  const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
-  if (currentPlayer) {
-    const visionCenters = getPlayerVisionCenters({
-      heroes: currentPlayer.heroes.map((hero) => ({ position: { x: hero.x, y: hero.y } })),
-      towns: currentPlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
-    });
-    for (const key of computeVisibleTiles(mapData, visionCenters, 5)) {
-      exploredSet.add(key);
-    }
-  }
-  const allBuildings = players.flatMap((p) => p.resourceBuildings);
-
-  if (mapData?.tiles) {
-    for (let y = 0; y < mapData.height; y++) {
-      for (let x = 0; x < mapData.width; x++) {
-        const tile = mapData.tiles[y]?.[x] as MapTile | undefined;
-        if (!tile) continue;
-        if (tile.object) {
-          const obj = tile.object;
-          if (obj.type === "resource" && collected.has(obj.id)) {
-            delete tile.object;
-          } else if (obj.type === "monster" && (killed.has(obj.id) || defeatedNeutralArmies.has(obj.id))) {
-            delete tile.object;
-          } else if (
-            obj.type === "adventure_building" &&
-            obj.subtype === AdventureBuildingType.CAMPFIRE &&
-            visitedAdventureBuildings.has(obj.id)
-          ) {
-            delete tile.object;
-          } else if (obj.type === "monster") {
-            const dominantUnitType = dominantNeutralUnits.get(obj.id);
-            if (dominantUnitType) obj.subtype = dominantUnitType;
-          } else if (obj.type === "building") {
-            const buildingData = allBuildings.find((b) => b.id === obj.id || (b.position.x === x && b.position.y === y));
-            if (buildingData) {
-              obj.guardianPower = buildingData.guardianPower;
-            }
-            if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
-              delete tile.object;
-            }
-          } else if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
-            delete tile.object;
-          }
-        }
-        if (!options.revealMap && !exploredSet.has(`${x},${y}`)) {
-          tile.terrain = "grass" as never;
-          tile.elevation = 0;
-          tile.isPassable = false;
-          tile.movementCost = 999;
-        }
-      }
-    }
-  }
-
-  return {
-    id: data.id as string,
-    status: data.status as GameState["status"],
-    maxPlayers: (data.maxPlayers as number) ?? 8,
-    players,
-    map: mapData,
-    turnNumber,
-    calendar: getGameCalendar(turnNumber),
-    currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
-    winnerId: data.winnerId as string | undefined,
-    neutralArmies: neutralArmies.map((army): NeutralArmy => ({
-      id: army.id,
-      status: army.status,
-      position: { x: army.x, y: army.y },
-      stacks: (army.stacks ?? []).map((stack) => ({
-        id: stack.id,
-        unitType: stack.unitType as UnitType,
-        count: stack.count,
-        health: stack.health,
-        maxHealth: stack.maxHealth,
-        position: stack.position,
-      })),
+function mapNeutralArmies(data: Record<string, unknown>) {
+  return ((data.neutralArmies as ApiNeutralArmy[] | undefined) ?? []).map((army): NeutralArmy => ({
+    id: army.id,
+    status: army.status,
+    position: { x: army.x, y: army.y },
+    stacks: (army.stacks ?? []).map((stack) => ({
+      id: stack.id,
+      unitType: stack.unitType as UnitType,
+      count: stack.count,
+      health: stack.health,
+      maxHealth: stack.maxHealth,
+      position: stack.position,
     })),
-    activeCombats: ((data.combats as ApiCombat[] | undefined) ?? [])
-      .filter((combat) => combat.status === "ACTIVE")
-      .map((combat) => ({
+  }));
+}
+
+function mapActiveCombats(data: Record<string, unknown>) {
+  return ((data.combats as ApiCombat[] | undefined) ?? [])
+    .filter((combat) => combat.status === "ACTIVE")
+    .map((combat): PersistentCombat => ({
       id: combat.id,
       gameId: combat.gameId,
       mode: combat.mode,
@@ -327,7 +256,192 @@ export function mapApiToGameState(
       participants: combat.participants ?? [],
       result: combat.result,
       visibility: combat.visibility ?? "full",
-    })),
+    }));
+}
+
+function buildExploredSet(
+  map: GameMap,
+  currentPlayer: Player | undefined,
+  revealMap: boolean
+) {
+  if (revealMap) {
+    const explored = new Set<string>();
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        explored.add(`${x},${y}`);
+      }
+    }
+    return explored;
+  }
+
+  const explored = new Set(currentPlayer?.exploredTiles ?? []);
+  if (!currentPlayer) return explored;
+
+  for (const key of computeVisibleTiles(map, getPlayerVisionCenters(currentPlayer), 5)) {
+    explored.add(key);
+  }
+
+  return explored;
+}
+
+function applyDynamicMapState(
+  targetMap: GameMap,
+  staticMap: GameMap,
+  players: Player[],
+  currentPlayer: Player | undefined,
+  neutralArmies: NeutralArmy[],
+  mapStateValue: unknown,
+  revealMap: boolean
+) {
+  const mapState = (mapStateValue as Record<string, unknown>) ?? {};
+  const collected = new Set<string>((mapState.collected as string[]) ?? []);
+  const killed = new Set<string>((mapState.killed as string[]) ?? []);
+  const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
+  const defeatedNeutralArmies = new Set(
+    neutralArmies
+      .filter((army) => army.status !== "ACTIVE")
+      .map((army) => army.id)
+  );
+  const dominantNeutralUnits = new Map(
+    neutralArmies
+      .filter((army) => army.status === "ACTIVE")
+      .map((army) => [army.id, getDominantUnitType(army.stacks)] as const)
+      .filter((entry): entry is readonly [string, UnitType] => Boolean(entry[1]))
+  );
+  const exploredSet = buildExploredSet(targetMap, currentPlayer, revealMap);
+  const allBuildings = players.flatMap((player) => player.resourceBuildings);
+  const buildingsById = new Map<string, ResourceBuilding>(
+    allBuildings.map((building) => [building.id, building])
+  );
+  const buildingsByPosition = new Map<string, ResourceBuilding>(
+    allBuildings.map((building) => [`${building.position.x},${building.position.y}`, building])
+  );
+
+  for (let y = 0; y < targetMap.height; y++) {
+    for (let x = 0; x < targetMap.width; x++) {
+      const tile = targetMap.tiles[y]?.[x] as MapTile | undefined;
+      const sourceTile = staticMap.tiles[y]?.[x] as MapTile | undefined;
+      if (!tile || !sourceTile) continue;
+
+      tile.object = sourceTile.object ? { ...sourceTile.object } : undefined;
+      tile.isPassable = sourceTile.isPassable;
+      tile.movementCost = sourceTile.movementCost;
+
+      const key = `${x},${y}`;
+      const isExplored = revealMap || exploredSet.has(key);
+
+      if (tile.object) {
+        const object = tile.object;
+        if (object.type === "resource" && collected.has(object.id)) {
+          delete tile.object;
+        } else if (object.type === "monster" && (killed.has(object.id) || defeatedNeutralArmies.has(object.id))) {
+          delete tile.object;
+        } else if (
+          object.type === "adventure_building" &&
+          object.subtype === AdventureBuildingType.CAMPFIRE &&
+          visitedAdventureBuildings.has(object.id)
+        ) {
+          delete tile.object;
+        } else if (object.type === "monster") {
+          const dominantUnitType = dominantNeutralUnits.get(object.id);
+          if (dominantUnitType) object.subtype = dominantUnitType;
+        } else if (object.type === "building") {
+          const buildingData = buildingsById.get(object.id) ?? buildingsByPosition.get(key);
+          if (buildingData) {
+            object.guardianPower = buildingData.guardianPower;
+          }
+          if (!isExplored) {
+            delete tile.object;
+          }
+        } else if (!isExplored) {
+          delete tile.object;
+        }
+      }
+
+      if (!isExplored) {
+        tile.isPassable = false;
+        tile.movementCost = 999;
+      }
+    }
+  }
+}
+
+export function mapApiToGameState(
+  data: Record<string, unknown>,
+  currentUserId?: string,
+  options: { revealMap?: boolean } = {}
+): GameState {
+  const turnNumber = data.turnNumber as number;
+  const players = mapPlayers(data, turnNumber);
+  const neutralArmies = mapNeutralArmies(data);
+  const activeCombats = mapActiveCombats(data);
+  const currentPlayer = players.find((player) => player.userId === currentUserId);
+  const mapId = data.id as string;
+  const normalizedStaticMap = normalizeMapMovement(cloneGameMap(data.mapData as GameMap));
+
+  staticGameMaps.set(mapId, normalizedStaticMap);
+
+  const map = cloneGameMap(normalizedStaticMap);
+  applyDynamicMapState(
+    map,
+    normalizedStaticMap,
+    players,
+    currentPlayer,
+    neutralArmies,
+    data.mapState,
+    Boolean(options.revealMap)
+  );
+
+  return {
+    id: mapId,
+    status: data.status as GameState["status"],
+    maxPlayers: (data.maxPlayers as number) ?? 8,
+    players,
+    map,
+    turnNumber,
+    calendar: getGameCalendar(turnNumber),
+    currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
+    winnerId: data.winnerId as string | undefined,
+    neutralArmies,
+    activeCombats,
+  };
+}
+
+export function mergeGameDynamicState(
+  baseGameState: GameState,
+  data: Record<string, unknown>,
+  currentUserId?: string,
+  options: { revealMap?: boolean } = {}
+): GameState {
+  const staticMap = getCachedStaticGameMap(baseGameState.id);
+  if (!staticMap) return baseGameState;
+
+  const turnNumber = data.turnNumber as number;
+  const players = mapPlayers(data, turnNumber);
+  const neutralArmies = mapNeutralArmies(data);
+  const activeCombats = mapActiveCombats(data);
+  const currentPlayer = players.find((player) => player.userId === currentUserId);
+
+  applyDynamicMapState(
+    baseGameState.map,
+    staticMap,
+    players,
+    currentPlayer,
+    neutralArmies,
+    data.mapState,
+    Boolean(options.revealMap)
+  );
+
+  return {
+    ...baseGameState,
+    status: (data.status as GameState["status"]) ?? baseGameState.status,
+    players,
+    turnNumber,
+    calendar: getGameCalendar(turnNumber),
+    currentTurnPlayerId: (data.currentTurnPlayerId as string) || baseGameState.currentTurnPlayerId,
+    winnerId: (data.winnerId as string | undefined) ?? baseGameState.winnerId,
+    neutralArmies,
+    activeCombats,
   };
 }
 

@@ -63,6 +63,7 @@ export function buildConnectionsAndWalls(
         }
       }
       if (!isBorder) continue;
+      if (zoneHere > otherZone) continue;
       if (tiles[y][x].terrain === TerrainType.WATER) continue;
 
       const pair = pairKey(zoneHere, otherZone);
@@ -83,22 +84,27 @@ export function buildConnectionsAndWalls(
 
     const borderA = findBorderTiles(zoneGrid, width, height, from, to)
       .filter((p) => tiles[p.y][p.x].terrain !== TerrainType.WATER);
-    if (borderA.length === 0) continue;
+    const borderB = findBorderTiles(zoneGrid, width, height, to, from)
+      .filter((p) => tiles[p.y][p.x].terrain !== TerrainType.WATER);
+    const borderTiles = [...borderA, ...borderB];
+    if (borderTiles.length === 0) continue;
 
     // Centre géométrique de la frontière
     let cx = 0;
     let cy = 0;
-    for (const p of borderA) {
+    for (const p of borderTiles) {
       cx += p.x;
       cy += p.y;
     }
-    cx /= borderA.length;
-    cy /= borderA.length;
+    cx /= borderTiles.length;
+    cy /= borderTiles.length;
 
     // Tile la plus proche du centre
-    let best = borderA[0];
+    const sealedBorder = borderTiles.filter((p) => sealedTiles.has(`${p.x},${p.y}`));
+    const gateCandidates = sealedBorder.length > 0 ? sealedBorder : borderTiles;
+    let best = gateCandidates[0];
     let bestDist = Number.POSITIVE_INFINITY;
-    for (const p of borderA) {
+    for (const p of gateCandidates) {
       const d = (p.x - cx) ** 2 + (p.y - cy) ** 2;
       if (d < bestDist) {
         bestDist = d;
@@ -108,7 +114,7 @@ export function buildConnectionsAndWalls(
 
     // Élargir la porte sur 1-2 tiles voisines de la frontière pour faciliter le passage
     const gateTiles = [best];
-    const candidates = borderA
+    const candidates = gateCandidates
       .filter((p) => p !== best)
       .sort((a, b) => (a.x - best.x) ** 2 + (a.y - best.y) ** 2 - ((b.x - best.x) ** 2 + (b.y - best.y) ** 2));
     if (candidates.length > 0) gateTiles.push(candidates[0]);

@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-labelledby="resource-wood-title resource-wood-desc">
-  <title id="resource-wood-title">Bois</title>
-  <desc id="resource-wood-desc">Sprite de ressource Bois, avec formes et matières dédiées.</desc>
-  
-  <ellipse cx="24" cy="40" rx="17" ry="5" fill="#000" opacity=".25"/><path d="M11 28 H39 C44 28 44 38 39 38 H11 C6 38 6 28 11 28 Z" fill="#8b4513" stroke="#3d1f0a" stroke-width="2.5"/><path d="M8 18 H36 C41 18 41 28 36 28 H8 C3 28 3 18 8 18 Z" fill="#6f3510" stroke="#3d1f0a" stroke-width="2.5"/><circle cx="11" cy="23" r="5" fill="#b87333" stroke="#ffd0a0" stroke-width="1.7"/><circle cx="14" cy="33" r="5" fill="#c07a38" stroke="#ffd0a0" stroke-width="1.7"/><path d="M18 21 H34 M21 32 H37 M10 23 Q13 20 16 23 M13 33 Q16 30 19 33" stroke="#d69a5a" stroke-width="1.7" stroke-linecap="round"/>
-</svg>

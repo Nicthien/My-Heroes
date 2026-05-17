@@ -13,6 +13,7 @@ import {
 import { getTownGoldProduction } from "@/lib/game/town-buildings";
 import { BuildingType, Faction, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
+import { evaluateGameLifecycle } from "./lifecycle";
 
 interface MinimalTurn {
   gamePlayerId: string;
@@ -76,6 +77,9 @@ export async function completePlayerTurn(
     actions: [],
     is_completed: true,
   }, { onConflict: "game_id,game_player_id,turn_number" });
+
+  const lifecycle = await evaluateGameLifecycle(supabase, gameId);
+  if (lifecycle.status !== "ACTIVE") return;
 
   const game = await getGameWithRelations(supabase, gameId);
   if (!game) return;

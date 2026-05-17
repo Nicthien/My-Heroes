@@ -100,5 +100,6 @@ function mapCombat(combat: Record<string, unknown>) {
     actionLog: combat.actionLog as string[],
     participants: (combat.participants as never[]) ?? [],
     result: combat.result as never,
+    visibility: (combat.visibility as "full" | "joinable_summary" | undefined) ?? "full",
   };
 }

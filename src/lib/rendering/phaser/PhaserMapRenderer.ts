@@ -1575,6 +1575,11 @@ class PhaserMapScene extends Phaser.Scene {
     return new Promise<void>((resolve) => {
       let index = 1;
       const moveNext = () => {
+        if (!this.isRenderedHeroUsable(renderedHero) || this.renderedHeroes.get(heroId) !== renderedHero) {
+          resolve();
+          return;
+        }
+
         const from = path[index - 1];
         const to = path[index];
         if (!from || !to) {
@@ -1613,9 +1618,14 @@ class PhaserMapScene extends Phaser.Scene {
           duration: 140,
           ease: "Sine.easeInOut",
           onUpdate: () => {
+            if (!this.isRenderedHeroUsable(renderedHero)) return;
             this.updateRenderedHeroPosition(renderedHero, tweenState.x, tweenState.y);
           },
           onComplete: () => {
+            if (!this.isRenderedHeroUsable(renderedHero) || this.renderedHeroes.get(heroId) !== renderedHero) {
+              resolve();
+              return;
+            }
             this.updateRenderedHeroPosition(renderedHero, end.x, end.y);
             if (!toWater && fromWater) {
               this.setRenderedHeroSurface(renderedHero, false, "walk");
@@ -1636,6 +1646,8 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private promoteHeroFromTown(renderedHero: RenderedHeroObject, x: number, y: number, metrics: NonNullable<ReturnType<typeof getObjectMetrics>>) {
+    if (!this.isRenderedHeroUsable(renderedHero)) return Promise.resolve();
+
     const previousScaleX = renderedHero.sprite.scaleX;
     const previousScaleY = renderedHero.sprite.scaleY;
     renderedHero.object.inTown = false;
@@ -1695,6 +1707,8 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number) {
+    if (!this.isRenderedHeroUsable(renderedHero)) return;
+
     renderedHero.sprite.x = x;
     renderedHero.sprite.setDepth(y);
     renderedHero.animation.baseY = y;
@@ -1748,13 +1762,16 @@ class PhaserMapScene extends Phaser.Scene {
     const sheet = renderedHero.object.onWater
       ? getBoatSpritesheet(renderedHero.object.faction)
       : getHeroSpritesheet(renderedHero.object.faction);
-    if (!sheet || !(renderedHero.sprite instanceof Phaser.GameObjects.Sprite)) return;
+    const sprite = renderedHero.sprite;
+    if (!sheet || !(sprite instanceof Phaser.GameObjects.Sprite) || !sprite.scene || !sprite.active || !sprite.anims) return;
     const key = getDirectionalAnimationKey(sheet, renderedHero.direction, state);
-    if (renderedHero.sprite.anims.currentAnim?.key === key) return;
-    renderedHero.sprite.play(key);
+    if (sprite.anims.currentAnim?.key === key) return;
+    sprite.play(key);
   }
 
   private setRenderedHeroSurface(renderedHero: RenderedHeroObject, onWater: boolean, state: DirectionalSpriteState) {
+    if (!this.isRenderedHeroUsable(renderedHero)) return;
+
     const nextOnWater = Boolean(onWater);
     const surfaceChanged = Boolean(renderedHero.object.onWater) !== nextOnWater;
     renderedHero.object.onWater = nextOnWater;
@@ -1769,7 +1786,8 @@ class PhaserMapScene extends Phaser.Scene {
       renderedHero.animation.baseScaleY = renderedHero.sprite.scaleY;
     }
 
-    if (!(renderedHero.sprite instanceof Phaser.GameObjects.Sprite)) return;
+    const sprite = renderedHero.sprite;
+    if (!(sprite instanceof Phaser.GameObjects.Sprite)) return;
 
     const sheet = nextOnWater
       ? getBoatSpritesheet(renderedHero.object.faction)
@@ -1779,11 +1797,21 @@ class PhaserMapScene extends Phaser.Scene {
     if (surfaceChanged) {
       const directionIndex = HERO_DIRECTIONS.indexOf(renderedHero.direction);
       const stateOffset = state === "walk" ? 4 : 0;
-      renderedHero.sprite.stop();
-      renderedHero.sprite.setTexture(sheet.key);
-      renderedHero.sprite.setFrame(directionIndex * sheet.columns + stateOffset);
+      sprite.stop();
+      sprite.setTexture(sheet.key);
+      sprite.setFrame(directionIndex * sheet.columns + stateOffset);
     }
     this.playHeroAnimation(renderedHero, state);
+  }
+
+  private isRenderedHeroUsable(renderedHero: RenderedHeroObject) {
+    return Boolean(
+      renderedHero.sprite &&
+      renderedHero.sprite instanceof Phaser.GameObjects.Sprite &&
+      renderedHero.sprite.scene &&
+      renderedHero.sprite.active &&
+      renderedHero.sprite.anims
+    );
   }
 
   private addObjectSprite(object: MapObjectData, x: number, y: number, path: string | undefined, width: number, height: number) {

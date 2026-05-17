@@ -116,6 +116,7 @@ interface ApiCombat {
   actionLog: string[];
   participants?: PersistentCombat["participants"];
   result?: PersistentCombat["result"];
+  visibility?: PersistentCombat["visibility"];
 }
 
 export function mapApiToGameState(
@@ -325,6 +326,7 @@ export function mapApiToGameState(
       actionLog: combat.actionLog,
       participants: combat.participants ?? [],
       result: combat.result,
+      visibility: combat.visibility ?? "full",
     })),
   };
 }

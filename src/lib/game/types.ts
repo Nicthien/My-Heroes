@@ -538,6 +538,7 @@ export interface PersistentCombat {
   actionLog: string[];
   participants?: CombatParticipant[];
   result?: CombatSummary | null;
+  visibility?: "full" | "joinable_summary";
 }
 
 export interface CombatLoss {

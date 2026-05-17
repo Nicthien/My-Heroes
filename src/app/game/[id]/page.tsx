@@ -98,6 +98,7 @@ export default function GamePage() {
     const combat = gameState.activeCombats?.find((item) => {
       if (item.status !== "ACTIVE") return false;
       if (minimizedCombatIds.includes(item.id)) return false;
+      if (item.visibility === "joinable_summary") return false;
       return item.attackerPlayerId === myPlayer.id || item.defenderPlayerId === myPlayer.id || item.participants?.some((participant) => participant.playerId === myPlayer.id);
     });
     if (combat) setActiveCombat(combat);

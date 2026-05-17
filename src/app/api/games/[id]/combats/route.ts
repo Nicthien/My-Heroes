@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { runAiCombatTurns } from "@/lib/game/ai/combat-runner";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
+import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
   canMoveAdventureStep,
@@ -35,7 +37,9 @@ export async function GET(
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json((data ?? []).map(toCombat));
+  const mapped = (data ?? []).map(toCombat);
+  const canSpectate = !gamePlayer.isAlive;
+  return NextResponse.json(mapped.filter((combat) => canSpectate || combatInvolvesPlayer(combat, String(gamePlayer.id))));
 }
 
 export async function POST(
@@ -53,6 +57,7 @@ export async function POST(
     id: string;
     userId: string | null;
     isAi?: boolean;
+    isAlive?: boolean;
     exploredTiles: string[];
     towns: Array<{ x: number; y: number }>;
     resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
@@ -77,6 +82,7 @@ export async function POST(
 
   if (!game || !gamePlayer) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
   if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
+  if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
   const completedTurn = ((game.turns ?? []) as Array<{ gamePlayerId: string; turnNumber: number; isCompleted: boolean }>).find(
     (turn) => turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
@@ -251,9 +257,23 @@ export async function POST(
       await supabase.from("armies").delete().eq("hero_id", attacker.id);
       await supabase.from("heroes").delete().eq("id", attacker.id);
     }
+    await evaluateGameLifecycle(supabase, id);
+  }
+
+  if (!result) {
+    const afterAi = await runAiCombatTurns(supabase, id, data.id);
+    if (afterAi) return NextResponse.json({ combat: afterAi, result: afterAi.result ?? null }, { status: 201 });
   }
 
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+}
+
+function combatInvolvesPlayer(combat: ReturnType<typeof toCombat>, playerId: string) {
+  return (
+    combat.attackerPlayerId === playerId ||
+    combat.defenderPlayerId === playerId ||
+    Boolean(combat.participants?.some((participant) => participant.playerId === playerId))
+  );
 }
 
 function getTargetPosition(body: { destination?: { x?: unknown; y?: unknown }; path?: Array<{ x?: unknown; y?: unknown }> }) {

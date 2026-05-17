@@ -26,11 +26,14 @@ export async function POST(
 
   const gamePlayer = await getGamePlayer(supabase, id, user.id) as unknown as {
     id: string;
+    isAlive?: boolean;
     heroes: Array<{ id: string; armies: UnitStack[] }>;
   } | null;
   const hero = gamePlayer?.heroes.find((item) => item.id === String(body.heroId));
 
   if (!gamePlayer || !hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+
+  if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
   const { data: activeCombats, error: activeCombatsError } = await supabase
     .from("combats")

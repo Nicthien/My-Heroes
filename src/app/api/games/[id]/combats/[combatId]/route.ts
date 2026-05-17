@@ -24,5 +24,19 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Combat introuvable" }, { status: 404 });
+  if (gamePlayer.isAlive && !combatInvolvesPlayer(data, String(gamePlayer.id))) {
+    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+  }
   return NextResponse.json(toCombat(data));
+}
+
+function combatInvolvesPlayer(
+  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string }> },
+  playerId: string
+) {
+  return (
+    combat.attacker_player_id === playerId ||
+    combat.defender_player_id === playerId ||
+    Boolean(combat.combat_participants?.some((participant) => participant.player_id === playerId))
+  );
 }

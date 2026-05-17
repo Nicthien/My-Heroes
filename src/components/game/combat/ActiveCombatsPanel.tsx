@@ -15,10 +15,11 @@ export default function ActiveCombatsPanel() {
   const gameState = useGameStore((state) => state.gameState);
   const restoreCombat = useGameStore((state) => state.restoreCombat);
   const focusTile = useGameStore.getState().focusTile;
-  const combats = gameState?.activeCombats ?? [];
-  if (combats.length === 0) return null;
-
   const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+  const combats = (gameState?.activeCombats ?? []).filter((combat) =>
+    myPlayer?.isAlive === false || combat.visibility !== "joinable_summary"
+  );
+  if (combats.length === 0) return null;
 
   return (
     <CollapsiblePanel

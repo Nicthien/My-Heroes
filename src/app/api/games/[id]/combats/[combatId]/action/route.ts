@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { runAiCombatTurns } from "@/lib/game/ai/combat-runner";
 import { executeManualCombatAction, getHexDistance, getHexNeighbors, isTerrainBlocked } from "@/lib/game/combat/persistent";
+import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
@@ -25,6 +27,7 @@ export async function POST(
 
   const gamePlayer = await getGamePlayer(supabase, id, user.id);
   if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
+  if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
   const { data: combat, error: fetchError } = await supabase
     .from("combats")
@@ -33,6 +36,10 @@ export async function POST(
     .eq("game_id", id)
     .single();
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  const gamePlayerId = String(gamePlayer.id);
+  if (!combatInvolvesPlayer(combat, gamePlayerId)) {
+    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+  }
   if (combat.status !== "ACTIVE") {
     const mapped = toCombat(combat);
     return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
@@ -68,13 +75,14 @@ export async function POST(
       error: "Etat de combat perime",
       combat: toCombat(combat),
       result: combat.result ?? null,
-    }, { status: 409 });
+      stale: true,
+    });
   }
 
-  if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayer.id) {
+  if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
-  if (!currentActor && combat.current_player_id && combat.current_player_id !== gamePlayer.id) {
+  if (!currentActor && combat.current_player_id && combat.current_player_id !== gamePlayerId) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
 
@@ -84,7 +92,7 @@ export async function POST(
     turnQueue: combat.turn_queue ?? [],
     round: combat.round ?? 1,
     currentUnitId: combat.current_unit_id,
-    playerAction: currentActor?.ownerPlayerId === gamePlayer.id ? action : null,
+    playerAction: currentActor?.ownerPlayerId === gamePlayerId ? action : null,
     attackerStats: { attack: attackerHero.attack, defense: attackerHero.defense },
     defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
   });
@@ -114,9 +122,25 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (result) {
     await persistResolvedCombat(supabase, combat, initialUnits, execution.units, execution.result);
+    await evaluateGameLifecycle(supabase, id);
   }
   const mapped = toCombat(data);
+  if (!result) {
+    const afterAi = await runAiCombatTurns(supabase, id, combatId);
+    return NextResponse.json({ combat: afterAi ?? mapped, result: afterAi?.result ?? null });
+  }
   return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
+}
+
+function combatInvolvesPlayer(
+  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string }> },
+  playerId: string
+) {
+  return (
+    combat.attacker_player_id === playerId ||
+    combat.defender_player_id === playerId ||
+    Boolean(combat.combat_participants?.some((participant) => participant.player_id === playerId))
+  );
 }
 
 function executeActionThenNeutralTurns(params: {

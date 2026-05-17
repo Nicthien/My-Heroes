@@ -61,6 +61,10 @@ export default function CombatScreen() {
   const fetchCombatInFlightRef = useRef(false);
   const activeCombatId = activeCombat?.id;
 
+  useEffect(() => {
+    if (activeCombat?.visibility === "joinable_summary") setActiveCombat(null);
+  }, [activeCombat?.visibility, setActiveCombat]);
+
   const resolveCombat = useCallback(async (combat: PersistentCombat) => {
     setActiveCombat(null);
     if (combat.result) setCombatResult(combat.result);
@@ -138,6 +142,8 @@ export default function CombatScreen() {
 
   useEffect(() => {
     if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
+    const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
+    if (myPlayer?.isAlive === false) return;
 
     const currentActor = activeCombat.boardState.units.find((unit) => unit.id === activeCombat.currentUnitId);
     if (!currentActor || currentActor.ownerPlayerId !== null) return;
@@ -190,7 +196,7 @@ export default function CombatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeCombat, gameState, resolveCombat, setActiveCombat]);
+  }, [activeCombat, gameState, resolveCombat, session?.user?.id, setActiveCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -2296,5 +2302,6 @@ function mapCombat(combat: Record<string, unknown>): PersistentCombat {
     actionLog: combat.actionLog as string[],
     participants: (combat.participants as PersistentCombat["participants"]) ?? [],
     result: combat.result as PersistentCombat["result"],
+    visibility: (combat.visibility as PersistentCombat["visibility"]) ?? "full",
   };
 }

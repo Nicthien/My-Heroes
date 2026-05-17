@@ -62,12 +62,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const syncedCombat = prev.activeCombat
       ? state.activeCombats?.find((combat) => combat.id === prev.activeCombat?.id) ?? prev.activeCombat
       : null;
+    const openCombat = syncedCombat?.visibility === "joinable_summary" ? null : syncedCombat;
 
     return {
       gameState: state,
       gameStateVersion: prev.gameStateVersion + 1,
-      activeCombat: syncedCombat,
-      isCombatMode: Boolean(syncedCombat),
+      activeCombat: openCombat,
+      isCombatMode: Boolean(openCombat),
     };
   }),
   setMovePending: (pending) => set({ isMovePending: pending }),
@@ -83,7 +84,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setCombatMessage: (message) => set({ combatMessage: message }),
   setPendingCombat: (combat) => set({ pendingCombat: combat }),
   setPendingJoinCombat: (combat) => set({ pendingJoinCombat: combat }),
-  setActiveCombat: (combat) => set({ activeCombat: combat, isCombatMode: Boolean(combat) }),
+  setActiveCombat: (combat) => {
+    const openCombat = combat?.visibility === "joinable_summary" ? null : combat;
+    set({ activeCombat: openCombat, isCombatMode: Boolean(openCombat) });
+  },
   minimizeCombat: (combatId) => set((state) => ({
     activeCombat: state.activeCombat?.id === combatId ? null : state.activeCombat,
     isCombatMode: state.activeCombat?.id === combatId ? false : state.isCombatMode,
@@ -92,8 +96,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       : [...state.minimizedCombatIds, combatId],
   })),
   restoreCombat: (combat) => set((state) => ({
-    activeCombat: combat,
-    isCombatMode: true,
+    activeCombat: combat.visibility === "joinable_summary" ? null : combat,
+    isCombatMode: combat.visibility !== "joinable_summary",
     minimizedCombatIds: state.minimizedCombatIds.filter((id) => id !== combat.id),
   })),
   setCombatResult: (result) => set({ lastCombatResult: result }),

@@ -1,96 +1,21 @@
-import { randomUUID } from "crypto";
-import {
-  canAfford,
-  getFactionBuildingRule,
-  getRecruitableUnitsForFaction,
-  subtractCost,
-  type ResourceCost,
-} from "@/lib/game/economy";
-import {
-  computeVisibleTiles,
-  findPath,
-  getAdventurePathCost,
-  getPlayerVisionCenters,
-  getUsableAdventureMovement,
-  isTileTraversable,
-  MINIMUM_ADVENTURE_STEP_COST,
-  normalizeMapMovement,
-} from "@/lib/game/engine";
-import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
-import { BuildingType, Faction, GameMap, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
-import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
+import { addVisit, createCampfireReward } from "@/lib/game/adventure-buildings";
+import { computeVisibleTiles, getAdventurePathCost, getPlayerVisionCenters, getUsableAdventureMovement, isTileTraversable, MINIMUM_ADVENTURE_STEP_COST } from "@/lib/game/engine";
+import { makeRng } from "@/lib/game/engine/rng";
+import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
+import { AdventureBuildingType, GameMap, Position, Resources, UnitStack } from "@/lib/game/types";
+import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
+import { buildAiContext, getResourcePileAmount, playerResources } from "./context";
+import { calculateHeroPower, calculateStacksPower, createBuildingGuardStacks, resolveAiAutoCombat } from "./combat";
+import { runAiEconomy } from "./economy";
+import { assignHeroRole } from "./roles";
+import { chooseAiObjective } from "./utility";
+import type { AiContext, AiDecision, AiGame, AiHero, AiObjective, AiPlayer } from "./types";
 
-interface AiArmy {
-  id: string;
-  unitType: UnitType;
-  count: number;
-  health: number;
-  maxHealth: number;
-  position: number;
-}
-
-interface AiHero {
-  id: string;
-  x: number;
-  y: number;
-  movement: number;
-  armies: AiArmy[];
-}
-
-interface AiTown {
-  id: string;
-  x: number;
-  y: number;
-  townType?: string;
-  buildings?: string[];
-  garrison?: AiArmy[];
-  availableRecruits?: Record<string, number>;
-  lastBuiltTurn?: number | null;
-}
-
-interface AiPlayer {
-  id: string;
-  userId: string | null;
-  isAi?: boolean;
-  isAlive?: boolean;
-  turnOrder?: number;
-  faction?: string;
-  gold: number;
-  wood: number;
-  ore: number;
-  mercury: number;
-  crystals: number;
-  gems: number;
-  sulfur: number;
-  exploredTiles: string[];
-  heroes: AiHero[];
-  towns: AiTown[];
-}
-
-interface AiGame {
-  id: string;
-  status: string;
-  maxPlayers: number;
-  turnNumber: number;
-  currentTurnPlayerId?: string | null;
-  mapData: unknown;
-  mapState?: unknown;
-  players: AiPlayer[];
-}
-
-const BUILD_PRIORITY: BuildingType[] = [
-  BuildingType.TOWN_HALL,
-  BuildingType.MARKET,
-  BuildingType.BARRACKS,
-  BuildingType.DWELLING_1,
-  BuildingType.RESOURCE_SILO,
-  BuildingType.DWELLING_2,
-  BuildingType.CITY_HALL,
-];
 const AI_TURN_START_DELAY_MS = 500;
 const AI_MOVE_DELAY_MS = 450;
 const AI_TURN_END_DELAY_MS = 2300;
+const MAX_HERO_OBJECTIVES_PER_TURN = 16;
 
 export async function runAiTurnsUntilHuman(supabase: SupabaseAdmin, gameId: string) {
   if (!(await acquireAiRunnerLock(supabase, gameId))) return;
@@ -107,7 +32,7 @@ export async function runAiTurnsUntilHuman(supabase: SupabaseAdmin, gameId: stri
       if (!currentPlayer?.isAi) return;
 
       await sleep(AI_TURN_START_DELAY_MS);
-      await runSimpleAiTurn(supabase, game, currentPlayer);
+      await runUtilityAiTurn(supabase, game, currentPlayer);
       await sleep(AI_TURN_END_DELAY_MS);
       await completePlayerTurn(supabase, game.id, Number(game.turnNumber), currentPlayer.id);
     }
@@ -138,328 +63,393 @@ async function acquireAiRunnerLock(supabase: SupabaseAdmin, gameId: string) {
   return true;
 }
 
-async function runSimpleAiTurn(supabase: SupabaseAdmin, game: AiGame, player: AiPlayer) {
-  await buildOneAffordableBuilding(supabase, game, player);
-  const afterBuild = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
-  const freshPlayer = afterBuild?.players.find((item) => item.id === player.id) ?? player;
-  await recruitAvailableUnits(supabase, freshPlayer);
+async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: AiPlayer) {
+  await runAiEconomy(supabase, game, player);
 
-  const afterRecruit = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
-  const movePlayer = afterRecruit?.players.find((item) => item.id === player.id) ?? freshPlayer;
-  if (afterRecruit) await moveHeroesForAi(supabase, afterRecruit, movePlayer);
-}
+  let freshGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
+  let freshPlayer = freshGame?.players.find((item) => item.id === player.id);
+  if (!freshGame || !freshPlayer) return;
 
-async function buildOneAffordableBuilding(supabase: SupabaseAdmin, game: AiGame, player: AiPlayer) {
-  const town = [...(player.towns ?? [])]
+  const heroIds = [...(freshPlayer.heroes ?? [])]
     .sort((a, b) => a.id.localeCompare(b.id))
-    .find((item) => item.lastBuiltTurn !== game.turnNumber);
-  if (!town) return;
+    .map((hero) => hero.id);
 
-  const faction = normalizeFaction(town.townType ?? player.faction);
-  const buildings = [...(town.buildings ?? [])];
-  const resources = playerResources(player);
+  for (let heroIndex = 0; heroIndex < heroIds.length; heroIndex++) {
+    for (let step = 0; step < MAX_HERO_OBJECTIVES_PER_TURN; step++) {
+      freshGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
+      freshPlayer = freshGame?.players.find((item) => item.id === player.id);
+      const hero = freshPlayer?.heroes.find((item) => item.id === heroIds[heroIndex]);
+      if (!freshGame || !freshPlayer || !hero || hero.movement < MINIMUM_ADVENTURE_STEP_COST) break;
+      if (isHeroInActiveCombat(freshGame, hero.id)) break;
 
-  for (const building of BUILD_PRIORITY) {
-    if (hasTownBuilding(buildings, building)) continue;
-    const rule = getFactionBuildingRule(faction, building);
-    if (!rule) continue;
-    if (rule.requires?.some((requirement) => !hasTownBuilding(buildings, requirement))) continue;
-    if (!canAfford(resources, rule.cost)) continue;
+      const context = buildAiContext(freshGame, freshPlayer);
+      const role = assignHeroRole(context, hero, heroIndex);
+      const score = chooseAiObjective(context, hero, role);
+      if (!score) break;
 
-    const nextBuildings = normalizeTownCenter([...buildings, building]);
-    const nextResources = subtractCost(resources, rule.cost);
-    await supabase.from("game_players").update(nextResources).eq("id", player.id);
-    await supabase.from("towns").update({
-      buildings: nextBuildings,
-      level: getTownCenterLevel(nextBuildings),
-      last_built_turn: game.turnNumber,
-    }).eq("id", town.id);
-    return;
-  }
-}
-
-async function recruitAvailableUnits(supabase: SupabaseAdmin, player: AiPlayer) {
-  const town = [...(player.towns ?? [])].sort((a, b) => a.id.localeCompare(b.id))[0];
-  if (!town) return;
-
-  const faction = normalizeFaction(town.townType ?? player.faction);
-  const buildings = town.buildings ?? [];
-  const availableRecruits = { ...(town.availableRecruits ?? {}) };
-  const garrison = [...(town.garrison ?? [])];
-  let resources = playerResources(player);
-  let changed = false;
-
-  for (const entry of getRecruitableUnitsForFaction(faction).filter((item) => !item.upgraded)) {
-    if (!hasTownBuilding(buildings, entry.dwelling)) continue;
-    const available = Math.floor(Number(availableRecruits[entry.unitType] ?? 0));
-    if (available <= 0) continue;
-
-    const count = getAffordableCount(resources, entry.rule.cost, available);
-    if (count <= 0) continue;
-
-    const totalCost = multiplyCost(entry.rule.cost, count);
-    resources = subtractCost(resources, totalCost);
-    availableRecruits[entry.unitType] = available - count;
-    addUnitsToGarrison(garrison, entry.unitType, count, entry.rule.health);
-    changed = true;
-  }
-
-  if (!changed) return;
-
-  await supabase.from("game_players").update(resources).eq("id", player.id);
-  await supabase.from("towns").update({
-    available_recruits: availableRecruits,
-    garrison,
-  }).eq("id", town.id);
-}
-
-async function moveHeroesForAi(supabase: SupabaseAdmin, game: AiGame, player: AiPlayer) {
-  const map = normalizeMapMovement(game.mapData as GameMap);
-  const collected = new Set<string>(((game.mapState as Record<string, unknown> | undefined)?.collected as string[] | undefined) ?? []);
-  const explored = new Set<string>(player.exploredTiles ?? []);
-  const heroes = [...(player.heroes ?? [])].sort((a, b) => Number(a.id > b.id) - Number(a.id < b.id));
-  let resources = playerResources(player);
-
-  for (const hero of heroes) {
-    let currentHero = { ...hero };
-    for (let step = 0; step < 12 && currentHero.movement >= MINIMUM_ADVENTURE_STEP_COST; step++) {
-      const move = chooseAiMove(map, explored, collected, currentHero);
-      if (!move) break;
-
-      const result = await applyAiHeroMove({
-        supabase,
-        game,
-        player,
-        hero: currentHero,
-        map,
-        collected,
-        explored,
-        resources,
-        path: move.path,
-      });
-      if (!result.moved) break;
-      currentHero = result.hero;
-      resources = result.resources;
-      player.exploredTiles = Array.from(explored);
+      const decision: AiDecision = { heroId: hero.id, role, score };
+      const result = await applyAiDecision(supabase, context, hero, decision);
+      if (!result.moved || result.heroRemoved) break;
       await sleep(AI_MOVE_DELAY_MS);
     }
   }
 }
 
-function chooseAiMove(map: GameMap, explored: Set<string>, collected: Set<string>, hero: AiHero) {
-  const start = { x: hero.x, y: hero.y };
-  const resourceTargets = findVisibleResourceTargets(map, explored, collected)
-    .map((target) => ({ position: target.position, path: findPath(map, start, target.position, hero.movement) }))
-    .filter((item) => item.path.length > 1)
-    .sort((a, b) => getAdventurePathCost(map, a.path) - getAdventurePathCost(map, b.path));
+async function applyAiDecision(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  decision: AiDecision,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const objective = decision.score.objective;
+  const movement = await moveHeroToObjective(supabase, context, hero, objective);
+  if (!movement.moved) return { moved: false };
 
-  return resourceTargets[0] ?? findExplorationTargets(map, explored, start, hero.movement)[0] ?? null;
+  if (objective.type === "resource") {
+    await collectResource(supabase, context, objective);
+  } else if (objective.type === "adventure_building") {
+    await visitAdventureBuilding(supabase, context, hero, objective);
+  } else if (objective.type === "resource_building") {
+    return captureOrFightResourceBuilding(supabase, context, movement.hero, objective);
+  } else if (objective.type === "neutral_army") {
+    return fightNeutralArmy(supabase, context, movement.hero, objective);
+  } else if (objective.type === "enemy_hero") {
+    return fightEnemyHero(supabase, context, movement.hero, objective);
+  } else if (objective.type === "neutral_town") {
+    return captureOrFightNeutralTown(supabase, context, movement.hero, objective);
+  }
+
+  return { moved: true };
 }
 
-async function applyAiHeroMove({
-  supabase,
-  game,
-  player,
-  hero,
-  map,
-  collected,
-  explored,
-  resources,
-  path,
-}: {
-  supabase: SupabaseAdmin;
-  game: AiGame;
-  player: AiPlayer;
-  hero: AiHero;
-  map: GameMap;
-  collected: Set<string>;
-  explored: Set<string>;
-  resources: Resources;
-  path: Position[];
-}): Promise<{ moved: boolean; hero: AiHero; resources: Resources }> {
-  const destination = path[path.length - 1];
-  const usedMovement = getAdventurePathCost(map, path);
-  if (!destination || path.length <= 1 || !Number.isFinite(usedMovement) || usedMovement <= 0 || usedMovement > hero.movement) {
-    return { moved: false, hero, resources };
+async function moveHeroToObjective(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; hero: AiHero }> {
+  const destination = objective.path[objective.path.length - 1];
+  const usedMovement = getAdventurePathCost(context.map, objective.path);
+  if (!destination || objective.path.length <= 1 || !Number.isFinite(usedMovement) || usedMovement <= 0 || usedMovement > hero.movement) {
+    return { moved: false, hero };
   }
-  const nextMovement = getUsableAdventureMovement(map, destination, hero.movement - usedMovement);
 
-  await supabase.from("heroes").update({
+  const nextMovement = getUsableAdventureMovement(context.map, destination, hero.movement - usedMovement);
+  const { error } = await supabase.from("heroes").update({
     x: destination.x,
     y: destination.y,
     movement: nextMovement,
   }).eq("id", hero.id);
+  if (error) throw error;
 
-  const visible = computeVisibleTiles(
-    map,
-    getPlayerVisionCenters({
-      heroes: [{ position: destination }],
-      towns: player.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
-    }),
-    5
-  );
-  for (const key of visible) explored.add(key);
-
-  const nextMapState = { ...((game.mapState as Record<string, unknown> | undefined) ?? {}) };
-  const tile = map.tiles[destination.y]?.[destination.x];
-  if (tile?.object?.type === "resource" && !collected.has(tile.object.id)) {
-    collected.add(tile.object.id);
-    const resourceType = (tile.object.subtype ?? "gold") as keyof Resources;
-    const amount = getResourcePileAmount(tile.object);
-    const nextResources = { ...resources, [resourceType]: Number(resources[resourceType] ?? 0) + amount };
-    await supabase.from("game_players").update({
-      [resourceType]: nextResources[resourceType],
-      explored_tiles: Array.from(explored),
-    }).eq("id", player.id);
-    nextMapState.collected = Array.from(collected);
-    await supabase.from("games").update({ map_state: nextMapState }).eq("id", game.id);
-    return { moved: true, hero: { ...hero, x: destination.x, y: destination.y, movement: nextMovement }, resources: nextResources };
-  }
-
-  await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", player.id);
-  return { moved: true, hero: { ...hero, x: destination.x, y: destination.y, movement: nextMovement }, resources };
-}
-
-function findVisibleResourceTargets(map: GameMap, explored: Set<string>, collected: Set<string>) {
-  const targets: Array<{ position: Position; object: MapObject }> = [];
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      if (!explored.has(`${tile.x},${tile.y}`)) continue;
-      if (tile.object?.type !== "resource" || collected.has(tile.object.id)) continue;
-      targets.push({ position: { x: tile.x, y: tile.y }, object: tile.object });
-    }
-  }
-  return targets;
-}
-
-function findExplorationTargets(map: GameMap, explored: Set<string>, start: Position, movement: number) {
-  const targets: Array<{ position: Position; path: Position[]; score: number }> = [];
-
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      const position = { x: tile.x, y: tile.y };
-      if (!explored.has(tileKey(position))) continue;
-      if (position.x === start.x && position.y === start.y) continue;
-      if (!isTileTraversable(tile)) continue;
-
-      const path = findPath(map, start, position, movement);
-      if (path.length <= 1) continue;
-      const cost = getAdventurePathCost(map, path);
-      if (cost > movement) continue;
-      const revealScore = countNewVisibleTiles(map, explored, position);
-      const frontierBonus = hasAdjacentUnexplored(map, explored, position) ? 1 : 0;
-      targets.push({
-        position,
-        path,
-        score: revealScore * 100000 + frontierBonus * 1000 + cost,
-      });
-    }
-  }
-
-  return targets.sort((a, b) => b.score - a.score || getAdventurePathCost(map, b.path) - getAdventurePathCost(map, a.path));
-}
-
-function countNewVisibleTiles(map: GameMap, explored: Set<string>, position: Position) {
-  let count = 0;
-  for (const key of computeVisibleTiles(map, [position], 5)) {
-    if (!explored.has(key)) count++;
-  }
-  return count;
-}
-
-function hasAdjacentUnexplored(map: GameMap, explored: Set<string>, position: Position) {
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const x = position.x + dx;
-      const y = position.y + dy;
-      if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
-      if (!explored.has(`${x},${y}`)) return true;
-    }
-  }
-  return false;
-}
-
-function tileKey(position: Position) {
-  return `${position.x},${position.y}`;
-}
-
-function addUnitsToGarrison(stacks: AiArmy[], unitType: UnitType, count: number, maxHealth: number) {
-  const existing = stacks.find((unit) => unit.unitType === unitType);
-  if (existing) {
-    existing.count += count;
-    existing.health += maxHealth * count;
-    return;
-  }
-
-  stacks.push({
-    id: randomUUID(),
-    unitType,
-    count,
-    health: maxHealth * count,
-    maxHealth,
-    position: stacks.length,
-  });
-}
-
-function getAffordableCount(resources: Resources, cost: ResourceCost, available: number) {
-  let limit = available;
-  for (const [resource, amount] of Object.entries(cost)) {
-    if (!amount) continue;
-    const owned = resources[resource as keyof Resources] ?? 0;
-    limit = Math.min(limit, Math.floor(owned / amount));
-  }
-  return Math.max(0, limit);
-}
-
-function multiplyCost(cost: ResourceCost, count: number): ResourceCost {
-  return Object.fromEntries(
-    Object.entries(cost).map(([resource, amount]) => [resource, (amount ?? 0) * count])
-  ) as ResourceCost;
-}
-
-function playerResources(player: Pick<AiPlayer, "gold" | "wood" | "ore" | "mercury" | "crystals" | "gems" | "sulfur">): Resources {
+  await updateExploration(supabase, context, destination);
   return {
-    gold: player.gold,
-    wood: player.wood,
-    ore: player.ore,
-    mercury: player.mercury,
-    crystals: player.crystals,
-    gems: player.gems ?? 0,
-    sulfur: player.sulfur,
+    moved: true,
+    hero: { ...hero, x: destination.x, y: destination.y, movement: nextMovement },
   };
 }
 
-function normalizeFaction(faction: string | undefined): Faction {
-  return faction && Object.values(Faction).includes(faction as Faction) ? (faction as Faction) : Faction.CASTLE;
+async function updateExploration(supabase: SupabaseAdmin, context: AiContext, destination: Position) {
+  const explored = new Set(context.explored);
+  const otherHeroes = (context.player.heroes ?? [])
+    .filter((hero) => hero.x !== destination.x || hero.y !== destination.y)
+    .map((hero) => ({ position: { x: hero.x, y: hero.y } }));
+  const visible = computeVisibleTiles(
+    context.map,
+    getPlayerVisionCenters({
+      heroes: [...otherHeroes, { position: destination }],
+      towns: context.player.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+    }),
+    5,
+  );
+  for (const key of visible) explored.add(key);
+  await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
 }
 
-function normalizeTownCenter(buildings: string[]) {
-  const centerBuildings = [BuildingType.VILLAGE_HALL, BuildingType.TOWN_HALL, BuildingType.CITY_HALL, BuildingType.CAPITOL];
-  const strongest = [...buildings]
-    .filter((building) => centerBuildings.includes(building as BuildingType))
-    .sort((a, b) => centerBuildings.indexOf(b as BuildingType) - centerBuildings.indexOf(a as BuildingType))[0];
-  return buildings.filter((building) => !centerBuildings.includes(building as BuildingType)).concat(strongest ?? BuildingType.VILLAGE_HALL);
+async function collectResource(supabase: SupabaseAdmin, context: AiContext, objective: AiObjective) {
+  const object = objective.object;
+  if (!object || context.collected.has(object.id)) return;
+
+  const resourceType = normalizeResource(object.subtype);
+  const amount = getResourcePileAmount(object);
+  const resources = playerResources(context.player);
+  const nextResources = { ...resources, [resourceType]: Number(resources[resourceType] ?? 0) + amount };
+  const nextCollected = Array.from(new Set([...context.collected, object.id]));
+
+  await supabase.from("game_players").update({
+    [resourceType]: nextResources[resourceType],
+  }).eq("id", context.player.id);
+  await supabase.from("games").update({
+    map_state: { ...context.mapState, collected: nextCollected },
+  }).eq("id", context.game.id);
 }
 
-function getResourcePileAmount(object: MapObject) {
-  const amount = Number(object.amount);
-  if (Number.isFinite(amount) && amount > 0) return amount;
+async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContext, hero: AiHero, objective: AiObjective) {
+  const object = objective.object;
+  const buildingType = object?.subtype as AdventureBuildingType | undefined;
+  if (!object || !buildingType) return;
 
-  switch (object.subtype) {
-    case "gold":
-      return 500;
-    case "wood":
-    case "ore":
-      return 5;
-    case "mercury":
-    case "crystals":
-    case "gems":
-    case "sulfur":
-      return 3;
-    default:
-      return 1;
+  if (buildingType === AdventureBuildingType.CAMPFIRE) {
+    const reward = createCampfireReward(makeRng(`${context.game.id}:${object.id}:${context.player.id}`));
+    const resources = playerResources(context.player);
+    const update: Partial<Resources> = { gold: resources.gold + reward.gold };
+    for (const [resource, amount] of Object.entries(reward.resources)) {
+      const key = resource as keyof Resources;
+      update[key] = Number(resources[key] ?? 0) + Number(amount ?? 0);
+    }
+    await supabase.from("game_players").update(update).eq("id", context.player.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...context.mapState,
+        visitedAdventureBuildings: Array.from(new Set([...context.visitedAdventureBuildings, object.id])),
+      },
+    }).eq("id", context.game.id);
+    return;
   }
+
+  if (buildingType === AdventureBuildingType.OBSERVATORY) {
+    const explored = new Set(context.explored);
+    for (const key of computeVisibleTiles(context.map, [objective.position], 20)) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+  }
+
+  if (buildingType === AdventureBuildingType.STARGATE) {
+    const target = findStargateDestination(context.map, object.targetId);
+    const landing = target ? findTeleportLanding(context.map, target) : null;
+    if (landing) {
+      await supabase.from("heroes").update({ x: landing.x, y: landing.y }).eq("id", hero.id);
+      const explored = new Set(context.explored);
+      for (const key of computeVisibleTiles(context.map, [landing], 5)) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+    }
+  }
+
+  await supabase.from("games").update({
+    map_state: {
+      ...context.mapState,
+      playerAdventureVisits: addVisit(context.playerAdventureVisits, context.player.id, object.id),
+    },
+  }).eq("id", context.game.id);
+}
+
+async function captureOrFightResourceBuilding(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const guardianPower = Number(objective.targetPower ?? 0);
+  if (guardianPower <= 0) {
+    await captureResourceBuilding(supabase, context, objective);
+    return { moved: true };
+  }
+
+  const defender = {
+    id: objective.id,
+    attack: 1,
+    defense: 1,
+    armies: createBuildingGuardStacks(objective.id, guardianPower),
+  };
+  const result = await resolveAiAutoCombat({
+    supabase,
+    attacker: hero,
+    defender,
+    experience: 150,
+    onAttackerWon: async () => captureResourceBuilding(supabase, context, objective),
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function captureResourceBuilding(supabase: SupabaseAdmin, context: AiContext, objective: AiObjective) {
+  await supabase.from("resource_buildings").update({
+    game_player_id: context.player.id,
+    guardian_power: 0,
+  }).eq("game_id", context.game.id).eq("id", objective.id);
+  await supabase.from("resource_buildings").update({
+    game_player_id: context.player.id,
+    guardian_power: 0,
+  }).eq("game_id", context.game.id).eq("x", objective.position.x).eq("y", objective.position.y);
+}
+
+async function fightNeutralArmy(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const army = (context.game.neutralArmies ?? []).find((item) =>
+    item.id === objective.id ||
+    (item.x === objective.position.x && item.y === objective.position.y)
+  );
+  const stacks = army?.stacks ?? createBuildingGuardStacks(objective.id, objective.targetPower);
+  const defender = {
+    id: army?.id ?? objective.id,
+    attack: 1,
+    defense: 1,
+    armies: stacks,
+  };
+
+  const result = await resolveAiAutoCombat({
+    supabase,
+    attacker: hero,
+    defender,
+    onAttackerWon: async () => {
+      if (army?.id) {
+        await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
+      }
+      await supabase.from("games").update({
+        map_state: {
+          ...context.mapState,
+          killed: Array.from(new Set([...context.killedNeutralArmies, objective.id])),
+        },
+      }).eq("id", context.game.id);
+    },
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function fightEnemyHero(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const defenderPlayer = context.game.players.find((player) => player.id === objective.targetPlayerId);
+  const defenderHero = defenderPlayer?.heroes.find((item) => item.id === objective.targetHeroId);
+  if (!defenderHero) return { moved: true };
+
+  const result = await resolveAiAutoCombat({
+    supabase,
+    attacker: hero,
+    defender: {
+      id: defenderHero.id,
+      attack: defenderHero.attack,
+      defense: defenderHero.defense,
+      armies: defenderHero.armies,
+    },
+    onAttackerWon: async () => {
+      await supabase.from("armies").delete().eq("hero_id", defenderHero.id);
+      await supabase.from("heroes").delete().eq("id", defenderHero.id);
+    },
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function captureOrFightNeutralTown(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const town = await findNeutralTown(supabase, context.game.id, objective.id, objective.position);
+  if (!town) return { moved: true };
+
+  const garrison = (town.neutral_garrison ?? []) as UnitStack[];
+  if (garrison.length === 0) {
+    await captureNeutralTown(supabase, town.id, context.player.id);
+    return { moved: true };
+  }
+
+  const targetPower = calculateStacksPower(garrison);
+  if (calculateHeroPower(hero) < targetPower * context.profile.neutralPowerRatio) return { moved: true };
+
+  const result = await resolveAiAutoCombat({
+    supabase,
+    attacker: hero,
+    defender: {
+      id: town.id,
+      attack: 1,
+      defense: 1,
+      armies: garrison,
+    },
+    experience: 250,
+    onAttackerWon: async () => captureNeutralTown(supabase, town.id, context.player.id),
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function findNeutralTown(supabase: SupabaseAdmin, gameId: string, townId: string, position: Position) {
+  const selectFields = "id,neutral_garrison";
+  const byId = await supabase
+    .from("towns")
+    .select(selectFields)
+    .eq("game_id", gameId)
+    .eq("id", townId)
+    .eq("is_neutral", true)
+    .maybeSingle();
+  if (byId.data) return byId.data as { id: string; neutral_garrison: UnitStack[] };
+
+  const byPosition = await supabase
+    .from("towns")
+    .select(selectFields)
+    .eq("game_id", gameId)
+    .eq("x", position.x)
+    .eq("y", position.y)
+    .eq("is_neutral", true)
+    .maybeSingle();
+  return byPosition.data as { id: string; neutral_garrison: UnitStack[] } | null;
+}
+
+async function captureNeutralTown(supabase: SupabaseAdmin, townId: string, playerId: string) {
+  await supabase.from("towns").update({
+    game_player_id: playerId,
+    is_neutral: false,
+    neutral_garrison: [],
+  }).eq("id", townId).eq("is_neutral", true);
+}
+
+function findStargateDestination(map: GameMap, targetId: string | undefined): Position | null {
+  if (!targetId) return null;
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "adventure_building" && tile.object.id === targetId) {
+        return { x: tile.x, y: tile.y };
+      }
+    }
+  }
+  return null;
+}
+
+function findTeleportLanding(map: GameMap, target: Position): Position | null {
+  const positions = [
+    target,
+    { x: target.x + 1, y: target.y },
+    { x: target.x - 1, y: target.y },
+    { x: target.x, y: target.y + 1 },
+    { x: target.x, y: target.y - 1 },
+  ];
+
+  for (const position of positions) {
+    const tile = map.tiles[position.y]?.[position.x];
+    if (isTileTraversable(tile)) return position;
+  }
+  return null;
+}
+
+function normalizeResource(resource: string | undefined): keyof Resources {
+  if (
+    resource === "wood" ||
+    resource === "ore" ||
+    resource === "mercury" ||
+    resource === "crystals" ||
+    resource === "gems" ||
+    resource === "sulfur"
+  ) {
+    return resource;
+  }
+  return "gold";
+}
+
+function isHeroInActiveCombat(game: AiGame, heroId: string) {
+  return (game.combats ?? []).some((combat) => {
+    if (combat.status !== "ACTIVE") return false;
+    if (combat.attackerHeroId === heroId || combat.defenderHeroId === heroId) return true;
+    return (combat.participants ?? []).some((participant) => participant.heroId === heroId);
+  });
 }
 
 function sleep(ms: number) {

@@ -36,6 +36,7 @@ import {
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
+import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -143,6 +144,7 @@ export async function POST(
     if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
     if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
     if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
+    if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
     const players = game.players as unknown as Array<{
       id: string;
@@ -306,6 +308,7 @@ export async function POST(
               .from("heroes")
               .update({ experience: hero.experience + 250 })
               .eq("id", hero.id);
+            await evaluateGameLifecycle(supabase, id);
             interaction = { type: "CAPTURE_TOWN", destination: lastPos };
           }
         }
@@ -428,6 +431,7 @@ export async function POST(
         .update(townOwnershipUpdate)
         .eq("id", town.id);
       await supabase.from("heroes").update({ experience: hero.experience + 250 }).eq("id", hero.id);
+      await evaluateGameLifecycle(supabase, id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useReportWebVitals } from "next/web-vitals";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
@@ -510,6 +510,7 @@ function UnitSprite({ unitType, side = "attacker", size = "sm" }: { unitType: Un
 }
 
 function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const fpsTone = stats.fps >= 50 ? "good" : stats.fps >= 30 ? "warn" : "bad";
   const frameTone = stats.worstFrameMs <= SLOW_FRAME_MS ? "good" : stats.worstFrameMs <= 55 ? "warn" : "bad";
   const droppedTone = stats.droppedFrames === 0 ? "good" : stats.droppedFrames <= 3 ? "warn" : "bad";
@@ -522,53 +523,132 @@ function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
     ? "n/a"
     : `${formatNumber(stats.heapUsedMb, 0)} / ${formatNumber(stats.heapLimitMb ?? 0, 0)} MB`;
   const vitalNames = ["LCP", "INP", "CLS", "FCP", "TTFB"];
+  const showTooltip = (text: string) => (event: SyntheticEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 260;
+    const x = Math.min(Math.max(12, rect.left), window.innerWidth - tooltipWidth - 12);
+    const y = rect.top > 88 ? rect.top - 8 : rect.bottom + 8;
+
+    setTooltip({ text, x, y });
+  };
 
   return (
-    <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label="Performances">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">Performances</div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">live</div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <DevPerformanceStat label="FPS" value={fpsText} tone={stats.hasFrameSample ? fpsTone : "idle"} />
-        <DevPerformanceStat label="Frame" value={avgFrameText} tone={stats.hasFrameSample ? frameTone : "idle"} />
-        <DevPerformanceStat label="Pic" value={worstFrameText} tone={stats.hasFrameSample ? frameTone : "idle"} />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <DevPerformanceStat label="Saccades" value={droppedText} tone={stats.hasFrameSample ? droppedTone : "idle"} />
-        <DevPerformanceStat label="Taches/s" value={longTaskRateText} tone={!stats.hasFrameSample ? "idle" : stats.longTasks === 0 ? "good" : "warn"} />
-      </div>
-      <div className="flex items-center justify-between gap-3 rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2">
-        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Total taches &gt;50ms</span>
-        <span className="font-mono text-[11px] font-bold text-amber-100">
-          {stats.longTaskTotal} ({formatNumber(stats.longTaskTotalMs, 0)} ms)
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-3 rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2">
-        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Memoire JS</span>
-        <span className="font-mono text-[11px] font-bold text-amber-100">{memoryText}</span>
-      </div>
-      <div className="space-y-1.5">
-        <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Web Vitals</div>
-        <div className="grid grid-cols-5 gap-1.5">
-          {vitalNames.map((name) => {
-            const vital = stats.vitals[name];
-            return (
-              <div
-                key={name}
-                className={`rounded-md border px-1.5 py-1 text-center ${getVitalToneClasses(vital?.rating)}`}
-                title={vital ? `${name} ${formatWebVitalValue(name, vital.value)} (${vital.rating ?? "n/a"})` : `${name} en attente`}
-              >
-                <div className="text-[9px] font-black uppercase leading-none">{name}</div>
-                <div className="mt-1 font-mono text-[10px] font-bold leading-none">
-                  {vital ? formatWebVitalValue(name, vital.value) : "--"}
-                </div>
-              </div>
-            );
-          })}
+    <>
+      <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label="Performances">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">Performances</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">live</div>
         </div>
-      </div>
-    </section>
+        <div className="grid grid-cols-3 gap-2">
+          <DevPerformanceStat
+            label="FPS"
+            value={fpsText}
+            tone={stats.hasFrameSample ? fpsTone : "idle"}
+            description="Images par seconde estimées sur la dernière seconde. Viser 60; sous 30, le jeu paraît saccadé."
+            onTooltip={showTooltip}
+            onTooltipClose={() => setTooltip(null)}
+          />
+          <DevPerformanceStat
+            label="Frame"
+            value={avgFrameText}
+            tone={stats.hasFrameSample ? frameTone : "idle"}
+            description="Temps moyen entre deux frames. Environ 16,7 ms correspond à 60 FPS; 33 ms correspond à 30 FPS."
+            onTooltip={showTooltip}
+            onTooltipClose={() => setTooltip(null)}
+          />
+          <DevPerformanceStat
+            label="Pic"
+            value={worstFrameText}
+            tone={stats.hasFrameSample ? frameTone : "idle"}
+            description="Frame la plus lente de l'échantillon. Les pics hauts indiquent un blocage ponctuel du rendu."
+            onTooltip={showTooltip}
+            onTooltipClose={() => setTooltip(null)}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <DevPerformanceStat
+            label="Saccades"
+            value={droppedText}
+            tone={stats.hasFrameSample ? droppedTone : "idle"}
+            description="Frames perdues estimées par seconde quand une frame dépasse 34 ms."
+            onTooltip={showTooltip}
+            onTooltipClose={() => setTooltip(null)}
+          />
+          <DevPerformanceStat
+            label="Tâches/s"
+            value={longTaskRateText}
+            tone={!stats.hasFrameSample ? "idle" : stats.longTasks === 0 ? "good" : "warn"}
+            description="Long tasks détectées sur le thread principal par seconde. Chaque tâche dépasse 50 ms."
+            onTooltip={showTooltip}
+            onTooltipClose={() => setTooltip(null)}
+          />
+        </div>
+        <DevPerformanceRow
+          label="Total tâches >50ms"
+          value={`${stats.longTaskTotal} (${formatNumber(stats.longTaskTotalMs, 0)} ms)`}
+          description="Cumul des long tasks depuis l'ouverture du panneau. Utile pour repérer les blocages persistants."
+          onTooltip={showTooltip}
+          onTooltipClose={() => setTooltip(null)}
+        />
+        <DevPerformanceRow
+          label="Mémoire JS"
+          value={memoryText}
+          description="Mémoire JavaScript utilisée par la page, puis limite disponible dans le navigateur."
+          onTooltip={showTooltip}
+          onTooltipClose={() => setTooltip(null)}
+        />
+        <div className="space-y-1.5">
+          <div
+            className="cursor-help text-[10px] font-black uppercase tracking-wider text-amber-300/70"
+            onPointerEnter={showTooltip("Mesures Web Vitals remontées par Next.js. Elles aident à suivre le chargement, la réactivité et la stabilité visuelle.")}
+            onPointerLeave={() => setTooltip(null)}
+            onFocus={showTooltip("Mesures Web Vitals remontées par Next.js. Elles aident à suivre le chargement, la réactivité et la stabilité visuelle.")}
+            onBlur={() => setTooltip(null)}
+            tabIndex={0}
+          >
+            Web Vitals
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {vitalNames.map((name) => {
+              const vital = stats.vitals[name];
+              const description = getWebVitalDescription(name);
+              const valueText = vital ? formatWebVitalValue(name, vital.value) : "--";
+              const ratingText = vital ? ` Note actuelle: ${formatWebVitalRating(vital.rating)}.` : "";
+
+              return (
+                <div
+                  key={name}
+                  className={`cursor-help rounded-md border px-1.5 py-1 text-center ${getVitalToneClasses(vital?.rating)}`}
+                  aria-label={description}
+                  onPointerEnter={showTooltip(`${description}${ratingText}`)}
+                  onPointerLeave={() => setTooltip(null)}
+                  onFocus={showTooltip(`${description}${ratingText}`)}
+                  onBlur={() => setTooltip(null)}
+                  tabIndex={0}
+                >
+                  <div className="text-[9px] font-black uppercase leading-none">{name}</div>
+                  <div className="mt-1 font-mono text-[10px] font-bold leading-none">
+                    {valueText}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+      {tooltip && (
+        <div
+          className="pointer-events-none fixed z-[100] w-[260px] rounded-md border border-amber-500/55 bg-stone-950/98 px-2.5 py-2 text-[11px] font-semibold leading-snug text-amber-100 shadow-xl shadow-black/60"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: tooltip.y > 96 ? "translateY(-100%)" : undefined,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -576,10 +656,16 @@ function DevPerformanceStat({
   label,
   value,
   tone,
+  description,
+  onTooltip,
+  onTooltipClose,
 }: {
   label: string;
   value: string;
   tone: "good" | "warn" | "bad" | "idle";
+  description: string;
+  onTooltip: (text: string) => (event: SyntheticEvent<HTMLElement>) => void;
+  onTooltipClose: () => void;
 }) {
   const toneClass = tone === "good"
     ? "border-emerald-500/35 text-emerald-100"
@@ -590,9 +676,46 @@ function DevPerformanceStat({
         : "border-amber-900/45 text-amber-200/70";
 
   return (
-    <div className={`rounded-md border bg-black/30 px-2 py-1.5 ${toneClass}`}>
+    <div
+      className={`cursor-help rounded-md border bg-black/30 px-2 py-1.5 ${toneClass}`}
+      aria-label={description}
+      onPointerEnter={onTooltip(description)}
+      onPointerLeave={onTooltipClose}
+      onFocus={onTooltip(description)}
+      onBlur={onTooltipClose}
+      tabIndex={0}
+    >
       <div className="text-[9px] font-black uppercase tracking-wider opacity-70">{label}</div>
       <div className="mt-1 font-mono text-[11px] font-bold leading-none">{value}</div>
+    </div>
+  );
+}
+
+function DevPerformanceRow({
+  label,
+  value,
+  description,
+  onTooltip,
+  onTooltipClose,
+}: {
+  label: string;
+  value: string;
+  description: string;
+  onTooltip: (text: string) => (event: SyntheticEvent<HTMLElement>) => void;
+  onTooltipClose: () => void;
+}) {
+  return (
+    <div
+      className="flex cursor-help items-center justify-between gap-3 rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2"
+      aria-label={description}
+      onPointerEnter={onTooltip(description)}
+      onPointerLeave={onTooltipClose}
+      onFocus={onTooltip(description)}
+      onBlur={onTooltipClose}
+      tabIndex={0}
+    >
+      <span className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">{label}</span>
+      <span className="font-mono text-[11px] font-bold text-amber-100">{value}</span>
     </div>
   );
 }
@@ -613,6 +736,25 @@ function getVitalToneClasses(rating: string | undefined) {
   if (rating === "poor") return "border-red-500/40 bg-red-950/25 text-red-100";
   if (rating === "needs-improvement") return "border-amber-500/45 bg-amber-950/25 text-amber-100";
   return "border-amber-900/45 bg-black/25 text-amber-200/70";
+}
+
+function getWebVitalDescription(name: string) {
+  const descriptions: Record<string, string> = {
+    LCP: "Largest Contentful Paint: temps d'affichage du plus gros élément visible. Bon sous 2,5 s.",
+    INP: "Interaction to Next Paint: latence des interactions utilisateur. Bon sous 200 ms.",
+    CLS: "Cumulative Layout Shift: stabilité visuelle de la page. Bon sous 0,1.",
+    FCP: "First Contentful Paint: premier contenu visible rendu à l'écran. Bon sous 1,8 s.",
+    TTFB: "Time To First Byte: délai avant le premier octet de réponse. Bon sous 800 ms.",
+  };
+
+  return descriptions[name] ?? name;
+}
+
+function formatWebVitalRating(rating: string | undefined) {
+  if (rating === "good") return "bonne";
+  if (rating === "needs-improvement") return "à améliorer";
+  if (rating === "poor") return "mauvaise";
+  return "n/a";
 }
 
 function TownTabButton({
@@ -787,7 +929,9 @@ function HUDContent() {
     (player) => player.userId === session?.user?.id
   );
   const isPending = gameState.status === "PENDING";
-  const hasActiveCombats = (gameState.activeCombats?.length ?? 0) > 0;
+  const hasActiveCombats = (gameState.activeCombats ?? []).some((combat) =>
+    myPlayer ? combatInvolvesPlayer(combat, myPlayer.id) : false
+  );
   const canAct = Boolean(
     myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
   );
@@ -796,12 +940,11 @@ function HUDContent() {
   );
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
-  const allHeroes = gameState.players.flatMap((p) => p.heroes);
   const allTowns = gameState.players.flatMap((p) => p.towns);
 
-  const selectedHero = allHeroes.find((h) => h.id === selectedHeroId);
+  const selectedHero = myPlayer?.heroes.find((h) => h.id === selectedHeroId);
 
-  const selectedTown = allTowns.find((t) => t.id === selectedTownId);
+  const selectedTown = myPlayer?.towns.find((t) => t.id === selectedTownId);
 
   const selectedTownOwner = gameState.players.find((p) =>
     p.towns.some((town) => town.id === selectedTownId)
@@ -1346,12 +1489,14 @@ function HUDContent() {
             {!isPending && (
               <span
                 className={`inline-flex max-w-[19rem] items-center gap-2 rounded-full border px-5 py-2 text-sm font-black uppercase tracking-widest shadow-[inset_0_0_0_1px_rgba(0,0,0,0.4)] ${
-                  canAct
+                  myPlayer?.isAlive === false
+                    ? "border-stone-400/50 bg-gradient-to-b from-stone-700/70 to-stone-950 text-stone-100"
+                    : canAct
                     ? "border-emerald-300/60 bg-gradient-to-b from-emerald-700/70 to-emerald-950 text-emerald-50"
                     : "border-red-400/40 bg-gradient-to-b from-red-900/60 to-red-950 text-red-100"
                 }`}
               >
-                {canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
+                {myPlayer?.isAlive === false ? "Défaite" : canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
               </span>
             )}
           </div>
@@ -1483,7 +1628,7 @@ function HUDContent() {
       )}
 
       {showDevPanel && (
-        <div className="pointer-events-auto absolute bottom-4 left-3 z-50 max-h-[calc(100vh-2rem)] w-80 overflow-y-auto rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
+        <div className="pointer-events-auto absolute bottom-[4.75rem] left-3 z-50 max-h-[calc(100vh-5.75rem)] w-80 overflow-y-auto rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
           <div className="flex items-center justify-between gap-3">
             <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
             <button
@@ -1504,7 +1649,7 @@ function HUDContent() {
               onClick={() => void setDevReveal(true)}
               disabled={devRevealMap}
             >
-              {devRevealMap ? "Brouillard supprime" : "Supprimer le brouillard"}
+              {devRevealMap ? "Brouillard supprimé" : "Supprimer le brouillard"}
             </button>
             <button
               type="button"

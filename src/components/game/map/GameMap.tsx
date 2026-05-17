@@ -134,7 +134,7 @@ export default function GameMapComponent() {
       renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap));
 
       // Fog of war
-      if (activeCombat || devRevealMap) {
+      if (activeCombat || devRevealMap || currentPlayer?.isAlive === false) {
         const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
         renderer.setFog(allTiles, allTiles);
       } else if (currentPlayer) {
@@ -156,7 +156,7 @@ export default function GameMapComponent() {
         const centerTarget = gameState.status === "PENDING" ? firstTown : firstHero;
         if (centerTarget) {
           renderer.centerOnTile(centerTarget.position.x, centerTarget.position.y);
-          if (gameState.status !== "PENDING" && firstHero) {
+          if (gameState.status !== "PENDING" && firstHero && currentPlayer?.isAlive !== false) {
             useGameStore.getState().selectHero(firstHero.id);
           }
         }
@@ -262,6 +262,8 @@ export default function GameMapComponent() {
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
     );
+    if (currentPlayer?.isAlive === false) return;
+
     const firstHero = currentPlayer?.heroes.find((hero) => !activeCombatHeroIds.has(hero.id));
     if (!firstHero) return;
 
@@ -610,7 +612,7 @@ export default function GameMapComponent() {
       if (!selectedObject) return;
 
       const obj = selectedObject;
-      if (obj.type === "town" && selectedHeroId && e.detail >= 2) {
+      if (obj.type === "town" && selectedHeroId && e.detail >= 2 && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
@@ -621,6 +623,7 @@ export default function GameMapComponent() {
       if (obj.type === "combat") {
         const combat = gameState.activeCombats?.find((item) => item.id === obj.id);
         if (!combat) return;
+        const isCombatOpenable = myPlayer?.isAlive === false || combat.visibility !== "joinable_summary";
         if (selectedHeroId && myPlayer) {
           const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
           if (!hero) return;
@@ -629,7 +632,7 @@ export default function GameMapComponent() {
             pendingAttackRef.current = null;
             rendererRef.current.clearHighlights();
             if (getCombatHeroIds(combat).has(hero.id)) {
-              setActiveCombat(combat);
+              if (isCombatOpenable) setActiveCombat(combat);
             } else {
               setCombatMessage("Ce heros est deja engage dans un combat.");
             }
@@ -673,7 +676,11 @@ export default function GameMapComponent() {
           setPendingJoinCombat({ combatId: combat.id, heroId: selectedHeroId, side: inferredSide });
           return;
         }
-        setActiveCombat(combat);
+        if (isCombatOpenable) {
+          setActiveCombat(combat);
+        } else {
+          setCombatMessage("Selectionnez un heros pour rejoindre ce combat.");
+        }
         return;
       }
       const isEnemyHero =
@@ -1067,12 +1074,12 @@ export default function GameMapComponent() {
         return;
       }
 
-      if (obj.type === "hero") {
+      if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
         selectHero(obj.id);
-      } else if (obj.type === "town") {
+      } else if (obj.type === "town" && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
@@ -1474,7 +1481,7 @@ function getMapRenderKey(map: NonNullable<ReturnType<typeof useGameStore.getStat
 
 function buildObjects(
   gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
-  currentPlayer: { id: string; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined,
+  currentPlayer: { id: string; isAlive?: boolean; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined,
   revealMap = false
 ): MapObjectData[] {
   const objects: MapObjectData[] = [];
@@ -1488,7 +1495,7 @@ function buildObjects(
     }
   }
 
-  if (revealMap) {
+  if (revealMap || currentPlayer?.isAlive === false) {
     for (let y = 0; y < gameState.map.height; y++) {
       for (let x = 0; x < gameState.map.width; x++) {
         const key = `${x},${y}`;
@@ -1523,7 +1530,7 @@ function buildObjects(
     if (gameState.status !== "PENDING") {
       for (const hero of player.heroes) {
         const key = `${hero.position.x},${hero.position.y}`;
-        if (!isCurrentPlayer && !visiblePositions.has(key)) continue;
+        if (!isCurrentPlayer && currentPlayer?.isAlive !== false && !visiblePositions.has(key)) continue;
         const townHeroes = heroesByTown.get(key) ?? [];
         const townHeroIndex = townHeroes.findIndex((item) => item.id === hero.id);
         const townHeroOffset = townHeroIndex >= 0
@@ -1548,7 +1555,7 @@ function buildObjects(
     for (const town of player.towns) {
       const key = `${town.position.x},${town.position.y}`;
       // Show own towns always, enemy towns only if explored
-      if (!isCurrentPlayer && !exploredSet.has(key)) continue;
+      if (!isCurrentPlayer && currentPlayer?.isAlive !== false && !exploredSet.has(key)) continue;
       objects.push({
         type: "town",
         id: town.id,
@@ -1667,7 +1674,7 @@ function buildObjects(
       const combatId = heroCombatIds.get(hero.id);
       if (!combatId) continue;
       const key = `${hero.position.x},${hero.position.y}`;
-      if (!isCurrentPlayer && !visiblePositions.has(key) && !exploredSet.has(key)) continue;
+      if (!isCurrentPlayer && currentPlayer?.isAlive !== false && !visiblePositions.has(key) && !exploredSet.has(key)) continue;
       objects.push({
         type: "combat",
         id: combatId,

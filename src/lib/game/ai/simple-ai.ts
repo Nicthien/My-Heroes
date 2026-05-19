@@ -130,8 +130,11 @@ async function moveHeroToObjective(
 ): Promise<{ moved: boolean; hero: AiHero }> {
   const destination = objective.path[objective.path.length - 1];
   const usedMovement = getAdventurePathCost(context.map, objective.path);
-  if (!destination || objective.path.length <= 1 || !Number.isFinite(usedMovement) || usedMovement <= 0 || usedMovement > hero.movement) {
+  if (!destination || objective.path.length < 1 || !Number.isFinite(usedMovement) || usedMovement > hero.movement) {
     return { moved: false, hero };
+  }
+  if (destination.x === hero.x && destination.y === hero.y) {
+    return { moved: true, hero };
   }
 
   const nextMovement = getUsableAdventureMovement(context.map, destination, hero.movement - usedMovement);

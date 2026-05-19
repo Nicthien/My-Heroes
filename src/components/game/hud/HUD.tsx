@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useReportWebVitals } from "next/web-vitals";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
@@ -53,12 +53,17 @@ const RESOURCE_ITEMS = [
 
 const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
+const DEV_PANEL_COLLAPSED_KEY = "my-heroes:dev-panel-collapsed";
+const DEV_PANEL_POSITION_KEY = "my-heroes:dev-panel-position";
+const DEV_PANEL_DEFAULT_POSITION = { x: 12, y: 112 };
+const DEV_PANEL_MARGIN = 12;
 const PERFORMANCE_SAMPLE_MS = 1000;
 const SLOW_FRAME_MS = 34;
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
 type ReportWebVitalsCallback = Parameters<typeof useReportWebVitals>[0];
+type DevPanelPosition = { x: number; y: number };
 type DevWebVital = {
   name: string;
   value: number;
@@ -109,6 +114,46 @@ function getNotificationPromptDismissed() {
 function getDevPanelVisible() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_PANEL_VISIBLE_KEY) === "true";
+}
+
+function getDevPanelCollapsed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DEV_PANEL_COLLAPSED_KEY) === "true";
+}
+
+function clampDevPanelPosition(
+  position: DevPanelPosition,
+  size = { width: 320, height: 56 }
+): DevPanelPosition {
+  if (typeof window === "undefined") return position;
+  const maxX = Math.max(DEV_PANEL_MARGIN, window.innerWidth - size.width - DEV_PANEL_MARGIN);
+  const maxY = Math.max(DEV_PANEL_MARGIN, window.innerHeight - size.height - DEV_PANEL_MARGIN);
+
+  return {
+    x: Math.min(Math.max(DEV_PANEL_MARGIN, position.x), maxX),
+    y: Math.min(Math.max(DEV_PANEL_MARGIN, position.y), maxY),
+  };
+}
+
+function getDevPanelPosition(): DevPanelPosition {
+  if (typeof window === "undefined") return DEV_PANEL_DEFAULT_POSITION;
+  const savedPosition = window.localStorage.getItem(DEV_PANEL_POSITION_KEY);
+  if (!savedPosition) return clampDevPanelPosition(DEV_PANEL_DEFAULT_POSITION);
+
+  try {
+    const parsed = JSON.parse(savedPosition) as Partial<DevPanelPosition>;
+    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") {
+      return clampDevPanelPosition(DEV_PANEL_DEFAULT_POSITION);
+    }
+    return clampDevPanelPosition({ x: parsed.x, y: parsed.y });
+  } catch {
+    return clampDevPanelPosition(DEV_PANEL_DEFAULT_POSITION);
+  }
+}
+
+function saveDevPanelPosition(position: DevPanelPosition) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DEV_PANEL_POSITION_KEY, JSON.stringify(position));
 }
 
 async function showBrowserNotification(title: string, options: NotificationOptions) {
@@ -899,6 +944,8 @@ function HUDContent() {
   );
   const [showDevPassword, setShowDevPassword] = useState(false);
   const [showDevPanel, setShowDevPanel] = useState(getDevPanelVisible);
+  const [devPanelCollapsed, setDevPanelCollapsed] = useState(getDevPanelCollapsed);
+  const [devPanelPosition, setDevPanelPosition] = useState(getDevPanelPosition);
   const [devPassword, setDevPassword] = useState("");
   const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
@@ -913,6 +960,14 @@ function HUDContent() {
   const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   const devPerformanceStats = useDevPerformanceStats(showDevPanel);
   const lastNotifiedTurnRef = useRef<string | null>(null);
+  const devPanelRef = useRef<HTMLDivElement | null>(null);
+  const devPanelDragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    latestPosition: DevPanelPosition;
+  } | null>(null);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
@@ -1310,6 +1365,63 @@ function HUDContent() {
     }
   };
 
+  const setDevPanelCollapse = (collapsed: boolean) => {
+    setDevPanelCollapsed(collapsed);
+    if (typeof window === "undefined") return;
+    if (collapsed) {
+      window.localStorage.setItem(DEV_PANEL_COLLAPSED_KEY, "true");
+    } else {
+      window.localStorage.removeItem(DEV_PANEL_COLLAPSED_KEY);
+    }
+  };
+
+  const getDevPanelSize = useCallback(() => {
+    const panel = devPanelRef.current;
+    return {
+      width: panel?.offsetWidth ?? 320,
+      height: panel?.offsetHeight ?? (devPanelCollapsed ? 56 : 520),
+    };
+  }, [devPanelCollapsed]);
+
+  const handleDevPanelPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    devPanelDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: devPanelPosition.x,
+      originY: devPanelPosition.y,
+      latestPosition: devPanelPosition,
+    };
+  };
+
+  const handleDevPanelPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = devPanelDragRef.current;
+    if (!drag) return;
+
+    const nextPosition = clampDevPanelPosition(
+      {
+        x: drag.originX + event.clientX - drag.startX,
+        y: drag.originY + event.clientY - drag.startY,
+      },
+      getDevPanelSize()
+    );
+
+    drag.latestPosition = nextPosition;
+    setDevPanelPosition(nextPosition);
+  };
+
+  const stopDevPanelDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = devPanelDragRef.current;
+    if (!drag) return;
+    devPanelDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    saveDevPanelPosition(drag.latestPosition);
+  };
+
   const unlockDevPanel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (devPassword === "godmode") {
@@ -1365,6 +1477,24 @@ function HUDContent() {
       body: "C'est à vous de jouer.",
     });
   }, [canAct, isPending, notificationPermission, turnNotificationKey]);
+
+  useEffect(() => {
+    if (!showDevPanel) return;
+    if (typeof window === "undefined") return;
+
+    const clampPosition = () => {
+      setDevPanelPosition((current) => {
+        const nextPosition = clampDevPanelPosition(current, getDevPanelSize());
+        saveDevPanelPosition(nextPosition);
+        return nextPosition;
+      });
+    };
+
+    clampPosition();
+    window.addEventListener("resize", clampPosition);
+
+    return () => window.removeEventListener("resize", clampPosition);
+  }, [showDevPanel, getDevPanelSize]);
 
   const selectedTownFaction = selectedTown
     ? (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction)
@@ -1626,21 +1756,62 @@ function HUDContent() {
       )}
 
       {showDevPanel && (
-        <div className="pointer-events-auto absolute bottom-[4.75rem] left-3 z-50 max-h-[calc(100vh-5.75rem)] w-80 overflow-y-auto rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
-          <div className="flex items-center justify-between gap-3">
-            <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+        <div
+          ref={devPanelRef}
+          className="pointer-events-auto absolute z-50 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-amber-500/60 bg-stone-950/95 text-amber-100 shadow-2xl shadow-black/70"
+          style={{
+            left: devPanelPosition.x,
+            top: devPanelPosition.y,
+            maxHeight: "calc(100vh - 1.5rem)",
+          }}
+        >
+          <div
+            className="flex cursor-move touch-none items-center justify-between gap-3 px-4 py-3"
+            onPointerDown={handleDevPanelPointerDown}
+            onPointerMove={handleDevPanelPointerMove}
+            onPointerUp={stopDevPanelDrag}
+            onPointerCancel={stopDevPanelDrag}
+          >
+            <div className={`min-w-0 truncate text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-amber-200 transition hover:border-amber-300"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setDevPanelCollapse(!devPanelCollapsed)}
+                aria-expanded={!devPanelCollapsed}
+                aria-label={devPanelCollapsed ? "Deplier le mode DEV" : "Replier le mode DEV"}
+                title={devPanelCollapsed ? "Deplier" : "Replier"}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`h-4 w-4 transition ${devPanelCollapsed ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
             <button
               type="button"
               className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-sm font-black text-amber-200 transition hover:border-amber-300"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setDevPanelVisibility(false)}
               aria-label="Fermer le mode DEV"
             >
               X
             </button>
+            </div>
           </div>
-          <div className={goldDivider + " my-3"} />
-          <DevPerformancePanel stats={devPerformanceStats} />
-          <div className="mt-3 space-y-2">
+          {!devPanelCollapsed && (
+            <div className="max-h-[calc(100vh-6rem)] overflow-y-auto px-4 pb-4">
+              <div className={goldDivider + " mb-3"} />
+              <DevPerformancePanel stats={devPerformanceStats} />
+              <div className="mt-3 space-y-2">
             <button
               type="button"
               className="w-full rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300 disabled:cursor-default disabled:border-emerald-400/50 disabled:bg-emerald-900/70 disabled:text-emerald-100"
@@ -1657,6 +1828,14 @@ function HUDContent() {
               Remettre le brouillard
             </button>
             <a
+              href="/dev/map-showcase"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
+            >
+              Showcase carte
+            </a>
+            <a
               href="/dev/sprites"
               target="_blank"
               rel="noopener noreferrer"
@@ -1664,7 +1843,9 @@ function HUDContent() {
             >
               Galerie des sprites
             </a>
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

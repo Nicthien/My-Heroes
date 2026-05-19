@@ -17,8 +17,10 @@ export interface MapObjectData {
   guardianPower?: number;
 }
 
+export type RendererLoadingProgress = (progress: number, message?: string) => void;
+
 export interface MapRenderer {
-  init(container: HTMLDivElement): Promise<void>;
+  init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress): Promise<void>;
   isReady(): boolean;
   renderMap(map: GameMap): void;
   setObjects(objects: MapObjectData[]): void;

@@ -125,8 +125,16 @@ function cloneGameMap(map: GameMap) {
   return structuredClone(map);
 }
 
+function shouldAlwaysKeepTileObject(object: MapTile["object"] | undefined) {
+  return object?.type === "wall";
+}
+
 export function getCachedStaticGameMap(gameId: string) {
   return staticGameMaps.get(gameId) ?? null;
+}
+
+export function setCachedStaticGameMap(gameId: string, map: GameMap) {
+  staticGameMaps.set(gameId, normalizeMapMovement(cloneGameMap(map)));
 }
 
 function getCompletedTurnPlayerIds(data: Record<string, unknown>, turnNumber: number) {
@@ -353,7 +361,7 @@ function applyDynamicMapState(
           if (!isExplored) {
             delete tile.object;
           }
-        } else if (!isExplored) {
+        } else if (!isExplored && !shouldAlwaysKeepTileObject(object)) {
           delete tile.object;
         }
       }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { runAiCombatTurns } from "@/lib/game/ai/combat-runner";
-import { executeManualCombatAction, getHexDistance, getHexNeighbors, isTerrainBlocked } from "@/lib/game/combat/persistent";
+import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -62,6 +62,9 @@ export async function POST(
 
   const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
+  const currentActorIsAi = currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId
+    ? await isAiGamePlayer(supabase, id, currentActor.ownerPlayerId)
+    : false;
   const expectedCurrentUnitId = typeof action.expectedCurrentUnitId === "string" ? action.expectedCurrentUnitId : null;
   const expectedRound = Number(action.expectedRound);
   const expectedActionLogLength = Number(action.expectedActionLogLength);
@@ -79,7 +82,7 @@ export async function POST(
     });
   }
 
-  if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId) {
+  if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId && !currentActorIsAi) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
   if (!currentActor && combat.current_player_id && combat.current_player_id !== gamePlayerId) {
@@ -93,6 +96,7 @@ export async function POST(
     round: combat.round ?? 1,
     currentUnitId: combat.current_unit_id,
     playerAction: currentActor?.ownerPlayerId === gamePlayerId ? action : null,
+    allowAutomatedAction: Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorIsAi)),
     attackerStats: { attack: attackerHero.attack, defense: attackerHero.defense },
     defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
   });
@@ -125,10 +129,6 @@ export async function POST(
     await evaluateGameLifecycle(supabase, id);
   }
   const mapped = toCombat(data);
-  if (!result) {
-    const afterAi = await runAiCombatTurns(supabase, id, combatId);
-    return NextResponse.json({ combat: afterAi ?? mapped, result: afterAi?.result ?? null });
-  }
   return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
 }
 
@@ -143,6 +143,17 @@ function combatInvolvesPlayer(
   );
 }
 
+async function isAiGamePlayer(supabase: ReturnType<typeof createAdminClient>, gameId: string, playerId: string) {
+  const { data, error } = await supabase
+    .from("game_players")
+    .select("is_ai")
+    .eq("game_id", gameId)
+    .eq("id", playerId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.is_ai);
+}
+
 function executeActionThenNeutralTurns(params: {
   units: CombatBoardUnit[];
   terrain: CombatTerrainFeature[];
@@ -150,6 +161,7 @@ function executeActionThenNeutralTurns(params: {
   round: number;
   currentUnitId: string | null;
   playerAction: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string } | null;
+  allowAutomatedAction: boolean;
   attackerStats: { attack: number; defense: number };
   defenderStats: { attack: number; defense: number };
 }) {
@@ -160,48 +172,37 @@ function executeActionThenNeutralTurns(params: {
   let currentPlayerId = units.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
   let result: "attacker" | "defender" | null = null;
   const log: string[] = [];
-  const maxSteps = 30;
 
-  for (let step = 0; step < maxSteps; step++) {
-    const actor = units.find((unit) => unit.id === currentUnitId);
-    const action = step === 0 && params.playerAction
-      ? params.playerAction
-      : actor?.ownerPlayerId === null
-        ? chooseNeutralAction(actor, units, params.terrain)
-        : null;
+  const actor = units.find((unit) => unit.id === currentUnitId);
+  const action = params.playerAction
+    ? params.playerAction
+    : params.allowAutomatedAction && actor
+      ? chooseNeutralAction(actor, units, params.terrain)
+      : null;
 
-    if (!actor || !action) {
-      currentPlayerId = actor?.ownerPlayerId ?? null;
-      break;
-    }
-
-    const execution = executeManualCombatAction({
-      units,
-      terrain: params.terrain,
-      turnQueue,
-      round,
-      currentUnitId,
-      action,
-      attackerStats: params.attackerStats,
-      defenderStats: params.defenderStats,
-    });
-
-    units = execution.units;
-    turnQueue = execution.turnQueue;
-    round = execution.round;
-    currentUnitId = execution.currentUnitId;
-    currentPlayerId = execution.currentPlayerId;
-    result = execution.result;
-    log.push(...execution.log);
-
-    if (result) break;
-
-    const nextActor = units.find((unit) => unit.id === currentUnitId);
-    if (!nextActor || nextActor.ownerPlayerId !== null) {
-      currentPlayerId = nextActor?.ownerPlayerId ?? null;
-      break;
-    }
+  if (!actor || !action) {
+    currentPlayerId = actor?.ownerPlayerId ?? null;
+    return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log };
   }
+
+  const execution = executeManualCombatAction({
+    units,
+    terrain: params.terrain,
+    turnQueue,
+    round,
+    currentUnitId,
+    action,
+    attackerStats: params.attackerStats,
+    defenderStats: params.defenderStats,
+  });
+
+  units = execution.units;
+  turnQueue = execution.turnQueue;
+  round = execution.round;
+  currentUnitId = execution.currentUnitId;
+  currentPlayerId = execution.currentPlayerId;
+  result = execution.result;
+  log.push(...execution.log);
 
   return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log };
 }
@@ -223,35 +224,13 @@ function chooseNeutralAction(
   const closest = [...enemies].sort((a, b) => getHexDistance(actor, a) - getHexDistance(actor, b))[0];
   if (!closest) return { type: "DEFEND" };
 
-  const destination = reachableCells(actor, units, terrain)
+  const approach = findMeleeApproach(actor, closest, units, terrain);
+  if (approach) return { type: "ATTACK", targetUnitId: closest.id };
+
+  const destination = getReachableCombatCells(actor, units, terrain)
     .sort((a, b) => getHexDistance(a, closest) - getHexDistance(b, closest))[0];
 
   return destination ? { type: "MOVE", q: destination.q, r: destination.r } : { type: "DEFEND" };
-}
-
-function reachableCells(
-  actor: CombatBoardUnit,
-  units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[]
-): { q: number; r: number }[] {
-  const occupied = new Set(units.filter((u) => u.id !== actor.id).map((u) => `${u.q},${u.r}`));
-  const visited = new Set<string>([`${actor.q},${actor.r}`]);
-  const queue: { q: number; r: number; dist: number }[] = [{ q: actor.q, r: actor.r, dist: 0 }];
-  const cells: { q: number; r: number }[] = [];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current.dist >= actor.speed) continue;
-    for (const nb of getHexNeighbors(current.q, current.r)) {
-      const key = `${nb.q},${nb.r}`;
-      if (visited.has(key) || isTerrainBlocked(nb.q, nb.r, terrain) || occupied.has(key)) continue;
-      visited.add(key);
-      cells.push(nb);
-      queue.push({ ...nb, dist: current.dist + 1 });
-    }
-  }
-
-  return cells;
 }
 
 function buildManualCombatResult(

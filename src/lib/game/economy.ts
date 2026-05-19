@@ -45,37 +45,37 @@ export const RESOURCE_BUILDING_RULES: ResourceBuildingRule[] = [
   {
     type: ResourceBuildingType.SAWMILL,
     label: "Scierie",
-    production: { wood: 5 },
+    production: { wood: 2 },
     guardianBasePower: 200,
   },
   {
     type: ResourceBuildingType.ORE_PIT,
     label: "Mine de minerai",
-    production: { ore: 5 },
+    production: { ore: 2 },
     guardianBasePower: 250,
   },
   {
     type: ResourceBuildingType.ALCHEMIST_LAB,
     label: "Laboratoire d'alchimiste",
-    production: { mercury: 3 },
+    production: { mercury: 1 },
     guardianBasePower: 350,
   },
   {
     type: ResourceBuildingType.CRYSTAL_CAVERN,
     label: "Caverne de cristaux",
-    production: { crystals: 3 },
+    production: { crystals: 1 },
     guardianBasePower: 350,
   },
   {
     type: ResourceBuildingType.GEM_POND,
     label: "Bassin de gemmes",
-    production: { gems: 3 },
+    production: { gems: 1 },
     guardianBasePower: 350,
   },
   {
     type: ResourceBuildingType.SULFUR_DUNE,
     label: "Dune de soufre",
-    production: { sulfur: 3 },
+    production: { sulfur: 1 },
     guardianBasePower: 350,
   },
 ];

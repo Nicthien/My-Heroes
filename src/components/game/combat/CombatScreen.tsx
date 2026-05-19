@@ -7,7 +7,17 @@ import { CombatBoardUnit, CombatEnvironment, CombatTerrainFeature, GameState, Pe
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { getCreature } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
-import { buildTurnQueue, COMBAT_COLS, COMBAT_ROWS, getCurrentCombatPlayerId, getHexDistance } from "@/lib/game/combat/persistent";
+import { buildTurnQueue, getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
+import {
+  COMBAT_COLS,
+  COMBAT_ROWS,
+  findHexPath,
+  findMeleeApproach,
+  getBlockedCombatCells,
+  getHexDistance,
+  getOccupiedCombatCells,
+} from "@/lib/game/combat/movement";
+import { calculateCombatDamageRange, hasAdjacentEnemy } from "@/lib/game/combat/rules";
 import { getUnitSpritePath } from "@/lib/rendering/phaser/assets";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -40,9 +50,11 @@ const MAX_BATTLE_ZOOM = 1.55;
 const RIGHT_DRAG_THRESHOLD = 5;
 const UNIT_RENDER_OFFSET_X = 52;
 const DEFENDER_RENDER_NUDGE_X = -5;
-const UNIT_MOVE_TRANSITION_MS = 980;
+const UNIT_MOVE_TRANSITION_MS = 1700;
 const UNIT_MOVE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const UNIT_DAMAGE_ANIMATION_MS = 520;
+const AUTOMATED_COMBAT_THINK_DELAY_MS = 350;
+const COMBAT_ACTION_SETTLE_BUFFER_MS = 140;
 
 export type UnitModelKind = "infantry" | "archer" | "cavalry" | "winged" | "large" | "caster" | "beast" | "undead";
 
@@ -50,9 +62,26 @@ type DamagePreview = {
   actorId: string;
   targetId: string;
   actionLabel: string;
-  damage: number;
-  kills: number;
+  minDamage: number;
+  maxDamage: number;
+  minKills: number;
+  maxKills: number;
 };
+
+type CombatHoverAction = "move" | "melee" | "ranged";
+
+const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
+  move: "url('/assets/cursors/combat-move-ground.webp') 15 21, pointer",
+  melee: "url('/assets/cursors/combat-melee.webp') 24 6, pointer",
+  ranged: "url('/assets/cursors/combat-ranged.webp') 25 7, pointer",
+};
+const COMBAT_FLYING_MOVE_CURSOR = "url('/assets/cursors/combat-move-flying.webp') 16 20, pointer";
+
+function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
+  if (action !== "move") return COMBAT_CURSORS[action];
+  const abilities = currentUnit ? getUnitRule(currentUnit.unitType).abilities ?? [] : [];
+  return abilities.includes("flying") ? COMBAT_FLYING_MOVE_CURSOR : COMBAT_CURSORS.move;
+}
 
 export default function CombatScreen() {
   const { data: session } = useSession();
@@ -64,11 +93,26 @@ export default function CombatScreen() {
   const minimizeCombat = useGameStore((state) => state.minimizeCombat);
   const focusTile = useGameStore((state) => state.focusTile);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const [combatAnimationBlocked, setCombatAnimationBlocked] = useState(false);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const isSubmittingActionRef = useRef(false);
   const neutralActionKeyRef = useRef<string | null>(null);
   const fetchCombatInFlightRef = useRef(false);
+  const combatAnimationTimeoutRef = useRef<number | null>(null);
+  const previousCombatForAnimationRef = useRef<PersistentCombat | null>(null);
   const activeCombatId = activeCombat?.id;
+
+  const blockCombatAnimation = useCallback((durationMs: number) => {
+    if (durationMs <= 0) return;
+    if (combatAnimationTimeoutRef.current !== null) {
+      window.clearTimeout(combatAnimationTimeoutRef.current);
+    }
+    setCombatAnimationBlocked(true);
+    combatAnimationTimeoutRef.current = window.setTimeout(() => {
+      combatAnimationTimeoutRef.current = null;
+      setCombatAnimationBlocked(false);
+    }, durationMs);
+  }, []);
 
   useEffect(() => {
     if (activeCombat?.visibility === "joinable_summary") setActiveCombat(null);
@@ -94,6 +138,44 @@ export default function CombatScreen() {
     if (refreshed) setGameState(refreshed);
   }, [focusTile, gameState?.players, session?.user?.id, setActiveCombat, setCombatResult, setGameState]);
 
+  const settleResolvedCombat = useCallback(async (previousCombat: PersistentCombat, resolvedCombat: PersistentCombat) => {
+    const durationMs = getCombatActionSettleMs(previousCombat, resolvedCombat);
+    setActiveCombat(resolvedCombat);
+    blockCombatAnimation(durationMs);
+    if (durationMs > 0) await delay(durationMs);
+    const current = useGameStore.getState().activeCombat;
+    if (current?.id === resolvedCombat.id) {
+      await resolveCombat(resolvedCombat);
+    }
+  }, [blockCombatAnimation, resolveCombat, setActiveCombat]);
+
+  useEffect(() => {
+    if (!activeCombat) {
+      previousCombatForAnimationRef.current = null;
+      if (combatAnimationTimeoutRef.current !== null) {
+        window.clearTimeout(combatAnimationTimeoutRef.current);
+        combatAnimationTimeoutRef.current = null;
+      }
+      window.setTimeout(() => setCombatAnimationBlocked(false), 0);
+      return;
+    }
+
+    const previousCombat = previousCombatForAnimationRef.current;
+    previousCombatForAnimationRef.current = activeCombat;
+    if (!previousCombat || previousCombat.id !== activeCombat.id) {
+      window.setTimeout(() => setCombatAnimationBlocked(false), 0);
+      return;
+    }
+
+    blockCombatAnimation(getCombatActionSettleMs(previousCombat, activeCombat));
+  }, [activeCombat, blockCombatAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (combatAnimationTimeoutRef.current !== null) window.clearTimeout(combatAnimationTimeoutRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!activeCombatId) return;
     const supabase = createClient();
@@ -113,7 +195,7 @@ export default function CombatScreen() {
         if (cancelled) return;
         const mapped = mapCombat(data);
         if (mapped.status === "RESOLVED") {
-          await resolveCombat(mapped);
+          await settleResolvedCombat(current, mapped);
           return;
         }
         setActiveCombat(mapped);
@@ -140,7 +222,7 @@ export default function CombatScreen() {
       clearInterval(interval);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [activeCombatId, resolveCombat, setActiveCombat]);
+  }, [activeCombatId, settleResolvedCombat, setActiveCombat]);
 
   useEffect(() => {
     if (!activeCombat || !gameState) return;
@@ -151,11 +233,16 @@ export default function CombatScreen() {
 
   useEffect(() => {
     if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
+    if (combatAnimationBlocked) return;
     const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
     if (myPlayer?.isAlive === false) return;
 
     const currentActor = activeCombat.boardState.units.find((unit) => unit.id === activeCombat.currentUnitId);
-    if (!currentActor || currentActor.ownerPlayerId !== null) return;
+    const currentActorPlayer = currentActor?.ownerPlayerId
+      ? gameState.players.find((player) => player.id === currentActor.ownerPlayerId)
+      : null;
+    const isAutomatedActor = Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorPlayer?.isAi));
+    if (!isAutomatedActor) return;
 
     const actionKey = [
       activeCombat.id,
@@ -167,12 +254,14 @@ export default function CombatScreen() {
     if (neutralActionKeyRef.current === actionKey || isSubmittingActionRef.current) return;
 
     let cancelled = false;
+    let started = false;
     const combat = activeCombat;
     neutralActionKeyRef.current = actionKey;
     isSubmittingActionRef.current = true;
     setIsSubmittingAction(true);
 
-    async function playNeutralTurns() {
+    async function playAutomatedTurn() {
+      started = true;
       try {
         const response = await fetchWithSupabaseAuth(`/api/games/${combat.gameId}/combats/${combat.id}/action`, {
           method: "POST",
@@ -190,7 +279,7 @@ export default function CombatScreen() {
 
         const mapped = mapCombat(combatPayload);
         if (mapped.status === "RESOLVED" || data.result) {
-          await resolveCombat({ ...mapped, result: mapped.result ?? data.result });
+          await settleResolvedCombat(combat, { ...mapped, result: mapped.result ?? data.result });
         } else {
           setActiveCombat(mapped);
         }
@@ -200,12 +289,18 @@ export default function CombatScreen() {
       }
     }
 
-    playNeutralTurns();
+    const timeout = window.setTimeout(() => void playAutomatedTurn(), AUTOMATED_COMBAT_THINK_DELAY_MS);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      if (!started) {
+        neutralActionKeyRef.current = null;
+        isSubmittingActionRef.current = false;
+        setIsSubmittingAction(false);
+      }
     };
-  }, [activeCombat, gameState, resolveCombat, session?.user?.id, setActiveCombat]);
+  }, [activeCombat, combatAnimationBlocked, gameState, session?.user?.id, setActiveCombat, settleResolvedCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -214,7 +309,7 @@ export default function CombatScreen() {
   const inspectedUnit = units.find((unit) => unit.id === inspectedUnitId) ?? null;
   const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, activeCombat.currentUnitId, activeCombat.currentPlayerId);
   const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
-  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction;
+  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction && !combatAnimationBlocked;
 
   const submitAction = async (action: Record<string, unknown>) => {
     if (!canSubmitAction || isSubmittingActionRef.current) return;
@@ -238,7 +333,7 @@ export default function CombatScreen() {
       if (!combatPayload) return;
       const mapped = mapCombat(combatPayload);
       if (mapped.status === "RESOLVED" || data.result) {
-        await resolveCombat({ ...mapped, result: mapped.result ?? data.result });
+        await settleResolvedCombat(activeCombat, { ...mapped, result: mapped.result ?? data.result });
       } else {
         setActiveCombat(mapped);
       }
@@ -258,7 +353,7 @@ export default function CombatScreen() {
           <div className={`mt-0.5 text-lg font-black ${goldText}`}>Round {activeCombat.round}</div>
         </div>
         <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
-          {isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
+          {combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
         </div>
         <button
           type="button"
@@ -398,66 +493,92 @@ function IsoBattlefield({
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
   const [camera, setCamera] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const units = combat.boardState.units;
+  const terrain = combat.boardState.terrain ?? [];
+  const [visualUnits, setVisualUnits] = useState<CombatBoardUnit[]>(units);
   const [damagedUnitIds, setDamagedUnitIds] = useState(() => new Set<string>());
   const viewportRef = useRef<HTMLDivElement>(null);
   const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const previousCombatIdRef = useRef<string | null>(null);
-  const previousUnitVitalsRef = useRef(new Map<string, { count: number; health: number }>());
+  const previousUnitsRef = useRef<CombatBoardUnit[]>(units);
   const damageTimeoutsRef = useRef<number[]>([]);
-  const combatStateKey = `${combat.id}:${combat.round}:${combat.currentUnitId ?? ""}:${combat.actionLog.length}`;
-  const units = combat.boardState.units;
-  const terrain = useMemo(() => combat.boardState.terrain ?? [], [combatStateKey]);
+  const revealDamageTimeoutsRef = useRef<number[]>([]);
   const environment = useMemo(
     () => combat.boardState.environment ?? buildCombatEnvironment(gameState.map, combat.position),
-    [combat.boardState.environment, combat.position, combatStateKey, gameState.map]
+    [combat.boardState.environment, combat.position, gameState.map]
   );
-  const currentUnit = useMemo(
-    () => units.find((unit) => unit.id === combat.currentUnitId),
-    [combat.currentUnitId, combatStateKey, units]
-  );
-  const occupied = useMemo(() => new Set(units.map((unit) => `${unit.q},${unit.r}`)), [combatStateKey, units]);
-  const blocked = useMemo(() => new Set(terrain.map((feature) => `${feature.q},${feature.r}`)), [combatStateKey, terrain]);
+  const currentUnit = units.find((unit) => unit.id === combat.currentUnitId);
+  const occupied = currentUnit ? getOccupiedCombatCells(units, currentUnit.id) : getOccupiedCombatCells(units);
+  const blocked = getBlockedCombatCells(terrain);
   const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
   const previewTarget = units.find((unit) => unit.id === (hoveredUnitId ?? inspectedUnitId));
   const preview = currentUnit && previewTarget && previewTarget.side !== currentUnit.side
     ? getDamagePreview(currentUnit, previewTarget, combat, gameState)
     : null;
 
+  const flashDamagedUnits = useCallback((unitIds: string[]) => {
+    setDamagedUnitIds((previous) => new Set([...previous, ...unitIds]));
+    const timeout = window.setTimeout(() => {
+      setDamagedUnitIds((previous) => {
+        const next = new Set(previous);
+        unitIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, UNIT_DAMAGE_ANIMATION_MS);
+    damageTimeoutsRef.current.push(timeout);
+  }, []);
+
   useEffect(() => {
-    const currentVitals = new Map(units.map((unit) => [unit.id, { count: unit.count, health: unit.health }]));
+    const previousUnits = previousUnitsRef.current;
+    const previousById = new Map(previousUnits.map((unit) => [unit.id, unit]));
+    const currentById = new Map(units.map((unit) => [unit.id, unit]));
 
     if (previousCombatIdRef.current !== combat.id) {
       previousCombatIdRef.current = combat.id;
-      previousUnitVitalsRef.current = currentVitals;
+      previousUnitsRef.current = units;
+      setVisualUnits(units);
       setDamagedUnitIds(new Set());
       return;
     }
 
     const damagedIds = units
       .filter((unit) => {
-        const previous = previousUnitVitalsRef.current.get(unit.id);
+        const previous = previousById.get(unit.id);
         return previous && (unit.health < previous.health || unit.count < previous.count);
       })
       .map((unit) => unit.id);
+    const removedDamagedIds = previousUnits
+      .filter((unit) => unit.count > 0 && !currentById.has(unit.id))
+      .map((unit) => unit.id);
+    const allDamagedIds = [...damagedIds, ...removedDamagedIds];
+    const movedIds = units
+      .filter((unit) => {
+        const previous = previousById.get(unit.id);
+        return previous && (unit.q !== previous.q || unit.r !== previous.r);
+      })
+      .map((unit) => unit.id);
 
-    previousUnitVitalsRef.current = currentVitals;
-    if (damagedIds.length === 0) return;
+    previousUnitsRef.current = units;
+    clearTimeouts(revealDamageTimeoutsRef);
 
-    setDamagedUnitIds((previous) => new Set([...previous, ...damagedIds]));
-    const timeout = window.setTimeout(() => {
-      setDamagedUnitIds((previous) => {
-        const next = new Set(previous);
-        damagedIds.forEach((id) => next.delete(id));
-        return next;
-      });
-    }, UNIT_DAMAGE_ANIMATION_MS);
-    damageTimeoutsRef.current.push(timeout);
-  }, [combat.id, units]);
+    if (movedIds.length > 0 && allDamagedIds.length > 0) {
+      setVisualUnits(buildPreAttackVisualUnits(previousUnits, units, allDamagedIds));
+      const revealTimeout = window.setTimeout(() => {
+        setVisualUnits(units);
+        flashDamagedUnits(allDamagedIds);
+      }, UNIT_MOVE_TRANSITION_MS);
+      revealDamageTimeoutsRef.current.push(revealTimeout);
+      return;
+    }
+
+    setVisualUnits(units);
+    if (allDamagedIds.length > 0) flashDamagedUnits(allDamagedIds);
+  }, [combat.id, flashDamagedUnits, units]);
 
   useEffect(() => {
     return () => {
-      damageTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-      damageTimeoutsRef.current = [];
+      clearTimeouts(damageTimeoutsRef);
+      clearTimeouts(revealDamageTimeoutsRef);
     };
   }, []);
 
@@ -475,7 +596,7 @@ function IsoBattlefield({
       };
     });
   };
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -491,7 +612,15 @@ function IsoBattlefield({
         panY: cursorY - ((cursorY - prev.panY) * nextZoom) / prev.zoom,
       };
     });
-  };
+  }, []);
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 2) return;
     rightDragRef.current = {
@@ -531,9 +660,21 @@ function IsoBattlefield({
       const reachable = Boolean(isMyAction && currentUnit && !unit && !feature && path.length > 1 && path.length - 1 <= currentUnit.speed);
       const isPendingDestination = activePendingMove?.q === q && activePendingMove.r === r;
       const isPendingPath = Boolean(activePendingMove?.path.some((step) => step.q === q && step.r === r));
-      const attackable = Boolean(isMyAction && currentUnit && unit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0)));
+      const enemyUnit = currentUnit && unit && unit.side !== currentUnit.side ? unit : null;
+      const canShoot = Boolean(currentUnit?.ranged && currentUnit.shots > 0 && distance > 1 && !hasAdjacentEnemy(currentUnit, units));
+      const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain) : null;
+      const hoverAction: CombatHoverAction | null = !isMyAction
+        ? null
+        : enemyUnit && canShoot
+          ? "ranged"
+          : enemyUnit && meleeApproach
+            ? "melee"
+            : reachable
+              ? "move"
+              : null;
+      const attackable = hoverAction === "melee" || hoverAction === "ranged";
       const { x, y } = getIsoPosition(q, r);
-      const canClick = isMyAction && !feature && (reachable || attackable);
+      const canClick = isMyAction && !feature && Boolean(hoverAction);
 
       cells.push(
         <button
@@ -546,15 +687,18 @@ function IsoBattlefield({
             width: TILE_WIDTH,
             height: TILE_HEIGHT + TILE_DEPTH,
             zIndex: r * 100 + (unit ? 30 : feature ? 18 : 1),
-            cursor: canClick ? "pointer" : "default",
+            cursor: hoverAction ? getCombatCursor(hoverAction, currentUnit) : "default",
           }}
           aria-disabled={!canClick}
           tabIndex={canClick ? 0 : -1}
           onClick={() => {
             if (!canClick) return;
-            if (attackable && unit) {
+            if (unit && hoverAction === "ranged") {
               setPendingMove(null);
-              onAction({ type: distance <= 1 ? "ATTACK" : "SHOOT", targetUnitId: unit.id });
+              onAction({ type: "SHOOT", targetUnitId: unit.id });
+            } else if (unit && hoverAction === "melee") {
+              setPendingMove(null);
+              onAction({ type: "ATTACK", targetUnitId: unit.id });
             } else if (reachable && currentUnit) {
               if (isPendingDestination) {
                 setPendingMove(null);
@@ -588,10 +732,16 @@ function IsoBattlefield({
     }
   }
 
-  const unitModels = units.map((unit) => {
+  const unitModels = visualUnits.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
     const distance = currentUnit ? getHexDistance(currentUnit, unit) : 999;
-    const attackable = Boolean(isMyAction && currentUnit && unit.side !== currentUnit.side && (distance <= 1 || (currentUnit.ranged && currentUnit.shots > 0)));
+    const canShoot = Boolean(currentUnit?.ranged && currentUnit.shots > 0 && distance > 1 && !hasAdjacentEnemy(currentUnit, units));
+    const attackable = Boolean(
+      isMyAction &&
+      currentUnit &&
+      unit.side !== currentUnit.side &&
+      (canShoot || findMeleeApproach(currentUnit, unit, units, terrain))
+    );
     const damaged = damagedUnitIds.has(unit.id);
 
     return (
@@ -613,7 +763,7 @@ function IsoBattlefield({
     );
   });
 
-  const unitBadges = units.map((unit) => {
+  const unitBadges = visualUnits.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
     const damaged = damagedUnitIds.has(unit.id);
 
@@ -640,7 +790,6 @@ function IsoBattlefield({
     <div
       ref={viewportRef}
       className="relative h-full min-h-[680px] w-full min-w-[860px] cursor-default overflow-hidden"
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={stopRightDrag}
@@ -1810,8 +1959,8 @@ function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview
       <div className="mt-2 font-bold text-amber-100">{actorRule.label} vers {targetRule.label}</div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
         <span className="rounded-sm border border-stone-600/60 bg-stone-950/70 px-2 py-1">{preview.actionLabel}</span>
-        <span className="rounded-sm border border-red-500/50 bg-red-950/60 px-2 py-1">{preview.damage} deg.</span>
-        <span className="rounded-sm border border-amber-500/50 bg-amber-950/60 px-2 py-1">{preview.kills} pertes</span>
+        <span className="rounded-sm border border-red-500/50 bg-red-950/60 px-2 py-1">{formatRange(preview.minDamage, preview.maxDamage)} deg.</span>
+        <span className="rounded-sm border border-amber-500/50 bg-amber-950/60 px-2 py-1">{formatRange(preview.minKills, preview.maxKills)} pertes</span>
       </div>
     </div>
   );
@@ -1829,7 +1978,8 @@ function InitiativeQueue({
   const queueRef = useRef<HTMLDivElement>(null);
   const [visibleRadius, setVisibleRadius] = useState(3);
   const unitsById = new Map(combat.boardState.units.map((unit) => [unit.id, unit]));
-  const initiativeOrder = buildTurnQueue(combat.boardState.units, combat.round).filter((id) => unitsById.get(id)?.count);
+  const initiativeOrder = (combat.turnQueue.length > 0 ? combat.turnQueue : buildTurnQueue(combat.boardState.units, combat.round))
+    .filter((id) => unitsById.get(id)?.count);
   const queue = getCenteredInitiativeSlots(initiativeOrder, combat.currentUnitId, visibleRadius)
     .map((slot) => {
       const unit = unitsById.get(slot.id);
@@ -1921,34 +2071,60 @@ function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
   );
 }
 
-function findHexPath(
-  start: { q: number; r: number },
-  end: { q: number; r: number },
-  occupied: Set<string>,
-  blocked: Set<string>
-) {
-  const startKey = `${start.q},${start.r}`;
-  const endKey = `${end.q},${end.r}`;
-  const queue: { q: number; r: number; path: { q: number; r: number }[] }[] = [
-    { q: start.q, r: start.r, path: [{ q: start.q, r: start.r }] },
-  ];
-  const seen = new Set([startKey]);
+function buildPreAttackVisualUnits(previousUnits: CombatBoardUnit[], currentUnits: CombatBoardUnit[], damagedUnitIds: string[]) {
+  const damagedIds = new Set(damagedUnitIds);
+  const previousById = new Map(previousUnits.map((unit) => [unit.id, unit]));
+  const currentIds = new Set(currentUnits.map((unit) => unit.id));
+  const unitsWithDelayedDamage = currentUnits.map((unit) => {
+    if (!damagedIds.has(unit.id)) return unit;
+    const previous = previousById.get(unit.id);
+    return previous
+      ? { ...unit, count: previous.count, health: previous.health, shots: previous.shots }
+      : unit;
+  });
+  const defeatedUnits = previousUnits.filter((unit) => damagedIds.has(unit.id) && !currentIds.has(unit.id));
+  return [...unitsWithDelayedDamage, ...defeatedUnits];
+}
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (`${current.q},${current.r}` === endKey) return current.path;
+function clearTimeouts(timeoutRef: { current: number[] }) {
+  timeoutRef.current.forEach((timeout) => window.clearTimeout(timeout));
+  timeoutRef.current = [];
+}
 
-    for (const neighbor of getHexNeighbors(current.q, current.r)) {
-      const key = `${neighbor.q},${neighbor.r}`;
-      if (seen.has(key)) continue;
-      if (blocked.has(key)) continue;
-      if (occupied.has(key) && key !== startKey && key !== endKey) continue;
-      seen.add(key);
-      queue.push({ ...neighbor, path: [...current.path, neighbor] });
-    }
+function getCombatActionSettleMs(previousCombat: PersistentCombat, currentCombat: PersistentCombat) {
+  if (previousCombat.id !== currentCombat.id) return 0;
+
+  const previousUnits = previousCombat.boardState.units;
+  const currentUnits = currentCombat.boardState.units;
+  const previousById = new Map(previousUnits.map((unit) => [unit.id, unit]));
+  const currentIds = new Set(currentUnits.map((unit) => unit.id));
+  const moved = currentUnits.some((unit) => {
+    const previous = previousById.get(unit.id);
+    return Boolean(previous && (unit.q !== previous.q || unit.r !== previous.r));
+  });
+  const damaged = currentUnits.some((unit) => {
+    const previous = previousById.get(unit.id);
+    return Boolean(previous && (unit.health < previous.health || unit.count < previous.count));
+  });
+  const defeated = previousUnits.some((unit) => unit.count > 0 && !currentIds.has(unit.id));
+  const turnAdvanced =
+    currentCombat.currentUnitId !== previousCombat.currentUnitId ||
+    currentCombat.round !== previousCombat.round ||
+    currentCombat.actionLog.length > previousCombat.actionLog.length;
+
+  if (!moved && !damaged && !defeated && !turnAdvanced) return 0;
+
+  let duration = 0;
+  if (moved) duration = Math.max(duration, UNIT_MOVE_TRANSITION_MS);
+  if (damaged || defeated) {
+    duration = Math.max(duration, moved ? UNIT_MOVE_TRANSITION_MS + UNIT_DAMAGE_ANIMATION_MS : UNIT_DAMAGE_ANIMATION_MS);
   }
+  if (duration === 0) duration = 450;
+  return duration + COMBAT_ACTION_SETTLE_BUFFER_MS;
+}
 
-  return [];
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
@@ -2028,38 +2204,35 @@ function getDamagePreview(
   gameState: GameState
 ): DamagePreview {
   const distance = getHexDistance(actor, target);
-  const canStrike = distance <= 1 || (actor.ranged && actor.shots > 0);
-  if (!canStrike) {
-    return { actorId: actor.id, targetId: target.id, actionLabel: "Hors portee", damage: 0, kills: 0 };
-  }
-
+  const canShoot = Boolean(actor.ranged && actor.shots > 0 && distance > 1 && !hasAdjacentEnemy(actor, combat.boardState.units));
+  const actionType = canShoot ? "SHOOT" : "ATTACK";
+  const approach = actionType === "ATTACK" && distance > 1
+    ? findMeleeApproach(actor, target, combat.boardState.units, combat.boardState.terrain ?? [])
+    : null;
+  const previewActor = approach
+    ? { ...actor, q: approach.destination.q, r: approach.destination.r }
+    : actor;
   const attackerStats = getCombatSideStats(actor.side, combat, gameState);
   const defenderStats = getCombatSideStats(target.side, combat, gameState);
-  const damage = estimateDamage(actor, target, attackerStats, defenderStats);
-  const nextHealth = Math.max(0, target.health - damage);
-  const kills = Math.max(0, target.count - (nextHealth > 0 ? Math.ceil(nextHealth / target.maxHealth) : 0));
+  const range = calculateCombatDamageRange({
+    attacker: previewActor,
+    defender: target,
+    attackerStats,
+    defenderStats,
+    actionType,
+    terrain: combat.boardState.terrain ?? [],
+    actorAdjacentToEnemy: hasAdjacentEnemy(previewActor, combat.boardState.units),
+  });
 
   return {
     actorId: actor.id,
     targetId: target.id,
-    actionLabel: distance <= 1 ? "Melee" : "Tir",
-    damage,
-    kills,
+    actionLabel: range.profile.actionLabel,
+    minDamage: range.minDamage,
+    maxDamage: range.maxDamage,
+    minKills: range.minKills,
+    maxKills: range.maxKills,
   };
-}
-
-function estimateDamage(
-  actor: CombatBoardUnit,
-  target: CombatBoardUnit,
-  attackerStats: { attack: number; defense: number },
-  defenderStats: { attack: number; defense: number }
-) {
-  const attackValue = getUnitRule(actor.unitType).attack + attackerStats.attack;
-  const defenseValue = getUnitRule(target.unitType).defense + defenderStats.defense + (target.defended ? 2 : 0);
-  const diff = attackValue - defenseValue;
-  const multiplier = diff >= 0 ? 1 + diff * 0.05 : 1 / (1 + Math.abs(diff) * 0.05);
-  const damagePerUnit = Math.floor((actor.minDamage + actor.maxDamage) / 2);
-  return Math.max(1, Math.floor(damagePerUnit * actor.count * multiplier));
 }
 
 function getCombatSideStats(side: "attacker" | "defender", combat: PersistentCombat, gameState: GameState) {
@@ -2073,6 +2246,10 @@ function getCombatSideStats(side: "attacker" | "defender", combat: PersistentCom
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function formatRange(min: number, max: number) {
+  return min === max ? String(min) : `${min}-${max}`;
 }
 
 function getUnitMoveTransition(durationMs: number) {
@@ -2327,17 +2504,6 @@ export function getUnitPalette(unit: CombatBoardUnit) {
   return unit.side === "attacker"
     ? { light: "#dbeafe", main: "#2563eb", dark: "#172554" }
     : { light: "#fecaca", main: "#dc2626", dark: "#450a0a" };
-}
-
-function getHexNeighbors(q: number, r: number) {
-  const even = r % 2 === 0;
-  const deltas = even
-    ? [[1, 0], [-1, 0], [0, -1], [-1, -1], [0, 1], [-1, 1]]
-    : [[1, 0], [-1, 0], [1, -1], [0, -1], [1, 1], [0, 1]];
-
-  return deltas
-    .map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
-    .filter((cell) => cell.q >= 0 && cell.q < COMBAT_COLS && cell.r >= 0 && cell.r < COMBAT_ROWS);
 }
 
 function getTerrainTitle(feature: CombatTerrainFeature) {

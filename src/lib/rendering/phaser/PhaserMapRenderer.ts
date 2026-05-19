@@ -3,7 +3,7 @@ import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
-import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
+import { MapObjectData, MapRenderer, type RendererLoadingProgress } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
 import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, ROAD_TEXTURES, TERRAIN_TOP_TEXTURES, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
 
@@ -413,6 +413,7 @@ class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
   objects: MapObjectData[] = [];
   readyCallback?: () => void;
+  loadingProgressCallback?: RendererLoadingProgress;
 
   private boardLayer!: Phaser.GameObjects.Container;
   private boardLipLayer!: Phaser.GameObjects.Container;
@@ -436,6 +437,8 @@ class PhaserMapScene extends Phaser.Scene {
   private fogTileStates: Uint8Array | null = null;
   private fogPlaneDepth = BASE_HEIGHT + FOG_PLANE_CLEARANCE;
   private fogStampTextureKeys = FOG_STAMP_TEXTURE_KEYS;
+  private reachableOverlayObjects: Phaser.GameObjects.GameObject[] = [];
+  private highlightOverlayObjects: Phaser.GameObjects.GameObject[] = [];
   private waterTiles: WaterTileEffect[] = [];
   private lavaTiles: LavaTileEffect[] = [];
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
@@ -451,6 +454,14 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   preload() {
+    this.loadingProgressCallback?.(84, "Chargement des graphismes...");
+    this.load.on("progress", (value: number) => {
+      this.loadingProgressCallback?.(84 + value * 5, "Chargement des graphismes...");
+    });
+    this.load.once("complete", () => {
+      this.loadingProgressCallback?.(89, "Preparation de la scene...");
+    });
+
     for (const path of MAP_SPRITE_PATHS) {
       if (path.endsWith(".svg")) this.load.svg(path, path);
       else this.load.image(path, path);
@@ -524,6 +535,11 @@ class PhaserMapScene extends Phaser.Scene {
     this.decorLayer.removeAll(true);
     this.mapObjectLayer.removeAll(true);
     this.objectLayer.removeAll(true);
+    this.reachableOverlayObjects = [];
+    this.highlightOverlayObjects = [];
+    this.reachableLayer.removeAll(true);
+    this.highlightLayer.removeAll(true);
+    this.movementLabelLayer.removeAll(true);
     this.renderedHeroes.clear();
     this.renderedStaticObjects.clear();
     this.heroSpriteAnimations = [];
@@ -1267,16 +1283,16 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   highlightPath(path: Position[]) {
-    this.highlightLayer.removeAll(true);
-    this.movementLabelLayer.removeAll(true);
-    this.drawDiamondOverlays(this.highlightLayer, path, 0xffff00, 0.08, 0.9, 2);
+    this.clearHighlights();
+    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, path, 0xffff00, 0.08, 0.9, 2);
   }
 
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string) {
+    this.clearDepthSortedOverlays(this.highlightOverlayObjects);
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
-    this.drawDiamondOverlays(this.highlightLayer, reachable, 0xffff00, 0.08, 0.9, 2);
-    this.drawDiamondOverlays(this.highlightLayer, unreachable, 0xff0000, 0.08, 0.9, 2);
+    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, reachable, 0xffff00, 0.08, 0.9, 2);
+    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, unreachable, 0xff0000, 0.08, 0.9, 2);
 
     const labelTile = unreachable.at(-1) ?? reachable.at(-1);
     if (labelTile && turnsLabel) {
@@ -1302,22 +1318,23 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   highlightTiles(tiles: Position[], color = REACHABLE_TILE_COLOR, alpha = REACHABLE_TILE_ALPHA) {
-    this.reachableLayer.removeAll(true);
-    this.drawDiamondOverlays(this.reachableLayer, tiles, color, Math.min(alpha, 0.08), 0.65, 1.5);
+    this.clearReachable();
+    this.drawDepthSortedDiamondOverlays(this.reachableOverlayObjects, tiles, color, Math.min(alpha, 0.08), 0.65, 1.5);
   }
 
   highlightTile(x: number, y: number, color = 0x00ff00) {
-    this.highlightLayer.removeAll(true);
-    this.movementLabelLayer.removeAll(true);
-    this.drawDiamondOverlay(this.highlightLayer, x, y, color, 0.08, 0.95, 2);
+    this.clearHighlights();
+    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, [{ x, y }], color, 0.08, 0.95, 2);
   }
 
   clearHighlights() {
+    this.clearDepthSortedOverlays(this.highlightOverlayObjects);
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
   }
 
   clearReachable() {
+    this.clearDepthSortedOverlays(this.reachableOverlayObjects);
     this.reachableLayer.removeAll(true);
   }
 
@@ -2611,9 +2628,14 @@ class PhaserMapScene extends Phaser.Scene {
       return;
     }
 
-    const started = this.sound.play(soundConfig.key, {
-      volume: soundConfig.volume,
-    });
+    let started = false;
+    try {
+      started = this.sound.play(soundConfig.key, {
+        volume: soundConfig.volume,
+      });
+    } catch {
+      return;
+    }
 
     if (started) {
       this.lastMovementSoundAt[kind] = now;
@@ -3002,6 +3024,45 @@ class PhaserMapScene extends Phaser.Scene {
     layer.add(graphics);
   }
 
+  private drawDepthSortedDiamondOverlays(
+    overlayObjects: Phaser.GameObjects.GameObject[],
+    tiles: Position[],
+    color: number,
+    fillAlpha: number,
+    strokeAlpha: number,
+    strokeWidth: number
+  ) {
+    if (!this.map || tiles.length === 0) return;
+
+    for (const tile of tiles) {
+      const iso = cartToIso(tile.x, tile.y);
+      const surfaceY = this.getSurfaceY(tile.x, tile.y);
+      const graphics = this.add.graphics();
+      graphics.fillStyle(color, fillAlpha);
+      graphics.lineStyle(strokeWidth, color, strokeAlpha);
+      drawDiamondPath(graphics, iso.x, surfaceY);
+      graphics.fillPath();
+      drawDiamondPath(graphics, iso.x, surfaceY);
+      graphics.strokePath();
+      graphics.setDepth(this.getTileOverlayDepth(tile.x, tile.y));
+      this.mapLayer.add(graphics);
+      overlayObjects.push(graphics);
+    }
+
+    this.mapLayer.sort("depth");
+  }
+
+  private clearDepthSortedOverlays(overlayObjects: Phaser.GameObjects.GameObject[]) {
+    for (const overlayObject of overlayObjects) {
+      overlayObject.destroy();
+    }
+    overlayObjects.length = 0;
+  }
+
+  private getTileOverlayDepth(x: number, y: number) {
+    return cartToIso(x, y).y + 0.2;
+  }
+
   getSurfaceY(x: number, y: number): number {
     const iso = cartToIso(x, y);
     if (!this.map) return iso.y;
@@ -3203,15 +3264,19 @@ export class PhaserMapRenderer implements MapRenderer {
   private scene: PhaserMapScene | null = null;
   private initialized = false;
   private destroyed = false;
+  private readyResolve: (() => void) | null = null;
 
-  async init(container: HTMLDivElement) {
+  async init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress) {
     this.destroyed = false;
+    onLoadingProgress?.(82, "Creation du canvas...");
     container.querySelectorAll("canvas").forEach((canvas) => canvas.remove());
 
     const scene = new PhaserMapScene();
     this.scene = scene;
+    scene.loadingProgressCallback = onLoadingProgress;
 
     const ready = new Promise<void>((resolve) => {
+      this.readyResolve = resolve;
       scene.readyCallback = resolve;
     });
 
@@ -3226,6 +3291,9 @@ export class PhaserMapRenderer implements MapRenderer {
         antialiasGL: false,
         roundPixels: true,
         powerPreference: "high-performance",
+        audio: {
+          disableWebAudio: true,
+        },
         scene,
         scale: {
           mode: Phaser.Scale.RESIZE,
@@ -3234,13 +3302,17 @@ export class PhaserMapRenderer implements MapRenderer {
       });
 
       await ready;
-      this.initialized = !this.destroyed;
+      this.readyResolve = null;
+      if (this.destroyed) return;
+      onLoadingProgress?.(90, "Affichage de la carte...");
+      this.initialized = true;
     } catch (error) {
       this.destroyed = true;
       this.initialized = false;
       this.game?.destroy(true);
       this.game = null;
       this.scene = null;
+      this.readyResolve = null;
       throw error;
     }
   }
@@ -3310,8 +3382,11 @@ export class PhaserMapRenderer implements MapRenderer {
   }
 
   destroy() {
+    if (this.destroyed && !this.game && !this.scene) return;
     this.destroyed = true;
     this.initialized = false;
+    this.readyResolve?.();
+    this.readyResolve = null;
     this.game?.destroy(true);
     this.game = null;
     this.scene = null;
@@ -4032,14 +4107,9 @@ function drawFogFrontierEdgeVisual(graphics: Phaser.GameObjects.Graphics, x: num
   const points = getDiamondPoints(x, y);
   const edge = getFogEdge(points, side);
 
-  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.34, 0x02040c, 0.44);
-  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.18, 0x10172a, 0.26);
-
-  graphics.lineStyle(1, 0xaab4dd, 0.18);
-  graphics.beginPath();
-  graphics.moveTo(edge.a.x, edge.a.y);
-  graphics.lineTo(edge.b.x, edge.b.y);
-  graphics.strokePath();
+  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.42, 0xb9c9d0, 0.06);
+  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.26, 0x6f8490, 0.08);
+  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.12, 0xf4fbff, 0.04);
 }
 
 function drawFogDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number, padding: number) {

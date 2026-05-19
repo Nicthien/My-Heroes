@@ -1,4 +1,5 @@
 import { getCachedStaticGameMap, mapApiToGameState, mergeGameDynamicState } from "./api";
+import { writeCachedGameState } from "./local-cache";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 
@@ -9,13 +10,19 @@ export async function refreshGameState(
 ) {
   const baseGameState = useGameStore.getState().gameState;
   const canUseIncrementalSync = baseGameState?.id === gameId && Boolean(getCachedStaticGameMap(gameId));
-  const endpoint = canUseIncrementalSync ? `/api/games/${gameId}/sync` : `/api/games/${gameId}`;
+  let usedIncrementalSync = canUseIncrementalSync;
+  let endpoint = usedIncrementalSync ? `/api/games/${gameId}/sync` : `/api/games/${gameId}`;
 
-  const res = await fetchWithSupabaseAuth(endpoint, { cache: "no-store" });
+  let res = await fetchWithSupabaseAuth(endpoint, { cache: "no-store" });
+  if (!res.ok && usedIncrementalSync) {
+    usedIncrementalSync = false;
+    endpoint = `/api/games/${gameId}`;
+    res = await fetchWithSupabaseAuth(endpoint, { cache: "no-store" });
+  }
   if (!res.ok) return null;
   const data = await res.json();
 
-  if (!canUseIncrementalSync) {
+  if (!usedIncrementalSync) {
     if (!data.mapData) {
       const { generateMap } = await import("./engine");
       data.mapData = generateMap(data.mapWidth, data.mapHeight);
@@ -39,12 +46,16 @@ export async function refreshGameState(
       }
     }
 
-    return mapApiToGameState(data, userId, options);
+    const nextGameState = mapApiToGameState(data, userId, options);
+    writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), options);
+    return nextGameState;
   }
 
   if (!baseGameState || baseGameState.id !== gameId) {
     return null;
   }
 
-  return mergeGameDynamicState(baseGameState, data, userId, options);
+  const nextGameState = mergeGameDynamicState(baseGameState, data, userId, options);
+  writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), options);
+  return nextGameState;
 }

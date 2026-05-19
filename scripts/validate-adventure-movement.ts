@@ -1,8 +1,11 @@
 import {
   canMoveAdventureStep,
+  areAdventurePositionsAdjacent,
   computeReachableTiles,
   findPath,
+  findPathToAdjacent,
   getAdventurePathCost,
+  getAdventurePathCostAvoiding,
   getAdventureStepCost,
   getDailyAdventureMovement,
   getMinimumAdjacentAdventureStepCost,
@@ -56,6 +59,13 @@ blockedMap.tiles[0][1].isPassable = false;
 blockedMap.tiles[1][0].object = { type: "wall", id: "wall-b" };
 blockedMap.tiles[1][0].isPassable = false;
 assert(!canMoveAdventureStep(blockedMap, { x: 0, y: 0 }, { x: 1, y: 1 }), "diagonal through touching obstacles should be blocked");
+
+const combatBlockMap = map(4, 1);
+combatBlockMap.tiles[0][1].object = { type: "monster", id: "guard" };
+const approachPath = findPathToAdjacent(combatBlockMap, { x: 0, y: 0 }, { x: 1, y: 0 }, 100);
+assert(approachPath.length === 1 && approachPath[0].x === 0 && approachPath[0].y === 0, "combat approach should stop before adjacent blocker");
+assert(areAdventurePositionsAdjacent(approachPath[0], { x: 1, y: 0 }), "combat approach destination should be adjacent to target");
+assert(!Number.isFinite(getAdventurePathCostAvoiding(combatBlockMap, [{ x: 0, y: 0 }, { x: 1, y: 0 }], [{ x: 1, y: 0 }])), "combat path cannot enter blocked target");
 
 const reachable = computeReachableTiles(diagonalMap, { x: 0, y: 0 }, 100);
 assert(reachable.has("1,0"), "orthogonal grass tile should be reachable with 100 PM");

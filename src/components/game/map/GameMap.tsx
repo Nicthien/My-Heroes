@@ -10,6 +10,7 @@ import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction }
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   findPath,
+  findPathToAdjacent,
   computeReachableTiles,
   computeVisibleTiles,
   getAdventurePathCost,
@@ -21,6 +22,16 @@ import { refreshGameState } from "@/lib/game/refresh";
 
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
+const ADVENTURE_CURSORS = {
+  default: "default",
+  dragging: "grabbing",
+  boot: "url('/assets/cursors/adventure-horse.webp') 5 12, pointer",
+  castle: "url('/assets/cursors/adventure-castle.webp') 16 22, pointer",
+  sword: "url('/assets/cursors/combat-melee.webp') 7 25, pointer",
+  resource: "url('/assets/cursors/adventure-resource.webp') 16 16, pointer",
+  building: "url('/assets/cursors/adventure-building.webp') 16 22, pointer",
+  forbidden: "default",
+} as const;
 const RESOURCE_BUILDING_LABEL_BY_TYPE = new Map<string, string>(
   RESOURCE_BUILDING_RULES.map((rule) => [rule.type, rule.label])
 );
@@ -36,7 +47,7 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
   | { type: "STOP"; message: string; destination?: Position };
@@ -112,11 +123,37 @@ export default function GameMapComponent() {
 
     let cancelled = false;
     let activeRenderer: MapRenderer | null = null;
+    let optimisticProgress = 78;
+    let rendererLoadingTimer: number | null = null;
 
-    const loadingState = useGameStore.getState();
-    if (loadingState.isLoading) {
-      loadingState.updateLoadingProgress(78, "Preparation du moteur de rendu...");
-    }
+    const updateRendererLoading = (progress: number, message?: string) => {
+      if (cancelled) return;
+      const loadingState = useGameStore.getState();
+      if (loadingState.isLoading && completedLoadingNonceRef.current < loadingState.loadingNonce) {
+        loadingState.updateLoadingProgress(progress, message);
+      }
+    };
+
+    const stopRendererLoadingTimer = () => {
+      if (rendererLoadingTimer) {
+        window.clearInterval(rendererLoadingTimer);
+        rendererLoadingTimer = null;
+      }
+    };
+
+    updateRendererLoading(78, "Preparation du moteur de rendu...");
+    rendererLoadingTimer = window.setInterval(() => {
+      optimisticProgress = Math.min(87, optimisticProgress + 1);
+      updateRendererLoading(
+        optimisticProgress,
+        optimisticProgress < 82
+          ? "Chargement du moteur graphique..."
+          : optimisticProgress < 86
+            ? "Chargement des graphismes..."
+            : "Finalisation du rendu..."
+      );
+      if (optimisticProgress >= 87) stopRendererLoadingTimer();
+    }, 700);
 
     const initPromise = createMapRenderer().then(async (renderer) => {
       activeRenderer = renderer;
@@ -126,11 +163,13 @@ export default function GameMapComponent() {
       }
 
       rendererRef.current = renderer;
+      updateRendererLoading(82, "Moteur graphique charge...");
 
-      await renderer.init(container);
+      await renderer.init(container, updateRendererLoading);
+      stopRendererLoadingTimer();
 
       if (cancelled) {
-        rendererRef.current?.destroy();
+        renderer.destroy();
         return;
       }
 
@@ -145,6 +184,7 @@ export default function GameMapComponent() {
 
     return () => {
       cancelled = true;
+      stopRendererLoadingTimer();
       if (loadingFinishTimeoutRef.current) {
         window.clearTimeout(loadingFinishTimeoutRef.current);
         loadingFinishTimeoutRef.current = null;
@@ -154,7 +194,7 @@ export default function GameMapComponent() {
       renderedMapRef.current = null;
       lastFogVisibleRef.current = null;
       lastFogExploredRef.current = null;
-      if (activeRenderer?.isReady()) activeRenderer.destroy();
+      activeRenderer?.destroy();
     };
   }, []);
 
@@ -174,13 +214,23 @@ export default function GameMapComponent() {
         currentLoadingState.updateLoadingProgress(88, "Mise a jour de la carte...");
       }
 
+      const reportMapLoading = (progress: number, message: string) => {
+        const loadingState = useGameStore.getState();
+        if (loadingState.isLoading && completedLoadingNonceRef.current < loadingState.loadingNonce) {
+          loadingState.updateLoadingProgress(progress, message);
+        }
+      };
+
       if (renderedMapRef.current !== gameState.map) {
+        reportMapLoading(91, "Construction du terrain...");
         renderer.renderMap(gameState.map);
+        reportMapLoading(94, "Placement des objets...");
         renderedMapRef.current = gameState.map;
         lastFogVisibleRef.current = null;
         lastFogExploredRef.current = null;
       }
       renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap));
+      reportMapLoading(95, "Calcul de la visibilite...");
 
       let visibleTiles: Set<string>;
       let exploredTiles: Set<string>;
@@ -204,7 +254,9 @@ export default function GameMapComponent() {
         !areTileKeySetsEqual(lastFogVisibleRef.current, visibleTiles) ||
         !areTileKeySetsEqual(lastFogExploredRef.current, exploredTiles)
       ) {
+        reportMapLoading(97, "Application du brouillard de guerre...");
         renderer.setFog(visibleTiles, exploredTiles);
+        reportMapLoading(98, "Centrage de la camera...");
         lastFogVisibleRef.current = visibleTiles;
         lastFogExploredRef.current = exploredTiles;
       }
@@ -362,22 +414,66 @@ export default function GameMapComponent() {
     if (e.button === 2 || e.button === 1) {
       isDragging.current = true;
       lastMouse.current = { x: e.clientX, y: e.clientY };
+      setMapContainerCursor(containerRef.current, ADVENTURE_CURSORS.dragging);
     }
   }, []);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDragging.current || !rendererRef.current) return;
-      const dx = e.clientX - lastMouse.current.x;
-      const dy = e.clientY - lastMouse.current.y;
-      rendererRef.current.panCamera(dx, dy);
-      lastMouse.current = { x: e.clientX, y: e.clientY };
+      const renderer = rendererRef.current;
+      const container = containerRef.current;
+      if (!renderer || !container) return;
+
+      if (isDragging.current) {
+        const dx = e.clientX - lastMouse.current.x;
+        const dy = e.clientY - lastMouse.current.y;
+        renderer.panCamera(dx, dy);
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+        setMapContainerCursor(container, ADVENTURE_CURSORS.dragging);
+        return;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const currentPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+      setMapContainerCursor(container, getAdventureMapCursor({
+        renderer,
+        gameState,
+        selectedHeroId,
+        selectedTownId,
+        currentPlayerId: currentPlayer?.id ?? null,
+        visibleTiles: lastFogVisibleRef.current,
+        activeCombatHeroIds,
+        screenX: e.clientX - rect.left,
+        screenY: e.clientY - rect.top,
+      }));
     },
-    []
+    [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
     isDragging.current = false;
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    if (!container || !renderer) return;
+
+    const rect = container.getBoundingClientRect();
+    const currentPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+    setMapContainerCursor(container, getAdventureMapCursor({
+      renderer,
+      gameState,
+      selectedHeroId,
+      selectedTownId,
+      currentPlayerId: currentPlayer?.id ?? null,
+      visibleTiles: lastFogVisibleRef.current,
+      activeCombatHeroIds,
+      screenX: e.clientX - rect.left,
+      screenY: e.clientY - rect.top,
+    }));
+  }, [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]);
+
+  const handleMouseLeave = useCallback(() => {
+    isDragging.current = false;
+    setMapContainerCursor(containerRef.current, ADVENTURE_CURSORS.default);
   }, []);
 
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -416,6 +512,7 @@ export default function GameMapComponent() {
         targetId: interaction.targetId,
         targetType: interaction.targetType,
         destination: interaction.destination,
+        targetPosition: interaction.targetPosition,
       });
       return true;
     }
@@ -780,14 +877,16 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
-        const path = findPath(gameState.map, hero.position, destination, hero.movement);
-        if (path.length <= 1) {
+        const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+        if (!approach) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
             setTimeout(() => rendererRef.current?.clearHighlights(), 500);
           }
           return;
         }
+        const path = approach.path;
+        const approachDestination = approach.destination;
 
         const pendingAttack = pendingAttackRef.current;
         const isConfirmingAttack =
@@ -799,7 +898,7 @@ export default function GameMapComponent() {
           pendingAttackRef.current = {
             heroId: selectedHeroId,
             targetId: obj.id,
-            destination,
+            destination: approachDestination,
             path,
           };
           rendererRef.current.highlightPath(path);
@@ -816,7 +915,7 @@ export default function GameMapComponent() {
 
         pendingAttackRef.current = null;
         rendererRef.current.clearHighlights();
-        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero", destination, path });
+        setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "hero", destination: approachDestination, targetPosition: destination, path });
         return;
       }
 
@@ -882,7 +981,19 @@ export default function GameMapComponent() {
               if (normalizedMessage.includes("garde")) {
                 pendingAttackRef.current = null;
                 rendererRef.current?.clearHighlights();
-                setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "town", destination, path });
+                const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+                if (approach) {
+                  setPendingCombat({
+                    attackerHeroId: selectedHeroId,
+                    targetId: obj.id,
+                    targetType: "town",
+                    destination: approach.destination,
+                    targetPosition: destination,
+                    path: approach.path,
+                  });
+                } else {
+                  setCombatMessage(message);
+                }
               } else {
                 setCombatMessage(message);
               }
@@ -1015,6 +1126,33 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
+        const guardianPower = gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0;
+        if (guardianPower > 0) {
+          const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+          if (!approach) {
+            rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            return;
+          }
+          if (!canAct) {
+            setCombatMessage(blockedTurnMessage);
+            return;
+          }
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current.highlightPath(approach.path);
+          rendererRef.current.highlightTile(destination.x, destination.y, 0xff6600);
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: obj.id,
+            targetType: "building",
+            destination: approach.destination,
+            targetPosition: destination,
+            path: approach.path,
+          });
+          return;
+        }
+
         const path = findPath(gameState.map, hero.position, destination, hero.movement);
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
@@ -1026,16 +1164,6 @@ export default function GameMapComponent() {
 
         if (!canAct) {
           setCombatMessage(blockedTurnMessage);
-          return;
-        }
-
-        const guardianPower = gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0;
-        if (guardianPower > 0) {
-          pendingMoveRef.current = null;
-          pendingAttackRef.current = null;
-          rendererRef.current.highlightPath(path);
-          rendererRef.current.highlightTile(destination.x, destination.y, 0xff6600);
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: obj.id, targetType: "building", destination, path });
           return;
         }
 
@@ -1203,21 +1331,64 @@ export default function GameMapComponent() {
         return;
       }
 
-      const path = findPath(gameState.map, hero.position, tile, hero.movement);
-      if (path.length > 1) {
-        if (targetTile?.object?.type === "monster") {
-          pendingMoveRef.current = null;
-          pendingAttackRef.current = null;
-          rendererRef.current.highlightPath(path);
+      if (targetTile?.object?.type === "monster") {
+        const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+        if (!approach) {
           rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current.highlightPath(approach.path);
+        rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          return;
+        }
+        setPendingCombat({
+          attackerHeroId: selectedHeroId,
+          targetId: targetTile.object.id,
+          targetType: "monster",
+          destination: approach.destination,
+          targetPosition: tile,
+          path: approach.path,
+        });
+        return;
+      }
+
+      if (targetTile?.object?.type === "building") {
+        const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
+        const guardianPower = targetTile.object?.guardianPower ?? 0;
+        if (!isMyBuilding && guardianPower > 0) {
+          const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+          if (!approach) {
+            rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            return;
+          }
           if (!canAct) {
             setCombatMessage(blockedTurnMessage);
             return;
           }
-          setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "monster", destination: tile, path });
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current.highlightPath(approach.path);
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: targetTile.object.id,
+            targetType: "building",
+            destination: approach.destination,
+            targetPosition: tile,
+            path: approach.path,
+          });
           return;
         }
+      }
 
+      const path = findPath(gameState.map, hero.position, tile, hero.movement);
+      if (path.length > 1) {
         if (targetTile?.object?.type === "building") {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
           if (!isMyBuilding) {
@@ -1228,11 +1399,24 @@ export default function GameMapComponent() {
 
             const guardianPower = targetTile.object?.guardianPower ?? 0;
             if (guardianPower > 0) {
+              const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+              if (!approach) {
+                rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+                setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+                return;
+              }
               pendingMoveRef.current = null;
               pendingAttackRef.current = null;
-              rendererRef.current.highlightPath(path);
+              rendererRef.current.highlightPath(approach.path);
               rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
-              setPendingCombat({ attackerHeroId: selectedHeroId, targetId: targetTile.object.id, targetType: "building", destination: tile, path });
+              setPendingCombat({
+                attackerHeroId: selectedHeroId,
+                targetId: targetTile.object.id,
+                targetType: "building",
+                destination: approach.destination,
+                targetPosition: tile,
+                path: approach.path,
+              });
               return;
             }
 
@@ -1392,11 +1576,106 @@ export default function GameMapComponent() {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
     </div>
   );
+}
+
+function setMapContainerCursor(container: HTMLDivElement | null, cursor: string) {
+  if (!container) return;
+  container.style.cursor = cursor;
+  container.querySelectorAll("canvas").forEach((canvas) => {
+    canvas.style.cursor = cursor;
+  });
+}
+
+function getAdventureMapCursor({
+  renderer,
+  gameState,
+  selectedHeroId,
+  selectedTownId,
+  currentPlayerId,
+  visibleTiles,
+  activeCombatHeroIds,
+  screenX,
+  screenY,
+}: {
+  renderer: MapRenderer;
+  gameState: ReturnType<typeof useGameStore.getState>["gameState"];
+  selectedHeroId: string | null;
+  selectedTownId: string | null;
+  currentPlayerId: string | null;
+  visibleTiles: Set<string> | null;
+  activeCombatHeroIds: Set<string>;
+  screenX: number;
+  screenY: number;
+}) {
+  if (!gameState || !selectedHeroId) return ADVENTURE_CURSORS.default;
+
+  const hero = gameState.players.flatMap((player) => player.heroes).find((item) => item.id === selectedHeroId);
+  if (!hero) return ADVENTURE_CURSORS.default;
+  if (activeCombatHeroIds.has(hero.id)) return ADVENTURE_CURSORS.forbidden;
+
+  const tile = renderer.getTileAtScreen(screenX, screenY);
+  if (!tile) return ADVENTURE_CURSORS.default;
+
+  const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
+  if (!targetTile) return ADVENTURE_CURSORS.forbidden;
+
+  const tileKey = `${tile.x},${tile.y}`;
+  const isReachableTile = computeReachableTiles(gameState.map, hero.position, hero.movement).has(tileKey);
+
+  const objects = filterClickThroughTownSpriteHits(
+    renderer.getObjectsAtScreen(screenX, screenY),
+    tile,
+    targetTile,
+    selectedHeroId
+  );
+  const selectedObject = selectObjectOnTile(objects, selectedHeroId, selectedTownId);
+  const objectCursor = selectedObject
+    ? getAdventureObjectCursor(selectedObject, currentPlayerId)
+    : null;
+
+  if (objectCursor) return objectCursor;
+
+  const tileObjectCursor = getAdventureTileObjectCursor(targetTile.object?.type);
+  if (tileObjectCursor) return tileObjectCursor;
+
+  if (isReachableTile) return ADVENTURE_CURSORS.boot;
+  if (visibleTiles && !visibleTiles.has(tileKey)) return ADVENTURE_CURSORS.forbidden;
+
+  return isTileTraversable(targetTile)
+    ? ADVENTURE_CURSORS.boot
+    : ADVENTURE_CURSORS.forbidden;
+}
+
+function getAdventureObjectCursor(object: MapObjectData, currentPlayerId: string | null) {
+  if (object.type === "combat") return ADVENTURE_CURSORS.sword;
+  if (object.type === "adventure_building") return ADVENTURE_CURSORS.building;
+  if (object.type === "building") return ADVENTURE_CURSORS.resource;
+  if (object.type === "town") {
+    return object.playerId === currentPlayerId
+      ? ADVENTURE_CURSORS.castle
+      : ADVENTURE_CURSORS.sword;
+  }
+  if (object.type === "hero" && currentPlayerId && object.playerId !== currentPlayerId) {
+    return ADVENTURE_CURSORS.sword;
+  }
+
+  return null;
+}
+
+function getAdventureTileObjectCursor(type: string | undefined) {
+  if (type === "monster" || type === "combat") return ADVENTURE_CURSORS.sword;
+  if (type === "resource") return ADVENTURE_CURSORS.resource;
+  if (type === "building") return ADVENTURE_CURSORS.resource;
+  if (type === "adventure_building") return ADVENTURE_CURSORS.building;
+  if (type === "wall" || type === "town_footprint") return ADVENTURE_CURSORS.forbidden;
+
+  return null;
 }
 
 async function getApiErrorMessage(response: Response) {
@@ -1416,7 +1695,7 @@ function animateHeroMovement(renderer: MapRenderer | null, heroId: string, path:
 
 function getAcceptedMovePath(data: unknown, fallbackPath: Position[]): Position[] {
   const path = (data as { path?: unknown })?.path;
-  if (!Array.isArray(path) || path.length < 2) return fallbackPath;
+  if (!Array.isArray(path) || path.length < 1) return fallbackPath;
   return path
     .map((position) => ({
       x: Number((position as Position).x),
@@ -1540,6 +1819,17 @@ function filterClickThroughTownSpriteHits(
 
 function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[]) {
   return getAdventurePathCost(map, path);
+}
+
+function getCombatApproach(
+  map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"],
+  start: Position,
+  target: Position,
+  movement: number
+): { destination: Position; path: Position[]; targetPosition: Position } | null {
+  const path = findPathToAdjacent(map, start, target, movement);
+  const destination = path[path.length - 1];
+  return destination ? { destination, path, targetPosition: target } : null;
 }
 
 function getAdjacentPositions(position: Position): Position[] {

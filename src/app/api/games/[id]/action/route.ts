@@ -120,7 +120,7 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "STOP"; message: string; destination: Position };
@@ -193,7 +193,8 @@ export async function POST(
       if (firstStop?.hero && isHeroInActiveCombat(game.combats, firstStop.hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
-      const movePath = firstStop ? action.path.slice(0, firstStop.pathIndex + 1) : action.path;
+      const stopPathIndex = firstStop?.stopBefore ? Math.max(0, firstStop.pathIndex - 1) : firstStop?.pathIndex;
+      const movePath = typeof stopPathIndex === "number" ? action.path.slice(0, stopPathIndex + 1) : action.path;
       const usedMovement = getPathMovementCost(mapData, movePath);
       const lastPos = movePath[movePath.length - 1];
       const { error: heroUpdateError } = await supabase.from("heroes").update({
@@ -231,6 +232,8 @@ export async function POST(
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
       const tile = mapData.tiles?.[lastPos.y]?.[lastPos.x];
+      const stopObject = firstStop?.object;
+      const stopTargetPosition = firstStop?.targetPosition;
       let interaction: MoveInteraction | null = null;
 
       if (tile?.object?.type === "resource" && !collected.has(tile.object.id)) {
@@ -246,22 +249,26 @@ export async function POST(
         if (firstStop.hero.playerId === gamePlayer.id) {
           interaction = { type: "STOP", message: "Un de vos heros bloque le chemin.", destination: lastPos };
         } else {
-          interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos };
+          interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos, targetPosition: stopTargetPosition };
         }
+      } else if (stopObject?.type === "monster" && stopTargetPosition && !killed.has(stopObject.id)) {
+        interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
       } else if (tile?.object?.type === "monster" && !killed.has(tile.object.id)) {
         interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "monster", destination: lastPos };
       } else if (tile?.object?.type === "artifact") {
         interaction = { type: "STOP", message: "Artefact atteint.", destination: lastPos };
-      } else if (tile?.object?.type === "building") {
+      } else if (tile?.object?.type === "building" || (stopObject?.type === "building" && stopTargetPosition)) {
+        const buildingObject = (stopObject?.type === "building" ? stopObject : tile?.object)!;
+        const buildingPosition = stopTargetPosition ?? lastPos;
         const building = players.flatMap((player) => player.resourceBuildings)
-          .find((item) => item.id === tile.object?.id || (item.x === lastPos.x && item.y === lastPos.y))
-          ?? await getResourceBuilding(supabase, id, tile.object.id);
-        const owner = findResourceBuildingOwner(players, tile.object, lastPos);
-        const guardianPower = Number(building?.guardianPower ?? tile.object.guardianPower ?? 0);
+          .find((item) => item.id === buildingObject.id || (item.x === buildingPosition.x && item.y === buildingPosition.y))
+          ?? await getResourceBuilding(supabase, id, buildingObject.id);
+        const owner = findResourceBuildingOwner(players, buildingObject, buildingPosition);
+        const guardianPower = Number(building?.guardianPower ?? buildingObject.guardianPower ?? 0);
         if (owner?.id === gamePlayer.id) {
           interaction = null;
         } else if (guardianPower > 0) {
-          interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "building", destination: lastPos };
+          interaction = { type: "COMBAT", targetId: buildingObject.id, targetType: "building", destination: lastPos, targetPosition: buildingPosition };
         } else if (building) {
           await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
           interaction = { type: "CAPTURE_BUILDING", buildingType: building.buildingType, destination: lastPos };
@@ -1104,13 +1111,13 @@ function findFirstMoveStop({
   collected: Set<string>;
   killed: Set<string>;
   visitedAdventureBuildings: Set<string>;
-}): { pathIndex: number; object?: MapObject; hero?: MinimalHero & { playerId: string } } | null {
+}): { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position } | null {
   for (let i = 1; i < path.length; i++) {
     const position = path[i];
     const hero = players
       .flatMap((player) => (player.heroes ?? []).map((item) => ({ ...item, playerId: player.id })))
       .find((item) => item.id !== movingHeroId && item.x === position.x && item.y === position.y);
-    if (hero) return { pathIndex: i, hero };
+    if (hero) return { pathIndex: i, stopBefore: true, hero, targetPosition: position };
 
     const object = map.tiles[position.y]?.[position.x]?.object;
     if (!object) continue;
@@ -1118,6 +1125,7 @@ function findFirstMoveStop({
     if (object.type === "monster" && killed.has(object.id)) continue;
     if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
     if (object.type === "wall" || object.type === "gate") continue;
+    if (object.type === "monster") return { pathIndex: i, stopBefore: true, object, targetPosition: position };
     if (object.type === "town") {
       const owner = findTownOwner(players, object, position);
       if (owner?.id === movingPlayerId) continue;
@@ -1126,6 +1134,9 @@ function findFirstMoveStop({
     if (object.type === "building") {
       const owner = findResourceBuildingOwner(players, object, position);
       if (owner?.id === movingPlayerId) continue;
+      if (Number(object.guardianPower ?? 0) > 0) {
+        return { pathIndex: i, stopBefore: true, object, targetPosition: position };
+      }
       return { pathIndex: i, object };
     }
     return { pathIndex: i, object };

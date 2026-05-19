@@ -18,13 +18,14 @@ import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
 import { buildConnectionsAndWalls } from "./connections";
-import { applyChokepointGuards, fillZone, placeTownInZone } from "./placement";
+import { applyChokepointGuards, fillZone, placeStartingEconomy, placeTownInZone } from "./placement";
 import { buildRoads, buildSecondaryRoads } from "./roads";
 import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
 import { placeAdventureBuildings } from "./adventure-buildings";
+export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
 
 function isPassable(terrain: TerrainType): boolean {
   return terrain !== TerrainType.LAVA;
@@ -88,6 +89,18 @@ function isInsideMap(map: GameMap, pos: Position): boolean {
   return pos.x >= 0 && pos.x < map.width && pos.y >= 0 && pos.y < map.height;
 }
 
+function positionKey(pos: Position): string {
+  return `${pos.x},${pos.y}`;
+}
+
+function toPositionKeySet(positions: Position[]): Set<string> {
+  return new Set(positions.map(positionKey));
+}
+
+function isBlockedPosition(pos: Position, blocked: Set<string>): boolean {
+  return blocked.has(positionKey(pos));
+}
+
 export function canMoveAdventureStep(map: GameMap, from: Position, to: Position): boolean {
   if (!isInsideMap(map, from) || !isInsideMap(map, to)) return false;
 
@@ -109,6 +122,26 @@ export function canMoveAdventureStep(map: GameMap, from: Position, to: Position)
   return true;
 }
 
+function canMoveAdventureStepAvoiding(map: GameMap, from: Position, to: Position, blocked: Set<string>): boolean {
+  if (isBlockedPosition(to, blocked)) return false;
+  if (!canMoveAdventureStep(map, from, to)) return false;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+    if (isBlockedPosition({ x: from.x + dx, y: from.y }, blocked)) return false;
+    if (isBlockedPosition({ x: from.x, y: from.y + dy }, blocked)) return false;
+  }
+
+  return true;
+}
+
+export function areAdventurePositionsAdjacent(a: Position, b: Position): boolean {
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  return dx <= 1 && dy <= 1 && (dx !== 0 || dy !== 0);
+}
+
 export function getAdventureStepCost(map: GameMap, from: Position, to: Position): number {
   if (!canMoveAdventureStep(map, from, to)) return Number.POSITIVE_INFINITY;
 
@@ -126,6 +159,24 @@ export function getAdventurePathCost(map: GameMap, path: Position[]): number {
     const stepCost = getAdventureStepCost(map, path[i - 1], path[i]);
     if (!Number.isFinite(stepCost)) return Number.POSITIVE_INFINITY;
     total += stepCost;
+  }
+  return total;
+}
+
+export function getAdventurePathCostAvoiding(map: GameMap, path: Position[], blockedPositions: Position[]): number {
+  const blocked = toPositionKeySet(blockedPositions);
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    const from = path[i - 1];
+    const to = path[i];
+    if (!canMoveAdventureStepAvoiding(map, from, to, blocked)) return Number.POSITIVE_INFINITY;
+
+    const targetTile = map.tiles[to.y]?.[to.x];
+    if (!targetTile) return Number.POSITIVE_INFINITY;
+
+    const surfaceCost = effectiveMovementCost(targetTile);
+    const isDiagonal = from.x !== to.x && from.y !== to.y;
+    total += isDiagonal ? Math.floor(surfaceCost * DIAGONAL_BASE / ORTHOGONAL_BASE) : surfaceCost;
   }
   return total;
 }
@@ -243,6 +294,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
 
   // 3) Châteaux (joueurs + neutres) puis remplissage value-system
   const townPositions: Position[] = [];
+  const playerTownPositions = new Map<number, { zoneId: number; position: Position }>();
   for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
     const meta = zoneGrid.meta[zoneId];
     if (!meta.hasTown) continue;
@@ -252,10 +304,26 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
       !!meta.townIsNeutral,
       meta.ownerIndex,
     );
-    if (placed) townPositions.push({ x: placed.x, y: placed.y });
+    if (placed) {
+      const position = { x: placed.x, y: placed.y };
+      townPositions.push(position);
+      if (!meta.townIsNeutral && meta.ownerIndex !== undefined) {
+        playerTownPositions.set(meta.ownerIndex, { zoneId, position });
+      }
+    }
   }
 
   const miningPositions: Position[] = [];
+  for (const [ownerIndex, start] of playerTownPositions) {
+    const placed = placeStartingEconomy(
+      { tiles, zoneGrid, width, height, rng },
+      start.zoneId,
+      start.position,
+      ownerIndex,
+    );
+    for (const b of placed) miningPositions.push({ x: b.x, y: b.y });
+  }
+
   for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
     const meta = zoneGrid.meta[zoneId];
     const tplZone = template.zones.find((z) => z.id === meta.templateZoneId)!;
@@ -270,6 +338,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
       { tiles, zoneGrid, width, height, rng },
       zoneId,
       tplZone.monsterStrength,
+      { allowBuildings: meta.type !== "player" },
     );
     for (const b of r.placedBuildings) miningPositions.push({ x: b.x, y: b.y });
   }
@@ -416,6 +485,81 @@ export function findPath(
         pos: neighbor,
         g,
         f,
+        path: [...current.path, neighbor],
+      });
+    }
+  }
+
+  return [];
+}
+
+export function findPathToAdjacent(
+  map: GameMap,
+  start: Position,
+  target: Position,
+  maxMovement: number,
+  blockedPositions: Position[] = [target]
+): Position[] {
+  if (!isInsideMap(map, start) || !isInsideMap(map, target)) return [];
+  if (areAdventurePositionsAdjacent(start, target)) return [start];
+
+  const blocked = toPositionKeySet(blockedPositions);
+  const goals = new Set(
+    getAdventureNeighbors(target)
+      .filter((position) =>
+        isInsideMap(map, position) &&
+        !isBlockedPosition(position, blocked) &&
+        isTileTraversable(map.tiles[position.y]?.[position.x])
+      )
+      .map(positionKey)
+  );
+  if (goals.size === 0) return [];
+
+  const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
+  const closedSet = new Set<string>();
+  const bestCost = new Map<string, number>([[positionKey(start), 0]]);
+
+  const heuristic = (a: Position) => {
+    const dx = Math.max(0, Math.abs(a.x - target.x) - 1);
+    const dy = Math.max(0, Math.abs(a.y - target.y) - 1);
+    const diagonal = Math.min(dx, dy);
+    const straight = Math.max(dx, dy) - diagonal;
+    return diagonal * 70 + straight * 50;
+  };
+
+  openSet.push({
+    pos: start,
+    g: 0,
+    f: heuristic(start),
+    path: [start],
+  });
+
+  while (openSet.length > 0) {
+    openSet.sort((a, b) => a.f - b.f);
+    const current = openSet.shift()!;
+    const key = positionKey(current.pos);
+
+    if (goals.has(key)) return current.path;
+    if (current.g > (bestCost.get(key) ?? Number.POSITIVE_INFINITY)) continue;
+    if (closedSet.has(key)) continue;
+    closedSet.add(key);
+
+    for (const neighbor of getAdventureNeighbors(current.pos)) {
+      if (!isInsideMap(map, neighbor)) continue;
+      if (!canMoveAdventureStepAvoiding(map, current.pos, neighbor, blocked)) continue;
+
+      const neighborKey = positionKey(neighbor);
+      if (closedSet.has(neighborKey)) continue;
+
+      const g = current.g + getAdventurePathCostAvoiding(map, [current.pos, neighbor], blockedPositions);
+      if (g > maxMovement) continue;
+      if (g >= (bestCost.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
+
+      bestCost.set(neighborKey, g);
+      openSet.push({
+        pos: neighbor,
+        g,
+        f: g + heuristic(neighbor),
         path: [...current.path, neighbor],
       });
     }

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { finalizeStartingRareMines } from "@/lib/game/engine";
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { createGamePlayerSetup, PLAYER_COLORS, pickAiFaction, pickAiName } from "@/lib/game/server/player-setup";
+import { syncResourceBuildingsFromMap } from "@/lib/game/server/resource-buildings";
 import { GameMap } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
@@ -57,13 +59,19 @@ export async function POST(
 
   const gameWithAi = await getGameWithRelations(supabase, id);
   if (!gameWithAi) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
-  const activePlayers = gameWithAi.players as unknown as Array<{ id: string; turnOrder: number }>;
+  const activePlayers = gameWithAi.players as unknown as Array<{ id: string; turnOrder: number; faction?: string }>;
   const firstPlayer = [...activePlayers].sort((a, b) => a.turnOrder - b.turnOrder)[0];
   if (!firstPlayer) return NextResponse.json({ error: "Aucun joueur dans la partie" }, { status: 400 });
 
+  const finalizedMapData = finalizeStartingRareMines(
+    gameWithAi.mapData as GameMap,
+    new Map(activePlayers.map((player) => [Number(player.turnOrder), player.faction])),
+  );
+  await syncResourceBuildingsFromMap(supabase, id, finalizedMapData);
+
   const { error } = await supabase
     .from("games")
-    .update({ status: "ACTIVE", current_turn_player_id: firstPlayer.id })
+    .update({ status: "ACTIVE", current_turn_player_id: firstPlayer.id, map_data: finalizedMapData })
     .eq("id", id)
     .select("id")
     .single();

@@ -9,7 +9,8 @@ import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import HUD from "@/components/game/hud/HUD";
-import { mapApiToGameState } from "@/lib/game/api";
+import { getCachedStaticGameMap, mapApiToGameState, setCachedStaticGameMap } from "@/lib/game/api";
+import { readCachedGameState, writeCachedGameState } from "@/lib/game/local-cache";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
@@ -47,10 +48,19 @@ export default function GamePage() {
     const supabase = createClient();
     let cancelled = false;
     const hasExistingGame = useGameStore.getState().gameState?.id === gameId;
+    let restoredCachedGame = false;
 
     if (!hasExistingGame) {
       useGameStore.getState().resetGame();
-      beginLoading("Connexion a la partie...", 8);
+      const cached = readCachedGameState(gameId, userId, { revealMap: devRevealMap });
+      if (cached) {
+        beginLoading("Restauration de la partie locale...", 24);
+        setCachedStaticGameMap(gameId, cached.staticMap);
+        setGameState(cached.gameState);
+        restoredCachedGame = true;
+      } else {
+        beginLoading("Connexion a la partie...", 8);
+      }
     }
 
     const bootstrapGame = async () => {
@@ -78,6 +88,7 @@ export default function GamePage() {
           const nextGameState = mapApiToGameState(data, userId, { revealMap: devRevealMap });
           if (nextGameState.id === gameId) {
             setGameState(nextGameState);
+            writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap });
             useGameStore.getState().updateLoadingProgress(72, "Initialisation du rendu...");
           }
         } else {
@@ -105,6 +116,7 @@ export default function GamePage() {
         if (cancelled || requestId !== loadRequestIdRef.current || !nextGameState) return;
         if (nextGameState.id === gameId) {
           setGameState(nextGameState);
+          writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap });
         }
       } catch {
         if (!cancelled && !useGameStore.getState().gameState) {
@@ -113,7 +125,7 @@ export default function GamePage() {
       }
     };
 
-    if (hasExistingGame) {
+    if (hasExistingGame || restoredCachedGame) {
       void syncGame();
     } else {
       void bootstrapGame();

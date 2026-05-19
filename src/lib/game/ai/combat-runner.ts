@@ -1,9 +1,9 @@
 import {
   executeManualCombatAction,
   getHexDistance,
-  getHexNeighbors,
-  isTerrainBlocked,
 } from "@/lib/game/combat/persistent";
+import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
+import { calculateCombatDamageRange, hasAdjacentEnemy, type CombatSideStats } from "@/lib/game/combat/rules";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { getUnitRule } from "@/lib/game/units";
 import type { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
@@ -33,6 +33,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
     const actor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
     if (!actor) return toCombat(combat);
+    if (actor.ownerPlayerId === null) return toCombat(combat);
     if (actor.ownerPlayerId !== null && !aiPlayerIds.has(actor.ownerPlayerId)) return toCombat(combat);
 
     const { data: attackerHero, error: attackerError } = await supabase
@@ -51,7 +52,11 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       : { data: null, error: null };
     if (defenderError) throw defenderError;
 
-    const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? []);
+    const sideStats = {
+      attacker: { attack: attackerHero?.attack ?? 1, defense: attackerHero?.defense ?? 1 },
+      defender: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
+    };
+    const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? [], sideStats);
     const execution = executeManualCombatAction({
       units: boardState.units ?? [],
       terrain: boardState.terrain ?? [],
@@ -59,8 +64,8 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       round: combat.round ?? 1,
       currentUnitId: combat.current_unit_id,
       action,
-      attackerStats: { attack: attackerHero?.attack ?? 1, defense: attackerHero?.defense ?? 1 },
-      defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
+      attackerStats: sideStats.attacker,
+      defenderStats: sideStats.defender,
     });
 
     const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
@@ -102,30 +107,53 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
   return data ? toCombat(data) : null;
 }
 
-function chooseAiCombatAction(actor: CombatBoardUnit, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]): CombatAction {
+function chooseAiCombatAction(
+  actor: CombatBoardUnit,
+  units: CombatBoardUnit[],
+  terrain: CombatTerrainFeature[],
+  sideStats: Record<"attacker" | "defender", CombatSideStats>
+): CombatAction {
   const enemies = units.filter((unit) => unit.count > 0 && unit.side !== actor.side);
   if (enemies.length === 0) return { type: "DEFEND" };
 
   const adjacent = enemies
     .filter((unit) => getHexDistance(actor, unit) <= 1)
-    .sort((a, b) => targetPriority(actor, b) - targetPriority(actor, a))[0];
+    .sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
   if (adjacent) return { type: "ATTACK", targetUnitId: adjacent.id };
 
-  if (actor.ranged && actor.shots > 0) {
-    const target = [...enemies].sort((a, b) => targetPriority(actor, b) - targetPriority(actor, a))[0];
+  if (actor.ranged && actor.shots > 0 && !hasAdjacentEnemy(actor, units)) {
+    const target = [...enemies].sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
     return { type: "SHOOT", targetUnitId: target.id };
   }
 
-  const target = [...enemies].sort((a, b) => targetPriority(actor, b) - targetPriority(actor, a))[0];
-  const destination = reachableCells(actor, units, terrain)
+  const target = [...enemies].sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
+  const approach = findMeleeApproach(actor, target, units, terrain);
+  if (approach) return { type: "ATTACK", targetUnitId: target.id };
+
+  const destination = getReachableCombatCells(actor, units, terrain)
     .sort((a, b) => getHexDistance(a, target) - getHexDistance(b, target))[0];
   return destination ? { type: "MOVE", q: destination.q, r: destination.r } : { type: "DEFEND" };
 }
 
-function targetPriority(actor: CombatBoardUnit, target: CombatBoardUnit) {
+function targetPriority(
+  actor: CombatBoardUnit,
+  target: CombatBoardUnit,
+  units: CombatBoardUnit[],
+  terrain: CombatTerrainFeature[],
+  sideStats: Record<"attacker" | "defender", CombatSideStats>
+) {
   const rule = getUnitRule(target.unitType);
-  const actorRule = getUnitRule(actor.unitType);
-  const averageDamage = Math.max(1, Math.floor((actorRule.minDamage + actorRule.maxDamage) / 2) * actor.count);
+  const distance = getHexDistance(actor, target);
+  const range = calculateCombatDamageRange({
+    attacker: actor,
+    defender: target,
+    attackerStats: sideStats[actor.side],
+    defenderStats: sideStats[target.side],
+    actionType: distance <= 1 ? "ATTACK" : "SHOOT",
+    terrain,
+    actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
+  });
+  const averageDamage = Math.floor((range.minDamage + range.maxDamage) / 2);
   const canKill = target.health <= averageDamage;
   return (
     (canKill ? 1200 : 0) +
@@ -134,31 +162,6 @@ function targetPriority(actor: CombatBoardUnit, target: CombatBoardUnit) {
     rule.power * target.count * 0.08 +
     Math.max(0, 400 - target.health * 0.05)
   );
-}
-
-function reachableCells(
-  actor: CombatBoardUnit,
-  units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[]
-): { q: number; r: number }[] {
-  const occupied = new Set(units.filter((unit) => unit.id !== actor.id).map((unit) => `${unit.q},${unit.r}`));
-  const visited = new Set<string>([`${actor.q},${actor.r}`]);
-  const queue: { q: number; r: number; dist: number }[] = [{ q: actor.q, r: actor.r, dist: 0 }];
-  const cells: { q: number; r: number }[] = [];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current.dist >= actor.speed) continue;
-    for (const nb of getHexNeighbors(current.q, current.r)) {
-      const key = `${nb.q},${nb.r}`;
-      if (visited.has(key) || isTerrainBlocked(nb.q, nb.r, terrain) || occupied.has(key)) continue;
-      visited.add(key);
-      cells.push(nb);
-      queue.push({ ...nb, dist: current.dist + 1 });
-    }
-  }
-
-  return cells;
 }
 
 function buildManualCombatResult(

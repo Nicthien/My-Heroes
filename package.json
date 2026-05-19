@@ -19,6 +19,7 @@
     "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:boat-sprites && npm run generate:town-sprites",
     "process:unit-sprites": "node scripts/process-unit-sprites.mjs",
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
+    "validate:combat": "tsx scripts/validate-combat-core.ts",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs"
   },

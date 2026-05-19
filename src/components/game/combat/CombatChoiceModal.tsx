@@ -59,6 +59,7 @@ export default function CombatChoiceModal() {
         targetId: pendingCombat.targetId,
         targetType: pendingCombat.targetType,
         destination: pendingCombat.destination,
+        targetPosition: pendingCombat.targetPosition,
         path: pendingCombat.path,
       }),
     });
@@ -215,7 +216,7 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
   }
 
   if (pendingCombat.targetType === "town") {
-    const destination = pendingCombat.destination;
+    const destination = pendingCombat.targetPosition ?? pendingCombat.destination;
     return gameState.players
       .flatMap((player) => player.towns)
       .find((town) =>
@@ -225,7 +226,7 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
   }
 
   if (pendingCombat.targetType === "building") {
-    const destination = pendingCombat.destination;
+    const destination = pendingCombat.targetPosition ?? pendingCombat.destination;
     const building = gameState.players
       .flatMap((player) => player.resourceBuildings)
       .find((item) =>

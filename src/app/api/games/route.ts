@@ -113,7 +113,6 @@ export async function POST(request: Request) {
   }
 
   await createNeutralArmies(supabase, gameRow.id, mapData);
-  await createResourceBuildings(supabase, gameRow.id, mapData);
   await createNeutralTowns(supabase, gameRow.id, mapData);
 
   const game = await getGameWithRelations(supabase, gameRow.id);
@@ -169,33 +168,6 @@ function prefixMonsterIds(
         tile.object.id = `${prefix}-${tile.object.id}`;
       }
     }
-  }
-}
-
-async function createResourceBuildings(
-  supabase: ReturnType<typeof createAdminClient>,
-  gameId: string,
-  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
-) {
-  const buildingTiles = mapData.tiles.flatMap((row) =>
-    row.filter((tile) => tile.object?.type === "building"),
-  );
-
-  for (const tile of buildingTiles) {
-    const id = tile.object?.id;
-    const buildingType = tile.object?.subtype;
-    const guardianPower = tile.object?.guardianPower ?? 200;
-    if (!id || !buildingType) continue;
-
-    await supabase.from("resource_buildings").insert({
-      id,
-      game_id: gameId,
-      game_player_id: null,
-      building_type: buildingType,
-      x: tile.x,
-      y: tile.y,
-      guardian_power: guardianPower,
-    });
   }
 }
 

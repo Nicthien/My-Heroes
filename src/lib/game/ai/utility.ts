@@ -1,6 +1,8 @@
 import {
   findPath,
+  findPathToAdjacent,
   getAdventurePathCost,
+  getAdventurePathCostAvoiding,
   isTileTraversable,
 } from "@/lib/game/engine";
 import { getAdventureBuildingRule } from "@/lib/game/adventure-buildings";
@@ -50,7 +52,7 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
       const pathCost = getAdventurePathCost(context.map, path);
       if (!Number.isFinite(pathCost) || pathCost > hero.movement) continue;
 
-      const objectObjective = getObjectObjective(context, tile.object, position, path, pathCost);
+      const objectObjective = getObjectObjective(context, tile.object, position, path, pathCost, start, hero.movement);
       if (objectObjective) {
         objectives.push(objectObjective);
         continue;
@@ -76,9 +78,9 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
     if (army.status !== "ACTIVE" || context.killedNeutralArmies.has(army.id)) continue;
     const position = { x: army.x, y: army.y };
     if (!context.explored.has(tileKey(position))) continue;
-    const path = findPath(context.map, start, position, hero.movement);
-    const pathCost = getAdventurePathCost(context.map, path);
-    if (path.length <= 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
+    const path = findPathToAdjacent(context.map, start, position, hero.movement);
+    const pathCost = getAdventurePathCostAvoiding(context.map, path, [position]);
+    if (path.length < 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
     objectives.push({
       type: "neutral_army",
       id: army.id,
@@ -93,9 +95,9 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
   for (const opponent of context.visibleOpponents) {
     for (const target of opponent.heroes ?? []) {
       const position = { x: target.x, y: target.y };
-      const path = findPath(context.map, start, position, hero.movement);
-      const pathCost = getAdventurePathCost(context.map, path);
-      if (path.length <= 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
+      const path = findPathToAdjacent(context.map, start, position, hero.movement);
+      const pathCost = getAdventurePathCostAvoiding(context.map, path, [position]);
+      if (path.length < 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
       const targetPower = calculateHeroPower(target);
       objectives.push({
         type: "enemy_hero",
@@ -120,6 +122,8 @@ function getObjectObjective(
   position: Position,
   path: Position[],
   pathCost: number,
+  start: Position,
+  movement: number,
 ): AiObjective | null {
   if (!object) return null;
 
@@ -146,12 +150,15 @@ function getObjectObjective(
     if (ownedBySelf) return null;
     const targetPower = Number(object.guardianPower ?? findVisibleBuildingPower(context, object.id, position) ?? 0);
     const buildingType = object.subtype ?? findVisibleBuildingType(context, object.id, position);
+    const objectivePath = targetPower > 0 ? findPathToAdjacent(context.map, start, position, movement) : path;
+    const objectivePathCost = targetPower > 0 ? getAdventurePathCostAvoiding(context.map, objectivePath, [position]) : pathCost;
+    if (objectivePath.length < 1 || !Number.isFinite(objectivePathCost) || objectivePathCost > movement) return null;
     return {
       type: "resource_building",
       id: object.id,
       position,
-      path,
-      pathCost,
+      path: objectivePath,
+      pathCost: objectivePathCost,
       baseValue: getResourceBuildingValue(buildingType, context.resourceNeeds),
       targetPower,
       object,
@@ -192,12 +199,15 @@ function getObjectObjective(
 
   if (object.type === "monster") {
     if (context.killedNeutralArmies.has(object.id)) return null;
+    const objectivePath = findPathToAdjacent(context.map, start, position, movement);
+    const objectivePathCost = getAdventurePathCostAvoiding(context.map, objectivePath, [position]);
+    if (objectivePath.length < 1 || !Number.isFinite(objectivePathCost) || objectivePathCost > movement) return null;
     return {
       type: "neutral_army",
       id: object.id,
       position,
-      path,
-      pathCost,
+      path: objectivePath,
+      pathCost: objectivePathCost,
       baseValue: 500 + Number(object.guardianPower ?? 0) * 0.45,
       targetPower: Number(object.guardianPower ?? 0),
       object,

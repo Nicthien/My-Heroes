@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { runAiCombatTurns } from "@/lib/game/ai/combat-runner";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
-  canMoveAdventureStep,
+  areAdventurePositionsAdjacent,
   computeVisibleTiles,
-  getAdventureStepCost,
+  getAdventurePathCostAvoiding,
   getPlayerVisionCenters,
   getUsableAdventureMovement,
   normalizeMapMovement,
@@ -97,34 +96,6 @@ export async function POST(
     return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
   }
 
-  // Move hero to combat location if a valid path is provided
-  if (Array.isArray(body.path) && body.path.length >= 2) {
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
-    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, body.path, attacker.movement ?? 0);
-    if (!validation.ok) return NextResponse.json({ error: "Chemin de combat invalide" }, { status: 400 });
-
-    const lastPos = body.path[body.path.length - 1] as { x: number; y: number };
-    await supabase.from("heroes").update({
-      x: lastPos.x,
-      y: lastPos.y,
-      movement: getUsableAdventureMovement(mapData, lastPos, (attacker.movement ?? 0) - validation.usedMovement),
-    }).eq("id", attacker.id);
-    attacker.x = lastPos.x;
-    attacker.y = lastPos.y;
-
-    const newlyVisible = computeVisibleTiles(
-      mapData,
-      getPlayerVisionCenters({
-        heroes: [{ position: { x: lastPos.x, y: lastPos.y } }],
-        towns: (gamePlayer.towns ?? []).map((t) => ({ position: { x: t.x, y: t.y } })),
-      }),
-      5
-    );
-    const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-    for (const key of newlyVisible) explored.add(key);
-    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-  }
-
   const defender = getDefender({
     targetId: String(body.targetId ?? ""),
     targetType: String(body.targetType ?? ""),
@@ -165,6 +136,38 @@ export async function POST(
   }
 
   const mapData = normalizeMapMovement(game.mapData as GameMap);
+  const defenderPosition = { x: targetDefender.x, y: targetDefender.y };
+  const path = Array.isArray(body.path) ? body.path : null;
+  if (path) {
+    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, path, attacker.movement ?? 0, defenderPosition);
+    if (!validation.ok) return NextResponse.json({ error: "Chemin de combat invalide" }, { status: 400 });
+
+    const lastPos = validation.destination;
+    if (lastPos.x !== attacker.x || lastPos.y !== attacker.y) {
+      await supabase.from("heroes").update({
+        x: lastPos.x,
+        y: lastPos.y,
+        movement: getUsableAdventureMovement(mapData, lastPos, (attacker.movement ?? 0) - validation.usedMovement),
+      }).eq("id", attacker.id);
+      attacker.x = lastPos.x;
+      attacker.y = lastPos.y;
+
+      const newlyVisible = computeVisibleTiles(
+        mapData,
+        getPlayerVisionCenters({
+          heroes: [{ position: { x: lastPos.x, y: lastPos.y } }],
+          towns: (gamePlayer.towns ?? []).map((t) => ({ position: { x: t.x, y: t.y } })),
+        }),
+        5
+      );
+      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+      for (const key of newlyVisible) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+    }
+  } else if (!areAdventurePositionsAdjacent({ x: attacker.x, y: attacker.y }, defenderPosition)) {
+    return NextResponse.json({ error: "Le heros doit s'arreter devant la cible avant le combat" }, { status: 400 });
+  }
+
   const environment = buildCombatEnvironment(mapData, { x: targetDefender.x, y: targetDefender.y });
   const combatStart = createCombatBoard(
     {
@@ -260,11 +263,6 @@ export async function POST(
     await evaluateGameLifecycle(supabase, id);
   }
 
-  if (!result) {
-    const afterAi = await runAiCombatTurns(supabase, id, data.id);
-    if (afterAi) return NextResponse.json({ combat: afterAi, result: afterAi.result ?? null }, { status: 201 });
-  }
-
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
 }
 
@@ -276,7 +274,8 @@ function combatInvolvesPlayer(combat: ReturnType<typeof toCombat>, playerId: str
   );
 }
 
-function getTargetPosition(body: { destination?: { x?: unknown; y?: unknown }; path?: Array<{ x?: unknown; y?: unknown }> }) {
+function getTargetPosition(body: { targetPosition?: { x?: unknown; y?: unknown }; destination?: { x?: unknown; y?: unknown }; path?: Array<{ x?: unknown; y?: unknown }> }) {
+  if (body.targetPosition) return body.targetPosition;
   if (body.destination) return body.destination;
   return Array.isArray(body.path) ? body.path[body.path.length - 1] : undefined;
 }
@@ -379,22 +378,18 @@ function validateCombatPath(
   map: GameMap,
   start: { x: number; y: number },
   path: Array<{ x: number; y: number }>,
-  movement: number
-): { ok: true; usedMovement: number } | { ok: false } {
-  if (!Array.isArray(path) || path.length < 2) return { ok: false };
+  movement: number,
+  target: { x: number; y: number }
+): { ok: true; usedMovement: number; destination: { x: number; y: number } } | { ok: false } {
+  if (!Array.isArray(path) || path.length < 1) return { ok: false };
   if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false };
 
-  let usedMovement = 0;
-  for (let i = 1; i < path.length; i++) {
-    const prev = path[i - 1];
-    const curr = path[i];
-    if (!canMoveAdventureStep(map, prev, curr)) return { ok: false };
-    const stepCost = getAdventureStepCost(map, prev, curr);
-    if (!Number.isFinite(stepCost)) return { ok: false };
-    usedMovement += stepCost;
-  }
+  const destination = path[path.length - 1];
+  if (!destination || !areAdventurePositionsAdjacent(destination, target)) return { ok: false };
+  const usedMovement = getAdventurePathCostAvoiding(map, path, [target]);
+  if (!Number.isFinite(usedMovement)) return { ok: false };
   if (usedMovement > movement) return { ok: false };
-  return { ok: true, usedMovement };
+  return { ok: true, usedMovement, destination };
 }
 
 function getDefender({

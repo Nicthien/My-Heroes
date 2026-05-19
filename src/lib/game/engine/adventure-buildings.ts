@@ -9,6 +9,11 @@ type AdventurePlacement = {
   type: AdventureBuildingType;
 };
 
+type StargatePair = {
+  a: MapTile;
+  b: MapTile;
+};
+
 export function placeAdventureBuildings(ctx: PlacementContext): void {
   const stargateCandidates: MapTile[] = [];
 
@@ -72,17 +77,52 @@ function placeStargatePairs(ctx: PlacementContext, candidates: MapTile[]): void 
   const shuffled = shuffle(ctx.rng, candidates).filter((tile) =>
     isValidAdventureTile(ctx, tile, AdventureBuildingType.STARGATE, 0)
   );
-  const pairCount = Math.min(Math.floor(shuffled.length / 2), ctx.width >= 72 ? 2 : 1);
+  const targetPairCount = Math.min(Math.floor(shuffled.length / 2), ctx.width >= 72 ? 2 : 1);
+  const pairs = selectStargatePairs(ctx, shuffled, targetPairCount);
 
-  for (let i = 0; i < pairCount; i++) {
-    const a = shuffled[i * 2];
-    const b = shuffled[i * 2 + 1];
-    if (!a || !b) continue;
+  for (const { a, b } of pairs) {
     const idA = `adv-stargate-${a.x}-${a.y}`;
     const idB = `adv-stargate-${b.x}-${b.y}`;
     placeAdventureBuilding(a, AdventureBuildingType.STARGATE, idA, idB);
     placeAdventureBuilding(b, AdventureBuildingType.STARGATE, idB, idA);
   }
+}
+
+function selectStargatePairs(ctx: PlacementContext, candidates: MapTile[], targetPairCount: number): StargatePair[] {
+  const pairs: StargatePair[] = [];
+  const selected: MapTile[] = [];
+  const minDistance = getMinimumStargateDistance(ctx.width, ctx.height);
+
+  for (let i = 0; i < candidates.length && pairs.length < targetPairCount; i++) {
+    const a = candidates[i];
+    if (isTooCloseToAny(a, selected, minDistance)) continue;
+
+    const b = candidates
+      .slice(i + 1)
+      .filter((tile) =>
+        stargateDistance(a, tile) >= minDistance &&
+        !isTooCloseToAny(tile, selected, minDistance)
+      )
+      .sort((left, right) => stargateDistance(right, a) - stargateDistance(left, a))[0];
+
+    if (!b) continue;
+    pairs.push({ a, b });
+    selected.push(a, b);
+  }
+
+  return pairs;
+}
+
+export function getMinimumStargateDistance(width: number, height: number): number {
+  return Math.max(9, Math.floor(Math.min(width, height) * 0.25));
+}
+
+function isTooCloseToAny(tile: MapTile, selected: MapTile[], minDistance: number): boolean {
+  return selected.some((other) => stargateDistance(tile, other) < minDistance);
+}
+
+function stargateDistance(a: MapTile, b: MapTile): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
 function placeAdventureBuilding(

@@ -452,6 +452,8 @@ export interface MapObject {
   guardianPower?: number;
   amount?: number;
   targetId?: string;
+  ownerIndex?: number;
+  strategicRole?: "start_wood" | "start_ore" | "start_gold" | "start_rare";
 }
 
 export type CombatMode = "AUTO" | "MANUAL";

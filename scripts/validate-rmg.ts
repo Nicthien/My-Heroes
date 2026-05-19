@@ -1,6 +1,15 @@
-import { generateMap, placePlayerStart } from "../src/lib/game/engine";
+import {
+  finalizeStartingRareMines,
+  findPathToAdjacent,
+  generateMap,
+  getAdventurePathCostAvoiding,
+  placePlayerStart,
+  rareMineForFaction,
+} from "../src/lib/game/engine";
+import { getMinimumStargateDistance } from "../src/lib/game/engine/adventure-buildings";
 import { listTemplatesForPlayers, TEMPLATES } from "../src/lib/game/engine/template";
-import { GameMap, TerrainType } from "../src/lib/game/types";
+import { RESOURCE_BUILDING_RULES } from "../src/lib/game/economy";
+import { Faction, GameMap, MapTile, ResourceBuildingType, TerrainType } from "../src/lib/game/types";
 
 interface ValidationIssue {
   severity: "error" | "warning";
@@ -31,6 +40,15 @@ const sizes = [36, 72, 108];
 const playerCounts = [2, 3, 4, 5, 6];
 const samplesPerTemplate = Number(process.env.RMG_SAMPLES ?? 8);
 const seeds = Array.from({ length: samplesPerTemplate }, (_, index) => `RMG${String(index + 1).padStart(3, "0")}`);
+const VALIDATION_FACTIONS = [
+  Faction.CASTLE,
+  Faction.RAMPART,
+  Faction.TOWER,
+  Faction.INFERNO,
+  Faction.NECROPOLIS,
+  Faction.DUNGEON,
+] as const;
+const PRIMARY_MINE_DAILY_MOVEMENT = 1500;
 
 const issues: ValidationIssue[] = [];
 const summaries: string[] = [];
@@ -40,6 +58,8 @@ const TOWN_FOOTPRINT_OFFSETS = [
   { x: -1, y: -1 },
   { x: 0, y: -1 },
 ] as const;
+
+validateResourceProductionRules();
 
 for (const playerCount of playerCounts) {
   const templates = listTemplatesForPlayers(playerCount);
@@ -53,6 +73,7 @@ for (const playerCount of playerCounts) {
           playerCount,
           templateId: template.id,
         });
+        finalizeStartingRareMines(map, validationFactionsFor(playerCount));
         const stats = collectStats(map);
         validateMap(map, stats, template.id, seed, playerCount, size);
       }
@@ -146,6 +167,9 @@ function validateMap(
     }
   }
 
+  validateStartingEconomy(map, templateId, seed, playerCount, size);
+  validateStargateSpacing(map, templateId, seed, playerCount, size);
+
   for (const row of map.tiles) {
     for (const tile of row) {
       if (tile.object?.type === "town" && !connected.has(`${tile.x},${tile.y}`)) {
@@ -203,6 +227,240 @@ function validateMap(
       }
     }
   }
+}
+
+function validateStartingEconomy(
+  map: GameMap,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  for (let playerIndex = 0; playerIndex < playerCount; playerIndex++) {
+    const start = placePlayerStart(map, playerIndex);
+    const mines = findStartingMines(map, playerIndex);
+    const wood = requireStartingMine(mines, "start_wood", templateId, seed, playerCount, size, playerIndex);
+    const ore = requireStartingMine(mines, "start_ore", templateId, seed, playerCount, size, playerIndex);
+    const gold = requireStartingMine(mines, "start_gold", templateId, seed, playerCount, size, playerIndex);
+    const rare = requireStartingMine(mines, "start_rare", templateId, seed, playerCount, size, playerIndex);
+
+    if (wood) validateMineType(wood, ResourceBuildingType.SAWMILL, "starting sawmill", templateId, seed, playerCount, size, playerIndex);
+    if (ore) validateMineType(ore, ResourceBuildingType.ORE_PIT, "starting ore pit", templateId, seed, playerCount, size, playerIndex);
+    if (gold) validateMineType(gold, ResourceBuildingType.GOLD_MINE, "starting gold mine", templateId, seed, playerCount, size, playerIndex);
+    if (rare) {
+      validateMineType(
+        rare,
+        rareMineForFaction(VALIDATION_FACTIONS[playerIndex], playerIndex),
+        "starting rare mine",
+        templateId,
+        seed,
+        playerCount,
+        size,
+        playerIndex,
+      );
+    }
+    validateStartingMineSpacing(mines, templateId, seed, playerCount, size, playerIndex);
+    validateStartingMineLandSupport(map, mines, templateId, seed, playerCount, size, playerIndex);
+
+    for (const mine of [wood, ore].filter(Boolean) as MapTile[]) {
+      const path = findPathToAdjacent(map, start, { x: mine.x, y: mine.y }, PRIMARY_MINE_DAILY_MOVEMENT);
+      const cost = getAdventurePathCostAvoiding(map, path, [{ x: mine.x, y: mine.y }]);
+      if (path.length === 0 || !Number.isFinite(cost) || cost > PRIMARY_MINE_DAILY_MOVEMENT) {
+        addIssue(
+          "error",
+          templateId,
+          seed,
+          playerCount,
+          size,
+          `player ${playerIndex + 1} primary mine ${mine.object?.subtype} is not reachable in one day at ${mine.x},${mine.y}`,
+        );
+      }
+    }
+
+    if (wood && ore && gold) {
+      const primaryDistance = Math.max(distance(start, wood), distance(start, ore));
+      if (distance(start, gold) < primaryDistance) {
+        addIssue(
+          "error",
+          templateId,
+          seed,
+          playerCount,
+          size,
+          `player ${playerIndex + 1} gold mine is not farther than primary mines at ${gold.x},${gold.y} (gold ${distance(start, gold)}, primary ${primaryDistance})`,
+        );
+      }
+    }
+  }
+}
+
+function validateStargateSpacing(
+  map: GameMap,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  const stargates = map.tiles
+    .flatMap((row) => row)
+    .filter((tile) => tile.object?.type === "adventure_building" && tile.object.subtype === "stargate");
+  const minDistance = getMinimumStargateDistance(map.width, map.height);
+
+  for (let i = 0; i < stargates.length; i++) {
+    for (let j = i + 1; j < stargates.length; j++) {
+      const actual = distance(stargates[i], stargates[j]);
+      if (actual >= minDistance) continue;
+      addIssue(
+        "error",
+        templateId,
+        seed,
+        playerCount,
+        size,
+        `stargates are too close: ${stargates[i].x},${stargates[i].y} and ${stargates[j].x},${stargates[j].y} (${actual} < ${minDistance})`,
+      );
+    }
+  }
+}
+
+function validateStartingMineLandSupport(
+  map: GameMap,
+  mines: MapTile[],
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+  playerIndex: number,
+): void {
+  for (const mine of mines) {
+    const support = countLandSupport(map, mine.x, mine.y);
+    if (mine.terrain === TerrainType.WATER || mine.terrain === TerrainType.LAVA || support.orthogonal < 1) {
+      addIssue(
+        "error",
+        templateId,
+        seed,
+        playerCount,
+        size,
+        `player ${playerIndex + 1} starting mine ${mine.object?.subtype} has poor land support at ${mine.x},${mine.y}`,
+      );
+    }
+  }
+}
+
+function countLandSupport(map: GameMap, x: number, y: number) {
+  let orthogonal = 0;
+  let surrounding = 0;
+
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const tile = map.tiles[y + dy]?.[x + dx];
+      if (!tile || tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA || !tile.isPassable) continue;
+      surrounding++;
+      if (Math.abs(dx) + Math.abs(dy) === 1) orthogonal++;
+    }
+  }
+
+  return { orthogonal, surrounding };
+}
+
+function validateStartingMineSpacing(
+  mines: MapTile[],
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+  playerIndex: number,
+): void {
+  for (let i = 0; i < mines.length; i++) {
+    for (let j = i + 1; j < mines.length; j++) {
+      if (distance(mines[i], mines[j]) > 1) continue;
+      addIssue(
+        "error",
+        templateId,
+        seed,
+        playerCount,
+        size,
+        `player ${playerIndex + 1} starting mines are adjacent at ${mines[i].x},${mines[i].y} and ${mines[j].x},${mines[j].y}`,
+      );
+    }
+  }
+}
+
+function findStartingMines(map: GameMap, ownerIndex: number) {
+  return map.tiles
+    .flatMap((row) => row)
+    .filter((tile) => tile.object?.type === "building" && tile.object.ownerIndex === ownerIndex);
+}
+
+function requireStartingMine(
+  mines: MapTile[],
+  role: NonNullable<NonNullable<MapTile["object"]>["strategicRole"]>,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+  playerIndex: number,
+) {
+  const found = mines.filter((tile) => tile.object?.strategicRole === role);
+  if (found.length !== 1) {
+    addIssue(
+      "error",
+      templateId,
+      seed,
+      playerCount,
+      size,
+      `player ${playerIndex + 1} expected exactly one ${role} mine, got ${found.length}`,
+    );
+  }
+  return found[0];
+}
+
+function validateMineType(
+  tile: MapTile,
+  expected: ResourceBuildingType,
+  label: string,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+  playerIndex: number,
+) {
+  if (tile.object?.subtype !== expected) {
+    addIssue(
+      "error",
+      templateId,
+      seed,
+      playerCount,
+      size,
+      `player ${playerIndex + 1} ${label} expected ${expected}, got ${tile.object?.subtype ?? "none"} at ${tile.x},${tile.y}`,
+    );
+  }
+}
+
+function validateResourceProductionRules(): void {
+  const expected: Partial<Record<ResourceBuildingType, Record<string, number>>> = {
+    [ResourceBuildingType.GOLD_MINE]: { gold: 1000 },
+    [ResourceBuildingType.SAWMILL]: { wood: 2 },
+    [ResourceBuildingType.ORE_PIT]: { ore: 2 },
+    [ResourceBuildingType.ALCHEMIST_LAB]: { mercury: 1 },
+    [ResourceBuildingType.CRYSTAL_CAVERN]: { crystals: 1 },
+    [ResourceBuildingType.GEM_POND]: { gems: 1 },
+    [ResourceBuildingType.SULFUR_DUNE]: { sulfur: 1 },
+  };
+
+  for (const [type, production] of Object.entries(expected)) {
+    const rule = RESOURCE_BUILDING_RULES.find((item) => item.type === type);
+    if (!rule || JSON.stringify(rule.production) !== JSON.stringify(production)) {
+      addIssue("error", "economy", "rules", 0, 0, `unexpected production for ${type}`);
+    }
+  }
+}
+
+function validationFactionsFor(playerCount: number): Faction[] {
+  return Array.from({ length: playerCount }, (_, index) => VALIDATION_FACTIONS[index % VALIDATION_FACTIONS.length]);
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
 function collectStats(map: GameMap): MapStats {

@@ -1,9 +1,27 @@
 import { CombatBoardUnit, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
+import {
+  COMBAT_COLS,
+  COMBAT_ROWS,
+  findHexPath,
+  findMeleeApproach,
+  getBlockedCombatCells,
+  getHexDistance,
+  getHexNeighbors,
+  getOccupiedCombatCells,
+  isInsideCombatCell,
+  isTerrainBlocked,
+} from "./movement";
+import {
+  applyDamageToStack,
+  hasAdjacentEnemy,
+  normalizeCombatUnit,
+  rollCombatDamage,
+  type ManualCombatActionType,
+} from "./rules";
 
-export const COMBAT_COLS = 13;
-export const COMBAT_ROWS = 9;
+export { COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
 
 export interface CombatParticipantSnapshot {
   id: string;
@@ -110,22 +128,10 @@ function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, 
 
 export function buildTurnQueue(units: CombatBoardUnit[], round = 1) {
   return [...units]
+    .map(normalizeCombatUnit)
     .filter((unit) => unit.count > 0 && (unit.joinsRound ?? 1) <= round)
     .sort((a, b) => b.speed - a.speed || (a.side === "attacker" ? -1 : 1) - (b.side === "attacker" ? -1 : 1) || a.position - b.position)
     .map((unit) => unit.id);
-}
-
-export function getHexDistance(a: { q: number; r: number }, b: { q: number; r: number }) {
-  const ac = offsetToCube(a.q, a.r);
-  const bc = offsetToCube(b.q, b.r);
-  return Math.max(Math.abs(ac.x - bc.x), Math.abs(ac.y - bc.y), Math.abs(ac.z - bc.z));
-}
-
-function offsetToCube(q: number, r: number) {
-  const x = q - (r - (r & 1)) / 2;
-  const z = r;
-  const y = -x - z;
-  return { x, y, z };
 }
 
 export function executeManualCombatAction(params: {
@@ -140,15 +146,24 @@ export function executeManualCombatAction(params: {
 }) {
   const log: string[] = [];
   let didAct = false;
-  const units = params.units.map((unit) => ({ ...unit }));
+  let didWait = false;
+  let deferredTurnQueue: string[] | null = null;
+  const units = params.units.map((unit) => normalizeCombatUnit({ ...unit }));
   const actor = units.find((unit) => unit.id === params.currentUnitId);
   if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
+  const actorWasDefended = actor.defended;
+  actor.defended = false;
 
   if (params.action.type === "MOVE") {
     const q = Number(params.action.q);
     const r = Number(params.action.r);
-    if (isInside(q, r) && !isTerrainBlocked(q, r, params.terrain) && !units.some((unit) => unit.q === q && unit.r === r)) {
-      const path = findPath(actor, { q, r }, units, params.terrain ?? []);
+    if (isInsideCombatCell(q, r) && !isTerrainBlocked(q, r, params.terrain) && !units.some((unit) => unit.q === q && unit.r === r)) {
+      const path = findHexPath(
+        actor,
+        { q, r },
+        getOccupiedCombatCells(units, actor.id),
+        getBlockedCombatCells(params.terrain)
+      );
       if (path.length > 1 && path.length - 1 <= actor.speed) {
         actor.q = q;
         actor.r = r;
@@ -159,20 +174,38 @@ export function executeManualCombatAction(params: {
   } else if (params.action.type === "ATTACK" || params.action.type === "SHOOT") {
     const target = units.find((unit) => unit.id === params.action.targetUnitId && unit.side !== actor.side);
     if (target) {
+      const actionType = params.action.type as ManualCombatActionType;
+      if (actionType === "ATTACK") {
+        const approach = findMeleeApproach(actor, target, units, params.terrain ?? []);
+        if (approach) {
+          actor.q = approach.destination.q;
+          actor.r = approach.destination.r;
+        }
+      }
       const distance = getHexDistance(actor, target);
-      const canShoot = params.action.type === "SHOOT" && actor.ranged && actor.shots > 0;
-      if (distance <= 1 || canShoot) {
-        if (canShoot) actor.shots = Math.max(0, actor.shots - 1);
-        applyDamage(actor, target, {
-          attack: getStats(actor.side, params).attack,
-          defense: getStats(target.side, params).defense,
-        }, log);
+      const roll = rollCombatDamage({
+        attacker: actor,
+        defender: target,
+        attackerStats: getStats(actor.side, params),
+        defenderStats: getStats(target.side, params),
+        actionType,
+        terrain: params.terrain,
+        actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
+      });
+      if (roll.profile.canStrike) {
+        if (actionType === "SHOOT") actor.shots = Math.max(0, actor.shots - 1);
+        applyRolledDamage(actor, target, roll, log);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
-          applyDamage(target, actor, {
-            attack: getStats(target.side, params).attack,
-            defense: getStats(actor.side, params).defense,
-          }, log, true);
+          const retaliationRoll = rollCombatDamage({
+            attacker: target,
+            defender: actor,
+            attackerStats: getStats(target.side, params),
+            defenderStats: getStats(actor.side, params),
+            actionType: "ATTACK",
+            terrain: params.terrain,
+          });
+          applyRolledDamage(target, actor, retaliationRoll, log, true);
           target.hasRetaliated = true;
         }
       }
@@ -182,12 +215,17 @@ export function executeManualCombatAction(params: {
     didAct = true;
     log.push(`${getUnitRule(actor.unitType).label} se défend.`);
   } else if (params.action.type === "WAIT") {
-    actor.waited = true;
-    didAct = true;
-    log.push(`${getUnitRule(actor.unitType).label} attend.`);
+    if (!actor.waited) {
+      actor.waited = true;
+      didWait = true;
+      deferredTurnQueue = deferUnitToWaitPhase(params.turnQueue, actor.id, units);
+      didAct = true;
+      log.push(`${getUnitRule(actor.unitType).label} attend.`);
+    }
   }
 
   if (!didAct) {
+    actor.defended = actorWasDefended;
     return {
       units,
       turnQueue: params.turnQueue,
@@ -203,18 +241,21 @@ export function executeManualCombatAction(params: {
   const result = getCombatResult(livingUnits);
   if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result };
 
-  const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round);
+  const next = didWait
+    ? getNextTurn(livingUnits, deferredTurnQueue ?? params.turnQueue, params.round)
+    : advanceTurn(livingUnits, params.turnQueue, actor.id, params.round);
   return {
-    units: livingUnits,
+    units: next.units,
     turnQueue: next.turnQueue,
     currentUnitId: next.currentUnitId,
-    currentPlayerId: livingUnits.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
+    currentPlayerId: next.units.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
     round: next.round,
     log,
     result: null,
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function applyDamage(attacker: CombatBoardUnit, defender: CombatBoardUnit, stats: { attack: number; defense: number }, log: string[], retaliation = false) {
   const attackValue = getUnitRule(attacker.unitType).attack + stats.attack;
   const defenseValue = getUnitRule(defender.unitType).defense + stats.defense + (defender.defended ? 2 : 0);
@@ -235,13 +276,40 @@ function getStats(side: CombatSide, params: { attackerStats: { attack: number; d
   return side === "attacker" ? params.attackerStats : params.defenderStats;
 }
 
+function applyRolledDamage(
+  attacker: CombatBoardUnit,
+  defender: CombatBoardUnit,
+  roll: ReturnType<typeof rollCombatDamage>,
+  log: string[],
+  retaliation = false
+) {
+  const { lost } = applyDamageToStack(defender, roll.damage);
+  const side = attacker.side === "attacker" ? "Heros" : "Defenseur";
+  const verb = retaliation ? "riposte" : "attaque";
+  const penalty = roll.profile.penaltyReasons.length > 0 ? ` (${roll.profile.penaltyReasons.join(", ")})` : "";
+  log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb} ${roll.profile.actionLabel}${penalty}: ${roll.damage} degats, ${lost} perte(s).`);
+}
+
+function deferUnitToWaitPhase(turnQueue: string[], currentUnitId: string, units: CombatBoardUnit[]) {
+  const livingIds = new Set(units.filter((unit) => unit.count > 0).map((unit) => unit.id));
+  const remaining = turnQueue.filter((id) => id !== currentUnitId && livingIds.has(id));
+  const nonWaited = remaining.filter((id) => !units.find((unit) => unit.id === id)?.waited);
+  const waited = remaining.filter((id) => units.find((unit) => unit.id === id)?.waited);
+  return [...nonWaited, ...waited, currentUnitId];
+}
+
 function advanceTurn(units: CombatBoardUnit[], turnQueue: string[], currentUnitId: string, round: number) {
   const remaining = turnQueue.filter((id) => id !== currentUnitId && units.some((unit) => unit.id === id));
-  if (remaining.length > 0) return { turnQueue: remaining, currentUnitId: remaining[0] ?? null, round };
+  return getNextTurn(units, remaining, round);
+}
+
+function getNextTurn(units: CombatBoardUnit[], turnQueue: string[], round: number) {
+  const remaining = turnQueue.filter((id) => units.some((unit) => unit.id === id));
+  if (remaining.length > 0) return { units, turnQueue: remaining, currentUnitId: remaining[0] ?? null, round };
   const nextRound = round + 1;
-  const refreshedUnits = units.map((unit) => ({ ...unit, hasRetaliated: false, defended: false, waited: false }));
+  const refreshedUnits = units.map((unit) => ({ ...unit, hasRetaliated: false, waited: false }));
   const nextQueue = buildTurnQueue(refreshedUnits, nextRound);
-  return { turnQueue: nextQueue, currentUnitId: nextQueue[0] ?? null, round: nextRound };
+  return { units: refreshedUnits, turnQueue: nextQueue, currentUnitId: nextQueue[0] ?? null, round: nextRound };
 }
 
 function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | null {
@@ -251,55 +319,12 @@ function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | nu
   return attackerAlive ? "attacker" : "defender";
 }
 
-function isInside(q: number, r: number) {
-  return Number.isInteger(q) && Number.isInteger(r) && q >= 0 && q < COMBAT_COLS && r >= 0 && r < COMBAT_ROWS;
-}
-
-export function isTerrainBlocked(q: number, r: number, terrain: CombatTerrainFeature[] = []) {
-  return terrain.some((feature) => feature.q === q && feature.r === r);
-}
-
-export function getHexNeighbors(q: number, r: number) {
-  const even = r % 2 === 0;
-  const deltas = even
-    ? [[1, 0], [-1, 0], [0, -1], [-1, -1], [0, 1], [-1, 1]]
-    : [[1, 0], [-1, 0], [1, -1], [0, -1], [1, 1], [0, 1]];
-
-  return deltas
-    .map(([dq, dr]) => ({ q: q + dq, r: r + dr }))
-    .filter((cell) => isInside(cell.q, cell.r));
-}
-
-function findPath(start: { q: number; r: number }, end: { q: number; r: number }, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
-  const startKey = `${start.q},${start.r}`;
-  const endKey = `${end.q},${end.r}`;
-  const occupied = new Set(units.map((unit) => `${unit.q},${unit.r}`));
-  const queue: { q: number; r: number; path: { q: number; r: number }[] }[] = [{ q: start.q, r: start.r, path: [{ q: start.q, r: start.r }] }];
-  const seen = new Set([startKey]);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (`${current.q},${current.r}` === endKey) return current.path;
-
-    for (const neighbor of getHexNeighbors(current.q, current.r)) {
-      const key = `${neighbor.q},${neighbor.r}`;
-      if (seen.has(key)) continue;
-      if (isTerrainBlocked(neighbor.q, neighbor.r, terrain)) continue;
-      if (occupied.has(key) && key !== startKey && key !== endKey) continue;
-      seen.add(key);
-      queue.push({ ...neighbor, path: [...current.path, neighbor] });
-    }
-  }
-
-  return [];
-}
-
 function createCombatTerrain() {
   const terrain: CombatTerrainFeature[] = [];
   const occupied = new Set<string>();
   const addFeature = (type: CombatTerrainFeature["type"], q: number, r: number) => {
     const key = `${q},${r}`;
-    if (!isInside(q, r) || q <= 1 || q >= COMBAT_COLS - 2 || occupied.has(key)) return false;
+    if (!isInsideCombatCell(q, r) || q <= 1 || q >= COMBAT_COLS - 2 || occupied.has(key)) return false;
     occupied.add(key);
     terrain.push({ type, q, r });
     return true;

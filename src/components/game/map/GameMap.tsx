@@ -3,10 +3,11 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
-import { GameState, Position, ResourceBuilding } from "@/lib/game/types";
+import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
+import { UNIT_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   findPath,
@@ -47,9 +48,10 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination?: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate"; destination?: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
+  | { type: "CAPTURE_GATE"; gateId: string; destination?: Position }
   | { type: "STOP"; message: string; destination?: Position };
 
 async function createMapRenderer(): Promise<MapRenderer> {
@@ -77,6 +79,7 @@ function getAllTileKeys(width: number, height: number) {
 export default function GameMapComponent() {
   const { data: session } = useSession();
   const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
+  const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
@@ -86,6 +89,7 @@ export default function GameMapComponent() {
   const didAutoSelectActiveHero = useRef(false);
   const autoSelectGameIdRef = useRef<string | null>(null);
   const renderedMapRef = useRef<GameState["map"] | null>(null);
+  const lastGateRenderKeyRef = useRef<string>("");
   const lastFogVisibleRef = useRef<Set<string> | null>(null);
   const lastFogExploredRef = useRef<Set<string> | null>(null);
   const lastCenteredHeroIdRef = useRef<string | null>(null);
@@ -192,6 +196,7 @@ export default function GameMapComponent() {
       initPromiseRef.current = null;
       rendererRef.current = null;
       renderedMapRef.current = null;
+      lastGateRenderKeyRef.current = "";
       lastFogVisibleRef.current = null;
       lastFogExploredRef.current = null;
       activeRenderer?.destroy();
@@ -220,6 +225,15 @@ export default function GameMapComponent() {
           loadingState.updateLoadingProgress(progress, message);
         }
       };
+
+      const gateRenderKey = (gameState.gates ?? [])
+        .map((gate) => `${gate.id}:${gate.ownerId ?? "neutral"}:${gate.garrison.reduce((total, unit) => total + unit.count, 0)}`)
+        .sort()
+        .join("|");
+      if (lastGateRenderKeyRef.current !== gateRenderKey) {
+        renderedMapRef.current = null;
+        lastGateRenderKeyRef.current = gateRenderKey;
+      }
 
       if (renderedMapRef.current !== gameState.map) {
         reportMapLoading(91, "Construction du terrain...");
@@ -537,6 +551,12 @@ export default function GameMapComponent() {
 
     if (interaction.type === "CAPTURE_TOWN") {
       setCombatMessage("Chateau capture.");
+      return true;
+    }
+
+    if (interaction.type === "CAPTURE_GATE") {
+      setCombatMessage("Porte controlee.");
+      setSelectedGateId(interaction.gateId);
       return true;
     }
 
@@ -1357,6 +1377,44 @@ export default function GameMapComponent() {
         return;
       }
 
+      if (targetTile?.object?.type === "gate") {
+        const gate = findGateAt(gameState, targetTile.object.id, tile);
+        if (gate && gate.ownerId === myPlayer?.id) {
+          if (areAdjacentOrSame(hero.position, gate.position)) {
+            setSelectedGateId(gate.id);
+          } else {
+            setCombatMessage("Approchez un heros allie de la porte pour gerer sa garnison.");
+          }
+          return;
+        }
+
+        if ((gate?.garrison ?? []).some((unit) => unit.count > 0)) {
+          const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+          if (!approach) {
+            rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            return;
+          }
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current.highlightPath(approach.path);
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
+          if (!canAct) {
+            setCombatMessage(blockedTurnMessage);
+            return;
+          }
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: gate?.id ?? targetTile.object.id,
+            targetType: "gate",
+            destination: approach.destination,
+            targetPosition: tile,
+            path: approach.path,
+          });
+          return;
+        }
+      }
+
       if (targetTile?.object?.type === "building") {
         const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
         const guardianPower = targetTile.object?.guardianPower ?? 0;
@@ -1580,8 +1638,174 @@ export default function GameMapComponent() {
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
+      {gameState && selectedGateId && (
+        <GateGarrisonModal
+          gameState={gameState}
+          gateId={selectedGateId}
+          currentUserId={session?.user?.id}
+          revealMap={devRevealMap}
+          onClose={() => setSelectedGateId(null)}
+          onMessage={setCombatMessage}
+        />
+      )}
     </div>
   );
+}
+
+function GateGarrisonModal({
+  gameState,
+  gateId,
+  currentUserId,
+  revealMap,
+  onClose,
+  onMessage,
+}: {
+  gameState: GameState;
+  gateId: string;
+  currentUserId?: string;
+  revealMap: boolean;
+  onClose: () => void;
+  onMessage: (message: string | null) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const gate = gameState.gates?.find((item) => item.id === gateId);
+  const player = gameState.players.find((item) => item.userId === currentUserId);
+  const adjacentHeroes = gate && player
+    ? player.heroes.filter((hero) => areAdjacentOrSame(hero.position, gate.position))
+    : [];
+  const hero = adjacentHeroes[0];
+  const isOwned = Boolean(gate && player && gate.ownerId === player.id);
+
+  if (!gate) return null;
+
+  const transfer = async (type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON", unit: UnitStack) => {
+    if (!hero || !isOwned || pending) return;
+    const countText = window.prompt("Nombre d'unites a transferer", String(unit.count));
+    const count = Math.min(unit.count, Math.max(1, Math.floor(Number(countText ?? 0))));
+    if (!Number.isFinite(count) || count <= 0) return;
+
+    setPending(true);
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        gateId: gate.id,
+        heroId: hero.id,
+        unitType: unit.unitType,
+        count,
+      }),
+    });
+    if (!response.ok) {
+      onMessage(await getApiErrorMessage(response));
+      setPending(false);
+      return;
+    }
+
+    const state = await refreshGameState(gameState.id, currentUserId, { revealMap });
+    if (state) useGameStore.getState().setGameState(state);
+    setPending(false);
+  };
+
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-[min(92vw,42rem)] rounded-xl border border-amber-600 bg-stone-950 p-5 text-amber-100 shadow-2xl shadow-black">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-400/80">Porte fortifiee</div>
+            <h2 className="mt-1 text-xl font-black text-amber-100">Garnison de passage</h2>
+          </div>
+          <button type="button" className="rounded-md border border-stone-600 px-3 py-1 text-sm text-stone-200 hover:bg-stone-800" onClick={onClose}>
+            Fermer
+          </button>
+        </div>
+
+        {!isOwned && (
+          <div className="mt-4 rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+            Cette porte ne vous appartient pas.
+          </div>
+        )}
+        {isOwned && !hero && (
+          <div className="mt-4 rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+            Placez un heros allie adjacent a la porte pour modifier la garnison.
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <GateStackList
+            title="Dans la porte"
+            empty="Aucune unite en garnison."
+            stacks={gate.garrison}
+            actionLabel="Reprendre"
+            disabled={!isOwned || !hero || pending}
+            onTransfer={(unit) => transfer("TRANSFER_GATE_GARRISON_TO_HERO", unit)}
+          />
+          <GateStackList
+            title={hero ? `Avec ${hero.name}` : "Heros adjacent"}
+            empty="Aucune unite disponible."
+            stacks={hero?.armies ?? []}
+            actionLabel="Deposer"
+            disabled={!isOwned || !hero || pending}
+            onTransfer={(unit) => transfer("TRANSFER_HERO_TO_GATE_GARRISON", unit)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GateStackList({
+  title,
+  empty,
+  stacks,
+  actionLabel,
+  disabled,
+  onTransfer,
+}: {
+  title: string;
+  empty: string;
+  stacks: UnitStack[];
+  actionLabel: string;
+  disabled: boolean;
+  onTransfer: (unit: UnitStack) => void;
+}) {
+  return (
+    <section className="rounded-lg border border-amber-700/40 bg-black/35 p-3">
+      <div className="text-[11px] font-black uppercase tracking-wider text-amber-300/80">{title}</div>
+      {stacks.length === 0 ? (
+        <div className="mt-3 rounded-md border border-amber-800/40 bg-black/30 px-3 py-2 text-xs text-amber-200/60">{empty}</div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {stacks.map((unit) => (
+            <div key={unit.id} className="flex items-center justify-between gap-3 rounded-md border border-stone-700 bg-stone-900/80 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-amber-100">{UNIT_RULES[unit.unitType as UnitType]?.label ?? unit.unitType}</div>
+                <div className="text-xs text-amber-200/60">{unit.count} unite(s)</div>
+              </div>
+              <button
+                type="button"
+                disabled={disabled}
+                className="shrink-0 rounded-md border border-sky-500/50 bg-sky-900 px-3 py-1.5 text-xs font-bold text-sky-50 disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-800 disabled:text-stone-500"
+                onClick={() => onTransfer(unit)}
+              >
+                {actionLabel}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function findGateAt(gameState: GameState, gateId: string, position: Position): Gate | undefined {
+  return gameState.gates?.find((gate) =>
+    gate.id === gateId || (gate.position.x === position.x && gate.position.y === position.y)
+  );
+}
+
+function areAdjacentOrSame(a: Position, b: Position) {
+  return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
 }
 
 function setMapContainerCursor(container: HTMLDivElement | null, cursor: string) {
@@ -1669,7 +1893,7 @@ function getAdventureObjectCursor(object: MapObjectData, currentPlayerId: string
 }
 
 function getAdventureTileObjectCursor(type: string | undefined) {
-  if (type === "monster" || type === "combat") return ADVENTURE_CURSORS.sword;
+  if (type === "monster" || type === "combat" || type === "gate") return ADVENTURE_CURSORS.sword;
   if (type === "resource") return ADVENTURE_CURSORS.resource;
   if (type === "building") return ADVENTURE_CURSORS.resource;
   if (type === "adventure_building") return ADVENTURE_CURSORS.building;

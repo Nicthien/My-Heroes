@@ -136,6 +136,11 @@ export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) =
 
 export const MAP_SPRITES = {
   town: "/assets/sprites/map/town-castle.webp",
+  gate: "/assets/sprites/map/gate.webp",
+  gates: {
+    diagonalDown: "/assets/sprites/map/gate-diagonal-down.webp",
+    diagonalUp: "/assets/sprites/map/gate-diagonal-up.webp",
+  },
   towns: {
     castle: "/assets/sprites/map/town-castle.webp",
     rampart: "/assets/sprites/map/town-rampart.webp",
@@ -391,8 +396,9 @@ export function getMonsterSpritePath(unitType: string | undefined) {
 
 export const MAP_SPRITE_PATHS = Array.from(new Set([
   MAP_SPRITES.town,
+  MAP_SPRITES.gate,
+  ...Object.values(MAP_SPRITES.gates),
   ...Object.values(MAP_SPRITES.towns),
-  ...Object.values(UNIT_SPRITES),
   ...Object.values(MAP_SPRITES.resources),
   ...Object.values(MAP_SPRITES.buildings),
   ...Object.values(MAP_SPRITES.adventureBuildings),

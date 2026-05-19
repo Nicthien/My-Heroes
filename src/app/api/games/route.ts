@@ -64,6 +64,13 @@ export async function POST(request: Request) {
   } = body;
 
   const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
+  const gateSchema = await getGateSchemaStatus(supabase);
+  if (!gateSchema.ok) {
+    return NextResponse.json({
+      error: "Migration Supabase manquante: appliquez supabase/migrations/20260519000100_add_gates.sql avant de creer une partie avec les portes fortifiees.",
+      details: gateSchema.message,
+    }, { status: 500 });
+  }
 
   const { generateMap } = await import("@/lib/game/engine");
   const mapData = generateMap({
@@ -112,18 +119,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  await createNeutralArmies(supabase, gameRow.id, mapData);
+  const neutralArmyResult = await createNeutralArmies(supabase, gameRow.id, mapData);
+  if (!neutralArmyResult.ok) return NextResponse.json({ error: neutralArmyResult.error }, { status: 500 });
+  const gateResult = await createGates(supabase, gameRow.id, mapData);
+  if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
   await createNeutralTowns(supabase, gameRow.id, mapData);
 
   const game = await getGameWithRelations(supabase, gameRow.id);
   return NextResponse.json(game, { status: 201 });
 }
 
+async function getGateSchemaStatus(supabase: ReturnType<typeof createAdminClient>): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { error: gatesError } = await supabase.from("gates").select("id").limit(1);
+  if (gatesError) return { ok: false, message: gatesError.message };
+
+  const { error: stacksError } = await supabase.from("gate_stacks").select("id").limit(1);
+  if (stacksError) return { ok: false, message: stacksError.message };
+
+  return { ok: true };
+}
+
 async function createNeutralArmies(
   supabase: ReturnType<typeof createAdminClient>,
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
-) {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const monsterTiles = mapData.tiles.flatMap((row) =>
     row.filter((tile) => tile.object?.type === "monster"),
   );
@@ -133,8 +153,9 @@ async function createNeutralArmies(
     if (!id) continue;
     const guardianPower = tile.object?.guardianPower ?? 100;
     const stacks = createNeutralArmyStacksForTile(tile, guardianPower, id);
-    await supabase.from("neutral_armies").insert({ id, game_id: gameId, x: tile.x, y: tile.y });
-    await supabase.from("neutral_army_stacks").insert(stacks.map((stack) => ({
+    const { error: armyError } = await supabase.from("neutral_armies").insert({ id, game_id: gameId, x: tile.x, y: tile.y });
+    if (armyError) return { ok: false, error: armyError.message };
+    const { error: stackError } = await supabase.from("neutral_army_stacks").insert(stacks.map((stack) => ({
       neutral_army_id: id,
       unit_type: stack.unitType,
       count: stack.count,
@@ -142,7 +163,45 @@ async function createNeutralArmies(
       max_health: stack.maxHealth,
       position: stack.position,
     })));
+    if (stackError) return { ok: false, error: stackError.message };
   }
+  return { ok: true };
+}
+
+async function createGates(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gateTiles = mapData.tiles.flatMap((row) =>
+    row.filter((tile) => tile.object?.type === "gate"),
+  );
+
+  for (const tile of gateTiles) {
+    const id = tile.object?.id;
+    if (!id) continue;
+    const guardianPower = tile.object?.guardianPower ?? 100;
+    const stacks = createNeutralArmyStacksForTile(tile, guardianPower, id);
+    const { error: gateError } = await supabase.from("gates").insert({
+      id,
+      game_id: gameId,
+      game_player_id: null,
+      x: tile.x,
+      y: tile.y,
+      guardian_power: guardianPower,
+    });
+    if (gateError) return { ok: false, error: gateError.message };
+    const { error: stackError } = await supabase.from("gate_stacks").insert(stacks.map((stack) => ({
+      gate_id: id,
+      unit_type: stack.unitType,
+      count: stack.count,
+      health: stack.health,
+      max_health: stack.maxHealth,
+      position: stack.position,
+    })));
+    if (stackError) return { ok: false, error: stackError.message };
+  }
+  return { ok: true };
 }
 
 function assignMonsterSubtypes(

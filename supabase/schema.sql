@@ -136,6 +136,25 @@ create table public.resource_buildings (
   guardian_power integer not null default 0
 );
 
+create table public.gates (
+  id text primary key,
+  game_id uuid not null references public.games(id) on delete cascade,
+  game_player_id uuid references public.game_players(id) on delete set null,
+  x integer not null,
+  y integer not null,
+  guardian_power integer not null default 0
+);
+
+create table public.gate_stacks (
+  id uuid primary key default gen_random_uuid(),
+  gate_id text not null references public.gates(id) on delete cascade,
+  unit_type text not null,
+  count integer not null,
+  health integer not null,
+  max_health integer not null,
+  position integer not null
+);
+
 create table public.turns (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete cascade,
@@ -156,6 +175,7 @@ create table public.combats (
   attacker_hero_id uuid not null references public.heroes(id) on delete cascade,
   defender_hero_id uuid references public.heroes(id) on delete set null,
   neutral_army_id text references public.neutral_armies(id) on delete set null,
+  gate_id text references public.gates(id) on delete set null,
   current_player_id uuid references public.game_players(id) on delete set null,
   current_unit_id text,
   round integer not null default 1,
@@ -184,6 +204,8 @@ alter publication supabase_realtime add table public.game_players;
 alter publication supabase_realtime add table public.heroes;
 alter publication supabase_realtime add table public.towns;
 alter publication supabase_realtime add table public.resource_buildings;
+alter publication supabase_realtime add table public.gates;
+alter publication supabase_realtime add table public.gate_stacks;
 alter publication supabase_realtime add table public.combats;
 alter publication supabase_realtime add table public.combat_participants;
 

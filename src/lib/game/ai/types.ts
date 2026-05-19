@@ -7,6 +7,7 @@ export type AiObjectiveType =
   | "resource_building"
   | "adventure_building"
   | "neutral_army"
+  | "gate"
   | "neutral_town"
   | "enemy_hero"
   | "exploration";
@@ -78,6 +79,15 @@ export interface AiNeutralArmy {
   stacks: AiArmy[];
 }
 
+export interface AiGate {
+  id: string;
+  gamePlayerId?: string | null;
+  x: number;
+  y: number;
+  guardianPower?: number;
+  garrison?: AiArmy[];
+}
+
 export interface AiCombat {
   id: string;
   status: string;
@@ -96,6 +106,7 @@ export interface AiGame {
   mapState?: unknown;
   players: AiPlayer[];
   neutralArmies?: AiNeutralArmy[];
+  gates?: AiGate[];
   combats?: AiCombat[];
 }
 

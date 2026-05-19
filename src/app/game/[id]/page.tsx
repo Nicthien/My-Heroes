@@ -140,6 +140,8 @@ export default function GamePage() {
           .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "gates", filter: `game_id=eq.${gameId}` }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "gate_stacks" }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, () => void syncGame())
           .subscribe();

@@ -31,6 +31,7 @@ interface MapStats {
   resources: number;
   adventureBuildings: number;
   monsters: number;
+  gates: number;
   decor: number;
   blockingDecor: number;
   terrain: Record<string, number>;
@@ -218,6 +219,17 @@ function validateMap(
       }
       if (tile.object?.type === "wall" && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `wall placed on water at ${tile.x},${tile.y}`);
+      }
+      if (tile.object?.type === "gate") {
+        if (!tile.isPassable) {
+          addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} is not passable at ${tile.x},${tile.y}`);
+        }
+        if (!tile.road) {
+          addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} is not on a road at ${tile.x},${tile.y}`);
+        }
+        if (tile.object.id.startsWith("gate-mon-")) {
+          addIssue("error", templateId, seed, playerCount, size, `legacy gate monster id used at ${tile.x},${tile.y}`);
+        }
       }
       if ((tile.object?.type === "town" || tile.object?.type === "town_footprint" || tile.object?.type === "building") && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `${tile.object.type} placed on water at ${tile.x},${tile.y}`);
@@ -475,6 +487,7 @@ function collectStats(map: GameMap): MapStats {
     resources: 0,
     adventureBuildings: 0,
     monsters: 0,
+    gates: 0,
     decor: 0,
     blockingDecor: 0,
     terrain: {},
@@ -495,6 +508,7 @@ function collectStats(map: GameMap): MapStats {
       if (tile.object?.type === "resource") stats.resources++;
       if (tile.object?.type === "adventure_building") stats.adventureBuildings++;
       if (tile.object?.type === "monster") stats.monsters++;
+      if (tile.object?.type === "gate") stats.gates++;
     }
   }
 

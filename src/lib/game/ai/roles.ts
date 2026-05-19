@@ -33,7 +33,7 @@ export function roleMultiplier(role: AiRole, objectiveType: string) {
   }
 
   if (role === "CONQUEROR") {
-    if (objectiveType === "enemy_hero" || objectiveType === "neutral_town") return 1.5;
+    if (objectiveType === "enemy_hero" || objectiveType === "neutral_town" || objectiveType === "gate") return 1.5;
     if (objectiveType === "neutral_army") return 1.15;
     if (objectiveType === "resource") return 0.75;
   }

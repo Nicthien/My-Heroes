@@ -264,6 +264,7 @@ async function persistResolvedCombat(
   combat: {
     game_id: string;
     neutral_army_id: string | null;
+    gate_id?: string | null;
     defender_player_id: string | null;
     attacker_player_id: string;
     attacker_hero_id: string;
@@ -284,11 +285,19 @@ async function persistResolvedCombat(
 
     await supabase.from("armies").update({ count, health }).eq("id", unit.id);
     await supabase.from("neutral_army_stacks").update({ count, health }).eq("id", unit.id);
+    await supabase.from("gate_stacks").update({ count, health }).eq("id", unit.id);
   }
 
   if (winnerSide === "attacker") {
     if (combat.neutral_army_id) {
       await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", combat.neutral_army_id);
+    } else if (combat.gate_id) {
+      await supabase
+        .from("gates")
+        .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
+        .eq("game_id", combat.game_id)
+        .eq("id", combat.gate_id);
+      await supabase.from("gate_stacks").delete().eq("gate_id", combat.gate_id);
     } else if (!combat.defender_player_id) {
       const capturedTown = await captureNeutralTownAt(supabase, combat);
       if (!capturedTown) {

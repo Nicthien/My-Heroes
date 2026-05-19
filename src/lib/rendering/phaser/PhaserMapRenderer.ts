@@ -58,6 +58,12 @@ type SpriteOrigin = {
   originY: number;
 };
 
+type FailedLoaderFile = {
+  key?: unknown;
+  src?: unknown;
+  url?: unknown;
+};
+
 const TILE_FOOT_OFFSET_Y = TILE_HEIGHT / 2;
 const RESOURCE_BUILDING_SCALE = 1.24;
 const RESOURCE_BUILDING_OFFSET_Y = TILE_FOOT_OFFSET_Y;
@@ -67,6 +73,17 @@ const MAP_OBJECT_ORIGIN_Y = 1;
 const MAP_OBJECT_FOOT_OFFSET_Y = TILE_FOOT_OFFSET_Y;
 const RESOURCE_PICKUP_OFFSET_Y = -4;
 const MONSTER_OFFSET_Y = 6;
+// Gate artwork is 298x248 (aspect 1.202); keep that ratio. Width is chosen so
+// the structure spans ~3 tiles across the road (towers on the side tiles).
+// 3-tile footprint along the wall diagonal: outer corners of tiles -1..+1
+// span 128 game-px horizontally (TILE_WIDTH 64; per-tile step 32; ±64 outer).
+const GATE_DISPLAY_WIDTH = 128;
+const GATE_DISPLAY_HEIGHT = Math.round(GATE_DISPLAY_WIDTH / 1.202);
+// Sprite point pinned to the road tile centre. The gate's foundation sits on
+// the road tile, with the portcullis arch hovering above (you pass under it).
+const GATE_ORIGIN_X = 0.5;
+const GATE_ORIGIN_Y = 0.7;
+const GATE_OFFSET_Y = 0;
 const TOWN_OFFSET_Y = TILE_FOOT_OFFSET_Y + 7;
 const HERO_OFFSET_Y = 6;
 const TOWN_HERO_OFFSET_Y = TOWN_OFFSET_Y + 12;
@@ -114,6 +131,7 @@ function getMapObjectHoverText(object: MapObject) {
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
   if (object.type === "adventure_building") return getAdventureBuildingLabel(object.subtype);
   if (object.type === "artifact") return "Artefact";
+  if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
 
   return null;
 }
@@ -125,6 +143,7 @@ function getMapObjectHoverY(object: MapObject, surfaceY: number) {
 
   if (object.type === "resource") return surfaceY + RESOURCE_PICKUP_OFFSET_Y - 38 - 6;
   if (object.type === "monster") return surfaceY + MONSTER_OFFSET_Y - 46 - 8;
+  if (object.type === "gate") return surfaceY - 58;
 
   return surfaceY - 34;
 }
@@ -431,6 +450,7 @@ class PhaserMapScene extends Phaser.Scene {
   private hoverLabelText?: Phaser.GameObjects.Text;
   private hoverLabelKey: string | null = null;
   private visibleTiles: Set<string> | null = null;
+  private exploredTiles: Set<string> | null = null;
   private fogChunkColumns = 0;
   private fogChunkRows = 0;
   private fogChunks: FogChunk[] = [];
@@ -445,6 +465,10 @@ class PhaserMapScene extends Phaser.Scene {
   private renderedHeroes = new Map<string, RenderedHeroObject>();
   private renderedStaticObjects = new Map<string, RenderedStaticObject>();
   private heroDirections = new Map<string, HeroDirection>();
+  private failedAssetKeys = new Set<string>();
+  private isLoadingDynamicTextures = false;
+  private pendingDynamicTextureKeys = new Set<string>();
+  private queuedMapRender: GameMap | null = null;
   private lastMovementSoundAt: Record<MovementSoundKind, number> = { horse: -Infinity, boat: -Infinity };
   private lastTerrainAnimationAt = 0;
   private lastHoverLabelAt = 0;
@@ -458,7 +482,14 @@ class PhaserMapScene extends Phaser.Scene {
     this.load.on("progress", (value: number) => {
       this.loadingProgressCallback?.(84 + value * 5, "Chargement des graphismes...");
     });
+    this.load.on("loaderror", (file: FailedLoaderFile) => {
+      const key = this.getFailedAssetKey(file);
+      if (!key) return;
+      this.failedAssetKeys.add(key);
+      console.warn(`[map] Asset failed to load, using fallback texture: ${key}`);
+    });
     this.load.once("complete", () => {
+      this.ensureFallbackTextures();
       this.loadingProgressCallback?.(89, "Preparation de la scene...");
     });
 
@@ -518,10 +549,11 @@ class PhaserMapScene extends Phaser.Scene {
 
   renderMap(map: GameMap) {
     this.map = map;
+    if (this.loadMissingMapTextures(map)) return;
+
     this.fogPlaneDepth = getMaxTileDepth(map) + FOG_PLANE_CLEARANCE;
     this.waterTiles = [];
     this.lavaTiles = [];
-    this.visibleTiles = null;
     this.fogTileStates = null;
     this.fogChunkColumns = 0;
     this.fogChunkRows = 0;
@@ -574,6 +606,47 @@ class PhaserMapScene extends Phaser.Scene {
     this.renderMapTileObjects();
     this.rebuildFogChunks();
     this.renderObjects();
+    this.redrawCurrentFog();
+  }
+
+  private loadMissingMapTextures(map: GameMap) {
+    if (this.isLoadingDynamicTextures) {
+      this.queuedMapRender = map;
+      return true;
+    }
+
+    const paths = this.getDynamicMapTexturePaths(map).filter((path) => !this.textures.exists(path));
+    if (paths.length === 0) return false;
+
+    this.isLoadingDynamicTextures = true;
+    this.queuedMapRender = map;
+    this.pendingDynamicTextureKeys = new Set(paths);
+    for (const path of paths) {
+      this.load.image(path, path);
+    }
+    this.load.once("complete", () => {
+      this.isLoadingDynamicTextures = false;
+      this.pendingDynamicTextureKeys.clear();
+      this.ensureFallbackTextures();
+      const queued = this.queuedMapRender;
+      this.queuedMapRender = null;
+      if (queued) this.renderMap(queued);
+    });
+    this.load.start();
+    return true;
+  }
+
+  private getDynamicMapTexturePaths(map: GameMap) {
+    const paths = new Set<string>();
+    for (const row of map.tiles) {
+      for (const tile of row) {
+        const object = tile.object;
+        if (object?.type === "monster") {
+          paths.add(getMonsterSpritePath(object.subtype));
+        }
+      }
+    }
+    return [...paths];
   }
 
   update(time: number) {
@@ -1242,6 +1315,8 @@ class PhaserMapScene extends Phaser.Scene {
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
     if (!this.map) return;
     this.visibleTiles = new Set(visibleTiles);
+    this.exploredTiles = new Set(exploredTiles);
+    if (this.isLoadingDynamicTextures) return;
     const totalTiles = this.map.width * this.map.height;
     if (!this.fogTileStates || this.fogTileStates.length !== totalTiles || this.fogChunks.length === 0) {
       this.rebuildFogChunks();
@@ -1280,6 +1355,14 @@ class PhaserMapScene extends Phaser.Scene {
       const chunk = this.fogChunks[chunkIndex];
       if (chunk) this.redrawFogChunk(chunk);
     }
+  }
+
+  private redrawCurrentFog() {
+    if (!this.visibleTiles || !this.exploredTiles) return;
+    const visibleTiles = new Set(this.visibleTiles);
+    const exploredTiles = new Set(this.exploredTiles);
+    this.fogTileStates = null;
+    this.setFog(visibleTiles, exploredTiles);
   }
 
   highlightPath(path: Position[]) {
@@ -1610,7 +1693,7 @@ class PhaserMapScene extends Phaser.Scene {
         if (!tile?.object || !this.shouldRenderMapTileObject(tile)) continue;
 
         const iso = cartToIso(x, y);
-        this.renderMapObject(tile.object, iso.x, this.getSurfaceY(x, y));
+        this.renderMapObject(tile.object, iso.x, this.getSurfaceY(x, y), tile);
       }
     }
     this.mapObjectLayer.sort("depth");
@@ -1672,7 +1755,8 @@ class PhaserMapScene extends Phaser.Scene {
   private renderMapObject(
     object: MapObject,
     isoX: number,
-    isoY: number
+    isoY: number,
+    tile?: MapTile,
   ) {
     if (object.type === "resource" && object.subtype) {
       const sprite = this.add.image(isoX, isoY + RESOURCE_PICKUP_OFFSET_Y, MAP_SPRITES.resources[object.subtype]);
@@ -1682,12 +1766,16 @@ class PhaserMapScene extends Phaser.Scene {
       sprite.setDepth(isoY + RESOURCE_PICKUP_OFFSET_Y);
       this.mapObjectLayer.add(sprite);
     } else if (object.type === "monster") {
-      const sprite = this.add.image(isoX, isoY + MONSTER_OFFSET_Y, getMonsterSpritePath(object.subtype));
+      const textureKey = getMonsterSpritePath(object.subtype);
+      this.ensureFallbackTexture(textureKey, "unit");
+      const sprite = this.add.image(isoX, isoY + MONSTER_OFFSET_Y, textureKey);
       const origin = getOriginForMapTileObject(object);
       sprite.setOrigin(origin.originX, origin.originY);
       sprite.setDisplaySize(46, 46);
       sprite.setDepth(isoY + MONSTER_OFFSET_Y);
       this.mapObjectLayer.add(sprite);
+    } else if (object.type === "gate") {
+      this.addGateSprite(isoX, isoY, object, tile);
     } else if (object.type === "wall" && object.subtype === "brick") {
       this.addBrickRampartSprite(isoX, isoY);
     }
@@ -2314,6 +2402,40 @@ class PhaserMapScene extends Phaser.Scene {
     this.objectLayer.sort("depth");
   }
 
+  private addGateSprite(isoX: number, isoY: number, object: MapObject, tile?: MapTile) {
+    const textureKey = this.getGateSpritePath(tile);
+    this.ensureFallbackTexture(textureKey, "map");
+    const sprite = this.add.image(isoX, isoY + GATE_OFFSET_Y, textureKey);
+    sprite.setOrigin(GATE_ORIGIN_X, GATE_ORIGIN_Y);
+    sprite.setDisplaySize(GATE_DISPLAY_WIDTH, GATE_DISPLAY_HEIGHT);
+    sprite.setDepth(isoY + GATE_OFFSET_Y);
+    if (object.ownerId) sprite.setTint(0xe8f0ff);
+    this.mapObjectLayer.add(sprite);
+  }
+
+  private getGateSpritePath(tile?: MapTile) {
+    if (!tile) return MAP_SPRITES.gates.diagonalDown;
+
+    const connections = this.getRoadConnections(tile);
+    const diagonalDownScore = connections.filter((side) => side === "northWest" || side === "southEast").length;
+    const diagonalUpScore = connections.filter((side) => side === "northEast" || side === "southWest").length;
+    if (diagonalDownScore !== diagonalUpScore) {
+      // The gate wall must cross the road perpendicularly so the road runs
+      // through the portcullis. gate-diagonal-down.webp is authored with its
+      // wall on the screen "\" diagonal, so it serves a "/" road (NE/SW),
+      // and the mirrored gate-diagonal-up.webp serves a "\" road (NW/SE).
+      return diagonalDownScore > diagonalUpScore
+        ? MAP_SPRITES.gates.diagonalUp
+        : MAP_SPRITES.gates.diagonalDown;
+    }
+
+    // No road: align the gate wall with the surrounding brick-wall axis.
+    const orientation = this.getWallOrientation(tile);
+    return orientation === "y" || orientation === "diagonalUp"
+      ? MAP_SPRITES.gates.diagonalUp
+      : MAP_SPRITES.gates.diagonalDown;
+  }
+
   private createRenderedHero(object: MapObjectData) {
     const metrics = getObjectMetrics(object);
     if (!metrics) return null;
@@ -2751,6 +2873,61 @@ class PhaserMapScene extends Phaser.Scene {
     );
   }
 
+  private getFailedAssetKey(file: FailedLoaderFile) {
+    const rawKey = file.key ?? file.src ?? file.url;
+    return typeof rawKey === "string" && rawKey.trim().length > 0 ? rawKey : null;
+  }
+
+  private ensureFallbackTextures() {
+    for (const key of this.failedAssetKeys) {
+      this.ensureFallbackTexture(key, this.getFallbackTextureKind(key));
+    }
+  }
+
+  private getFallbackTextureKind(path: string): "map" | "town" | "unit" {
+    if (path.includes("/assets/sprites/units/")) return "unit";
+    if (path.includes("/assets/sprites/map/town-")) return "town";
+    return "map";
+  }
+
+  private ensureFallbackTexture(path: string, kind: "map" | "town" | "unit" = "map") {
+    if (!path || this.textures.exists(path)) return;
+    if (this.pendingDynamicTextureKeys.has(path)) return;
+
+    const size = kind === "town" ? { width: 88, height: 72 } : kind === "unit" ? { width: 48, height: 48 } : { width: 56, height: 56 };
+    const graphics = this.make.graphics({ x: 0, y: 0 }, false);
+    graphics.clear();
+    graphics.fillStyle(kind === "town" ? 0x28364f : kind === "unit" ? 0x35445a : 0x34413a, 1);
+    graphics.fillRect(0, 0, size.width, size.height);
+    graphics.lineStyle(2, 0xf2cf75, 0.95);
+    graphics.strokeRect(1, 1, size.width - 2, size.height - 2);
+
+    if (kind === "town") {
+      graphics.fillStyle(0x8ea5bd, 1);
+      graphics.fillTriangle(size.width * 0.18, size.height * 0.62, size.width * 0.5, size.height * 0.22, size.width * 0.82, size.height * 0.62);
+      graphics.fillStyle(0xb8c6d6, 1);
+      graphics.fillRect(size.width * 0.24, size.height * 0.58, size.width * 0.52, size.height * 0.28);
+      graphics.fillStyle(0x5a3a24, 1);
+      graphics.fillRect(size.width * 0.44, size.height * 0.68, size.width * 0.12, size.height * 0.18);
+    } else if (kind === "unit") {
+      graphics.fillStyle(0xb8c6d6, 1);
+      graphics.fillCircle(size.width * 0.5, size.height * 0.28, size.width * 0.12);
+      graphics.fillStyle(0x7a92aa, 1);
+      graphics.fillRect(size.width * 0.36, size.height * 0.42, size.width * 0.28, size.height * 0.32);
+      graphics.lineStyle(3, 0xd8e2ef, 1);
+      graphics.lineBetween(size.width * 0.66, size.height * 0.28, size.width * 0.66, size.height * 0.82);
+    } else {
+      graphics.fillStyle(0xa9bdc7, 1);
+      graphics.fillTriangle(size.width * 0.5, size.height * 0.18, size.width * 0.2, size.height * 0.45, size.width * 0.5, size.height * 0.72);
+      graphics.fillTriangle(size.width * 0.5, size.height * 0.18, size.width * 0.8, size.height * 0.45, size.width * 0.5, size.height * 0.72);
+      graphics.fillStyle(0x5f6f77, 1);
+      graphics.fillRect(size.width * 0.36, size.height * 0.5, size.width * 0.28, size.height * 0.18);
+    }
+
+    graphics.generateTexture(path, size.width, size.height);
+    graphics.destroy();
+  }
+
   private addObjectSprite(
     object: MapObjectData,
     x: number,
@@ -2761,6 +2938,7 @@ class PhaserMapScene extends Phaser.Scene {
     origin = getOriginForObject(object)
   ) {
     if (!path) return null;
+    this.ensureFallbackTexture(path, object.type === "town" ? "town" : "map");
     const sprite = this.add.image(x, y, path);
     sprite.setOrigin(origin.originX, origin.originY);
     sprite.setDisplaySize(width, height);

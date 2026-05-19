@@ -77,6 +77,14 @@ export async function POST(
     status: string;
     stacks: UnitStack[];
   }>;
+  const gates = (game?.gates ?? []) as unknown as Array<{
+    id: string;
+    gamePlayerId?: string | null;
+    x: number;
+    y: number;
+    guardianPower?: number;
+    garrison?: UnitStack[];
+  }>;
   const gamePlayer = players.find((player) => player.userId === user.id);
 
   if (!game || !gamePlayer) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
@@ -110,7 +118,10 @@ export async function POST(
   const townDefender = !defender && !buildingDefender && body.targetType === "town"
     ? await getTownDefender(supabase, id, String(body.targetId ?? ""), targetPosition)
     : null;
-  const targetDefender = defender ?? buildingDefender ?? townDefender;
+  const gateDefender = !defender && !buildingDefender && !townDefender && body.targetType === "gate"
+    ? getGateDefender(gates, String(body.targetId ?? ""), targetPosition)
+    : null;
+  const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender;
   if (!targetDefender) {
     const debug = {
       gameId: id,
@@ -128,7 +139,7 @@ export async function POST(
     }, { status: 400 });
   }
   const defenderOwner = targetDefender.playerId ? players.find((player) => player.id === targetDefender.playerId) : null;
-  if (body.mode === "AUTO" && body.targetType === "hero" && !defenderOwner?.isAi) {
+  if (body.mode === "AUTO" && (body.targetType === "hero" || body.targetType === "gate") && targetDefender.playerId && !defenderOwner?.isAi) {
     return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
   }
   if (targetDefender.heroId && isHeroInActiveCombat(game.combats, targetDefender.heroId)) {
@@ -225,6 +236,7 @@ export async function POST(
       attacker_hero_id: attacker.id,
       defender_hero_id: targetDefender.heroId,
       neutral_army_id: targetDefender.neutralArmyId,
+      gate_id: body.targetType === "gate" ? targetDefender.id : null,
       x: targetDefender.x,
       y: targetDefender.y,
       board_state: { ...combatStart.boardState, environment },
@@ -246,6 +258,8 @@ export async function POST(
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
+      } else if (body.targetType === "gate") {
+        await captureGate(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (targetDefender.heroId && targetDefender.playerId) {
         await supabase.from("armies").delete().eq("hero_id", targetDefender.heroId);
         await supabase.from("heroes").delete().eq("id", targetDefender.heroId);
@@ -264,6 +278,46 @@ export async function POST(
   }
 
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+}
+
+function getGateDefender(
+  gates: Array<{ id: string; gamePlayerId?: string | null; x: number; y: number; guardianPower?: number; garrison?: UnitStack[] }>,
+  targetId: string,
+  targetPosition?: { x?: unknown; y?: unknown }
+) {
+  const x = Number(targetPosition?.x);
+  const y = Number(targetPosition?.y);
+  const gate = gates.find((item) =>
+    item.id === targetId || (Number.isFinite(x) && Number.isFinite(y) && item.x === x && item.y === y)
+  );
+  const garrison = gate?.garrison ?? [];
+  if (!gate || garrison.length === 0) return null;
+
+  return {
+    id: gate.id,
+    playerId: gate.gamePlayerId ?? null,
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: garrison,
+    x: gate.x,
+    y: gate.y,
+  };
+}
+
+async function captureGate(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  gateId: string,
+  playerId: string
+) {
+  await supabase
+    .from("gates")
+    .update({ game_player_id: playerId, guardian_power: 0 })
+    .eq("game_id", gameId)
+    .eq("id", gateId);
+  await supabase.from("gate_stacks").delete().eq("gate_id", gateId);
 }
 
 function combatInvolvesPlayer(combat: ReturnType<typeof toCombat>, playerId: string) {

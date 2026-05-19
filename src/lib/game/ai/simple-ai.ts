@@ -113,6 +113,8 @@ async function applyAiDecision(
     return captureOrFightResourceBuilding(supabase, context, movement.hero, objective);
   } else if (objective.type === "neutral_army") {
     return fightNeutralArmy(supabase, context, movement.hero, objective);
+  } else if (objective.type === "gate") {
+    return captureOrFightGate(supabase, context, movement.hero, objective);
   } else if (objective.type === "enemy_hero") {
     return fightEnemyHero(supabase, context, movement.hero, objective);
   } else if (objective.type === "neutral_town") {
@@ -273,6 +275,50 @@ async function captureResourceBuilding(supabase: SupabaseAdmin, context: AiConte
     game_player_id: context.player.id,
     guardian_power: 0,
   }).eq("game_id", context.game.id).eq("x", objective.position.x).eq("y", objective.position.y);
+}
+
+async function captureOrFightGate(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const gate = (context.game.gates ?? []).find((item) =>
+    item.id === objective.id || (item.x === objective.position.x && item.y === objective.position.y)
+  );
+  if (!gate || gate.gamePlayerId === context.player.id) return { moved: true };
+
+  const garrison = gate.garrison ?? [];
+  if (garrison.length === 0) {
+    await captureGate(supabase, context.game.id, gate.id, context.player.id);
+    return { moved: true };
+  }
+
+  const result = await resolveAiAutoCombat({
+    supabase,
+    attacker: hero,
+    defender: {
+      id: gate.id,
+      attack: 1,
+      defense: 1,
+      armies: garrison,
+    },
+    experience: 150,
+    onAttackerWon: async () => {
+      await captureGate(supabase, context.game.id, gate.id, context.player.id);
+      await supabase.from("gate_stacks").delete().eq("gate_id", gate.id);
+    },
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function captureGate(supabase: SupabaseAdmin, gameId: string, gateId: string, playerId: string) {
+  await supabase
+    .from("gates")
+    .update({ game_player_id: playerId, guardian_power: 0 })
+    .eq("game_id", gameId)
+    .eq("id", gateId);
 }
 
 async function fightNeutralArmy(

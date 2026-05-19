@@ -9,6 +9,7 @@ import {
   BuildingType,
   type DecorKind,
   Faction,
+  type Gate,
   type GameMap,
   type GameState,
   HeroClass,
@@ -22,7 +23,11 @@ import {
 
 const MOCK_USER_ID = "dev-map-user";
 const WIDTH = 30;
-const HEIGHT = 22;
+const HEIGHT = 28;
+const RESOURCE_BUILDING_Y = 23;
+const RESOURCE_PICKUP_Y = 25;
+const NEUTRAL_GATE_POSITION = { x: 21, y: 25 };
+const OWNED_GATE_POSITION = { x: 27, y: 23 };
 
 const TERRAIN_GALLERY = [
   TerrainType.GRASS,
@@ -70,7 +75,7 @@ export default function DevMapShowcasePage() {
     store.setGameState(buildShowcaseState());
     store.setDevRevealMap(true);
     store.selectHero("showcase-hero-castle");
-    store.focusTile(14, 11);
+    store.focusTile(23, 23);
 
     return () => useGameStore.getState().resetGame();
   }, []);
@@ -89,6 +94,7 @@ export default function DevMapShowcasePage() {
 
 function buildShowcaseState(): GameState {
   const map = buildShowcaseMap();
+  const gates = buildShowcaseGates();
   const townPositions = [
     { id: "town-castle", faction: Faction.CASTLE, x: 17, y: 3, name: "Castle" },
     { id: "town-rampart", faction: Faction.RAMPART, x: 21, y: 3, name: "Rampart" },
@@ -138,7 +144,7 @@ function buildShowcaseState(): GameState {
         attackerHeroId: "showcase-hero-castle",
         currentPlayerId: "p1",
         round: 1,
-        position: { x: 14, y: 15 },
+        position: { x: 24, y: 23 },
         boardState: { units: [] },
         turnQueue: [],
         actionLog: [],
@@ -160,9 +166,9 @@ function buildShowcaseState(): GameState {
         ],
         towns: townPositions.slice(0, 3).map((town) => buildTown(town.id, town.name, town.faction, town.x, town.y)),
         resourceBuildings: [
-          { id: "rb-gold_mine", type: ResourceBuildingType.GOLD_MINE, position: { x: 2, y: 15 }, ownerId: "p1", guardianPower: 0 },
-          { id: "rb-sawmill", type: ResourceBuildingType.SAWMILL, position: { x: 4, y: 15 }, ownerId: "p1", guardianPower: 0 },
-          { id: "rb-ore_pit", type: ResourceBuildingType.ORE_PIT, position: { x: 6, y: 15 }, ownerId: "p1", guardianPower: 0 },
+          { id: "rb-gold_mine", type: ResourceBuildingType.GOLD_MINE, position: getResourceBuildingPosition(0), ownerId: "p1", guardianPower: 0 },
+          { id: "rb-sawmill", type: ResourceBuildingType.SAWMILL, position: getResourceBuildingPosition(1), ownerId: "p1", guardianPower: 0 },
+          { id: "rb-ore_pit", type: ResourceBuildingType.ORE_PIT, position: getResourceBuildingPosition(2), ownerId: "p1", guardianPower: 0 },
         ],
         isAlive: true,
         turnOrder: 0,
@@ -182,8 +188,8 @@ function buildShowcaseState(): GameState {
         ],
         towns: townPositions.slice(3, 6).map((town) => buildTown(town.id, town.name, town.faction, town.x, town.y)),
         resourceBuildings: [
-          { id: "rb-alchemist_lab", type: ResourceBuildingType.ALCHEMIST_LAB, position: { x: 8, y: 15 }, ownerId: "p2", guardianPower: 0 },
-          { id: "rb-crystal_cavern", type: ResourceBuildingType.CRYSTAL_CAVERN, position: { x: 10, y: 15 }, ownerId: "p2", guardianPower: 0 },
+          { id: "rb-alchemist_lab", type: ResourceBuildingType.ALCHEMIST_LAB, position: getResourceBuildingPosition(3), ownerId: "p2", guardianPower: 0 },
+          { id: "rb-crystal_cavern", type: ResourceBuildingType.CRYSTAL_CAVERN, position: getResourceBuildingPosition(4), ownerId: "p2", guardianPower: 0 },
         ],
         isAlive: true,
         turnOrder: 1,
@@ -201,8 +207,8 @@ function buildShowcaseState(): GameState {
         heroes: [],
         towns: townPositions.slice(6).map((town) => buildTown(town.id, town.name, town.faction, town.x, town.y)),
         resourceBuildings: [
-          { id: "rb-gem_pond", type: ResourceBuildingType.GEM_POND, position: { x: 12, y: 15 }, ownerId: "p3", guardianPower: 0 },
-          { id: "rb-sulfur_dune", type: ResourceBuildingType.SULFUR_DUNE, position: { x: 14, y: 15 }, ownerId: "p3", guardianPower: 0 },
+          { id: "rb-gem_pond", type: ResourceBuildingType.GEM_POND, position: getResourceBuildingPosition(5), ownerId: "p3", guardianPower: 0 },
+          { id: "rb-sulfur_dune", type: ResourceBuildingType.SULFUR_DUNE, position: getResourceBuildingPosition(6), ownerId: "p3", guardianPower: 0 },
         ],
         isAlive: true,
         turnOrder: 2,
@@ -211,6 +217,7 @@ function buildShowcaseState(): GameState {
       },
     ],
     neutralArmies: [],
+    gates,
   };
 }
 
@@ -257,10 +264,26 @@ function buildShowcaseMap(): GameMap {
   drawRoad(map, [[8, 13], [8, 14], [8, 15], [8, 16], [8, 17], [8, 18]], "gravel");
   drawRoad(map, [[17, 13], [17, 12], [17, 11], [17, 10], [17, 9], [17, 8], [17, 7], [17, 6], [17, 5]], "dirt");
   drawRoad(map, [[21, 13], [21, 12], [21, 11], [21, 10], [21, 9], [21, 8], [21, 7], [21, 6], [21, 5]], "gravel");
+  drawRoad(map, [[17, 25], [18, 25], [19, 25], [20, 25], [21, 25], [22, 25], [23, 25], [24, 25], [25, 25]], "paved");
+  drawRoad(map, [[27, 20], [27, 21], [27, 22], [27, 23], [27, 24], [27, 25], [27, 26]], "gravel");
+
+  placeObject(map, NEUTRAL_GATE_POSITION.x, NEUTRAL_GATE_POSITION.y, {
+    type: "gate",
+    id: "showcase-gate-neutral",
+    subtype: "brick",
+    guardianPower: 900,
+  }, true);
+  placeObject(map, OWNED_GATE_POSITION.x, OWNED_GATE_POSITION.y, {
+    type: "gate",
+    id: "showcase-gate-owned",
+    subtype: "natural",
+    ownerId: "p1",
+    guardianPower: 480,
+  }, true);
 
   for (const [index, type] of RESOURCE_BUILDINGS.entries()) {
-    const x = 2 + index * 2;
-    placeObject(map, x, 15, {
+    const position = getResourceBuildingPosition(index);
+    placeObject(map, position.x, position.y, {
       type: "building",
       id: `rb-${type}`,
       subtype: type,
@@ -270,7 +293,7 @@ function buildShowcaseMap(): GameMap {
   }
 
   for (const [index, resource] of RESOURCES.entries()) {
-    placeObject(map, 2 + index * 2, 17, {
+    placeObject(map, 2 + index * 2, RESOURCE_PICKUP_Y, {
       type: "resource",
       id: `res-${resource}`,
       subtype: resource,
@@ -325,6 +348,35 @@ function buildShowcaseMap(): GameMap {
   placeDecor(map, 27, 18, "grass-tuft", false);
 
   return map;
+}
+
+function buildShowcaseGates(): Gate[] {
+  return [
+    {
+      id: "showcase-gate-neutral",
+      ownerId: null,
+      position: NEUTRAL_GATE_POSITION,
+      guardianPower: 900,
+      garrison: [
+        { id: "showcase-gate-neutral-a", unitType: UnitType.SWORDSMAN, count: 20, health: 200, maxHealth: 200, position: 0 },
+        { id: "showcase-gate-neutral-b", unitType: UnitType.MONK, count: 8, health: 80, maxHealth: 80, position: 1 },
+      ],
+    },
+    {
+      id: "showcase-gate-owned",
+      ownerId: "p1",
+      position: OWNED_GATE_POSITION,
+      guardianPower: 480,
+      garrison: [
+        { id: "showcase-gate-owned-a", unitType: UnitType.PIKEMAN, count: 28, health: 280, maxHealth: 280, position: 0 },
+        { id: "showcase-gate-owned-b", unitType: UnitType.ARCHER, count: 14, health: 140, maxHealth: 140, position: 1 },
+      ],
+    },
+  ];
+}
+
+function getResourceBuildingPosition(index: number) {
+  return { x: 2 + index * 2, y: RESOURCE_BUILDING_Y };
 }
 
 function makeTile(x: number, y: number, terrain: TerrainType, elevation: number): MapTile {

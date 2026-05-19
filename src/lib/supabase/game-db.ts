@@ -30,6 +30,7 @@ export function toGame(row: DbRow) {
     turns: rows(row.turns).map(toTurn),
     combats: rows(row.combats).map(toCombat),
     neutralArmies: rows(row.neutral_armies).map(toNeutralArmy),
+    gates: rows(row.gates).map(toGate),
   };
 }
 
@@ -182,6 +183,30 @@ export function toNeutralArmyStack(row: DbRow) {
   };
 }
 
+export function toGate(row: DbRow) {
+  return {
+    id: row.id,
+    gameId: row.game_id,
+    gamePlayerId: row.game_player_id,
+    x: row.x,
+    y: row.y,
+    guardianPower: row.guardian_power,
+    garrison: rows(row.gate_stacks ?? row.garrison).map(toGateStack).filter((stack) => Number(stack.count) > 0),
+  };
+}
+
+export function toGateStack(row: DbRow) {
+  return {
+    id: row.id,
+    gateId: row.gate_id,
+    unitType: row.unit_type,
+    count: row.count,
+    health: row.health,
+    maxHealth: row.max_health,
+    position: row.position,
+  };
+}
+
 export function toCombat(row: DbRow) {
   const boardState = row.board_state as { units?: CombatBoardUnit[] } | null;
   const currentUnitId = row.current_unit_id as string | null;
@@ -196,6 +221,7 @@ export function toCombat(row: DbRow) {
     attackerHeroId: row.attacker_hero_id,
     defenderHeroId: row.defender_hero_id,
     neutralArmyId: row.neutral_army_id,
+    gateId: row.gate_id,
     currentPlayerId: getCurrentCombatPlayerId(boardState, currentUnitId, row.current_player_id as string | null),
     currentUnitId,
     round: row.round,
@@ -247,56 +273,91 @@ export async function getGamePlayer(supabase: SupabaseAdmin, gameId: string, use
 export async function getGameWithRelations(supabase: SupabaseAdmin, id: string) {
   const { data, error } = await supabase
     .from("games")
-    .select(`
-      *,
-      game_players!game_players_game_id_fkey(
-        *,
-        profiles(name),
-        heroes(*, armies(*)),
-        towns(*),
-        resource_buildings(*)
-      ),
-      turns(*),
-      combats(*, combat_participants(*)),
-      neutral_armies(*, neutral_army_stacks(*))
-    `)
+    .select(gameRelationsSelect(true))
     .eq("id", id)
     .maybeSingle();
 
+  if (error && isMissingGateSchemaError(error)) {
+    const fallback = await supabase
+      .from("games")
+      .select(gameRelationsSelect(false))
+      .eq("id", id)
+      .maybeSingle();
+    if (fallback.error) throw fallback.error;
+    return fallback.data ? toGame(fallback.data as unknown as DbRow) : null;
+  }
+
   if (error) throw error;
-  return data ? toGame(data) : null;
+  return data ? toGame(data as unknown as DbRow) : null;
 }
 
 export async function getGameSyncWithRelations(supabase: SupabaseAdmin, id: string) {
   const { data, error } = await supabase
     .from("games")
-    .select(`
-      id,
-      status,
-      max_players,
-      map_width,
-      map_height,
-      turn_number,
-      current_turn_player_id,
-      winner_id,
-      map_state,
-      updated_at,
-      game_players!game_players_game_id_fkey(
-        *,
-        profiles(name),
-        heroes(*, armies(*)),
-        towns(*),
-        resource_buildings(*)
-      ),
-      turns(*),
-      combats(*, combat_participants(*)),
-      neutral_armies(*, neutral_army_stacks(*))
-    `)
+    .select(gameSyncRelationsSelect(true))
     .eq("id", id)
     .maybeSingle();
 
+  if (error && isMissingGateSchemaError(error)) {
+    const fallback = await supabase
+      .from("games")
+      .select(gameSyncRelationsSelect(false))
+      .eq("id", id)
+      .maybeSingle();
+    if (fallback.error) throw fallback.error;
+    return fallback.data ? toGame(fallback.data as unknown as DbRow) : null;
+  }
+
   if (error) throw error;
-  return data ? toGame(data) : null;
+  return data ? toGame(data as unknown as DbRow) : null;
+}
+
+function gameRelationsSelect(includeGates: boolean) {
+  return `
+    *,
+    game_players!game_players_game_id_fkey(
+      *,
+      profiles(name),
+      heroes(*, armies(*)),
+      towns(*),
+      resource_buildings(*)
+    ),
+    turns(*),
+    combats(*, combat_participants(*)),
+    neutral_armies(*, neutral_army_stacks(*))
+    ${includeGates ? ", gates(*, gate_stacks(*))" : ""}
+  `;
+}
+
+function gameSyncRelationsSelect(includeGates: boolean) {
+  return `
+    id,
+    status,
+    max_players,
+    map_width,
+    map_height,
+    turn_number,
+    current_turn_player_id,
+    winner_id,
+    map_state,
+    updated_at,
+    game_players!game_players_game_id_fkey(
+      *,
+      profiles(name),
+      heroes(*, armies(*)),
+      towns(*),
+      resource_buildings(*)
+    ),
+    turns(*),
+    combats(*, combat_participants(*)),
+    neutral_armies(*, neutral_army_stacks(*))
+    ${includeGates ? ", gates(*, gate_stacks(*))" : ""}
+  `;
+}
+
+function isMissingGateSchemaError(error: { code?: string; message?: string; details?: string | null }) {
+  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return text.includes("gates") || text.includes("gate_stacks") || text.includes("gate_id");
 }
 
 export async function getGameRow(supabase: SupabaseAdmin, id: string) {

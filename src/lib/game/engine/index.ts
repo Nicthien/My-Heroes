@@ -363,6 +363,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     if (t.decor?.blocking) t.decor = undefined;
     t.isPassable = true;
     t.movementCost = getMovementCost(t.terrain);
+    t.road ??= "paved";
   }
 
   return {

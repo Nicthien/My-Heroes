@@ -123,11 +123,11 @@ export function buildConnectionsAndWalls(
       openTile(tiles[gt.y][gt.x]);
     }
 
-    // Place le monstre garde sur la tile principale
+    // Place la porte fortifiee sur la tile principale.
     tiles[best.y][best.x].object = {
-      type: "monster",
-      id: `gate-mon-${c.from}-${c.to}-${best.x}-${best.y}`,
-      subtype: "guard",
+      type: "gate",
+      id: `gate-${c.from}-${c.to}-${best.x}-${best.y}`,
+      subtype: c.wallType,
       // guardianPower est rempli plus tard par le value system
     };
 

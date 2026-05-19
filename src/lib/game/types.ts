@@ -411,6 +411,14 @@ export interface ResourceBuilding {
   guardianPower: number;
 }
 
+export interface Gate {
+  id: string;
+  position: Position;
+  ownerId: string | null;
+  garrison: UnitStack[];
+  guardianPower: number;
+}
+
 export enum AdventureBuildingType {
   OBSERVATORY = "observatory",
   CAMPFIRE = "campfire",
@@ -450,6 +458,7 @@ export interface MapObject {
   subtype?: string;
   name?: string;
   guardianPower?: number;
+  ownerId?: string | null;
   amount?: number;
   targetId?: string;
   ownerIndex?: number;
@@ -531,6 +540,7 @@ export interface PersistentCombat {
   attackerHeroId: string;
   defenderHeroId?: string | null;
   neutralArmyId?: string | null;
+  gateId?: string | null;
   currentPlayerId?: string | null;
   currentUnitId?: string | null;
   round: number;
@@ -606,6 +616,8 @@ export type GameAction =
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "TRANSFER_GATE_GARRISON_TO_HERO"; gateId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "TRANSFER_HERO_TO_GATE_GARRISON"; gateId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
@@ -634,4 +646,5 @@ export interface GameState {
   winnerId?: string;
   activeCombats?: PersistentCombat[];
   neutralArmies?: NeutralArmy[];
+  gates?: Gate[];
 }

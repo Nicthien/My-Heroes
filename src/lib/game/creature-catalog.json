@@ -1160,7 +1160,7 @@
       "health": 110,
       "speed": 5,
       "growth": 2,
-      "aiValue": 2016,
+      "aiValue": 1814,
       "cost": {
         "gold": 1100
       },
@@ -1899,7 +1899,7 @@
       "health": 200,
       "speed": 14,
       "growth": 1,
-      "aiValue": 4696,
+      "aiValue": 4919,
       "cost": {
         "gold": 3000,
         "mercury": 1
@@ -2174,7 +2174,7 @@
       "health": 80,
       "speed": 11,
       "growth": 2,
-      "aiValue": 1589,
+      "aiValue": 1685,
       "cost": {
         "gold": 1050
       },
@@ -2198,7 +2198,7 @@
       "health": 180,
       "speed": 11,
       "growth": 1,
-      "aiValue": 4702,
+      "aiValue": 5003,
       "cost": {
         "gold": 2500,
         "sulfur": 1
@@ -2500,7 +2500,7 @@
       "health": 70,
       "speed": 8,
       "growth": 2,
-      "aiValue": 1443,
+      "aiValue": 1544,
       "cost": {
         "gold": 1100
       },

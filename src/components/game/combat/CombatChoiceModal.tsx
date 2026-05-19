@@ -103,16 +103,19 @@ export default function CombatChoiceModal() {
   }
 
   const isBuilding = pendingCombat.targetType === "building";
+  const isGate = pendingCombat.targetType === "gate";
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
       <div className="w-[min(92vw,58rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 shadow-2xl shadow-black text-white">
         <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">
-          {isBuilding ? "Gardiens du bâtiment" : "Engagement"}
+          {isGate ? "Gardiens de la porte" : isBuilding ? "Gardiens du bâtiment" : "Engagement"}
         </div>
         <h2 className="mt-2 text-2xl font-bold text-yellow-100">Choisir la résolution du combat</h2>
         <p className="mt-3 text-sm text-stone-300">
-          {isBuilding
+          {isGate
+            ? "Cette porte est defendue par une garnison. Battez-la pour controler le passage."
+            : isBuilding
             ? "Ce bâtiment est défendu par des gardiens. Battez-les pour en prendre le contrôle."
             : "Le combat sera visible sur la carte générale. En mode manuel, les deux joueurs rejoignent le plateau tactique synchrone."}
         </p>
@@ -169,6 +172,7 @@ function mapCombat(combat: Record<string, unknown>) {
     attackerHeroId: combat.attackerHeroId as string,
     defenderHeroId: combat.defenderHeroId as string | null,
     neutralArmyId: combat.neutralArmyId as string | null,
+    gateId: combat.gateId as string | null,
     currentPlayerId: combat.currentPlayerId as string | null,
     currentUnitId: combat.currentUnitId as string | null,
     round: combat.round as number,
@@ -248,6 +252,14 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
     }];
   }
 
+  if (pendingCombat.targetType === "gate") {
+    const destination = pendingCombat.targetPosition ?? pendingCombat.destination;
+    return gameState.gates?.find((gate) =>
+      gate.id === pendingCombat.targetId ||
+      Boolean(destination && gate.position.x === destination.x && gate.position.y === destination.y)
+    )?.garrison ?? [];
+  }
+
   const defenderHero = findHero(gameState, pendingCombat.targetId);
   return defenderHero?.armies ?? [];
 }
@@ -271,6 +283,7 @@ function getDifficulty(ratio: number) {
 function getSourceLabel(targetType: PendingCombat["targetType"]) {
   if (targetType === "building") return "Gardiens estimés du lieu.";
   if (targetType === "town") return "Garnison neutre repérée.";
+  if (targetType === "gate") return "Garnison de porte reperee.";
   if (targetType === "monster") return "Armée neutre observée.";
   return "Défense adverse repérée.";
 }

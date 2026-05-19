@@ -71,6 +71,15 @@ interface MinimalResourceBuilding {
   buildingType: string;
 }
 
+interface MinimalGate {
+  id: string;
+  gamePlayerId?: string | null;
+  x: number;
+  y: number;
+  guardianPower?: number;
+  garrison?: MinimalArmy[];
+}
+
 interface MinimalTurn {
   gamePlayerId: string;
   turnNumber: number;
@@ -120,9 +129,10 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town"; destination: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate"; destination: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
+  | { type: "CAPTURE_GATE"; gateId: string; destination: Position }
   | { type: "STOP"; message: string; destination: Position };
 
 const HERO_IN_COMBAT_ERROR = "Ce heros est deja engage dans un combat.";
@@ -154,6 +164,7 @@ export async function POST(
       towns: MinimalTown[];
       heroes?: MinimalHero[];
     }>;
+    const gates = (game.gates ?? []) as unknown as MinimalGate[];
     const turns = game.turns as MinimalTurn[];
     const completedTurn = turns.find((turn) =>
       turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
@@ -186,6 +197,7 @@ export async function POST(
         movingHeroId: hero.id,
         movingPlayerId: gamePlayer.id,
         players,
+        gates,
         collected,
         killed,
         visitedAdventureBuildings,
@@ -253,6 +265,11 @@ export async function POST(
         }
       } else if (stopObject?.type === "monster" && stopTargetPosition && !killed.has(stopObject.id)) {
         interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
+      } else if (stopObject?.type === "gate" && stopTargetPosition) {
+        const gate = findGate(gates, stopObject.id, stopTargetPosition);
+        if (gate && gate.gamePlayerId !== gamePlayer.id && (gate.garrison?.length ?? 0) > 0) {
+          interaction = { type: "COMBAT", targetId: gate.id, targetType: "gate", destination: lastPos, targetPosition: stopTargetPosition };
+        }
       } else if (tile?.object?.type === "monster" && !killed.has(tile.object.id)) {
         interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "monster", destination: lastPos };
       } else if (tile?.object?.type === "artifact") {
@@ -285,6 +302,19 @@ export async function POST(
           position: lastPos,
           explored,
         });
+      }
+
+      if (tile?.object?.type === "gate") {
+        const gate = findGate(gates, tile.object.id, lastPos);
+        if (gate && gate.gamePlayerId !== gamePlayer.id) {
+          const hasGarrison = (gate.garrison ?? []).some((unit) => unit.count > 0);
+          if (hasGarrison) {
+            interaction = { type: "COMBAT", targetId: gate.id, targetType: "gate", destination: lastPos, targetPosition: lastPos };
+          } else {
+            await captureGate(supabase, id, gate.id, gamePlayer.id);
+            interaction = { type: "CAPTURE_GATE", gateId: gate.id, destination: lastPos };
+          }
+        }
       }
 
       // Capture d'un château neutre : si garnison vide → capture immédiate.
@@ -651,6 +681,44 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO" || action.type === "TRANSFER_HERO_TO_GATE_GARRISON") {
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const rule = UNIT_RULES[unitType];
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      const gate = gates.find((item) => item.id === action.gateId);
+      if (!rule || !hero || !gate || gate.gamePlayerId !== gamePlayer.id) {
+        return NextResponse.json({ error: "Transfert de porte invalide" }, { status: 400 });
+      }
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
+        return NextResponse.json({ error: "Le heros doit etre adjacent a la porte" }, { status: 400 });
+      }
+
+      if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO") {
+        const source = (gate.garrison ?? []).find((unit) => unit.unitType === unitType);
+        if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
+
+        if (source.count === count) {
+          await supabase.from("gate_stacks").delete().eq("id", source.id);
+        } else {
+          await supabase.from("gate_stacks").update({
+            count: source.count - count,
+            health: Math.max(0, source.health - rule.health * count),
+          }).eq("id", source.id);
+        }
+        await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
+      } else {
+        const source = hero.armies.find((army) => army.unitType === unitType);
+        if (!source || source.count < count) return NextResponse.json({ error: "Armee insuffisante" }, { status: 400 });
+
+        await addUnitsToGateGarrison(supabase, gate, unitType, count, rule.health);
+        await removeUnitsFromHeroArmy(supabase, source, count, rule.health);
+      }
+
+      await compactGateStackPositions(supabase, gate.id);
+      return NextResponse.json({ success: true });
+    }
+
     if (action.type === "END_TURN") {
       await completePlayerTurn(supabase, id, Number(game.turnNumber), gamePlayer.id);
       await runAiTurnsUntilHuman(supabase, id);
@@ -716,6 +784,112 @@ function removeUnitsFromStackList(stacks: MinimalArmy[], unitType: UnitType, cou
     )
     .filter((unit) => unit.count > 0)
     .map((unit, position) => ({ ...unit, position }));
+}
+
+function findGate(gates: MinimalGate[], gateId: string, position: Position) {
+  return gates.find((gate) =>
+    gate.id === gateId || (gate.x === position.x && gate.y === position.y)
+  );
+}
+
+function areAdjacentOrSame(a: Position, b: Position) {
+  return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+}
+
+async function captureGate(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  gateId: string,
+  playerId: string,
+) {
+  await supabase
+    .from("gates")
+    .update({ game_player_id: playerId, guardian_power: 0 })
+    .eq("game_id", gameId)
+    .eq("id", gateId);
+}
+
+async function addUnitsToHeroArmy(
+  supabase: ReturnType<typeof createAdminClient>,
+  hero: MinimalHero,
+  unitType: UnitType,
+  count: number,
+  maxHealth: number,
+) {
+  const existing = hero.armies.find((army) => army.unitType === unitType);
+  if (existing) {
+    await supabase.from("armies").update({
+      count: existing.count + count,
+      health: existing.health + maxHealth * count,
+    }).eq("id", existing.id);
+    return;
+  }
+
+  await supabase.from("armies").insert({
+    hero_id: hero.id,
+    unit_type: unitType,
+    count,
+    health: maxHealth * count,
+    max_health: maxHealth,
+    position: hero.armies.length,
+  });
+}
+
+async function removeUnitsFromHeroArmy(
+  supabase: ReturnType<typeof createAdminClient>,
+  source: MinimalArmy,
+  count: number,
+  maxHealth: number,
+) {
+  if (source.count === count) {
+    await supabase.from("armies").delete().eq("id", source.id);
+    return;
+  }
+
+  await supabase.from("armies").update({
+    count: source.count - count,
+    health: Math.max(0, source.health - maxHealth * count),
+  }).eq("id", source.id);
+}
+
+async function addUnitsToGateGarrison(
+  supabase: ReturnType<typeof createAdminClient>,
+  gate: MinimalGate,
+  unitType: UnitType,
+  count: number,
+  maxHealth: number,
+) {
+  const existing = (gate.garrison ?? []).find((unit) => unit.unitType === unitType);
+  if (existing) {
+    await supabase.from("gate_stacks").update({
+      count: existing.count + count,
+      health: existing.health + maxHealth * count,
+    }).eq("id", existing.id);
+    return;
+  }
+
+  await supabase.from("gate_stacks").insert({
+    gate_id: gate.id,
+    unit_type: unitType,
+    count,
+    health: maxHealth * count,
+    max_health: maxHealth,
+    position: gate.garrison?.length ?? 0,
+  });
+}
+
+async function compactGateStackPositions(supabase: ReturnType<typeof createAdminClient>, gateId: string) {
+  const { data } = await supabase
+    .from("gate_stacks")
+    .select("id,position")
+    .eq("gate_id", gateId)
+    .order("position", { ascending: true });
+  for (let position = 0; position < (data ?? []).length; position++) {
+    const stack = data?.[position];
+    if (stack && stack.position !== position) {
+      await supabase.from("gate_stacks").update({ position }).eq("id", stack.id);
+    }
+  }
 }
 
 async function incrementPlayerResource(supabase: ReturnType<typeof createAdminClient>, playerId: string, resource: string, amount: number) {
@@ -1094,6 +1268,7 @@ function findFirstMoveStop({
   movingHeroId,
   movingPlayerId,
   players,
+  gates,
   collected,
   killed,
   visitedAdventureBuildings,
@@ -1108,6 +1283,7 @@ function findFirstMoveStop({
     towns?: MinimalTown[];
     heroes?: MinimalHero[];
   }>;
+  gates: MinimalGate[];
   collected: Set<string>;
   killed: Set<string>;
   visitedAdventureBuildings: Set<string>;
@@ -1124,7 +1300,7 @@ function findFirstMoveStop({
     if (object.type === "resource" && collected.has(object.id)) continue;
     if (object.type === "monster" && killed.has(object.id)) continue;
     if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
-    if (object.type === "wall" || object.type === "gate") continue;
+    if (object.type === "wall") continue;
     if (object.type === "monster") return { pathIndex: i, stopBefore: true, object, targetPosition: position };
     if (object.type === "town") {
       const owner = findTownOwner(players, object, position);
@@ -1138,6 +1314,14 @@ function findFirstMoveStop({
         return { pathIndex: i, stopBefore: true, object, targetPosition: position };
       }
       return { pathIndex: i, object };
+    }
+    if (object.type === "gate") {
+      const gate = findGate(gates, object.id, position);
+      if (gate?.gamePlayerId === movingPlayerId) continue;
+      if ((gate?.garrison ?? []).some((unit) => unit.count > 0)) {
+        return { pathIndex: i, stopBefore: true, object, targetPosition: position };
+      }
+      return { pathIndex: i, object, targetPosition: position };
     }
     return { pathIndex: i, object };
   }

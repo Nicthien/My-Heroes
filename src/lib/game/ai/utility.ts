@@ -92,6 +92,30 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
     });
   }
 
+  for (const gate of context.game.gates ?? []) {
+    if (gate.gamePlayerId === context.player.id) continue;
+    const position = { x: gate.x, y: gate.y };
+    if (!context.explored.has(tileKey(position))) continue;
+    const stacks = gate.garrison ?? [];
+    const targetPower = calculateStacksPower(stacks);
+    const objectivePath = targetPower > 0
+      ? findPathToAdjacent(context.map, start, position, hero.movement)
+      : findPath(context.map, start, position, hero.movement);
+    const objectivePathCost = targetPower > 0
+      ? getAdventurePathCostAvoiding(context.map, objectivePath, [position])
+      : getAdventurePathCost(context.map, objectivePath);
+    if (objectivePath.length < 1 || !Number.isFinite(objectivePathCost) || objectivePathCost > hero.movement) continue;
+    objectives.push({
+      type: "gate",
+      id: gate.id,
+      position,
+      path: objectivePath,
+      pathCost: objectivePathCost,
+      baseValue: targetPower > 0 ? 900 + targetPower * 0.5 : 700,
+      targetPower,
+    });
+  }
+
   for (const opponent of context.visibleOpponents) {
     for (const target of opponent.heroes ?? []) {
       const position = { x: target.x, y: target.y };
@@ -228,6 +252,9 @@ function scoreObjective(
     if (heroPower < objective.targetPower * context.profile.neutralPowerRatio) return null;
   }
   if (objective.type === "resource_building" && objective.targetPower > 0) {
+    if (heroPower < objective.targetPower * context.profile.neutralPowerRatio) return null;
+  }
+  if (objective.type === "gate" && objective.targetPower > 0) {
     if (heroPower < objective.targetPower * context.profile.neutralPowerRatio) return null;
   }
   if (objective.type === "enemy_hero") {

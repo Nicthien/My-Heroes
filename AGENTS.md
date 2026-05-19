@@ -20,3 +20,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - When placing adventure buildings, prefer tiles away from roads and never place them directly on a road tile. Small dense maps may use a fallback near roads only when needed to keep adventure density.
 - Do not add adventure building positions to mining/resource road targets such as `miningPositions` or `buildSecondaryRoads`.
 - Keep blocking decor visually distinct from scenic decor. A single decor kind should not sometimes block and sometimes be passable; use obstacle-specific kinds such as groves or boulder clusters for impassable decoration, and keep ordinary trees, bushes, flowers, and small rocks passable.
+
+# Visual Assets
+
+- For game/map visuals, create and use pixel-art sprite assets in `.webp` under `public/assets/sprites/`.
+- Do not use generated SVGs or rough vector placeholders for in-game objects when a sprite can be used.
+- If a temporary fallback is needed for resilience, keep it internal to rendering code and replace it with a real `.webp` sprite before considering the feature visually complete.

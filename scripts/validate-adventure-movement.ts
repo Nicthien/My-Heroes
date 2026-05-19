@@ -67,6 +67,12 @@ assert(approachPath.length === 1 && approachPath[0].x === 0 && approachPath[0].y
 assert(areAdventurePositionsAdjacent(approachPath[0], { x: 1, y: 0 }), "combat approach destination should be adjacent to target");
 assert(!Number.isFinite(getAdventurePathCostAvoiding(combatBlockMap, [{ x: 0, y: 0 }, { x: 1, y: 0 }], [{ x: 1, y: 0 }])), "combat path cannot enter blocked target");
 
+const gateMap = map(3, 1);
+gateMap.tiles[0][1].object = { type: "gate", id: "gate-a" };
+gateMap.tiles[0][1].road = "paved";
+assert(canMoveAdventureStep(gateMap, { x: 0, y: 0 }, { x: 1, y: 0 }), "empty or allied gates should be traversable by movement helpers");
+assert(getAdventureStepCost(gateMap, { x: 0, y: 0 }, { x: 1, y: 0 }) === 50, "gate road tile should keep road movement cost");
+
 const reachable = computeReachableTiles(diagonalMap, { x: 0, y: 0 }, 100);
 assert(reachable.has("1,0"), "orthogonal grass tile should be reachable with 100 PM");
 assert(!reachable.has("1,1"), "diagonal grass tile should not be reachable with only 100 PM");

@@ -328,7 +328,8 @@ function canPlaceStartingMineAt(
   allowCoastalWater: boolean,
 ): boolean {
   if (tile.object || tile.decor) return false;
-  if (!isSolidLandTile(tile) && !(allowCoastalWater && tile.terrain === TerrainType.WATER)) return false;
+  const isCoastalWater = allowCoastalWater && tile.terrain === TerrainType.WATER;
+  if (!isSolidLandTile(tile) && !isCoastalWater) return false;
   if (!hasLandSupportNearby(ctx, tile.x, tile.y)) return false;
   if (!respectSpacing) return true;
   return !hasBlockingObjectNearby(ctx, tile.x, tile.y, 1) && !hasPlacedStartingMineNearby(placed, tile.x, tile.y, 1);
@@ -604,7 +605,7 @@ export function applyChokepointGuards(
     const targetZone = ctx.zoneGrid.meta[cp.toZoneId];
     const threat = Math.floor(targetZone.value * GUARD_MULTIPLIER[cp.guardStrength]);
     const tile = ctx.tiles[cp.y][cp.x];
-    if (tile.object?.type === "monster") {
+    if (tile.object?.type === "gate") {
       tile.object.guardianPower = threat;
     }
   }

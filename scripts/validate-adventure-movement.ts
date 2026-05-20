@@ -9,6 +9,7 @@ import {
   getAdventureStepCost,
   getDailyAdventureMovement,
   getMinimumAdjacentAdventureStepCost,
+  getRequiredAdventureMovement,
   getUsableAdventureMovement,
 } from "../src/lib/game/engine";
 import { GameMap, MapTile, TerrainType, UnitType } from "../src/lib/game/types";
@@ -75,10 +76,23 @@ assert(getAdventureStepCost(gateMap, { x: 0, y: 0 }, { x: 1, y: 0 }) === 50, "ga
 
 const reachable = computeReachableTiles(diagonalMap, { x: 0, y: 0 }, 100);
 assert(reachable.has("1,0"), "orthogonal grass tile should be reachable with 100 PM");
-assert(!reachable.has("1,1"), "diagonal grass tile should not be reachable with only 100 PM");
+assert(reachable.has("1,1"), "diagonal grass tile should be terminal-reachable with 100 PM (H3 last-move exception)");
 assert(getMinimumAdjacentAdventureStepCost(diagonalMap, { x: 0, y: 0 }) === 100, "cheapest adjacent grass step should cost 100 PM");
 assert(getUsableAdventureMovement(diagonalMap, { x: 0, y: 0 }, 99) === 0, "movement below cheapest adjacent step should be exhausted");
 assert(getUsableAdventureMovement(diagonalMap, { x: 0, y: 0 }, 100) === 100, "movement matching cheapest adjacent step should remain usable");
+
+// H3 last-move diagonal exception
+const lastMoveMap = map(2, 2);
+assert(
+  getRequiredAdventureMovement(lastMoveMap, [{ x: 0, y: 0 }, { x: 1, y: 1 }]) === 100,
+  "last-move diagonal should only require the orthogonal cost (100 PM, not 141)"
+);
+const lastMovePath = findPath(lastMoveMap, { x: 0, y: 0 }, { x: 1, y: 1 }, 100);
+assert(lastMovePath.length === 2, "findPath should permit a single diagonal step as the final move with 100 PM");
+// Non-final diagonals must still pay full price
+const twoDiagMap = map(3, 3);
+const twoDiagPath = findPath(twoDiagMap, { x: 0, y: 0 }, { x: 2, y: 2 }, 200);
+assert(twoDiagPath.length === 0, "two diagonals should not fit in 200 PM even with last-move exception");
 
 assert(getDailyAdventureMovement([{ unitType: UnitType.DWARF }]) === 1500, "slow army should get 1500 PM");
 assert(getDailyAdventureMovement([{ unitType: UnitType.ARCHANGEL }]) === 2000, "fast army should get 2000 PM");

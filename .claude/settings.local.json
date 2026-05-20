@@ -17,7 +17,8 @@
       "WebFetch(domain:heroes.thelazy.net)",
       "Bash(powershell -Command \"Get-Content 'c:\\\\AI\\\\My Heroes\\\\.env.example'\")",
       "Bash(supabase start *)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(npx tsx *)"
     ]
   }
 }

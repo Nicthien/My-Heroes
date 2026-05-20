@@ -17,6 +17,7 @@ import {
   computeVisibleTiles,
   getAdventurePathCostAvoiding,
   getPlayerVisionCenters,
+  getRequiredAdventureMovementAvoiding,
   getUsableAdventureMovement,
   normalizeMapMovement,
 } from "@/lib/game/engine";
@@ -610,7 +611,8 @@ function validateCombatPath(
   if (!destination || !areAdventurePositionsAdjacent(destination, target)) return { ok: false };
   const usedMovement = getAdventurePathCostAvoiding(map, path, [target]);
   if (!Number.isFinite(usedMovement)) return { ok: false };
-  if (usedMovement > movement) return { ok: false };
+  const requiredMovement = getRequiredAdventureMovementAvoiding(map, path, [target]);
+  if (requiredMovement > movement) return { ok: false };
   return { ok: true, usedMovement, destination };
 }
 

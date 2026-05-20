@@ -30,6 +30,7 @@ import {
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
 import MiniMap from "./MiniMap";
+import AdventureMusicControl from "./AdventureMusicControl";
 import {
   CornerOrnaments,
   FleurDeLis,
@@ -1604,6 +1605,7 @@ function HUDContent() {
                 <span>Sem. {gameState.calendar.weekOfMonth} · Jour {gameState.calendar.dayOfWeek}</span>
               </div>
             </div>
+            <AdventureMusicControl />
           </div>
 
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-center">

@@ -30,6 +30,7 @@ import {
   getAdventureStepCost,
   getDailyAdventureMovement,
   getPlayerVisionCenters,
+  getRequiredAdventureMovement,
   getUsableAdventureMovement,
   isTileTraversable,
   normalizeMapMovement,
@@ -1631,6 +1632,7 @@ function validateMovePath(
     if (!Number.isFinite(stepCost)) return { ok: false, error: "Terrain infranchissable" };
     usedMovement += stepCost;
   }
-  if (usedMovement > movement) return { ok: false, error: "Deplacement insuffisant" };
+  const requiredMovement = getRequiredAdventureMovement(map, path as Position[]);
+  if (requiredMovement > movement) return { ok: false, error: "Deplacement insuffisant" };
   return { ok: true, usedMovement };
 }

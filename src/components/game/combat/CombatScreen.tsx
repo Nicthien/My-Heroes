@@ -22,6 +22,8 @@ import { getUnitSpritePath } from "@/lib/rendering/phaser/assets";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
 import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
+import { playCombatDamageHit } from "@/lib/audio/combatAudio";
+import CombatAudioControl from "./CombatAudioControl";
 import {
   CornerOrnaments,
   FleurDeLis,
@@ -359,13 +361,16 @@ export default function CombatScreen() {
         <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
           {combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
         </div>
-        <button
-          type="button"
-          className="rounded-md border border-amber-600/60 bg-gradient-to-b from-stone-900 to-stone-950 px-3 py-1 text-sm font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.15)_inset] transition hover:from-stone-800 hover:to-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
-          onClick={() => minimizeCombat(activeCombat.id)}
-        >
-          Reduire
-        </button>
+        <div className="flex items-center gap-3">
+          <CombatAudioControl />
+          <button
+            type="button"
+            className="rounded-md border border-amber-600/60 bg-gradient-to-b from-stone-900 to-stone-950 px-3 py-1 text-sm font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.15)_inset] transition hover:from-stone-800 hover:to-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+            onClick={() => minimizeCombat(activeCombat.id)}
+          >
+            Reduire
+          </button>
+        </div>
       </header>
       <div className="relative z-10 flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1 overflow-hidden">
@@ -521,6 +526,7 @@ function IsoBattlefield({
     : null;
 
   const flashDamagedUnits = useCallback((unitIds: string[]) => {
+    void playCombatDamageHit(0.55 + unitIds.length * 0.18);
     setDamagedUnitIds((previous) => new Set([...previous, ...unitIds]));
     const timeout = window.setTimeout(() => {
       setDamagedUnitIds((previous) => {

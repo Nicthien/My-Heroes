@@ -35,6 +35,7 @@ function getMovementCost(terrain: TerrainType): number {
   switch (terrain) {
     case TerrainType.GRASS:
     case TerrainType.DIRT:
+    case TerrainType.WATER:
       return 100;
     case TerrainType.SAND:
     case TerrainType.FOREST:
@@ -42,8 +43,6 @@ function getMovementCost(terrain: TerrainType): number {
       return 150;
     case TerrainType.SWAMP:
       return 175;
-    case TerrainType.WATER:
-      return 200;
     case TerrainType.MOUNTAIN:
       return 250;
     default:
@@ -163,6 +162,46 @@ export function getAdventurePathCost(map: GameMap, path: Position[]): number {
   return total;
 }
 
+/**
+ * Movement points actually required to traverse a path, applying the H3
+ * "last-move diagonal exception": if the final step is diagonal, the hero
+ * only needs to pay the destination's orthogonal cost (the full diagonal cost
+ * is still consumed afterwards, clamped to 0).
+ */
+export function getRequiredAdventureMovement(map: GameMap, path: Position[]): number {
+  if (path.length < 2) return 0;
+  const fullCost = getAdventurePathCost(map, path);
+  if (!Number.isFinite(fullCost)) return Number.POSITIVE_INFINITY;
+
+  const from = path[path.length - 2];
+  const to = path[path.length - 1];
+  const isLastDiagonal = from.x !== to.x && from.y !== to.y;
+  if (!isLastDiagonal) return fullCost;
+
+  const tile = map.tiles[to.y]?.[to.x];
+  if (!tile) return fullCost;
+  const orthoCost = effectiveMovementCost(tile);
+  const diagCost = Math.floor(orthoCost * DIAGONAL_BASE / ORTHOGONAL_BASE);
+  return fullCost - diagCost + orthoCost;
+}
+
+export function getRequiredAdventureMovementAvoiding(map: GameMap, path: Position[], blockedPositions: Position[]): number {
+  if (path.length < 2) return 0;
+  const fullCost = getAdventurePathCostAvoiding(map, path, blockedPositions);
+  if (!Number.isFinite(fullCost)) return Number.POSITIVE_INFINITY;
+
+  const from = path[path.length - 2];
+  const to = path[path.length - 1];
+  const isLastDiagonal = from.x !== to.x && from.y !== to.y;
+  if (!isLastDiagonal) return fullCost;
+
+  const tile = map.tiles[to.y]?.[to.x];
+  if (!tile) return fullCost;
+  const orthoCost = effectiveMovementCost(tile);
+  const diagCost = Math.floor(orthoCost * DIAGONAL_BASE / ORTHOGONAL_BASE);
+  return fullCost - diagCost + orthoCost;
+}
+
 export function getAdventurePathCostAvoiding(map: GameMap, path: Position[], blockedPositions: Position[]): number {
   const blocked = toPositionKeySet(blockedPositions);
   let total = 0;
@@ -212,10 +251,13 @@ export function getDailyAdventureMovement(heroArmies: Pick<UnitStack, "unitType"
   }, Number.POSITIVE_INFINITY);
 
   if (!Number.isFinite(slowestSpeed)) return 2000;
-  if (slowestSpeed <= 3) return 1500;
   if (slowestSpeed >= 11) return 2000;
 
   const movementBySpeed: Record<number, number> = {
+    0: 1300,
+    1: 1360,
+    2: 1430,
+    3: 1500,
     4: 1560,
     5: 1630,
     6: 1700,
@@ -224,7 +266,8 @@ export function getDailyAdventureMovement(heroArmies: Pick<UnitStack, "unitType"
     9: 1900,
     10: 1960,
   };
-  return movementBySpeed[Math.floor(slowestSpeed)] ?? 1500;
+  const floored = Math.max(0, Math.floor(slowestSpeed));
+  return movementBySpeed[floored] ?? 1300;
 }
 
 export function normalizeMapMovement(map: GameMap): GameMap {
@@ -481,8 +524,14 @@ export function findPath(
       const nKey = `${neighbor.x},${neighbor.y}`;
       if (closedSet.has(nKey)) continue;
 
-      const g = current.g + getAdventureStepCost(map, current.pos, neighbor);
-      if (g > maxMovement) continue;
+      const stepCost = getAdventureStepCost(map, current.pos, neighbor);
+      const g = current.g + stepCost;
+      const isGoal = neighbor.x === end.x && neighbor.y === end.y;
+      const isDiagonal = current.pos.x !== neighbor.x && current.pos.y !== neighbor.y;
+      const tile = map.tiles[neighbor.y]?.[neighbor.x];
+      const orthoCost = tile ? effectiveMovementCost(tile) : Number.POSITIVE_INFINITY;
+      const requiredG = isGoal && isDiagonal ? current.g + orthoCost : g;
+      if (requiredG > maxMovement) continue;
       if (g >= (bestCost.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       bestCost.set(nKey, g);
@@ -608,6 +657,24 @@ export function computeReachableTiles(
     }
   }
 
+  // Last-move diagonal exception: a diagonal neighbor of any reachable tile
+  // is itself terminal-reachable if the hero has at least the destination's
+  // orthogonal cost. Such tiles are reachable only as the final step.
+  for (const [key, cost] of bestCost) {
+    const [sx, sy] = key.split(",").map(Number);
+    const from = { x: sx, y: sy };
+    for (const neighbor of getAdventureNeighbors(from)) {
+      if (!isInsideMap(map, neighbor)) continue;
+      if (from.x === neighbor.x || from.y === neighbor.y) continue;
+      if (!canMoveAdventureStep(map, from, neighbor)) continue;
+      const tile = map.tiles[neighbor.y]?.[neighbor.x];
+      if (!tile) continue;
+      const orthoCost = effectiveMovementCost(tile);
+      if (cost + orthoCost > maxMovement) continue;
+      reachable.add(`${neighbor.x},${neighbor.y}`);
+    }
+  }
+
   return reachable;
 }
 
@@ -658,9 +725,7 @@ export function computeVisibleTiles(map: GameMap, centers: Position[], radius: n
         const x = center.x + dx;
         const y = center.y + dy;
         if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
-        if (Math.abs(dx) + Math.abs(dy) <= radius) {
-          visible.add(`${x},${y}`);
-        }
+        visible.add(`${x},${y}`);
       }
     }
   }

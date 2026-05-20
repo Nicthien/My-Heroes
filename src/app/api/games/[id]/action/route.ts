@@ -8,6 +8,7 @@ import {
   subtractCost,
 } from "@/lib/game/economy";
 import { createCampfireReward, addVisit, hasPlayerVisited, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { isCreatureBankType, PendingCreatureBankReward } from "@/lib/game/creature-banks";
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { makeRng } from "@/lib/game/engine/rng";
@@ -34,6 +35,7 @@ import {
   normalizeMapMovement,
 } from "@/lib/game/engine";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
+import { getUnitRule } from "@/lib/game/units";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
@@ -129,7 +131,7 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate"; destination: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination: Position }
@@ -188,6 +190,7 @@ export async function POST(
       const collected = new Set<string>((mapState.collected as string[]) ?? []);
       const killed = new Set<string>((mapState.killed as string[]) ?? []);
       const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
+      const defeatedCreatureBanks = getDefeatedCreatureBanks(mapState);
       for (const army of ((game.neutralArmies ?? []) as Array<{ id: string; status: string }>)) {
         if (army.status !== "ACTIVE") killed.add(army.id);
       }
@@ -201,6 +204,7 @@ export async function POST(
         collected,
         killed,
         visitedAdventureBuildings,
+        defeatedCreatureBanks,
       });
       if (firstStop?.hero && isHeroInActiveCombat(game.combats, firstStop.hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
@@ -290,6 +294,10 @@ export async function POST(
           await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
           interaction = { type: "CAPTURE_BUILDING", buildingType: building.buildingType, destination: lastPos };
         }
+      } else if (stopObject?.type === "adventure_building" && isCreatureBankType(stopObject.subtype) && stopTargetPosition && !defeatedCreatureBanks.has(stopObject.id)) {
+        interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "creature_bank", destination: lastPos, targetPosition: stopTargetPosition };
+      } else if (tile?.object?.type === "adventure_building" && isCreatureBankType(tile.object.subtype) && !defeatedCreatureBanks.has(tile.object.id)) {
+        interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "creature_bank", destination: lastPos, targetPosition: lastPos };
       } else if (tile?.object?.type === "adventure_building" && !visitedAdventureBuildings.has(tile.object.id)) {
         interaction = await handleAdventureBuildingVisit({
           supabase,
@@ -606,6 +614,96 @@ export async function POST(
         available_recruits: { ...(town.availableRecruits ?? {}), [unitType]: available - count },
         garrison: nextGarrison,
       }).eq("id", town.id);
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "CLAIM_CREATURE_BANK_REWARD") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const creatureBanks = getCreatureBankStateMap(mapState);
+      const bankState = creatureBanks[String(action.bankId ?? "")];
+      const pendingReward = bankState?.pendingReward as PendingCreatureBankReward | undefined;
+      if (!pendingReward || bankState.claimed) {
+        return NextResponse.json({ error: "Aucune recompense de banque disponible" }, { status: 400 });
+      }
+      if (pendingReward.playerId !== gamePlayer.id || pendingReward.heroId !== hero.id) {
+        return NextResponse.json({ error: "Cette recompense appartient a un autre heros" }, { status: 403 });
+      }
+
+      const acceptedCreatures = normalizeCreatureRewardSelection(action.creatures, pendingReward.reward.creatures ?? []);
+      const newStackTypes = Object.entries(acceptedCreatures)
+        .filter(([, count]) => count > 0)
+        .map(([unitType]) => unitType as UnitType)
+        .filter((unitType) => !hero.armies.some((army) => army.unitType === unitType));
+      const maxHeroStacks = 7;
+      if (hero.armies.length + newStackTypes.length > maxHeroStacks) {
+        return NextResponse.json({ error: "Pas assez de place dans l'armee du heros" }, { status: 400 });
+      }
+
+      const resources = playerResources(gamePlayer);
+      const nextResources: Partial<Resources> = {};
+      if (pendingReward.reward.gold) nextResources.gold = resources.gold + pendingReward.reward.gold;
+      for (const [resource, amount] of Object.entries(pendingReward.reward.resources ?? {})) {
+        const key = resource as keyof Resources;
+        nextResources[key] = (resources[key] ?? 0) + Number(amount ?? 0);
+      }
+      if (Object.keys(nextResources).length > 0) {
+        await updatePlayerResources(supabase, gamePlayer.id, nextResources);
+      }
+      if (pendingReward.reward.experience) {
+        await supabase.from("heroes").update({ experience: hero.experience + pendingReward.reward.experience }).eq("id", hero.id);
+      }
+
+      let nextPosition = hero.armies.length;
+      for (const [unitTypeValue, count] of Object.entries(acceptedCreatures)) {
+        const unitType = unitTypeValue as UnitType;
+        if (count <= 0) continue;
+        const rule = getUnitRule(unitType);
+        const existing = hero.armies.find((army) => army.unitType === unitType);
+        if (existing) {
+          await supabase.from("armies").update({
+            count: existing.count + count,
+            health: existing.health + rule.health * count,
+          }).eq("id", existing.id);
+        } else {
+          await supabase.from("armies").insert({
+            hero_id: hero.id,
+            unit_type: unitType,
+            count,
+            health: rule.health * count,
+            max_health: rule.health,
+            position: nextPosition++,
+          });
+        }
+      }
+
+      const heroArtifactTokens = {
+        ...((mapState.heroArtifactTokens as Record<string, string[]> | undefined) ?? {}),
+      };
+      if (pendingReward.reward.artifactTokens?.length) {
+        heroArtifactTokens[hero.id] = [
+          ...(heroArtifactTokens[hero.id] ?? []),
+          ...pendingReward.reward.artifactTokens,
+        ];
+      }
+      await supabase.from("games").update({
+        map_state: {
+          ...mapState,
+          creatureBanks: {
+            ...creatureBanks,
+            [pendingReward.bankId]: {
+              ...bankState,
+              defeated: true,
+              claimed: true,
+              pendingReward: null,
+            },
+          },
+          heroArtifactTokens,
+        },
+      }).eq("id", id);
 
       return NextResponse.json({ success: true });
     }
@@ -1262,6 +1360,38 @@ async function updatePlayerResources(
   throw error;
 }
 
+function getCreatureBankStateMap(mapState: Record<string, unknown>) {
+  return ((mapState.creatureBanks as Record<string, unknown> | undefined) ?? {}) as Record<string, {
+    defeated?: boolean;
+    claimed?: boolean;
+    pendingReward?: PendingCreatureBankReward | null;
+  }>;
+}
+
+function getDefeatedCreatureBanks(mapState: Record<string, unknown>): Set<string> {
+  return new Set(
+    Object.entries(getCreatureBankStateMap(mapState))
+      .filter(([, state]) => state.defeated || state.claimed)
+      .map(([bankId]) => bankId)
+  );
+}
+
+function normalizeCreatureRewardSelection(
+  value: unknown,
+  available: Array<{ unitType: UnitType; count: number }>,
+): Partial<Record<UnitType, number>> {
+  const requested = (value as Record<string, unknown> | undefined) ?? {};
+  const out: Partial<Record<UnitType, number>> = {};
+  for (const entry of available) {
+    const raw = requested[entry.unitType];
+    const count = raw === undefined
+      ? entry.count
+      : Math.min(entry.count, Math.max(0, Math.floor(Number(raw) || 0)));
+    if (count > 0) out[entry.unitType] = count;
+  }
+  return out;
+}
+
 function findFirstMoveStop({
   path,
   map,
@@ -1272,6 +1402,7 @@ function findFirstMoveStop({
   collected,
   killed,
   visitedAdventureBuildings,
+  defeatedCreatureBanks,
 }: {
   path: Position[];
   map: GameMap;
@@ -1287,6 +1418,7 @@ function findFirstMoveStop({
   collected: Set<string>;
   killed: Set<string>;
   visitedAdventureBuildings: Set<string>;
+  defeatedCreatureBanks: Set<string>;
 }): { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position } | null {
   for (let i = 1; i < path.length; i++) {
     const position = path[i];
@@ -1300,6 +1432,10 @@ function findFirstMoveStop({
     if (object.type === "resource" && collected.has(object.id)) continue;
     if (object.type === "monster" && killed.has(object.id)) continue;
     if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
+    if (object.type === "adventure_building" && isCreatureBankType(object.subtype)) {
+      if (defeatedCreatureBanks.has(object.id)) continue;
+      return { pathIndex: i, stopBefore: true, object, targetPosition: position };
+    }
     if (object.type === "wall") continue;
     if (object.type === "monster") return { pathIndex: i, stopBefore: true, object, targetPosition: position };
     if (object.type === "town") {

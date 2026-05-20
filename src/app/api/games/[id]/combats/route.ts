@@ -3,6 +3,13 @@ import { requireCurrentUser } from "@/lib/auth";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
+import {
+  createCreatureBankGuardStacks,
+  createCreatureBankPendingReward,
+  getCreatureBankDefinition,
+  isCreatureBankType,
+  PendingCreatureBankReward,
+} from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
@@ -104,6 +111,7 @@ export async function POST(
     return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
   }
 
+  const mapData = normalizeMapMovement(game.mapData as GameMap);
   const defender = getDefender({
     targetId: String(body.targetId ?? ""),
     targetType: String(body.targetType ?? ""),
@@ -121,7 +129,10 @@ export async function POST(
   const gateDefender = !defender && !buildingDefender && !townDefender && body.targetType === "gate"
     ? getGateDefender(gates, String(body.targetId ?? ""), targetPosition)
     : null;
-  const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender;
+  const creatureBankDefender = !defender && !buildingDefender && !townDefender && !gateDefender && body.targetType === "creature_bank"
+    ? getCreatureBankDefender(mapData, String(body.targetId ?? ""), targetPosition)
+    : null;
+  const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender ?? creatureBankDefender;
   if (!targetDefender) {
     const debug = {
       gameId: id,
@@ -146,7 +157,6 @@ export async function POST(
     return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
   }
 
-  const mapData = normalizeMapMovement(game.mapData as GameMap);
   const defenderPosition = { x: targetDefender.x, y: targetDefender.y };
   const path = Array.isArray(body.path) ? body.path : null;
   if (path) {
@@ -218,12 +228,23 @@ export async function POST(
       }
     )
     : null;
-  const result = autoResult
+  let result = autoResult
     ? {
       ...autoResult,
       winnerPlayerId: autoResult.winnerId === attacker.id ? gamePlayer.id : targetDefender.playerId,
     }
     : null;
+  if (result && autoResult?.winnerId === attacker.id && creatureBankDefender) {
+    result = {
+      ...result,
+      creatureBankReward: createCreatureBankPendingReward(
+        creatureBankDefender.bankType,
+        creatureBankDefender.id,
+        attacker.id,
+        gamePlayer.id,
+      ),
+    };
+  }
 
   const { data, error } = await supabase
     .from("combats")
@@ -260,6 +281,8 @@ export async function POST(
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (body.targetType === "gate") {
         await captureGate(supabase, id, targetDefender.id, gamePlayer.id);
+      } else if (body.targetType === "creature_bank" && creatureBankDefender && result?.creatureBankReward) {
+        await markCreatureBankDefeated(supabase, id, game.mapState as Record<string, unknown>, result.creatureBankReward);
       } else if (targetDefender.heroId && targetDefender.playerId) {
         await supabase.from("armies").delete().eq("hero_id", targetDefender.heroId);
         await supabase.from("heroes").delete().eq("id", targetDefender.heroId);
@@ -304,6 +327,61 @@ function getGateDefender(
     x: gate.x,
     y: gate.y,
   };
+}
+
+function getCreatureBankDefender(
+  mapData: GameMap,
+  targetId: string,
+  targetPosition?: { x?: unknown; y?: unknown }
+) {
+  const x = Number(targetPosition?.x);
+  const y = Number(targetPosition?.y);
+  const targetTile = Number.isFinite(x) && Number.isFinite(y)
+    ? mapData.tiles[y]?.[x]
+    : undefined;
+  const tile = targetTile?.object?.id === targetId
+    ? targetTile
+    : mapData.tiles.flatMap((row) => row).find((item) => item.object?.id === targetId);
+  const object = tile?.object;
+  if (!tile || object?.type !== "adventure_building" || !isCreatureBankType(object.subtype)) return null;
+  if (!getCreatureBankDefinition(object.subtype)) return null;
+
+  return {
+    id: object.id,
+    playerId: null,
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: createCreatureBankGuardStacks(object.subtype, object.id),
+    x: tile.x,
+    y: tile.y,
+    bankType: object.subtype,
+  };
+}
+
+async function markCreatureBankDefeated(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  mapStateValue: Record<string, unknown> | undefined,
+  pendingReward: PendingCreatureBankReward,
+) {
+  const mapState = mapStateValue ?? {};
+  const creatureBanks = ((mapState.creatureBanks as Record<string, unknown> | undefined) ?? {}) as Record<string, object>;
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      creatureBanks: {
+        ...creatureBanks,
+        [pendingReward.bankId]: {
+          ...(creatureBanks[pendingReward.bankId] ?? {}),
+          defeated: true,
+          claimed: false,
+          pendingReward,
+        },
+      },
+    },
+  }).eq("id", gameId);
 }
 
 async function captureGate(

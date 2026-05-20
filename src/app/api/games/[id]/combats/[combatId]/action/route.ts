@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
 import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
+import {
+  createCreatureBankPendingReward,
+  isCreatureBankType,
+  PendingCreatureBankReward,
+} from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, GameMap } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 
@@ -102,9 +107,13 @@ export async function POST(
   });
 
   const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
-  const result = execution.result
+  let result = execution.result
     ? buildManualCombatResult(execution.result, initialUnits, execution.units, combat)
     : null;
+  if (result && execution.result === "attacker") {
+    const pendingReward = await findCreatureBankRewardForCombat(supabase, combat);
+    if (pendingReward) result = { ...result, creatureBankReward: pendingReward };
+  }
   const actionLog = [...(combat.action_log ?? []), ...execution.log];
 
   const { data, error } = await supabase
@@ -300,7 +309,10 @@ async function persistResolvedCombat(
       await supabase.from("gate_stacks").delete().eq("gate_id", combat.gate_id);
     } else if (!combat.defender_player_id) {
       const capturedTown = await captureNeutralTownAt(supabase, combat);
-      if (!capturedTown) {
+      const creatureBankReward = capturedTown ? null : await findCreatureBankRewardForCombat(supabase, combat);
+      if (creatureBankReward) {
+        await markCreatureBankDefeated(supabase, combat.game_id, creatureBankReward);
+      } else if (!capturedTown) {
         await supabase
           .from("resource_buildings")
           .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
@@ -349,4 +361,57 @@ async function captureNeutralTownAt(
     .eq("id", town.id);
 
   return true;
+}
+
+async function findCreatureBankRewardForCombat(
+  supabase: ReturnType<typeof createAdminClient>,
+  combat: {
+    game_id: string;
+    attacker_player_id: string;
+    attacker_hero_id: string;
+    x: number;
+    y: number;
+  },
+): Promise<PendingCreatureBankReward | null> {
+  const { data: game } = await supabase
+    .from("games")
+    .select("map_data,map_state")
+    .eq("id", combat.game_id)
+    .maybeSingle();
+  const mapData = game?.map_data as GameMap | undefined;
+  const object = mapData?.tiles?.[combat.y]?.[combat.x]?.object;
+  if (object?.type !== "adventure_building" || !isCreatureBankType(object.subtype)) return null;
+
+  const creatureBanks = (((game?.map_state as Record<string, unknown> | undefined)?.creatureBanks as Record<string, { pendingReward?: PendingCreatureBankReward | null }> | undefined) ?? {});
+  const existing = creatureBanks[object.id]?.pendingReward;
+  if (existing) return existing;
+  return createCreatureBankPendingReward(object.subtype, object.id, combat.attacker_hero_id, combat.attacker_player_id);
+}
+
+async function markCreatureBankDefeated(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  pendingReward: PendingCreatureBankReward,
+) {
+  const { data: game } = await supabase
+    .from("games")
+    .select("map_state")
+    .eq("id", gameId)
+    .maybeSingle();
+  const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
+  const creatureBanks = ((mapState.creatureBanks as Record<string, object> | undefined) ?? {});
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      creatureBanks: {
+        ...creatureBanks,
+        [pendingReward.bankId]: {
+          ...(creatureBanks[pendingReward.bankId] ?? {}),
+          defeated: true,
+          claimed: false,
+          pendingReward,
+        },
+      },
+    },
+  }).eq("id", gameId);
 }

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { isCreatureBankType } from "@/lib/game/creature-banks";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
@@ -107,6 +108,30 @@ const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
   lighthouse: { originX: 0.49, originY: 0.898 },
   observatory: { originX: 0.475, originY: 0.938 },
   stargate: { originX: 0.48, originY: 0.918 },
+  ancient_altar: { originX: 0.5, originY: 0.84 },
+  beholders_sanctuary: { originX: 0.5, originY: 0.84 },
+  black_tower: { originX: 0.5, originY: 0.88 },
+  churchyard: { originX: 0.5, originY: 0.84 },
+  crypt: { originX: 0.5, originY: 0.84 },
+  cyclops_stockpile: { originX: 0.5, originY: 0.84 },
+  derelict_ship: { originX: 0.5, originY: 0.84 },
+  dragon_fly_hive: { originX: 0.5, originY: 0.84 },
+  dragon_utopia: { originX: 0.5, originY: 0.86 },
+  dwarven_treasury: { originX: 0.5, originY: 0.84 },
+  experimental_shop: { originX: 0.5, originY: 0.84 },
+  griffin_conservatory: { originX: 0.5, originY: 0.84 },
+  imp_cache: { originX: 0.5, originY: 0.84 },
+  ivory_tower: { originX: 0.5, originY: 0.88 },
+  mansion: { originX: 0.5, originY: 0.84 },
+  medusa_stores: { originX: 0.5, originY: 0.84 },
+  naga_bank: { originX: 0.5, originY: 0.84 },
+  pirate_cavern: { originX: 0.5, originY: 0.84 },
+  red_tower: { originX: 0.5, originY: 0.88 },
+  ruins: { originX: 0.5, originY: 0.84 },
+  shipwreck: { originX: 0.5, originY: 0.84 },
+  spit: { originX: 0.5, originY: 0.84 },
+  temple_of_the_sea: { originX: 0.5, originY: 0.86 },
+  wolf_raider_picket: { originX: 0.5, originY: 0.84 },
 };
 const TOWN_ORIGINS: Record<string, SpriteOrigin> = {
   castle: { originX: 0.495, originY: 0.904 },
@@ -4816,9 +4841,13 @@ function getObjectMetrics(object: MapObjectData) {
   }
   if (object.type === "town") return { width: 146, height: 110, offsetY: TOWN_OFFSET_Y };
   if (object.type === "building") return { width: RESOURCE_BUILDING_DISPLAY_SIZE, height: RESOURCE_BUILDING_DISPLAY_SIZE, offsetY: RESOURCE_BUILDING_OFFSET_Y };
-  if (object.type === "adventure_building") return object.buildingType === "stargate"
-    ? { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y }
-    : { width: 50, height: 50, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
+  if (object.type === "adventure_building") {
+    if (object.buildingType === "stargate") return { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
+    if (isCreatureBankType(object.buildingType)) {
+      return { width: 66, height: 66, offsetY: ADVENTURE_BUILDING_OFFSET_Y + 3 };
+    }
+    return { width: 50, height: 50, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
+  }
   if (object.type === "combat") return { width: 48, height: 48, offsetY: MAP_OBJECT_FOOT_OFFSET_Y };
   return null;
 }

@@ -48,7 +48,7 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate"; destination?: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination?: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination?: Position }
@@ -2254,6 +2254,7 @@ function buildObjects(
           color: "",
           name: tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
           buildingType: tile.object.subtype,
+          guardianPower: tile.object.guardianPower ?? 0,
         });
       }
     }

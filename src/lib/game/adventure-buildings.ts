@@ -1,5 +1,6 @@
 import { AdventureBuildingType, AdventureBuildingVisitMode, Resources, TerrainType } from "./types";
 import { RNG, randInt } from "./engine/rng";
+import { getCreatureBankLabel } from "./creature-banks";
 
 export interface AdventureBuildingRule {
   type: AdventureBuildingType;
@@ -57,6 +58,8 @@ export function getAdventureBuildingRule(type: string | undefined): AdventureBui
 }
 
 export function getAdventureBuildingLabel(type: string | undefined): string {
+  const creatureBankLabel = getCreatureBankLabel(type);
+  if (creatureBankLabel) return creatureBankLabel;
   return getAdventureBuildingRule(type)?.label ?? "Batiment d'aventure";
 }
 

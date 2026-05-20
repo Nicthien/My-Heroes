@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
+import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
 import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
 import { GameState, Hero, UnitStack, UnitType } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
@@ -260,6 +261,13 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
     )?.garrison ?? [];
   }
 
+  if (pendingCombat.targetType === "creature_bank") {
+    const tile = gameState.map.tiles.flatMap((row) => row)
+      .find((item) => item.object?.id === pendingCombat.targetId);
+    const bankType = tile?.object?.subtype;
+    return isCreatureBankType(bankType) ? createCreatureBankGuardStacks(bankType, pendingCombat.targetId) : [];
+  }
+
   const defenderHero = findHero(gameState, pendingCombat.targetId);
   return defenderHero?.armies ?? [];
 }
@@ -284,6 +292,7 @@ function getSourceLabel(targetType: PendingCombat["targetType"]) {
   if (targetType === "building") return "Gardiens estimés du lieu.";
   if (targetType === "town") return "Garnison neutre repérée.";
   if (targetType === "gate") return "Garnison de porte reperee.";
+  if (targetType === "creature_bank") return "Gardiens de banque de creatures.";
   if (targetType === "monster") return "Armée neutre observée.";
   return "Défense adverse repérée.";
 }

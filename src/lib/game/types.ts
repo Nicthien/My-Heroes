@@ -567,6 +567,7 @@ export interface CombatSummary {
   experienceGained: number;
   log: string[];
   attackerDied?: boolean;
+  creatureBankReward?: import("./creature-banks").PendingCreatureBankReward;
 }
 
 export interface GameMap {
@@ -620,6 +621,7 @@ export type GameAction =
   | { type: "TRANSFER_HERO_TO_GATE_GARRISON"; gateId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
+  | { type: "CLAIM_CREATURE_BANK_REWARD"; bankId: string; heroId: string; creatures?: Partial<Record<UnitType, number>> }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }
   | { type: "END_TURN" };

@@ -3,6 +3,7 @@ import {
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject,
 } from "./types";
+import { isCreatureBankType } from "./creature-banks";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { getDominantUnitType } from "./neutral-armies";
 import { normalizeTownBuildings } from "./town-buildings";
@@ -359,6 +360,11 @@ function applyDynamicMapState(
   const collected = new Set<string>((mapState.collected as string[]) ?? []);
   const killed = new Set<string>((mapState.killed as string[]) ?? []);
   const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
+  const defeatedCreatureBanks = new Set(
+    Object.entries((mapState.creatureBanks as Record<string, { defeated?: boolean; claimed?: boolean }> | undefined) ?? {})
+      .filter(([, state]) => state.defeated || state.claimed)
+      .map(([bankId]) => bankId)
+  );
   const defeatedNeutralArmies = new Set(
     neutralArmies
       .filter((army) => army.status !== "ACTIVE")
@@ -429,6 +435,12 @@ function applyDynamicMapState(
           object.type === "adventure_building" &&
           object.subtype === AdventureBuildingType.CAMPFIRE &&
           visitedAdventureBuildings.has(object.id)
+        ) {
+          delete tile.object;
+        } else if (
+          object.type === "adventure_building" &&
+          isCreatureBankType(object.subtype) &&
+          defeatedCreatureBanks.has(object.id)
         ) {
           delete tile.object;
         } else if (object.type === "monster") {

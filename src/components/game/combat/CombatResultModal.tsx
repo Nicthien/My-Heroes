@@ -1,6 +1,9 @@
 "use client";
 
-import { useSession } from "@/lib/auth/client";
+import { useState } from "react";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import { CreatureBankReward } from "@/lib/game/creature-banks";
+import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { getUnitRule } from "@/lib/game/units";
 
@@ -10,17 +13,19 @@ export default function CombatResultModal() {
   const gameState = useGameStore((state) => state.gameState);
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
+  const setGameState = useGameStore((state) => state.setGameState);
   if (!result) return null;
 
   const myPlayer = gameState?.players.find((p) => p.userId === session?.user?.id);
   const iWon = Boolean(myPlayer && result.winnerPlayerId === myPlayer.id);
   const heroDied = Boolean(result.attackerDied && myPlayer && result.winnerPlayerId !== myPlayer.id);
+  const bankReward = iWon ? result.creatureBankReward : null;
 
   const borderColor = heroDied ? "border-red-700" : iWon ? "border-green-600" : "border-yellow-600";
   const tagColor = heroDied ? "text-red-400" : iWon ? "text-green-400" : "text-yellow-500";
   const titleColor = heroDied ? "text-red-100" : iWon ? "text-green-100" : "text-yellow-100";
-  const title = heroDied ? "Votre héros a péri au combat" : iWon ? "Victoire !" : "Combat terminé";
-  const tag = heroDied ? "Défaite" : iWon ? "Victoire" : "Résultat";
+  const title = heroDied ? "Votre heros a peri au combat" : iWon ? "Victoire !" : "Combat termine";
+  const tag = heroDied ? "Defaite" : iWon ? "Victoire" : "Resultat";
   const buttonColor = heroDied ? "bg-red-800 hover:bg-red-700" : iWon ? "bg-green-800 hover:bg-green-700" : "bg-yellow-700 hover:bg-yellow-600";
 
   const winnerName = getWinnerPlayerName(result, gameState);
@@ -36,23 +41,133 @@ export default function CombatResultModal() {
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Losses title="Pertes attaquant" losses={aggregateLosses(result.attackerLosses)} />
-          <Losses title="Pertes défenseur" losses={aggregateLosses(result.defenderLosses)} />
+          <Losses title="Pertes defenseur" losses={aggregateLosses(result.defenderLosses)} />
         </div>
+        {bankReward && gameState && (
+          <CreatureBankRewardPanel
+            key={bankReward.bankId}
+            gameId={gameState.id}
+            userId={session?.user?.id}
+            bankReward={bankReward}
+            onClaimed={(refreshed) => {
+              if (refreshed) setGameState(refreshed);
+              setActiveCombat(null);
+              setCombatResult(null);
+            }}
+          />
+        )}
         {result.log.length > 0 && (
           <div className="mt-5 max-h-36 overflow-y-auto rounded bg-black/40 p-3 text-sm text-stone-300">
             {result.log.slice(-8).map((line, index) => <div key={index}>{line}</div>)}
           </div>
         )}
         <button
-          className={`mt-6 rounded px-5 py-2 font-bold text-white ${buttonColor}`}
+          className={`mt-6 rounded px-5 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-stone-700 ${buttonColor}`}
+          disabled={Boolean(bankReward)}
           onClick={() => {
             setActiveCombat(null);
             setCombatResult(null);
           }}
         >
-          Retour à la carte
+          {bankReward ? "Recompense a recuperer" : "Retour a la carte"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function RewardSummary({ reward }: { reward: CreatureBankReward }) {
+  const entries: string[] = [];
+  if (reward.gold) entries.push(`${reward.gold} or`);
+  if (reward.experience) entries.push(`${reward.experience} XP`);
+  for (const [resource, amount] of Object.entries(reward.resources ?? {})) {
+    if (amount) entries.push(`${amount} ${resource}`);
+  }
+  if (reward.artifactTokens?.length) entries.push(`${reward.artifactTokens.length} jeton(s) d'artefact`);
+
+  return (
+    <div className="mt-2 rounded bg-black/30 px-3 py-2 text-sm text-emerald-100/85">
+      {entries.length > 0 ? entries.join(" | ") : "Creatures recrutable uniquement."}
+    </div>
+  );
+}
+
+function CreatureBankRewardPanel({
+  gameId,
+  userId,
+  bankReward,
+  onClaimed,
+}: {
+  gameId: string;
+  userId: string | undefined;
+  bankReward: NonNullable<NonNullable<ReturnType<typeof useGameStore.getState>["lastCombatResult"]>["creatureBankReward"]>;
+  onClaimed: (refreshed: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]> | null) => void;
+}) {
+  const [creatureSelection, setCreatureSelection] = useState<Record<string, number>>(
+    Object.fromEntries((bankReward.reward.creatures ?? []).map((entry) => [entry.unitType, entry.count]))
+  );
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  const claimCreatureBankReward = async () => {
+    setClaiming(true);
+    setClaimError(null);
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "CLAIM_CREATURE_BANK_REWARD",
+        bankId: bankReward.bankId,
+        heroId: bankReward.heroId,
+        creatures: creatureSelection,
+      }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setClaimError(data?.error ?? "Recompense impossible a recuperer.");
+      setClaiming(false);
+      return;
+    }
+    onClaimed(await refreshGameState(gameId, userId));
+  };
+
+  return (
+    <div className="mt-5 rounded border border-emerald-700/70 bg-emerald-950/30 p-4">
+      <div className="text-sm font-bold text-emerald-100">Recompense : {bankReward.label}</div>
+      <RewardSummary reward={bankReward.reward} />
+      {(bankReward.reward.creatures ?? []).length > 0 && (
+        <div className="mt-3 space-y-2">
+          {bankReward.reward.creatures?.map((entry) => {
+            const selected = creatureSelection[entry.unitType] ?? entry.count;
+            return (
+              <label key={entry.unitType} className="grid gap-1 rounded border border-emerald-700/35 bg-black/35 px-3 py-2 text-sm">
+                <span className="flex items-center justify-between gap-3">
+                  <span className="font-bold text-emerald-100">{getUnitRule(entry.unitType).label}</span>
+                  <span className="text-emerald-200">{selected}/{entry.count}</span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={entry.count}
+                  value={selected}
+                  onChange={(event) => setCreatureSelection((current) => ({
+                    ...current,
+                    [entry.unitType]: Number(event.currentTarget.value),
+                  }))}
+                />
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {claimError && <div className="mt-3 text-sm font-bold text-red-300">{claimError}</div>}
+      <button
+        className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-700"
+        disabled={claiming}
+        onClick={claimCreatureBankReward}
+      >
+        {claiming ? "Recuperation..." : "Recuperer la recompense"}
+      </button>
     </div>
   );
 }
@@ -65,7 +180,7 @@ function getWinnerPlayerName(result: NonNullable<ReturnType<typeof useGameStore.
   if (owner) return owner.name;
 
   if (result.winnerId === "attacker") return "Camp attaquant";
-  if (result.winnerId === "defender") return "Camp défenseur";
+  if (result.winnerId === "defender") return "Camp defenseur";
   for (const player of gameState?.players ?? []) {
     if (player.id === result.winnerId) return player.name;
   }

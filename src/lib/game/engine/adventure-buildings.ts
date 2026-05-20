@@ -1,12 +1,18 @@
 import { AdventureBuildingType, MapTile, TerrainType } from "../types";
 import { getAdventureBuildingLabel } from "../adventure-buildings";
+import {
+  CREATURE_BANK_DEFINITIONS,
+  CREATURE_BANK_TYPES,
+  CreatureBankType,
+  getCreatureBankGuardPower,
+} from "../creature-banks";
 import { PlacementContext } from "./placement";
 import { shuffle } from "./rng";
 import { tilesInZone } from "./zones";
 
 type AdventurePlacement = {
   tile: MapTile;
-  type: AdventureBuildingType;
+  type: AdventureBuildingType | CreatureBankType;
 };
 
 type StargatePair = {
@@ -33,6 +39,7 @@ export function placeAdventureBuildings(ctx: PlacementContext): void {
   }
 
   placeStargatePairs(ctx, stargateCandidates);
+  placeCreatureBanks(ctx);
 }
 
 function adventureTargetForZone(type: string, value: number): number {
@@ -127,9 +134,10 @@ function stargateDistance(a: MapTile, b: MapTile): number {
 
 function placeAdventureBuilding(
   tile: MapTile,
-  type: AdventureBuildingType,
+  type: AdventureBuildingType | CreatureBankType,
   id = `adv-${type}-${tile.x}-${tile.y}`,
   targetId?: string,
+  guardianPower?: number,
 ): AdventurePlacement {
   tile.object = {
     type: "adventure_building",
@@ -137,8 +145,76 @@ function placeAdventureBuilding(
     subtype: type,
     name: getAdventureBuildingLabel(type),
     targetId,
+    guardianPower,
   };
   return { tile, type };
+}
+
+function placeCreatureBanks(ctx: PlacementContext): void {
+  for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
+    const meta = ctx.zoneGrid.meta[zoneId];
+    const targetCount = creatureBankTargetForZone(meta.type, meta.value);
+    if (targetCount <= 0) continue;
+
+    const picks = pickCreatureBanksForZone(ctx, zoneId, targetCount);
+    for (const type of picks) {
+      const tile = findCreatureBankTile(ctx, zoneId, type);
+      if (!tile) continue;
+      const id = `creature-bank-${type}-${tile.x}-${tile.y}`;
+      placeAdventureBuilding(tile, type, id, undefined, getCreatureBankGuardPower(type, id));
+    }
+  }
+}
+
+function creatureBankTargetForZone(type: string, value: number): number {
+  if (value < 2200) return 0;
+  if (type === "treasure") return value >= 8000 ? 3 : 2;
+  if (type === "junction") return value >= 3200 ? 2 : 1;
+  return value >= 4200 ? 1 : 0;
+}
+
+function pickCreatureBanksForZone(ctx: PlacementContext, zoneId: number, count: number): CreatureBankType[] {
+  const meta = ctx.zoneGrid.meta[zoneId];
+  return shuffle(ctx.rng, CREATURE_BANK_TYPES)
+    .map((type) => {
+      const definition = CREATURE_BANK_DEFINITIONS[type];
+      const terrainMatch = definition.preferredTerrain.includes(meta.baseTerrain);
+      return {
+        type,
+        score: (terrainMatch ? 2 : 0.65) * definition.rarity * (0.65 + ctx.rng() * 0.7),
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, count)
+    .map((entry) => entry.type);
+}
+
+function findCreatureBankTile(
+  ctx: PlacementContext,
+  zoneId: number,
+  type: CreatureBankType,
+): MapTile | null {
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
+  for (const roadBuffer of [2, 1, 0]) {
+    for (const pos of candidates) {
+      const tile = ctx.tiles[pos.y][pos.x];
+      if (!isValidCreatureBankTile(ctx, tile, type, roadBuffer)) continue;
+      return tile;
+    }
+  }
+  return null;
+}
+
+function isValidCreatureBankTile(ctx: PlacementContext, tile: MapTile, type: CreatureBankType, roadBuffer: number): boolean {
+  const definition = CREATURE_BANK_DEFINITIONS[type];
+  if (tile.object || tile.decor || tile.road) return false;
+  if (tile.terrain === TerrainType.LAVA && !definition.preferredTerrain.includes(TerrainType.LAVA)) return false;
+  if (tile.terrain === TerrainType.WATER && !definition.aquatic) return false;
+  if (tile.terrain !== TerrainType.WATER && (!tile.isPassable || tile.terrain === TerrainType.LAVA)) return false;
+  if (!definition.preferredTerrain.includes(tile.terrain) && ctx.rng() > 0.28) return false;
+  if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
+  if (hasMajorObjectNearby(ctx, tile.x, tile.y, 3)) return false;
+  return true;
 }
 
 function isValidAdventureTile(ctx: PlacementContext, tile: MapTile, type: AdventureBuildingType, roadBuffer: number): boolean {

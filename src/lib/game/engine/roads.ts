@@ -96,6 +96,7 @@ function findForcedRoadPath(
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const tile = tiles[n.y][n.x];
       if (isTownFootprint(tile)) continue;
+      if (tile.object?.type === "wall" && isProtectedGateFlank(tiles, n.x, n.y)) continue;
       if (!allowWaterRoads && tile.terrain === TerrainType.WATER) continue;
       const waterCost = tile.terrain === TerrainType.WATER ? 4 : 0;
       const wallCost = tile.object?.type === "wall" ? 8 : 0;
@@ -204,6 +205,7 @@ export function paintRoad(
     const tile = tiles[p.y][p.x];
     if (!allowWaterRoads && tile.terrain === TerrainType.WATER) continue;
     if (isTownFootprint(tile)) continue;
+    if (isProtectedGateFlank(tiles, p.x, p.y)) continue;
     if (tile.object?.type === "wall") tile.object = undefined;
     if (tile.decor?.blocking) tile.decor = undefined;
     tile.isPassable = true;
@@ -212,6 +214,24 @@ export function paintRoad(
     if (tile.road === "paved" && type === "dirt") continue;
     tile.road = type;
   }
+}
+
+function isProtectedGateFlank(tiles: MapTile[][], x: number, y: number): boolean {
+  for (const neighbor of [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ]) {
+    const object = tiles[neighbor.y]?.[neighbor.x]?.object;
+    if (object?.type !== "gate" || !object.roadAxis) continue;
+    const dx = x - neighbor.x;
+    const dy = y - neighbor.y;
+    if (object.roadAxis === "x" && dx === 0 && Math.abs(dy) === 1) return true;
+    if (object.roadAxis === "y" && dy === 0 && Math.abs(dx) === 1) return true;
+  }
+
+  return false;
 }
 
 /** Trace une route entre tous les châteaux donnés. */

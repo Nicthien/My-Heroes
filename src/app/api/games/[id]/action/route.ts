@@ -34,6 +34,7 @@ import {
   isTileTraversable,
   normalizeMapMovement,
 } from "@/lib/game/engine";
+import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
@@ -180,6 +181,7 @@ export async function POST(
       if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
       const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const effectiveGates = getEffectiveGates(gates, mapData);
       if (isHeroInActiveCombat(game.combats, hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
@@ -200,7 +202,7 @@ export async function POST(
         movingHeroId: hero.id,
         movingPlayerId: gamePlayer.id,
         players,
-        gates,
+        gates: effectiveGates,
         collected,
         killed,
         visitedAdventureBuildings,
@@ -270,7 +272,7 @@ export async function POST(
       } else if (stopObject?.type === "monster" && stopTargetPosition && !killed.has(stopObject.id)) {
         interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
       } else if (stopObject?.type === "gate" && stopTargetPosition) {
-        const gate = findGate(gates, stopObject.id, stopTargetPosition);
+        const gate = findGate(effectiveGates, stopObject.id, stopTargetPosition);
         if (gate && gate.gamePlayerId !== gamePlayer.id && (gate.garrison?.length ?? 0) > 0) {
           interaction = { type: "COMBAT", targetId: gate.id, targetType: "gate", destination: lastPos, targetPosition: stopTargetPosition };
         }
@@ -313,15 +315,17 @@ export async function POST(
       }
 
       if (tile?.object?.type === "gate") {
-        const gate = findGate(gates, tile.object.id, lastPos);
+        const gate = findGate(effectiveGates, tile.object.id, lastPos);
         if (gate && gate.gamePlayerId !== gamePlayer.id) {
           const hasGarrison = (gate.garrison ?? []).some((unit) => unit.count > 0);
           if (hasGarrison) {
             interaction = { type: "COMBAT", targetId: gate.id, targetType: "gate", destination: lastPos, targetPosition: lastPos };
           } else {
-            await captureGate(supabase, id, gate.id, gamePlayer.id);
+            await captureGate(supabase, id, gate, gamePlayer.id);
             interaction = { type: "CAPTURE_GATE", gateId: gate.id, destination: lastPos };
           }
+        } else if (gate && gate.gamePlayerId === gamePlayer.id) {
+          interaction = { type: "CAPTURE_GATE", gateId: gate.id, destination: lastPos };
         }
       }
 
@@ -817,6 +821,24 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    if (action.type === "CAPTURE_GATE") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const gate = getEffectiveGates(gates, mapData).find((item) => item.id === action.gateId);
+      if (!hero || !gate) {
+        return NextResponse.json({ error: "Porte invalide" }, { status: 400 });
+      }
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
+        return NextResponse.json({ error: "Le heros doit etre adjacent a la porte" }, { status: 400 });
+      }
+      if ((gate.garrison ?? []).some((unit) => unit.count > 0)) {
+        return NextResponse.json({ error: "La porte est gardee" }, { status: 400 });
+      }
+
+      await captureGate(supabase, id, gate, gamePlayer.id);
+      return NextResponse.json({ success: true, interaction: { type: "CAPTURE_GATE", gateId: gate.id } });
+    }
+
     if (action.type === "END_TURN") {
       await completePlayerTurn(supabase, id, Number(game.turnNumber), gamePlayer.id);
       await runAiTurnsUntilHuman(supabase, id);
@@ -890,6 +912,42 @@ function findGate(gates: MinimalGate[], gateId: string, position: Position) {
   );
 }
 
+function getEffectiveGates(gates: MinimalGate[], mapData: GameMap) {
+  const byId = new Map(gates.map((gate) => [gate.id, gate]));
+  const byPosition = new Map(gates.map((gate) => [`${gate.x},${gate.y}`, gate]));
+
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (object?.type !== "gate") continue;
+      const key = `${tile.x},${tile.y}`;
+      if (byId.has(object.id) || byPosition.has(key)) continue;
+
+      const garrison = createNeutralArmyStacksForTile(tile, object.guardianPower ?? 100, object.id)
+        .map((stack): MinimalArmy => ({
+          id: `${object.id}-stack-${stack.position}`,
+          unitType: stack.unitType,
+          count: stack.count,
+          health: stack.health,
+          maxHealth: stack.maxHealth,
+          position: stack.position,
+        }));
+      const gate: MinimalGate = {
+        id: object.id,
+        gamePlayerId: object.ownerId ?? null,
+        x: tile.x,
+        y: tile.y,
+        guardianPower: object.guardianPower ?? 0,
+        garrison,
+      };
+      byId.set(gate.id, gate);
+      byPosition.set(key, gate);
+    }
+  }
+
+  return [...byId.values()];
+}
+
 function areAdjacentOrSame(a: Position, b: Position) {
   return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
 }
@@ -897,14 +955,20 @@ function areAdjacentOrSame(a: Position, b: Position) {
 async function captureGate(
   supabase: ReturnType<typeof createAdminClient>,
   gameId: string,
-  gateId: string,
+  gate: MinimalGate,
   playerId: string,
 ) {
   await supabase
     .from("gates")
-    .update({ game_player_id: playerId, guardian_power: 0 })
-    .eq("game_id", gameId)
-    .eq("id", gateId);
+    .upsert({
+      id: gate.id,
+      game_id: gameId,
+      game_player_id: playerId,
+      x: gate.x,
+      y: gate.y,
+      guardian_power: 0,
+    }, { onConflict: "id" });
+  await supabase.from("gate_stacks").delete().eq("gate_id", gate.id);
 }
 
 async function addUnitsToHeroArmy(

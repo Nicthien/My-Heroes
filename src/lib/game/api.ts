@@ -5,7 +5,7 @@ import {
 } from "./types";
 import { isCreatureBankType } from "./creature-banks";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
-import { getDominantUnitType } from "./neutral-armies";
+import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { normalizeTownBuildings } from "./town-buildings";
 
 interface ApiPlayer {
@@ -256,7 +256,11 @@ function isLegacyGateMonsterObject(object: MapObject | undefined): object is Map
   return object?.type === "monster" && typeof object.id === "string" && object.id.includes("gate-mon-");
 }
 
-function mapGates(data: Record<string, unknown>, neutralArmies: NeutralArmy[] = []): Gate[] {
+function isGateMapObject(object: MapObject | undefined): object is MapObject & { id: string } {
+  return object?.type === "gate" && typeof object.id === "string";
+}
+
+function mapGates(data: Record<string, unknown>, neutralArmies: NeutralArmy[] = [], staticMapOverride?: GameMap): Gate[] {
   const gatesById = new Map<string, Gate>();
   for (const gate of ((data.gates as ApiGate[] | undefined) ?? []).map((gate): Gate => ({
     id: gate.id,
@@ -276,18 +280,29 @@ function mapGates(data: Record<string, unknown>, neutralArmies: NeutralArmy[] = 
   }
 
   const neutralArmiesById = new Map(neutralArmies.map((army) => [army.id, army]));
-  const mapData = data.mapData as GameMap | undefined;
+  const mapData = (data.mapData as GameMap | undefined) ?? staticMapOverride;
   for (const row of mapData?.tiles ?? []) {
     for (const tile of row) {
       const object = tile.object;
-      if (!isLegacyGateMonsterObject(object) || gatesById.has(object.id)) continue;
+      if (!isLegacyGateMonsterObject(object) && !isGateMapObject(object)) continue;
+      if (gatesById.has(object.id)) continue;
       const neutralArmy = neutralArmiesById.get(object.id);
+      const fallbackGarrison = object.type === "gate"
+        ? createNeutralArmyStacksForTile(tile, object.guardianPower ?? 100, object.id).map((stack) => ({
+          id: `${object.id}-stack-${stack.position}`,
+          unitType: stack.unitType,
+          count: stack.count,
+          health: stack.health,
+          maxHealth: stack.maxHealth,
+          position: stack.position,
+        }))
+        : [];
       gatesById.set(object.id, {
         id: object.id,
         ownerId: null,
         position: { x: tile.x, y: tile.y },
         guardianPower: object.guardianPower ?? 0,
-        garrison: neutralArmy?.status === "ACTIVE" ? neutralArmy.stacks : [],
+        garrison: neutralArmy?.status === "ACTIVE" ? neutralArmy.stacks : fallbackGarrison,
       });
     }
   }
@@ -532,7 +547,7 @@ export function mergeGameDynamicState(
   const turnNumber = data.turnNumber as number;
   const players = mapPlayers(data, turnNumber);
   const neutralArmies = mapNeutralArmies(data);
-  const gates = mapGates(data, neutralArmies);
+  const gates = mapGates(data, neutralArmies, staticMap);
   const activeCombats = mapActiveCombats(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
 

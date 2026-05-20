@@ -227,6 +227,22 @@ function validateMap(
         if (!tile.road) {
           addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} is not on a road at ${tile.x},${tile.y}`);
         }
+        if (tile.object.roadAxis !== "x" && tile.object.roadAxis !== "y") {
+          addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} has no road axis at ${tile.x},${tile.y}`);
+        } else {
+          for (const roadTile of getGateRoadTiles(map, tile)) {
+            if (!roadTile?.road) {
+              addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} is missing straight road access at ${tile.x},${tile.y}`);
+              break;
+            }
+          }
+          for (const wallTile of getGateFlankWallTiles(map, tile)) {
+            if (wallTile?.object?.type !== "wall" || wallTile.isPassable || wallTile.road) {
+              addIssue("error", templateId, seed, playerCount, size, `gate ${tile.object.id} is missing blocking flank wall at ${tile.x},${tile.y}`);
+              break;
+            }
+          }
+        }
         if (tile.object.id.startsWith("gate-mon-")) {
           addIssue("error", templateId, seed, playerCount, size, `legacy gate monster id used at ${tile.x},${tile.y}`);
         }
@@ -517,6 +533,20 @@ function collectStats(map: GameMap): MapStats {
 
 function getTownFootprintTiles(map: GameMap, doorX: number, doorY: number) {
   return TOWN_FOOTPRINT_OFFSETS.map((offset) => map.tiles[doorY + offset.y]?.[doorX + offset.x]);
+}
+
+function getGateRoadTiles(map: GameMap, tile: MapTile) {
+  const offsets = tile.object?.roadAxis === "x"
+    ? [{ x: -1, y: 0 }, { x: 1, y: 0 }]
+    : [{ x: 0, y: -1 }, { x: 0, y: 1 }];
+  return offsets.map((offset) => map.tiles[tile.y + offset.y]?.[tile.x + offset.x]);
+}
+
+function getGateFlankWallTiles(map: GameMap, tile: MapTile) {
+  const offsets = tile.object?.roadAxis === "x"
+    ? [{ x: 0, y: -1 }, { x: 0, y: 1 }]
+    : [{ x: -1, y: 0 }, { x: 1, y: 0 }];
+  return offsets.map((offset) => map.tiles[tile.y + offset.y]?.[tile.x + offset.x]);
 }
 
 function floodReachable(map: GameMap, start: { x: number; y: number }): Set<string> {

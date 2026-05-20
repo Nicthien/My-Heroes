@@ -1,15 +1,18 @@
-import { MapTile, TerrainType } from "../types";
+import { MapTile, Position, RoadType, TerrainType } from "../types";
 import { findBorderTiles, ZoneGrid } from "./zones";
 import { MapTemplate, ConnectionTemplate, WallType } from "./template";
 
 export interface Chokepoint {
   x: number;
   y: number;
+  roadAxis: GateRoadAxis;
   fromZoneId: number;
   toZoneId: number;
   guardStrength: ConnectionTemplate["guardStrength"];
   wallType: WallType;
 }
+
+export type GateRoadAxis = "x" | "y";
 
 /**
  * Pour chaque connexion :
@@ -102,38 +105,25 @@ export function buildConnectionsAndWalls(
     // Tile la plus proche du centre
     const sealedBorder = borderTiles.filter((p) => sealedTiles.has(`${p.x},${p.y}`));
     const gateCandidates = sealedBorder.length > 0 ? sealedBorder : borderTiles;
-    let best = gateCandidates[0];
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (const p of gateCandidates) {
-      const d = (p.x - cx) ** 2 + (p.y - cy) ** 2;
-      if (d < bestDist) {
-        bestDist = d;
-        best = p;
-      }
-    }
+    const gate = pickGateCandidate(tiles, zoneGrid, gateCandidates, from, to, cx, cy, width, height);
+    if (!gate) continue;
 
     // Élargir la porte sur 1-2 tiles voisines de la frontière pour faciliter le passage
-    const gateTiles = [best];
-    const candidates = gateCandidates
-      .filter((p) => p !== best)
-      .sort((a, b) => (a.x - best.x) ** 2 + (a.y - best.y) ** 2 - ((b.x - best.x) ** 2 + (b.y - best.y) ** 2));
-    if (candidates.length > 0) gateTiles.push(candidates[0]);
-
-    for (const gt of gateTiles) {
-      openTile(tiles[gt.y][gt.x]);
-    }
+    prepareGateFrame(tiles, width, height, gate, c.wallType);
 
     // Place la porte fortifiee sur la tile principale.
-    tiles[best.y][best.x].object = {
+    tiles[gate.y][gate.x].object = {
       type: "gate",
-      id: `gate-${c.from}-${c.to}-${best.x}-${best.y}`,
+      id: `gate-${c.from}-${c.to}-${gate.x}-${gate.y}`,
       subtype: c.wallType,
+      roadAxis: gate.roadAxis,
       // guardianPower est rempli plus tard par le value system
     };
 
     chokepoints.push({
-      x: best.x,
-      y: best.y,
+      x: gate.x,
+      y: gate.y,
+      roadAxis: gate.roadAxis,
       fromZoneId: from,
       toZoneId: to,
       guardStrength: c.guardStrength,
@@ -153,7 +143,41 @@ export function buildConnectionsAndWalls(
   return chokepoints;
 }
 
+export function enforceChokepointGateFrames(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  chokepoints: Chokepoint[],
+  road: RoadType = "paved",
+): void {
+  for (const cp of chokepoints) {
+    const tile = tiles[cp.y]?.[cp.x];
+    if (!tile?.object || tile.object.type !== "gate") continue;
+
+    const id = tile.object.id;
+    const guardianPower = tile.object.guardianPower;
+    prepareGateFrame(tiles, width, height, cp, cp.wallType);
+
+    tile.object = {
+      type: "gate",
+      id,
+      subtype: cp.wallType,
+      roadAxis: cp.roadAxis,
+      guardianPower,
+    };
+    tile.road = road;
+
+    for (const offset of getRoadAxisOffsets(cp.roadAxis)) {
+      const lane = tiles[cp.y + offset.y]?.[cp.x + offset.x];
+      if (!lane || lane.object?.type === "town_footprint") continue;
+      lane.road = road;
+    }
+  }
+}
+
 function sealTile(tile: MapTile, wallType: WallType): void {
+  tile.road = undefined;
+  tile.decor = undefined;
   tile.isPassable = false;
   tile.movementCost = 999;
   if (wallType === "brick") {
@@ -180,6 +204,117 @@ function openTile(tile: MapTile): void {
   tile.isPassable = true;
   tile.movementCost = movementCostFor(tile.terrain);
   if (tile.object?.type === "wall") tile.object = undefined;
+  if (tile.decor?.blocking) tile.decor = undefined;
+}
+
+function pickGateCandidate(
+  tiles: MapTile[][],
+  zoneGrid: ZoneGrid,
+  gateCandidates: Position[],
+  fromZoneId: number,
+  toZoneId: number,
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+): (Position & { roadAxis: GateRoadAxis }) | null {
+  let best: (Position & { roadAxis: GateRoadAxis }) | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const p of gateCandidates) {
+    const hereZone = zoneGrid.tilesZone[p.y]?.[p.x];
+    for (const next of getOrthogonalNeighbors(p)) {
+      if (next.x < 0 || next.x >= width || next.y < 0 || next.y >= height) continue;
+      const nextZone = zoneGrid.tilesZone[next.y]?.[next.x];
+      if (nextZone === hereZone) continue;
+      if (!((hereZone === fromZoneId && nextZone === toZoneId) || (hereZone === toZoneId && nextZone === fromZoneId))) continue;
+      if (tiles[next.y][next.x].terrain === TerrainType.WATER) continue;
+
+      const roadAxis: GateRoadAxis = next.x !== p.x ? "x" : "y";
+      const sidePenalty = getGateSideOffsets(roadAxis).reduce((penalty, offset) => {
+        const side = tiles[p.y + offset.y]?.[p.x + offset.x];
+        if (!side) return penalty + 100;
+        return penalty + (side.terrain === TerrainType.WATER ? 20 : 0);
+      }, 0);
+      const score = (p.x - cx) ** 2 + (p.y - cy) ** 2 + sidePenalty;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x: p.x, y: p.y, roadAxis };
+      }
+    }
+  }
+
+  if (best) return best;
+
+  let fallback = gateCandidates[0];
+  let fallbackDist = Number.POSITIVE_INFINITY;
+  for (const p of gateCandidates) {
+    const d = (p.x - cx) ** 2 + (p.y - cy) ** 2;
+    if (d < fallbackDist) {
+      fallbackDist = d;
+      fallback = p;
+    }
+  }
+
+  return fallback ? { ...fallback, roadAxis: inferGateRoadAxisFromWalls(tiles, fallback) } : null;
+}
+
+function prepareGateFrame(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  gate: Position & { roadAxis: GateRoadAxis },
+  wallType: WallType,
+): void {
+  for (const offset of getRoadAxisOffsets(gate.roadAxis)) {
+    const lane = tiles[gate.y + offset.y]?.[gate.x + offset.x];
+    if (!lane || lane.object?.type === "town_footprint") continue;
+    openTile(lane);
+  }
+
+  for (const offset of getGateSideOffsets(gate.roadAxis)) {
+    const x = gate.x + offset.x;
+    const y = gate.y + offset.y;
+    if (x < 0 || x >= width || y < 0 || y >= height) continue;
+    const side = tiles[y][x];
+    if (side.object?.type === "town" || side.object?.type === "town_footprint") continue;
+    if (side.terrain === TerrainType.WATER || side.terrain === TerrainType.LAVA) {
+      side.terrain = TerrainType.GRASS;
+      side.elevation = 0;
+    }
+    sealTile(side, wallType);
+  }
+}
+
+function getRoadAxisOffsets(roadAxis: GateRoadAxis): Position[] {
+  return roadAxis === "x"
+    ? [{ x: -1, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }]
+    : [{ x: 0, y: -1 }, { x: 0, y: 0 }, { x: 0, y: 1 }];
+}
+
+function getGateSideOffsets(roadAxis: GateRoadAxis): Position[] {
+  return roadAxis === "x"
+    ? [{ x: 0, y: -1 }, { x: 0, y: 1 }]
+    : [{ x: -1, y: 0 }, { x: 1, y: 0 }];
+}
+
+function getOrthogonalNeighbors(pos: Position): Position[] {
+  return [
+    { x: pos.x + 1, y: pos.y },
+    { x: pos.x - 1, y: pos.y },
+    { x: pos.x, y: pos.y + 1 },
+    { x: pos.x, y: pos.y - 1 },
+  ];
+}
+
+function inferGateRoadAxisFromWalls(tiles: MapTile[][], pos: Position): GateRoadAxis {
+  const xWalls = Number(isWall(tiles[pos.y]?.[pos.x - 1])) + Number(isWall(tiles[pos.y]?.[pos.x + 1]));
+  const yWalls = Number(isWall(tiles[pos.y - 1]?.[pos.x])) + Number(isWall(tiles[pos.y + 1]?.[pos.x]));
+  return yWalls >= xWalls ? "x" : "y";
+}
+
+function isWall(tile: MapTile | undefined): boolean {
+  return tile?.object?.type === "wall";
 }
 
 function movementCostFor(t: TerrainType): number {

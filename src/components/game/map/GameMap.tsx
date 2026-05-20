@@ -26,11 +26,11 @@ const REACHABLE_TILE_ALPHA = 0.34;
 const ADVENTURE_CURSORS = {
   default: "default",
   dragging: "grabbing",
-  boot: "url('/assets/cursors/adventure-horse.webp') 5 12, pointer",
-  castle: "url('/assets/cursors/adventure-castle.webp') 16 22, pointer",
-  sword: "url('/assets/cursors/combat-melee.webp') 7 25, pointer",
-  resource: "url('/assets/cursors/adventure-resource.webp') 16 16, pointer",
-  building: "url('/assets/cursors/adventure-building.webp') 16 22, pointer",
+  boot: "url('/assets/cursors/adventure-horse.webp') 4 4, pointer",
+  castle: "url('/assets/cursors/adventure-castle.webp') 4 4, pointer",
+  sword: "url('/assets/cursors/combat-melee.webp') 4 4, pointer",
+  resource: "url('/assets/cursors/adventure-resource.webp') 4 4, pointer",
+  building: "url('/assets/cursors/adventure-building.webp') 4 4, pointer",
   forbidden: "default",
 } as const;
 const RESOURCE_BUILDING_LABEL_BY_TYPE = new Map<string, string>(
@@ -632,12 +632,13 @@ export default function GameMapComponent() {
 
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
     const targetTile = tile ? gameState.map.tiles[tile.y]?.[tile.x] : undefined;
-    const objects = filterClickThroughTownSpriteHits(
+    let objects = filterClickThroughTownSpriteHits(
       rendererRef.current.getObjectsAtScreen(screenX, screenY),
       tile,
       targetTile,
       selectedHeroId
     );
+
 
     if (isSyncingMoveRef.current) {
       return;
@@ -805,7 +806,112 @@ export default function GameMapComponent() {
       return true;
     };
 
-      if (objects.length > 0) {
+    if (targetTile?.object?.type === "gate" && tile && selectedHeroId && myPlayer) {
+      const gate = findGateAt(gameState, targetTile.object.id, tile);
+      const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+      const heroOnGate = Boolean(gate && hero && hero.position.x === gate.position.x && hero.position.y === gate.position.y);
+      const shouldTreatGateAsGround = Boolean(
+        gate &&
+        hero &&
+        (
+          (gate.ownerId === myPlayer.id && !heroOnGate) ||
+          (gate.ownerId !== myPlayer.id && gate.garrison.every((unit) => unit.count <= 0))
+        )
+      );
+      if (shouldTreatGateAsGround) {
+        objects = objects.filter((object) => object.type !== "gate");
+      }
+    }
+
+    if (targetTile?.object?.type === "gate" && tile && selectedHeroId && myPlayer) {
+      const gate = findGateAt(gameState, targetTile.object.id, tile);
+      const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+      if (gate && hero) {
+        const isOwnedGate = gate.ownerId === myPlayer.id;
+        const garrisonCount = gate.garrison.reduce((total, unit) => total + unit.count, 0);
+        const heroOnGate = hero.position.x === gate.position.x && hero.position.y === gate.position.y;
+
+        if (isOwnedGate && heroOnGate) {
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current?.clearHighlights();
+          setSelectedGateId(gate.id);
+          return;
+        }
+
+        if (garrisonCount === 0 && gate.ownerId !== myPlayer.id && heroOnGate) {
+          if (blockIfHeroInCombat(hero.id)) return;
+          if (!canAct) {
+            setCombatMessage(blockedTurnMessage);
+            return;
+          }
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current?.clearHighlights();
+
+          isSyncingMoveRef.current = true;
+          useGameStore.getState().setMovePending(true);
+          fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "CAPTURE_GATE",
+              gateId: gate.id,
+              heroId: hero.id,
+            }),
+          })
+            .then(async (response) => {
+              if (!response.ok) {
+                setCombatMessage(await getApiErrorMessage(response));
+                return null;
+              }
+              setCombatMessage("Porte controlee.");
+              return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+            })
+            .then((state) => {
+              if (state) useGameStore.getState().setGameState(state);
+              setSelectedGateId(gate.id);
+            })
+            .finally(() => {
+              isSyncingMoveRef.current = false;
+              useGameStore.getState().setMovePending(false);
+          });
+          return;
+        }
+
+        if (garrisonCount > 0 && !isOwnedGate) {
+          if (blockIfHeroInCombat(hero.id)) return;
+          const approach = getCombatApproach(gameState.map, hero.position, gate.position, hero.movement);
+          if (!approach) {
+            rendererRef.current?.highlightTile(gate.position.x, gate.position.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            return;
+          }
+          if (!canAct) {
+            setCombatMessage(blockedTurnMessage);
+            return;
+          }
+          pendingMoveRef.current = null;
+          pendingAttackRef.current = null;
+          rendererRef.current?.clearHighlights();
+          rendererRef.current?.highlightPath(approach.path);
+          rendererRef.current?.highlightTile(gate.position.x, gate.position.y, 0xff6600);
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: gate.id,
+            targetType: "gate",
+            destination: approach.destination,
+            targetPosition: gate.position,
+            path: approach.path,
+          });
+          return;
+        }
+
+        // Owned-distant gates and empty unowned gates fall through to normal movement.
+      }
+    }
+
+    if (objects.length > 0) {
       const selectedObject = selectObjectOnTile(
         objects,
         selectedHeroId,
@@ -815,14 +921,6 @@ export default function GameMapComponent() {
       if (!selectedObject) return;
 
       const obj = selectedObject;
-      if (obj.type === "town" && selectedHeroId && e.detail >= 2 && myPlayer && obj.playerId === myPlayer.id) {
-        pendingMoveRef.current = null;
-        pendingAttackRef.current = null;
-        rendererRef.current.clearHighlights();
-        selectTown(obj.id);
-        return;
-      }
-
       if (obj.type === "combat") {
         const combat = gameState.activeCombats?.find((item) => item.id === obj.id);
         if (!combat) return;
@@ -1308,7 +1406,163 @@ export default function GameMapComponent() {
         return;
       }
 
-      if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
+      if (obj.type === "gate") {
+        pendingAttackRef.current = null;
+        rendererRef.current?.clearHighlights();
+        const gate = findGateAt(gameState, obj.id, { x: obj.x, y: obj.y });
+        const isOwnedGate = Boolean(gate && myPlayer && gate.ownerId === myPlayer.id);
+        const hasAdjacentHero = Boolean(
+          gate && myPlayer?.heroes.some((hero) => areAdjacentOrSame(hero.position, gate.position))
+        );
+
+        if (isOwnedGate) {
+          if (hasAdjacentHero && gate) {
+            setSelectedGateId(gate.id);
+            return;
+          }
+        } else {
+          const garrisonCount = (gate?.garrison ?? []).reduce((total, unit) => total + unit.count, 0);
+          if (selectedHeroId && myPlayer && gate) {
+            const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+            if (!hero) return;
+            if (blockIfHeroInCombat(hero.id)) return;
+
+            if (garrisonCount > 0) {
+              const destination = { x: obj.x, y: obj.y };
+              const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+              if (!approach) {
+                rendererRef.current?.highlightTile(destination.x, destination.y, 0xff0000);
+                setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+                return;
+              }
+              if (!canAct) {
+                setCombatMessage(blockedTurnMessage);
+                return;
+              }
+              rendererRef.current?.highlightPath(approach.path);
+              rendererRef.current?.highlightTile(destination.x, destination.y, 0xff6600);
+              setPendingCombat({
+                attackerHeroId: selectedHeroId,
+                targetId: gate.id,
+                targetType: "gate",
+                destination: approach.destination,
+                targetPosition: destination,
+                path: approach.path,
+              });
+              return;
+            }
+
+            if (hero.position.x !== gate.position.x || hero.position.y !== gate.position.y) {
+              const destination = gate.position;
+              const path = findPath(gameState.map, hero.position, destination, hero.movement);
+              if (path.length <= 1) {
+                if (handleOutOfRange(hero, destination) === "inaccessible") {
+                  rendererRef.current?.highlightTile(destination.x, destination.y, 0xff0000);
+                  setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+                }
+                return;
+              }
+
+              pendingAttackRef.current = null;
+              const pendingMove = pendingMoveRef.current;
+              const isConfirmingMove =
+                pendingMove?.heroId === selectedHeroId &&
+                pendingMove.destination.x === destination.x &&
+                pendingMove.destination.y === destination.y;
+
+              if (!isConfirmingMove) {
+                pendingMoveRef.current = { heroId: selectedHeroId, destination, path };
+                rendererRef.current?.highlightPath(path);
+                return;
+              }
+
+              if (!canAct) {
+                setCombatMessage(blockedTurnMessage);
+                pendingMoveRef.current = null;
+                rendererRef.current?.clearHighlights();
+                return;
+              }
+
+              rendererRef.current?.highlightPath(path);
+              isSyncingMoveRef.current = true;
+              useGameStore.getState().setMovePending(true);
+              fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  type: "MOVE_HERO",
+                  heroId: selectedHeroId,
+                  path: path.map((point: Position) => ({ x: point.x, y: point.y })),
+                }),
+              })
+                .then(async (response) => {
+                  if (!response.ok) {
+                    isSyncingMoveRef.current = false;
+                    useGameStore.getState().setMovePending(false);
+                    setCombatMessage(await getApiErrorMessage(response));
+                    return null;
+                  }
+                  return response.json();
+                })
+                .then(async (data) => {
+                  if (!data) return;
+                  const acceptedPath = getAcceptedMovePath(data, path);
+                  await animateHeroMovement(rendererRef.current, selectedHeroId, acceptedPath);
+                  handleMoveInteraction(selectedHeroId, data.interaction as MoveInteraction | null | undefined);
+                  refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
+                    .then((state) => {
+                      if (state) useGameStore.getState().setGameState(state);
+                    })
+                    .finally(() => {
+                      isSyncingMoveRef.current = false;
+                      useGameStore.getState().setMovePending(false);
+                    });
+                })
+                .catch(() => {
+                  isSyncingMoveRef.current = false;
+                  useGameStore.getState().setMovePending(false);
+                  setCombatMessage("Deplacement impossible pour le moment.");
+                });
+              return;
+            }
+
+            if (!canAct) {
+              setCombatMessage(blockedTurnMessage);
+              return;
+            }
+
+            isSyncingMoveRef.current = true;
+            useGameStore.getState().setMovePending(true);
+            fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                type: "CAPTURE_GATE",
+                gateId: gate.id,
+                heroId: hero.id,
+              }),
+            })
+              .then(async (response) => {
+                if (!response.ok) {
+                  setCombatMessage(await getApiErrorMessage(response));
+                  return null;
+                }
+                setCombatMessage("Porte controlee.");
+                return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+              })
+              .then((state) => {
+                if (state) useGameStore.getState().setGameState(state);
+                setSelectedGateId(gate.id);
+              })
+              .finally(() => {
+                isSyncingMoveRef.current = false;
+                useGameStore.getState().setMovePending(false);
+            });
+            return;
+          }
+          if (garrisonCount > 0) setCombatMessage(`Porte gardee : ${garrisonCount} unite(s).`);
+        }
+      } else if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
@@ -1379,40 +1633,14 @@ export default function GameMapComponent() {
 
       if (targetTile?.object?.type === "gate") {
         const gate = findGateAt(gameState, targetTile.object.id, tile);
-        if (gate && gate.ownerId === myPlayer?.id) {
-          if (areAdjacentOrSame(hero.position, gate.position)) {
-            setSelectedGateId(gate.id);
-          } else {
-            setCombatMessage("Approchez un heros allie de la porte pour gerer sa garnison.");
-          }
+        const heroOnGate = Boolean(gate && hero.position.x === gate.position.x && hero.position.y === gate.position.y);
+        if (gate && gate.ownerId === myPlayer?.id && heroOnGate) {
+          setSelectedGateId(gate.id);
           return;
         }
 
-        if ((gate?.garrison ?? []).some((unit) => unit.count > 0)) {
-          const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
-          if (!approach) {
-            rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
-            setTimeout(() => rendererRef.current?.clearHighlights(), 500);
-            return;
-          }
-          pendingMoveRef.current = null;
-          pendingAttackRef.current = null;
-          rendererRef.current.highlightPath(approach.path);
-          rendererRef.current.highlightTile(tile.x, tile.y, 0xff6600);
-          if (!canAct) {
-            setCombatMessage(blockedTurnMessage);
-            return;
-          }
-          setPendingCombat({
-            attackerHeroId: selectedHeroId,
-            targetId: gate?.id ?? targetTile.object.id,
-            targetType: "gate",
-            destination: approach.destination,
-            targetPosition: tile,
-            path: approach.path,
-          });
-          return;
-        }
+        // Owned-but-hero-not-on-it and non-owned gates fall through: the move flow handles
+        // pathfinding, and MOVE_HERO triggers combat or capture on arrival.
       }
 
       if (targetTile?.object?.type === "building") {
@@ -1668,6 +1896,11 @@ function GateGarrisonModal({
   onMessage: (message: string | null) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [transferDialog, setTransferDialog] = useState<{
+    type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON";
+    unitType: UnitType;
+    count: number;
+  } | null>(null);
   const gate = gameState.gates?.find((item) => item.id === gateId);
   const player = gameState.players.find((item) => item.userId === currentUserId);
   const adjacentHeroes = gate && player
@@ -1678,10 +1911,28 @@ function GateGarrisonModal({
 
   if (!gate) return null;
 
-  const transfer = async (type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON", unit: UnitStack) => {
+  const activeTransferStack = transferDialog
+    ? (transferDialog.type === "TRANSFER_GATE_GARRISON_TO_HERO" ? gate.garrison : hero?.armies ?? [])
+        .find((unit) => unit.unitType === transferDialog.unitType)
+    : undefined;
+  const activeTransferMax = activeTransferStack?.count ?? 0;
+  const activeTransferCount = Math.min(Math.max(1, transferDialog?.count ?? 1), Math.max(1, activeTransferMax));
+  const activeTransferLabel = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO"
+    ? hero ? `Vers : ${hero.name}` : "Vers : heros"
+    : "Vers : garnison";
+  const activeTransferAction = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO" ? "Reprendre" : "Déposer";
+
+  const openTransferDialog = (
+    type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON",
+    unit: UnitStack
+  ) => {
     if (!hero || !isOwned || pending) return;
-    const countText = window.prompt("Nombre d'unites a transferer", String(unit.count));
-    const count = Math.min(unit.count, Math.max(1, Math.floor(Number(countText ?? 0))));
+    setTransferDialog({ type, unitType: unit.unitType as UnitType, count: unit.count });
+  };
+
+  const transfer = async () => {
+    if (!hero || !isOwned || pending || !transferDialog || !activeTransferStack) return;
+    const count = Math.min(activeTransferMax, Math.max(1, Math.floor(activeTransferCount)));
     if (!Number.isFinite(count) || count <= 0) return;
 
     setPending(true);
@@ -1689,10 +1940,10 @@ function GateGarrisonModal({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type,
+        type: transferDialog.type,
         gateId: gate.id,
         heroId: hero.id,
-        unitType: unit.unitType,
+        unitType: activeTransferStack.unitType,
         count,
       }),
     });
@@ -1704,6 +1955,7 @@ function GateGarrisonModal({
 
     const state = await refreshGameState(gameState.id, currentUserId, { revealMap });
     if (state) useGameStore.getState().setGameState(state);
+    setTransferDialog(null);
     setPending(false);
   };
 
@@ -1738,7 +1990,7 @@ function GateGarrisonModal({
             stacks={gate.garrison}
             actionLabel="Reprendre"
             disabled={!isOwned || !hero || pending}
-            onTransfer={(unit) => transfer("TRANSFER_GATE_GARRISON_TO_HERO", unit)}
+            onTransfer={(unit) => openTransferDialog("TRANSFER_GATE_GARRISON_TO_HERO", unit)}
           />
           <GateStackList
             title={hero ? `Avec ${hero.name}` : "Heros adjacent"}
@@ -1746,10 +1998,60 @@ function GateGarrisonModal({
             stacks={hero?.armies ?? []}
             actionLabel="Deposer"
             disabled={!isOwned || !hero || pending}
-            onTransfer={(unit) => transfer("TRANSFER_HERO_TO_GATE_GARRISON", unit)}
+            onTransfer={(unit) => openTransferDialog("TRANSFER_HERO_TO_GATE_GARRISON", unit)}
           />
         </div>
+
       </div>
+      {transferDialog && activeTransferStack && activeTransferMax > 0 && (
+        <form
+          className="absolute left-1/2 top-1/2 z-10 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-md border border-amber-900/80 bg-black/90 px-3 py-4 text-amber-100 shadow-2xl shadow-black/80"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void transfer();
+          }}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3 text-base font-black">
+            <span className="text-amber-100">Nombre</span>
+            <span className="text-yellow-300">Max {activeTransferMax}</span>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={activeTransferMax}
+            value={activeTransferCount}
+            onChange={(event) => {
+              const next = Math.min(
+                Math.max(1, Math.floor(Number(event.currentTarget.value) || 1)),
+                activeTransferMax
+              );
+              setTransferDialog({ ...transferDialog, count: next });
+            }}
+            className="h-12 w-full rounded-lg border border-orange-600/90 bg-black px-3 text-center text-xl font-black tabular-nums text-amber-50 outline-none focus:border-yellow-300 focus:ring-1 focus:ring-yellow-300/70"
+            autoFocus
+          />
+          <div className="mt-3 text-center text-base font-black text-amber-200/80">
+            {activeTransferLabel}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              className="h-11 rounded-lg border border-orange-600/90 bg-black/70 text-base font-black text-amber-100 transition hover:border-yellow-300 hover:text-yellow-100 disabled:cursor-not-allowed disabled:border-stone-700 disabled:text-stone-500"
+              onClick={() => setTransferDialog(null)}
+              disabled={pending}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="h-11 rounded-lg border border-orange-500 bg-gradient-to-b from-orange-500 to-orange-800 text-base font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] transition hover:from-orange-400 hover:to-orange-700 disabled:cursor-not-allowed disabled:border-stone-700 disabled:from-stone-800 disabled:to-stone-900 disabled:text-stone-500"
+              disabled={pending}
+            >
+              {activeTransferAction}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -1799,9 +2101,21 @@ function GateStackList({
 }
 
 function findGateAt(gameState: GameState, gateId: string, position: Position): Gate | undefined {
-  return gameState.gates?.find((gate) =>
+  const fromState = gameState.gates?.find((gate) =>
     gate.id === gateId || (gate.position.x === position.x && gate.position.y === position.y)
   );
+  if (fromState) return fromState;
+
+  const tile = gameState.map.tiles[position.y]?.[position.x];
+  const object = tile?.object;
+  if (object?.type !== "gate") return undefined;
+  return {
+    id: object.id,
+    ownerId: object.ownerId ?? null,
+    position: { x: position.x, y: position.y },
+    guardianPower: object.guardianPower ?? 0,
+    garrison: [],
+  };
 }
 
 function areAdjacentOrSame(a: Position, b: Position) {
@@ -1860,10 +2174,16 @@ function getAdventureMapCursor({
   );
   const selectedObject = selectObjectOnTile(objects, selectedHeroId, selectedTownId);
   const objectCursor = selectedObject
-    ? getAdventureObjectCursor(selectedObject, currentPlayerId)
+    ? getAdventureObjectCursor(selectedObject, gameState, currentPlayerId)
     : null;
 
   if (objectCursor) return objectCursor;
+
+  if (targetTile.object?.type === "gate") {
+    const gate = findGateAt(gameState, targetTile.object.id, tile);
+    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.castle;
+    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.sword : ADVENTURE_CURSORS.boot;
+  }
 
   const tileObjectCursor = getAdventureTileObjectCursor(targetTile.object?.type);
   if (tileObjectCursor) return tileObjectCursor;
@@ -1876,8 +2196,17 @@ function getAdventureMapCursor({
     : ADVENTURE_CURSORS.forbidden;
 }
 
-function getAdventureObjectCursor(object: MapObjectData, currentPlayerId: string | null) {
+function getAdventureObjectCursor(
+  object: MapObjectData,
+  gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
+  currentPlayerId: string | null
+) {
   if (object.type === "combat") return ADVENTURE_CURSORS.sword;
+  if (object.type === "gate") {
+    const gate = findGateAt(gameState, object.id, { x: object.x, y: object.y });
+    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.castle;
+    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.sword : ADVENTURE_CURSORS.boot;
+  }
   if (object.type === "adventure_building") return ADVENTURE_CURSORS.building;
   if (object.type === "building") return ADVENTURE_CURSORS.resource;
   if (object.type === "town") {
@@ -2012,6 +2341,9 @@ function selectObjectOnTile(
   const combat = objects.find((obj) => obj.type === "combat");
   if (combat) return combat;
 
+  const gate = objects.find((obj) => obj.type === "gate");
+  if (gate) return gate;
+
   const enemyBuilding = objects.find((obj) => obj.type === "building" && !obj.playerId);
   if (enemyBuilding) return enemyBuilding;
 
@@ -2036,7 +2368,7 @@ function filterClickThroughTownSpriteHits(
   if (!selectedHeroId || !tile || !targetTile || !isTileTraversable(targetTile)) return objects;
 
   return objects.filter((object) =>
-    object.type !== "town" ||
+    (object.type !== "town" && object.type !== "gate") ||
     (object.x === tile.x && object.y === tile.y)
   );
 }
@@ -2260,6 +2592,50 @@ function buildObjects(
     }
   }
 
+  const gatePositions = new Set<string>();
+  const playerById = new Map(gameState.players.map((player) => [player.id, player]));
+  for (const gate of gameState.gates ?? []) {
+    const key = `${gate.position.x},${gate.position.y}`;
+    if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+    gatePositions.add(key);
+    const owner = gate.ownerId ? playerById.get(gate.ownerId) : undefined;
+    objects.push({
+      type: "gate",
+      id: gate.id,
+      playerId: gate.ownerId,
+      x: gate.position.x,
+      y: gate.position.y,
+      faction: owner?.faction as string ?? "",
+      color: owner?.color ?? "",
+      name: owner ? "Porte controlee" : "Porte neutre",
+      guardianPower: gate.guardianPower,
+    });
+  }
+
+  if (gameState.map?.tiles) {
+    for (let y = 0; y < gameState.map.height; y++) {
+      for (let x = 0; x < gameState.map.width; x++) {
+        const tile = gameState.map.tiles[y]?.[x];
+        if (!tile?.object || tile.object.type !== "gate") continue;
+        const key = `${x},${y}`;
+        if (gatePositions.has(key)) continue;
+        if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
+
+        objects.push({
+          type: "gate",
+          id: tile.object.id,
+          playerId: tile.object.ownerId ?? null,
+          x,
+          y,
+          faction: "",
+          color: "",
+          name: tile.object.ownerId ? "Porte controlee" : "Porte neutre",
+          guardianPower: tile.object.guardianPower ?? 0,
+        });
+      }
+    }
+  }
+
   for (const combat of gameState.activeCombats ?? []) {
     const key = `${combat.position.x},${combat.position.y}`;
     if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
@@ -2311,4 +2687,3 @@ function getTownHeroRenderOffset(index: number, total: number) {
     y: row * 13,
   };
 }
-

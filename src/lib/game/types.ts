@@ -461,6 +461,7 @@ export interface MapObject {
   ownerId?: string | null;
   amount?: number;
   targetId?: string;
+  roadAxis?: "x" | "y";
   ownerIndex?: number;
   strategicRole?: "start_wood" | "start_ore" | "start_gold" | "start_rare";
 }

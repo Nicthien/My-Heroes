@@ -32,7 +32,6 @@ export async function POST(
 
   const gamePlayer = await getGamePlayer(supabase, id, user.id);
   if (!gamePlayer) return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
-  if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
   const { data: combat, error: fetchError } = await supabase
     .from("combats")
@@ -92,6 +91,11 @@ export async function POST(
   }
   if (!currentActor && combat.current_player_id && combat.current_player_id !== gamePlayerId) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
+  }
+
+  const isAutomatedTurn = Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorIsAi));
+  if (!gamePlayer.isAlive && !isAutomatedTurn) {
+    return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
   }
 
   const execution = executeActionThenNeutralTurns({
@@ -300,6 +304,12 @@ async function persistResolvedCombat(
   if (winnerSide === "attacker") {
     if (combat.neutral_army_id) {
       await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", combat.neutral_army_id);
+      await supabase
+        .from("gates")
+        .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
+        .eq("game_id", combat.game_id)
+        .eq("x", combat.x)
+        .eq("y", combat.y);
     } else if (combat.gate_id) {
       await supabase
         .from("gates")

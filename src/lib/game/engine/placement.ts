@@ -242,6 +242,7 @@ export function placeStartingEconomy(
 function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y: number): boolean {
   const door = ctx.tiles[y]?.[x];
   if (!isTownDoorTileFree(door)) return false;
+  if (isGateFrameTile(ctx, x, y)) return false;
 
   for (const offset of TOWN_FOOTPRINT_OFFSETS) {
     const nx = x + offset.x;
@@ -249,6 +250,7 @@ function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y:
     if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) return false;
     if (ctx.zoneGrid.tilesZone[ny][nx] !== zoneId) return false;
     if (!isTownFootprintTileFree(ctx.tiles[ny][nx])) return false;
+    if (isGateFrameTile(ctx, nx, ny)) return false;
   }
 
   return true;
@@ -267,6 +269,31 @@ function isTownFootprintTileFree(tile: MapTile | undefined): tile is MapTile {
     !tile.object &&
     !tile.decor
   );
+}
+
+function isGateFrameTile(ctx: PlacementContext, x: number, y: number): boolean {
+  const tile = ctx.tiles[y]?.[x];
+  if (tile?.object?.type === "gate") return true;
+
+  for (const gate of [
+    ctx.tiles[y]?.[x - 1],
+    ctx.tiles[y]?.[x + 1],
+    ctx.tiles[y - 1]?.[x],
+    ctx.tiles[y + 1]?.[x],
+  ]) {
+    if (gate?.object?.type !== "gate" || !gate.object.roadAxis) continue;
+    const dx = x - gate.x;
+    const dy = y - gate.y;
+    if (gate.object.roadAxis === "x") {
+      if (dy === 0 && Math.abs(dx) === 1) return true;
+      if (dx === 0 && Math.abs(dy) === 1) return true;
+    } else {
+      if (dx === 0 && Math.abs(dy) === 1) return true;
+      if (dy === 0 && Math.abs(dx) === 1) return true;
+    }
+  }
+
+  return false;
 }
 
 function downgradeWildTerrain(t: TerrainType): TerrainType {
@@ -297,10 +324,16 @@ function findStartingMineTile(
   const coastalCandidates = buildCandidates(true, true);
   if (coastalCandidates.length > 0) return pickBestStartingMineCandidate(coastalCandidates, entry.idealDistance)?.tile ?? null;
 
+  const minimumStrategicDistance = getMinimumStrategicMineDistance(town, entry, placed);
   const relaxedDistanceCandidates = zoneTiles
     .filter((tile) => canPlaceStartingMineAt(ctx, tile, placed, true, true))
     .map((tile) => makeStartingMineCandidate(ctx, town, spec, tile));
-  if (relaxedDistanceCandidates.length > 0) return pickBestStartingMineCandidate(relaxedDistanceCandidates, entry.idealDistance)?.tile ?? null;
+  if (relaxedDistanceCandidates.length > 0) {
+    return pickBestStartingMineCandidate(
+      preferMinimumDistance(relaxedDistanceCandidates, minimumStrategicDistance),
+      entry.idealDistance,
+    )?.tile ?? null;
+  }
 
   const fallback = buildCandidates(false, true);
   if (fallback.length > 0) return pickBestStartingMineCandidate(fallback, entry.idealDistance)?.tile ?? null;
@@ -308,7 +341,29 @@ function findStartingMineTile(
   const relaxedFallback = zoneTiles
     .filter((tile) => canPlaceStartingMineAt(ctx, tile, placed, false, true))
     .map((tile) => makeStartingMineCandidate(ctx, town, spec, tile));
-  return pickBestStartingMineCandidate(relaxedFallback, entry.idealDistance)?.tile ?? null;
+  return pickBestStartingMineCandidate(
+    preferMinimumDistance(relaxedFallback, minimumStrategicDistance),
+    entry.idealDistance,
+  )?.tile ?? null;
+}
+
+function getMinimumStrategicMineDistance(
+  town: Position,
+  entry: (typeof STARTING_MINE_SPECS)[number],
+  placed: StartingEconomyPlacement[],
+): number {
+  if (entry.role !== "start_gold" && entry.role !== "start_rare") return 0;
+  const primaryDistances = placed
+    .filter((item) => item.role === "start_wood" || item.role === "start_ore")
+    .map((item) => Math.max(Math.abs(item.x - town.x), Math.abs(item.y - town.y)));
+  if (primaryDistances.length === 0) return 0;
+  return Math.max(...primaryDistances);
+}
+
+function preferMinimumDistance<T extends { distance: number }>(candidates: T[], minimumDistance: number): T[] {
+  if (minimumDistance <= 0) return candidates;
+  const preferred = candidates.filter((candidate) => candidate.distance >= minimumDistance);
+  return preferred.length > 0 ? preferred : candidates;
 }
 
 function makeStartingMineCandidate(ctx: PlacementContext, town: Position, spec: BuildingSpec, tile: MapTile) {
@@ -328,6 +383,7 @@ function canPlaceStartingMineAt(
   allowCoastalWater: boolean,
 ): boolean {
   if (tile.object || tile.decor) return false;
+  if (isGateFrameTile(ctx, tile.x, tile.y)) return false;
   const isCoastalWater = allowCoastalWater && tile.terrain === TerrainType.WATER;
   if (!isSolidLandTile(tile) && !isCoastalWater) return false;
   if (!hasLandSupportNearby(ctx, tile.x, tile.y)) return false;
@@ -426,7 +482,7 @@ export function fillZone(
 
   // Liste de tiles candidates : toutes les tiles libres de la zone
   const allTiles = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
-    .filter((p) => isTileFree(ctx.tiles[p.y][p.x]));
+    .filter((p) => isTileFree(ctx.tiles[p.y][p.x]) && !isGateFrameTile(ctx, p.x, p.y));
   if (allTiles.length === 0) {
     return { zoneId, spentValue: 0, placedBuildings, placedPiles, guardianThreat: 0 };
   }

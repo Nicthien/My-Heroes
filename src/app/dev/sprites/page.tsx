@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
+import { CREATURE_BANK_DEFINITIONS, CREATURE_BANK_TYPES } from "@/lib/game/creature-banks";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { UnitRule } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
@@ -53,6 +54,11 @@ const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/adventure-campfire.webp", label: "Feu de camp", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-lighthouse.webp", label: "Phare", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-stargate.webp", label: "Stargate", group: "Aventures" },
+  ...CREATURE_BANK_TYPES.map((type) => ({
+    path: `/assets/sprites/map/creature-bank-${type.replace(/_/g, "-")}.webp`,
+    label: CREATURE_BANK_DEFINITIONS[type].label,
+    group: "Banques de creatures",
+  })),
   { path: "/assets/sprites/map/wall-brick.webp", label: "Mur de pierre", group: "Obstacles" },
   { path: "/assets/sprites/map/wall-vegetal.webp", label: "Mur végétal", group: "Obstacles" },
   { path: "/assets/sprites/map/grove-pine.webp", label: "Bosquet de pins", group: "Obstacles" },
@@ -104,12 +110,11 @@ const FEATURED_UNIT_GROUPS = new Set(["cove", "factory", "bulwark", "neutral"]);
 
 const HERO_SHEET_ENTRIES = Object.values(HERO_SPRITESHEETS);
 const BOAT_SHEET_ENTRIES = Object.values(BOAT_SPRITESHEETS);
-type GalleryTab = "units" | "spritesheets" | "svg" | "webp";
+type GalleryTab = "units" | "spritesheets" | "webp";
 
 const UNIT_COUNT = FACTION_GROUPS.reduce((total, group) => total + group.units.length, 0);
 const UNIT_TYPES = FACTION_GROUPS.flatMap((group) => group.units);
 const SPRITESHEET_COUNT = HERO_SHEET_ENTRIES.length + BOAT_SHEET_ENTRIES.length;
-const PUBLIC_SVGS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".svg"));
 const PUBLIC_WEBPS = PUBLIC_STATIC_ASSETS.filter((entry) => entry.path.endsWith(".webp"));
 
 const MODEL_LABELS: Record<UnitModelKind, string> = {
@@ -561,7 +566,6 @@ function StaticSpriteTab({
 export default function SpritesGalleryPage() {
   const [activeTab, setActiveTab] = useState<GalleryTab>("units");
   const [selectedSprite, setSelectedSprite] = useState<SelectedSprite | null>(null);
-  const svgGroups = Array.from(new Set(PUBLIC_SVGS.map((entry) => entry.group)));
   const webpGroups = Array.from(new Set(PUBLIC_WEBPS.map((entry) => entry.group)));
   const selectedUnitIndex = selectedSprite?.unitType ? UNIT_TYPES.indexOf(selectedSprite.unitType) : -1;
   const selectAdjacentUnit = (offset: number) => {
@@ -584,7 +588,6 @@ export default function SpritesGalleryPage() {
           <nav aria-label="Types de ressources" className="flex flex-wrap gap-2">
             <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités" onClick={() => setActiveTab("units")} />
             <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
-            <TabButton active={activeTab === "svg"} count={PUBLIC_SVGS.length} label="SVG carte" onClick={() => setActiveTab("svg")} />
             <TabButton active={activeTab === "webp"} count={PUBLIC_WEBPS.length} label="WebP carte" onClick={() => setActiveTab("webp")} />
           </nav>
         </div>
@@ -593,7 +596,6 @@ export default function SpritesGalleryPage() {
       <main className="mx-auto mt-6 max-w-7xl">
         {activeTab === "units" ? <UnitsTab onSelect={setSelectedSprite} /> : null}
         {activeTab === "spritesheets" ? <SpritesheetsTab onSelect={setSelectedSprite} /> : null}
-        {activeTab === "svg" ? <StaticSpriteTab assets={PUBLIC_SVGS} fileGroups={svgGroups} onSelect={setSelectedSprite} /> : null}
         {activeTab === "webp" ? <StaticSpriteTab assets={PUBLIC_WEBPS} fileGroups={webpGroups} onSelect={setSelectedSprite} /> : null}
       </main>
       {selectedSprite ? (

@@ -71,11 +71,11 @@ type DamagePreview = {
 type CombatHoverAction = "move" | "melee" | "ranged";
 
 const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
-  move: "url('/assets/cursors/combat-move-ground.webp') 15 21, pointer",
-  melee: "url('/assets/cursors/combat-melee.webp') 24 6, pointer",
-  ranged: "url('/assets/cursors/combat-ranged.webp') 25 7, pointer",
+  move: "url('/assets/cursors/combat-move-ground.webp') 4 4, pointer",
+  melee: "url('/assets/cursors/combat-melee.webp') 4 4, pointer",
+  ranged: "url('/assets/cursors/combat-ranged.webp') 4 4, pointer",
 };
-const COMBAT_FLYING_MOVE_CURSOR = "url('/assets/cursors/combat-move-flying.webp') 16 20, pointer";
+const COMBAT_FLYING_MOVE_CURSOR = "url('/assets/cursors/combat-move-flying.webp') 4 4, pointer";
 
 function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
   if (action !== "move") return COMBAT_CURSORS[action];
@@ -96,11 +96,18 @@ export default function CombatScreen() {
   const [combatAnimationBlocked, setCombatAnimationBlocked] = useState(false);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const isSubmittingActionRef = useRef(false);
+  const actionSubmissionTokenRef = useRef(0);
   const neutralActionKeyRef = useRef<string | null>(null);
   const fetchCombatInFlightRef = useRef(false);
   const combatAnimationTimeoutRef = useRef<number | null>(null);
   const previousCombatForAnimationRef = useRef<PersistentCombat | null>(null);
   const activeCombatId = activeCombat?.id;
+
+  const releaseSubmissionLock = useCallback((submissionToken: number) => {
+    if (actionSubmissionTokenRef.current !== submissionToken) return;
+    isSubmittingActionRef.current = false;
+    setIsSubmittingAction(false);
+  }, []);
 
   const blockCombatAnimation = useCallback((durationMs: number) => {
     if (durationMs <= 0) return;
@@ -234,8 +241,6 @@ export default function CombatScreen() {
   useEffect(() => {
     if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
     if (combatAnimationBlocked) return;
-    const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
-    if (myPlayer?.isAlive === false) return;
 
     const currentActor = activeCombat.boardState.units.find((unit) => unit.id === activeCombat.currentUnitId);
     const currentActorPlayer = currentActor?.ownerPlayerId
@@ -256,6 +261,7 @@ export default function CombatScreen() {
     let cancelled = false;
     let started = false;
     const combat = activeCombat;
+    const submissionToken = ++actionSubmissionTokenRef.current;
     neutralActionKeyRef.current = actionKey;
     isSubmittingActionRef.current = true;
     setIsSubmittingAction(true);
@@ -284,8 +290,7 @@ export default function CombatScreen() {
           setActiveCombat(mapped);
         }
       } finally {
-        isSubmittingActionRef.current = false;
-        if (!cancelled) setIsSubmittingAction(false);
+        releaseSubmissionLock(submissionToken);
       }
     }
 
@@ -296,11 +301,10 @@ export default function CombatScreen() {
       window.clearTimeout(timeout);
       if (!started) {
         neutralActionKeyRef.current = null;
-        isSubmittingActionRef.current = false;
-        setIsSubmittingAction(false);
+        releaseSubmissionLock(submissionToken);
       }
     };
-  }, [activeCombat, combatAnimationBlocked, gameState, session?.user?.id, setActiveCombat, settleResolvedCombat]);
+  }, [activeCombat, combatAnimationBlocked, gameState, releaseSubmissionLock, setActiveCombat, settleResolvedCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -314,6 +318,7 @@ export default function CombatScreen() {
   const submitAction = async (action: Record<string, unknown>) => {
     if (!canSubmitAction || isSubmittingActionRef.current) return;
 
+    const submissionToken = ++actionSubmissionTokenRef.current;
     isSubmittingActionRef.current = true;
     setIsSubmittingAction(true);
     try {
@@ -338,8 +343,7 @@ export default function CombatScreen() {
         setActiveCombat(mapped);
       }
     } finally {
-      isSubmittingActionRef.current = false;
-      setIsSubmittingAction(false);
+      releaseSubmissionLock(submissionToken);
     }
   };
 
@@ -1978,14 +1982,17 @@ function InitiativeQueue({
   const queueRef = useRef<HTMLDivElement>(null);
   const [visibleRadius, setVisibleRadius] = useState(3);
   const unitsById = new Map(combat.boardState.units.map((unit) => [unit.id, unit]));
-  const initiativeOrder = (combat.turnQueue.length > 0 ? combat.turnQueue : buildTurnQueue(combat.boardState.units, combat.round))
+  const currentRoundOrder = (combat.turnQueue.length > 0 ? combat.turnQueue : buildTurnQueue(combat.boardState.units, combat.round))
     .filter((id) => unitsById.get(id)?.count);
-  const queue = getCenteredInitiativeSlots(initiativeOrder, combat.currentUnitId, visibleRadius)
+  const nextRoundOrder = buildTurnQueue(combat.boardState.units, combat.round + 1)
+    .filter((id) => unitsById.get(id)?.count);
+  const initiativeOrder = [...currentRoundOrder, ...nextRoundOrder];
+  const queue = getCenteredInitiativeSlots(initiativeOrder, combat.currentUnitId, visibleRadius, currentRoundOrder.length)
     .map((slot) => {
       const unit = unitsById.get(slot.id);
       return unit && unit.count > 0 ? { ...slot, unit } : null;
     })
-    .filter((slot): slot is { id: string; offset: number; unit: CombatBoardUnit } => Boolean(slot));
+    .filter((slot): slot is { id: string; offset: number; startsNextRound: boolean; unit: CombatBoardUnit } => Boolean(slot));
 
   useEffect(() => {
     const element = queueRef.current;
@@ -2007,53 +2014,67 @@ function InitiativeQueue({
   return (
     <div ref={queueRef} className="mx-auto flex max-w-full items-center justify-center overflow-hidden">
       <div className="flex max-w-full items-center gap-1.5 overflow-hidden rounded-md border border-amber-700/50 bg-black/55 px-2 py-1.5 shadow-[0_10px_26px_rgba(0,0,0,0.5),0_0_0_1px_rgba(252,211,77,0.12)_inset] backdrop-blur-sm">
-        {queue.map(({ unit, offset }) => {
-        const rule = getUnitRule(unit.unitType);
-        const active = offset === 0;
-        const inspected = inspectedUnitId === unit.id;
-        const previous = offset < 0;
-        return (
-          <button
-            type="button"
-            key={`${unit.id}-${offset}`}
-            className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${
-              active
-                ? "h-16 w-14 border-amber-200 bg-amber-950/90 shadow-[0_0_18px_rgba(251,191,36,0.68)]"
-                : inspected
-                  ? "h-14 w-12 border-sky-300 bg-sky-950/85 shadow-[0_0_12px_rgba(125,211,252,0.42)]"
-                  : unit.side === "attacker"
-                    ? "h-14 w-12 border-blue-400/55 bg-blue-950/65"
-                    : "h-14 w-12 border-red-400/55 bg-red-950/65"
-            } ${previous ? "opacity-55 saturate-75" : ""}`}
-            title={`${offset === 0 ? "Actuel" : offset < 0 ? `${Math.abs(offset)} precedent` : `${offset} suivant`} - ${rule.label} x${unit.count} / v${unit.speed}`}
-            onClick={() => onInspectUnit(unit.id)}
-          >
-            <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/75 to-black/30`}>
-              <InitiativeMiniature unit={unit} />
-            </span>
-            {active && <span className="absolute inset-x-1 bottom-4 h-px bg-amber-200/80" />}
-            <span className="absolute inset-x-0 bottom-0 grid h-4 place-items-center bg-black/72 px-1 text-[10px] font-black leading-none text-stone-100">
-              x{unit.count}
-            </span>
-          </button>
-        );
+        {queue.map(({ unit, offset, startsNextRound }) => {
+          const rule = getUnitRule(unit.unitType);
+          const active = offset === 0;
+          const inspected = inspectedUnitId === unit.id;
+          const previous = offset < 0;
+          return (
+            <div key={`${unit.id}-${offset}`} className="flex shrink-0 items-center gap-1.5">
+              {startsNextRound && (
+                <span
+                  className="h-14 w-1 shrink-0 rounded-full border border-amber-200/70 bg-gradient-to-b from-amber-100 via-amber-300 to-orange-700 shadow-[0_0_12px_rgba(251,191,36,0.72)]"
+                  title="Debut du prochain round"
+                  aria-label="Debut du prochain round"
+                />
+              )}
+              <button
+                type="button"
+                className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${
+                  active
+                    ? "h-16 w-14 border-amber-200 bg-amber-950/90 shadow-[0_0_18px_rgba(251,191,36,0.68)]"
+                    : inspected
+                      ? "h-14 w-12 border-sky-300 bg-sky-950/85 shadow-[0_0_12px_rgba(125,211,252,0.42)]"
+                      : unit.side === "attacker"
+                        ? "h-14 w-12 border-blue-400/55 bg-blue-950/65"
+                        : "h-14 w-12 border-red-400/55 bg-red-950/65"
+                } ${previous ? "opacity-55 saturate-75" : ""}`}
+                title={`${offset === 0 ? "Actuel" : offset < 0 ? `${Math.abs(offset)} precedent` : `${offset} suivant`} - ${rule.label} x${unit.count} / v${unit.speed}`}
+                onClick={() => onInspectUnit(unit.id)}
+              >
+                <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/75 to-black/30`}>
+                  <InitiativeMiniature unit={unit} />
+                </span>
+                {active && <span className="absolute inset-x-1 bottom-4 h-px bg-amber-200/80" />}
+                <span className="absolute inset-x-0 bottom-0 grid h-4 place-items-center bg-black/72 px-1 text-[10px] font-black leading-none text-stone-100">
+                  x{unit.count}
+                </span>
+              </button>
+            </div>
+          );
         })}
       </div>
     </div>
   );
 }
 
-function getCenteredInitiativeSlots(order: string[], currentUnitId: string | null | undefined, radius: number) {
+function getCenteredInitiativeSlots(order: string[], currentUnitId: string | null | undefined, radius: number, nextRoundStartIndex = order.length) {
   if (order.length === 0) return [];
   const currentIndex = Math.max(0, currentUnitId ? order.indexOf(currentUnitId) : 0);
   const offsets = order.length === 1
     ? [0]
     : Array.from({ length: radius * 2 + 1 }, (_, index) => index - radius);
 
-  return offsets.map((offset) => ({
-    id: order[(currentIndex + offset + order.length * 4) % order.length],
-    offset,
-  }));
+  return offsets.map((offset) => {
+    const rawIndex = currentIndex + offset;
+    const index = ((rawIndex % order.length) + order.length) % order.length;
+    const startsNextRound = offset > 0 && rawIndex === nextRoundStartIndex;
+    return {
+      id: order[index],
+      offset,
+      startsNextRound,
+    };
+  });
 }
 
 function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {

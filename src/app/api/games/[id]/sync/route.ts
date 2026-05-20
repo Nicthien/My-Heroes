@@ -45,5 +45,6 @@ export async function GET(
       sanitizeCombatForViewer(combat, player?.id, isSpectator)
     ),
     neutralArmies: game.neutralArmies ?? [],
+    gates: game.gates ?? [],
   });
 }

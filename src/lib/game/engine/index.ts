@@ -17,7 +17,7 @@ import { getUnitRule } from "../units";
 import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
-import { buildConnectionsAndWalls } from "./connections";
+import { buildConnectionsAndWalls, enforceChokepointGateFrames } from "./connections";
 import { applyChokepointGuards, fillZone, placeStartingEconomy, placeTownInZone } from "./placement";
 import { buildRoads, buildSecondaryRoads } from "./roads";
 import { placeDecor } from "./decor";
@@ -350,6 +350,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   const roadOptions = { allowWaterRoads: fullTemplate.allowRoadBridges !== false };
   buildRoads(tiles, width, height, townPositions, "paved", roadOptions);
   buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10, roadOptions);
+  enforceChokepointGateFrames(tiles, width, height, chokepoints, "paved");
 
   // Batiments d'aventure hors route pour recompenser l'exploration.
   placeAdventureBuildings({ tiles, zoneGrid, width, height, rng });
@@ -365,6 +366,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     t.movementCost = getMovementCost(t.terrain);
     t.road ??= "paved";
   }
+  enforceChokepointGateFrames(tiles, width, height, chokepoints, "paved");
 
   return {
     width,
@@ -382,7 +384,11 @@ function pickDefaultTemplate(playerCount: number, rng: RNG): string {
     // fallback à JEBUS_CROSS si rien ne matche
     return "jebus-cross";
   }
-  return compatible[Math.floor(rng() * compatible.length)].id;
+  const gatedTemplates = compatible.filter((template) =>
+    template.sealZoneBorders !== false && template.connections.length > 0
+  );
+  const candidates = gatedTemplates.length > 0 ? gatedTemplates : compatible;
+  return candidates[Math.floor(rng() * candidates.length)].id;
 }
 
 export function placePlayerStart(

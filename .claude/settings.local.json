@@ -16,7 +16,8 @@
       "Bash(echo \"exit=$?\")",
       "WebFetch(domain:heroes.thelazy.net)",
       "Bash(powershell -Command \"Get-Content 'c:\\\\AI\\\\My Heroes\\\\.env.example'\")",
-      "Bash(supabase start *)"
+      "Bash(supabase start *)",
+      "Bash(git diff *)"
     ]
   }
 }

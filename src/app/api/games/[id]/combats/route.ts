@@ -20,6 +20,7 @@ import {
   getUsableAdventureMovement,
   normalizeMapMovement,
 } from "@/lib/game/engine";
+import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
@@ -84,7 +85,7 @@ export async function POST(
     status: string;
     stacks: UnitStack[];
   }>;
-  const gates = (game?.gates ?? []) as unknown as Array<{
+  const dbGates = (game?.gates ?? []) as unknown as Array<{
     id: string;
     gamePlayerId?: string | null;
     x: number;
@@ -112,6 +113,7 @@ export async function POST(
   }
 
   const mapData = normalizeMapMovement(game.mapData as GameMap);
+  const gates = getEffectiveGates(dbGates, mapData);
   const defender = getDefender({
     targetId: String(body.targetId ?? ""),
     targetType: String(body.targetType ?? ""),
@@ -187,6 +189,10 @@ export async function POST(
     }
   } else if (!areAdventurePositionsAdjacent({ x: attacker.x, y: attacker.y }, defenderPosition)) {
     return NextResponse.json({ error: "Le heros doit s'arreter devant la cible avant le combat" }, { status: 400 });
+  }
+
+  if (body.targetType === "gate") {
+    await ensureGateRow(supabase, id, targetDefender);
   }
 
   const environment = buildCombatEnvironment(mapData, { x: targetDefender.x, y: targetDefender.y });
@@ -277,10 +283,16 @@ export async function POST(
     if (attackerWon) {
       if (targetDefender.neutralArmyId) {
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
+        await supabase
+          .from("gates")
+          .update({ game_player_id: gamePlayer.id, guardian_power: 0 })
+          .eq("game_id", id)
+          .eq("x", targetDefender.x)
+          .eq("y", targetDefender.y);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (body.targetType === "gate") {
-        await captureGate(supabase, id, targetDefender.id, gamePlayer.id);
+        await captureGate(supabase, id, targetDefender, gamePlayer.id);
       } else if (body.targetType === "creature_bank" && creatureBankDefender && result?.creatureBankReward) {
         await markCreatureBankDefeated(supabase, id, game.mapState as Record<string, unknown>, result.creatureBankReward);
       } else if (targetDefender.heroId && targetDefender.playerId) {
@@ -327,6 +339,44 @@ function getGateDefender(
     x: gate.x,
     y: gate.y,
   };
+}
+
+function getEffectiveGates(
+  gates: Array<{ id: string; gamePlayerId?: string | null; x: number; y: number; guardianPower?: number; garrison?: UnitStack[] }>,
+  mapData: GameMap,
+) {
+  const byId = new Map(gates.map((gate) => [gate.id, gate]));
+  const byPosition = new Map(gates.map((gate) => [`${gate.x},${gate.y}`, gate]));
+
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (object?.type !== "gate") continue;
+      const key = `${tile.x},${tile.y}`;
+      if (byId.has(object.id) || byPosition.has(key)) continue;
+      const garrison = createNeutralArmyStacksForTile(tile, object.guardianPower ?? 100, object.id)
+        .map((stack): UnitStack => ({
+          id: `${object.id}-stack-${stack.position}`,
+          unitType: stack.unitType,
+          count: stack.count,
+          health: stack.health,
+          maxHealth: stack.maxHealth,
+          position: stack.position,
+        }));
+      const gate = {
+        id: object.id,
+        gamePlayerId: object.ownerId ?? null,
+        x: tile.x,
+        y: tile.y,
+        guardianPower: object.guardianPower ?? 0,
+        garrison,
+      };
+      byId.set(gate.id, gate);
+      byPosition.set(key, gate);
+    }
+  }
+
+  return [...byId.values()];
 }
 
 function getCreatureBankDefender(
@@ -387,15 +437,55 @@ async function markCreatureBankDefeated(
 async function captureGate(
   supabase: ReturnType<typeof createAdminClient>,
   gameId: string,
-  gateId: string,
+  gate: { id: string; x: number; y: number },
   playerId: string
 ) {
   await supabase
     .from("gates")
-    .update({ game_player_id: playerId, guardian_power: 0 })
-    .eq("game_id", gameId)
-    .eq("id", gateId);
-  await supabase.from("gate_stacks").delete().eq("gate_id", gateId);
+    .upsert({
+      id: gate.id,
+      game_id: gameId,
+      game_player_id: playerId,
+      x: gate.x,
+      y: gate.y,
+      guardian_power: 0,
+    }, { onConflict: "id" });
+  await supabase.from("gate_stacks").delete().eq("gate_id", gate.id);
+}
+
+async function ensureGateRow(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  gate: { id: string; playerId?: string | null; x: number; y: number; armies?: UnitStack[] },
+) {
+  await supabase
+    .from("gates")
+    .upsert({
+      id: gate.id,
+      game_id: gameId,
+      game_player_id: gate.playerId ?? null,
+      x: gate.x,
+      y: gate.y,
+      guardian_power: 0,
+    }, { onConflict: "id" });
+
+  if (!gate.armies?.length) return;
+
+  const { data: existingStacks, error: stackReadError } = await supabase
+    .from("gate_stacks")
+    .select("id")
+    .eq("gate_id", gate.id)
+    .limit(1);
+  if (stackReadError || (existingStacks?.length ?? 0) > 0) return;
+
+  await supabase.from("gate_stacks").insert(gate.armies.map((stack, position) => ({
+    gate_id: gate.id,
+    unit_type: stack.unitType,
+    count: stack.count,
+    health: stack.health,
+    max_health: stack.maxHealth,
+    position,
+  })));
 }
 
 function combatInvolvesPlayer(combat: ReturnType<typeof toCombat>, playerId: string) {

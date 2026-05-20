@@ -85,6 +85,7 @@ const GATE_DISPLAY_HEIGHT = Math.round(GATE_DISPLAY_WIDTH / 1.202);
 const GATE_ORIGIN_X = 0.5;
 const GATE_ORIGIN_Y = 0.7;
 const GATE_OFFSET_Y = 0;
+const GATE_DEPTH_CLEARANCE = 256;
 const TOWN_OFFSET_Y = TILE_FOOT_OFFSET_Y + 7;
 const HERO_OFFSET_Y = 6;
 const TOWN_HERO_OFFSET_Y = TOWN_OFFSET_Y + 12;
@@ -185,6 +186,7 @@ function getOriginForObject(object: MapObjectData): SpriteOrigin {
   if (object.type === "hero") return object.onWater ? BOAT_SPRITE_ORIGIN : HERO_SPRITE_ORIGIN;
   if (object.type === "town") return TOWN_ORIGINS[object.faction] ?? DEFAULT_SPRITE_ORIGIN;
   if (object.type === "building") return RESOURCE_BUILDING_ORIGIN;
+  if (object.type === "gate") return { originX: GATE_ORIGIN_X, originY: GATE_ORIGIN_Y };
   if (object.type === "adventure_building" && object.buildingType) {
     return ADVENTURE_BUILDING_ORIGINS[object.buildingType] ?? DEFAULT_SPRITE_ORIGIN;
   }
@@ -1511,13 +1513,74 @@ class PhaserMapScene extends Phaser.Scene {
   getObjectsAtScreen(screenX: number, screenY: number) {
     const world = this.cameras.main.getWorldPoint(screenX, screenY);
     const objectHits = this.objects.filter((object) => this.isPointInsideObject(world.x, world.y, object));
-    if (objectHits.length > 0) {
-      return objectHits.sort((a, b) => this.getObjectDepth(b) - this.getObjectDepth(a));
+    const mapGateHits = this.getMapGateObjectsNearWorld(world.x, world.y)
+      .filter((object) => this.isPointInsideObject(world.x, world.y, object));
+    const hits = this.dedupeObjectHits([...objectHits, ...mapGateHits]);
+    if (hits.length > 0) {
+      return hits.sort((a, b) => this.getObjectDepth(b) - this.getObjectDepth(a));
     }
 
     const tile = this.getTileAtScreen(screenX, screenY);
     if (!tile) return [];
-    return this.objects.filter((object) => object.x === tile.x && object.y === tile.y);
+    return this.dedupeObjectHits([
+      ...this.objects.filter((object) => object.x === tile.x && object.y === tile.y),
+      ...this.getMapGateObjectsAtTile(tile),
+    ]);
+  }
+
+  private dedupeObjectHits(objects: MapObjectData[]) {
+    const seen = new Set<string>();
+    return objects.filter((object) => {
+      const key = `${object.type}:${object.id}:${object.x},${object.y}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private getMapGateObjectsNearWorld(worldX: number, worldY: number) {
+    if (!this.map) return [];
+    const cart = isoToCart(worldX, worldY);
+    const centerX = Math.round(cart.x);
+    const centerY = Math.round(cart.y);
+    const gates: MapObjectData[] = [];
+
+    for (let dy = -4; dy <= 4; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
+        const x = centerX + dx;
+        const y = centerY + dy;
+        if (x < 0 || x >= this.map.width || y < 0 || y >= this.map.height) continue;
+        const tile = this.map.tiles[y]?.[x];
+        const gate = this.mapGateTileToObject(tile);
+        if (gate) gates.push(gate);
+      }
+    }
+
+    return gates;
+  }
+
+  private getMapGateObjectsAtTile(position: Position) {
+    if (!this.map) return [];
+    const tile = this.map.tiles[position.y]?.[position.x];
+    const gate = this.mapGateTileToObject(tile);
+    return gate ? [gate] : [];
+  }
+
+  private mapGateTileToObject(tile: MapTile | undefined): MapObjectData | null {
+    const object = tile?.object;
+    if (!tile || object?.type !== "gate") return null;
+
+    return {
+      type: "gate",
+      id: object.id,
+      playerId: object.ownerId ?? null,
+      x: tile.x,
+      y: tile.y,
+      faction: "",
+      color: "",
+      name: object.ownerId ? "Porte controlee" : "Porte neutre",
+      guardianPower: object.guardianPower ?? 0,
+    };
   }
 
   private isPointInsideObject(worldX: number, worldY: number, object: MapObjectData) {
@@ -2433,13 +2496,21 @@ class PhaserMapScene extends Phaser.Scene {
     const sprite = this.add.image(isoX, isoY + GATE_OFFSET_Y, textureKey);
     sprite.setOrigin(GATE_ORIGIN_X, GATE_ORIGIN_Y);
     sprite.setDisplaySize(GATE_DISPLAY_WIDTH, GATE_DISPLAY_HEIGHT);
-    sprite.setDepth(isoY + GATE_OFFSET_Y);
+    sprite.setDepth(this.getGateSpriteDepth(isoY));
     if (object.ownerId) sprite.setTint(0xe8f0ff);
     this.mapObjectLayer.add(sprite);
   }
 
+  private getGateSpriteDepth(isoY: number) {
+    const visualFootOffset = GATE_DISPLAY_HEIGHT * (1 - GATE_ORIGIN_Y);
+    return isoY + GATE_OFFSET_Y + visualFootOffset + GATE_DEPTH_CLEARANCE;
+  }
+
   private getGateSpritePath(tile?: MapTile) {
     if (!tile) return MAP_SPRITES.gates.diagonalDown;
+    const roadAxis = tile.object?.type === "gate" ? tile.object.roadAxis : undefined;
+    if (roadAxis === "x") return MAP_SPRITES.gates.diagonalUp;
+    if (roadAxis === "y") return MAP_SPRITES.gates.diagonalDown;
 
     const connections = this.getRoadConnections(tile);
     const diagonalDownScore = connections.filter((side) => side === "northWest" || side === "southEast").length;
@@ -2558,6 +2629,9 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private createRenderedStaticObject(object: MapObjectData) {
+    const map = this.map;
+    if (!map) return null;
+
     const iso = cartToIso(object.x, object.y);
     const surfaceY = this.getSurfaceY(object.x, object.y);
     const rendered: RenderedStaticObject = { object };
@@ -2593,6 +2667,39 @@ class PhaserMapScene extends Phaser.Scene {
       const metrics = getObjectMetrics(object);
       if (!metrics) return null;
       rendered.sprite = this.addObjectSprite(object, iso.x, surfaceY + metrics.offsetY, MAP_SPRITES.adventureBuildings[object.buildingType], metrics.width, metrics.height, getOriginForObject(object)) ?? undefined;
+    } else if (object.type === "gate") {
+      const tile = map.tiles[object.y]?.[object.x];
+      const textureKey = this.getGateSpritePath(tile);
+      const sprite = this.addObjectSprite(
+        object,
+        iso.x,
+        surfaceY + GATE_OFFSET_Y,
+        textureKey,
+        GATE_DISPLAY_WIDTH,
+        GATE_DISPLAY_HEIGHT,
+        getOriginForObject(object),
+      );
+      if (!sprite) return null;
+      sprite.setDepth(this.getGateSpriteDepth(surfaceY));
+      if (object.playerId) sprite.setTint(0xe8f0ff);
+      rendered.sprite = sprite;
+      if (object.playerId) {
+        const bounds = this.getObjectBounds(object);
+        if (bounds) {
+          const width = bounds.right - bounds.left;
+          const height = bounds.bottom - bounds.top;
+          const bannerPlacement = getGateBannerPlacement(textureKey);
+          rendered.banner = this.addBanner(
+            this.objectLayer,
+            bounds.left + width * bannerPlacement.xRatio,
+            bounds.top + height * bannerPlacement.yRatio,
+            object.color || "#808080",
+            18,
+            12,
+            sprite.depth + 24,
+          );
+        }
+      }
     } else if (object.type === "combat") {
       const markerY = surfaceY - 60;
       const markerDepth = surfaceY + 1000;
@@ -4841,6 +4948,7 @@ function getObjectMetrics(object: MapObjectData) {
   }
   if (object.type === "town") return { width: 146, height: 110, offsetY: TOWN_OFFSET_Y };
   if (object.type === "building") return { width: RESOURCE_BUILDING_DISPLAY_SIZE, height: RESOURCE_BUILDING_DISPLAY_SIZE, offsetY: RESOURCE_BUILDING_OFFSET_Y };
+  if (object.type === "gate") return { width: GATE_DISPLAY_WIDTH, height: GATE_DISPLAY_HEIGHT, offsetY: GATE_OFFSET_Y };
   if (object.type === "adventure_building") {
     if (object.buildingType === "stargate") return { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
     if (isCreatureBankType(object.buildingType)) {
@@ -4870,6 +4978,12 @@ function getHeroTravelMetrics(object: MapObjectData) {
 function getHeroBannerMetrics(object: MapObjectData) {
   if (object.inTown) return { xOffset: 7, baseOffsetY: 10, poleHeight: 27, width: 7, height: 5 };
   return { xOffset: 10, baseOffsetY: 8, poleHeight: 42, width: 9, height: 6 };
+}
+
+function getGateBannerPlacement(textureKey: string) {
+  return textureKey === MAP_SPRITES.gates.diagonalUp
+    ? { xRatio: 0.77, yRatio: 0.18 }
+    : { xRatio: 0.23, yRatio: 0.18 };
 }
 
 function getHeroDirection(from: Position, to: Position, fallback: HeroDirection): HeroDirection {

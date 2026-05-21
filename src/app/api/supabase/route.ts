@@ -14,12 +14,21 @@ async function proxyRequest(request: NextRequest) {
   headers.set("host", new URL(targetOrigin).host);
   headers.delete("origin");
 
-  const response = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body: request.body,
-    redirect: "manual",
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(targetUrl, {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: "manual",
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Supabase local est indisponible. Demarrez la stack avec npm run dev ou npm run dev:supabase." },
+      { status: 503 },
+    );
+  }
 
   const responseHeaders = new Headers(response.headers);
   ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"].forEach((name) => {

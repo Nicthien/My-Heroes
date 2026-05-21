@@ -26,7 +26,16 @@ async function proxyRequest(request: NextRequest, path: string[] = []) {
     fetchOptions.duplex = 'half';
   }
 
-  const response = await fetch(targetUrl, fetchOptions);
+  let response: Response;
+
+  try {
+    response = await fetch(targetUrl, fetchOptions);
+  } catch {
+    return NextResponse.json(
+      { error: "Supabase local est indisponible. Demarrez la stack avec npm run dev ou npm run dev:supabase." },
+      { status: 503 },
+    );
+  }
 
   const responseHeaders = new Headers(response.headers);
   ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"].forEach((name) => {

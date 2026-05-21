@@ -143,6 +143,7 @@ export function executeManualCombatAction(params: {
   action: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string };
   attackerStats: { attack: number; defense: number };
   defenderStats: { attack: number; defense: number };
+  immortalHeroId?: string | null;
 }) {
   const log: string[] = [];
   let didAct = false;
@@ -194,7 +195,7 @@ export function executeManualCombatAction(params: {
       });
       if (roll.profile.canStrike) {
         if (actionType === "SHOOT") actor.shots = Math.max(0, actor.shots - 1);
-        applyRolledDamage(actor, target, roll, log);
+        applyRolledDamage(actor, target, roll, log, false, params.immortalHeroId);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
           const retaliationRoll = rollCombatDamage({
@@ -205,7 +206,7 @@ export function executeManualCombatAction(params: {
             actionType: "ATTACK",
             terrain: params.terrain,
           });
-          applyRolledDamage(target, actor, retaliationRoll, log, true);
+          applyRolledDamage(target, actor, retaliationRoll, log, true, params.immortalHeroId);
           target.hasRetaliated = true;
         }
       }
@@ -281,8 +282,15 @@ function applyRolledDamage(
   defender: CombatBoardUnit,
   roll: ReturnType<typeof rollCombatDamage>,
   log: string[],
-  retaliation = false
+  retaliation = false,
+  immortalHeroId?: string | null
 ) {
+  if (defender.heroId && defender.heroId === immortalHeroId) {
+    const side = attacker.side === "attacker" ? "Heros" : "Defenseur";
+    const verb = retaliation ? "riposte" : "attaque";
+    log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb}: mode dieu, aucune perte.`);
+    return;
+  }
   const { lost } = applyDamageToStack(defender, roll.damage);
   const side = attacker.side === "attacker" ? "Heros" : "Defenseur";
   const verb = retaliation ? "riposte" : "attaque";
@@ -347,16 +355,23 @@ function createCombatTerrain() {
   return terrain;
 }
 
-export function resolveAutomaticCombat(attacker: CombatParticipantSnapshot, defender: CombatParticipantSnapshot): CombatSummary {
+export function resolveAutomaticCombat(
+  attacker: CombatParticipantSnapshot,
+  defender: CombatParticipantSnapshot,
+  options: { immortalHeroId?: string | null } = {}
+): CombatSummary {
   const result = autoResolveCombat(attacker, defender);
-  const attackerWins = result.winnerHeroId === attacker.id;
-  const attackerLossRatio = attackerWins ? result.winnerLossRatio : 1;
-  const defenderLossRatio = attackerWins ? 1 : result.winnerLossRatio;
+  const attackerIsImmortal = Boolean(options.immortalHeroId && (attacker.heroId === options.immortalHeroId || attacker.id === options.immortalHeroId));
+  const defenderIsImmortal = Boolean(options.immortalHeroId && (defender.heroId === options.immortalHeroId || defender.id === options.immortalHeroId));
+  const attackerWins = attackerIsImmortal || (!defenderIsImmortal && result.winnerHeroId === attacker.id);
+  const winnerLossRatio = attackerIsImmortal || defenderIsImmortal ? 0 : result.winnerLossRatio;
+  const attackerLossRatio = attackerWins ? winnerLossRatio : 1;
+  const defenderLossRatio = attackerWins ? 1 : winnerLossRatio;
   const attackerNext = applyLossesToArmies(attacker.armies, attackerLossRatio, !attackerWins);
   const defenderNext = applyLossesToArmies(defender.armies, defenderLossRatio, attackerWins);
   return {
-    winnerId: result.winnerHeroId,
-    loserId: result.loserHeroId,
+    winnerId: attackerWins ? attacker.id : defender.id,
+    loserId: attackerWins ? defender.id : attacker.id,
     attackerLosses: getLosses(attacker.armies, attackerNext),
     defenderLosses: getLosses(defender.armies, defenderNext),
     experienceGained: 500,

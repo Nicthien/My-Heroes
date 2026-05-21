@@ -27,6 +27,8 @@ interface GameStore {
   loadingNonce: number;
   isMovePending: boolean;
   devRevealMap: boolean;
+  devGodMode: boolean;
+  devTeleportArmed: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
 
@@ -49,6 +51,8 @@ interface GameStore {
   beginLoading: (message?: string, progress?: number) => void;
   updateLoadingProgress: (progress: number, message?: string) => void;
   setDevRevealMap: (reveal: boolean) => void;
+  setDevGodMode: (enabled: boolean) => void;
+  setDevTeleportArmed: (armed: boolean) => void;
   resetGame: () => void;
 }
 
@@ -74,6 +78,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadingNonce: 0,
   isMovePending: false,
   devRevealMap: false,
+  devGodMode: false,
+  devTeleportArmed: false,
   cameraTarget: null,
   zoomRequest: null,
 
@@ -153,6 +159,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadingMessage: message ?? state.loadingMessage,
     })),
   setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
+  setDevGodMode: (enabled) => set({ devGodMode: enabled }),
+  setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
 
   resetGame: () =>
     set({
@@ -173,6 +181,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadingNonce: 0,
       isMovePending: false,
       devRevealMap: false,
+      devGodMode: false,
+      devTeleportArmed: false,
       cameraTarget: null,
       zoomRequest: null,
     }),

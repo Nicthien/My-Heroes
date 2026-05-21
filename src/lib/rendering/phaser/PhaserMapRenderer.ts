@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPreferences";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
@@ -253,8 +254,7 @@ class PhaserMapScene extends Phaser.Scene {
     });
 
     for (const path of MAP_SPRITE_PATHS) {
-      if (path.endsWith(".svg")) this.load.svg(path, path);
-      else this.load.image(path, path);
+      this.load.image(path, path);
     }
     for (const sound of Object.values(MOVEMENT_SOUNDS)) {
       this.load.audio(sound.key, sound.path);
@@ -2199,6 +2199,11 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private playMovementSound(kind: MovementSoundKind) {
+    if (getSavedAudioMuted()) return;
+
+    const effectsVolume = getSavedEffectsVolume();
+    if (effectsVolume <= 0) return;
+
     const soundConfig = MOVEMENT_SOUNDS[kind];
     const now = this.time.now;
     if (now - this.lastMovementSoundAt[kind] < soundConfig.minIntervalMs) {
@@ -2208,7 +2213,7 @@ class PhaserMapScene extends Phaser.Scene {
     let started = false;
     try {
       started = this.sound.play(soundConfig.key, {
-        volume: soundConfig.volume,
+        volume: soundConfig.volume * effectsVolume,
       });
     } catch {
       return;
@@ -3025,7 +3030,5 @@ export class PhaserMapRenderer implements MapRenderer {
     this.scene = null;
   }
 }
-
-
 
 

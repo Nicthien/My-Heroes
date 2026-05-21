@@ -16,7 +16,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Every route under `src/app/api/games/` must gate access with `requireCurrentUser(request)` and bail on the returned `response` if `user` is null.
 - Writes go through `createAdminClient()` (Supabase service role, bypasses RLS). Do not use the browser `createClient()` server-side.
 - The browser only does **reads** via Supabase realtime + the `/api/supabase/[...path]` proxy. Never add a client-side write path.
-- For new actions on an entity, follow the existing `if (action.type === "...")` chain in `src/app/api/games/[id]/action/route.ts` rather than creating a parallel handler file.
+- For new game-level actions on an entity, follow the existing `if (action.type === "...")` chain in `src/app/api/games/[id]/action/route.ts` rather than creating a parallel handler file. Combat-specific actions live in the existing combat action route under `src/app/api/games/[id]/combats/[combatId]/action/route.ts`.
 
 # Database Schema
 
@@ -65,7 +65,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Component Layout
 
-- Heavy screens (HUD, CombatScreen, PhaserMapScene) are intentionally split into small sibling files. When adding code, place it next to the closest existing module rather than growing the orchestrator.
+- Heavy screens (HUD, CombatScreen, PhaserMapScene inside `PhaserMapRenderer.ts`) are intentionally split into small sibling files. When adding code, place it next to the closest existing module rather than growing the orchestrator.
 - For new HUD panels, follow `HeroPanel.tsx` / `TownXxxTab.tsx`: one component, explicit props, no global store calls except via `useGameStore.getState()` for one-shot actions.
 - For new stateful behaviors, prefer a custom hook (`useDevPanel`, `useTurnNotifications`) over inlining `useState`/`useEffect` in the orchestrator.
 - For rendering helpers in `src/lib/rendering/phaser/`, prefer a pure free function in a sibling module over a new method on `PhaserMapScene`. Only add a class method when it must touch scene state (`this.add`, `this.fogLayer`, refs, etc.).
@@ -74,6 +74,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Testing
 
 - Smoke tests live in `tests/e2e/` (Playwright). Run `npm run test:e2e` before considering UI changes complete.
-- The Playwright suite covers auth pages plus `/dev/*` preview pages (HUD, combat, map showcase, sprites, RMG). When changing a heavy component, add or update the matching `/dev/*` page so the smoke test exercises it with mocked state.
+- The Playwright suite covers auth pages plus selected `/dev/*` preview pages (HUD, combat, map showcase, sprites, RMG). When changing a heavy component, add or update the matching `/dev/*` page and `tests/e2e/dev-pages.spec.ts` so the smoke test exercises it with mocked state.
 - Pure logic changes (engine, combat rules, map generator) should also pass the corresponding `npm run validate:*` script.
 - `npm run lint` and `npx tsc --noEmit` must stay clean — both are zero-warning targets in this repo.

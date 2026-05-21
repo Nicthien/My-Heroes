@@ -56,13 +56,13 @@ Effets initiaux:
 
 Ajouter quatre fichiers dans `public/assets/sprites/map/`:
 
-- `adventure-observatory.svg`
+- `adventure-observatory.webp`
   - Petite tour de pierre, dome cuivre/bleu nuit, lentille ou telescope, details d'etoiles.
-- `adventure-campfire.svg`
+- `adventure-campfire.webp`
   - Foyer, buches, sacoches, petites pieces/ressources visibles, flamme lisible a petite taille.
-- `adventure-lighthouse.svg`
+- `adventure-lighthouse.webp`
   - Tour claire, lanterne, faisceau stylise, base rocheuse/eau pour suggerer la cote.
-- `adventure-stargate.svg`
+- `adventure-stargate.webp`
   - Arche de pierre ancienne, runes, portail bleu/violet, base isometrique.
 
 Contraintes:

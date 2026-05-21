@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="gold-mine-title gold-mine-desc">
-  <title id="gold-mine-title">Mine d'or</title>
-  <desc id="gold-mine-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Mine d'or.</desc>
-  
-  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#7a6a52" stroke="#5a4a38" stroke-width="1.2"/><path d="M21 54 V42 Q32 28 43 42 V54 Z" fill="#120e06"/><path d="M19 41 H45 M20 41 V55 M44 41 V55" stroke="#7a5220" stroke-width="3" stroke-linecap="round"/><ellipse cx="32" cy="51" rx="8" ry="4" fill="#ffd700" opacity=".65"/><circle cx="13" cy="50" r="4" fill="#ffd700" stroke="#c8900a" stroke-width="1"/><path d="M47 28 L56 18 M55 18 L62 12 M55 18 L49 13" stroke="#5a4a38" stroke-width="2.3" stroke-linecap="round"/>
-</svg>

@@ -1,15 +1,14 @@
 "use client";
 
-import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   MUSIC_PREFERENCE_EVENT,
   clampMusicVolume,
-  getSavedMusicEnabled,
-  getSavedMusicVolume,
-  saveMusicEnabled,
-  saveMusicVolume,
+  getSavedAdventureMusicVolume,
+  getSavedAudioMuted,
 } from "@/lib/audio/musicPreferences";
+import AudioSettingsButton from "@/components/game/audio/AudioSettingsButton";
 
 const BPM = 74;
 const STEP_SECONDS = 60 / BPM / 2;
@@ -350,23 +349,22 @@ function createAdventureMusicEngine(initialVolume: number): AdventureMusicEngine
 
 export default function AdventureMusicControl() {
   const activeCombat = useGameStore((state) => state.activeCombat);
-  const [enabled, setEnabled] = useState(getSavedMusicEnabled);
-  const [volume, setVolume] = useState(getSavedMusicVolume);
+  const [muted, setMuted] = useState(getSavedAudioMuted);
+  const [volume, setVolume] = useState(getSavedAdventureMusicVolume);
   const [status, setStatus] = useState<MusicStatus>("idle");
   const engineRef = useRef<AdventureMusicEngine | null>(null);
 
-  const getEngine = useCallback(() => {
-    engineRef.current ??= createAdventureMusicEngine(volume);
+  const getEngine = useCallback((initialVolume = volume) => {
+    engineRef.current ??= createAdventureMusicEngine(initialVolume);
     return engineRef.current;
   }, [volume]);
 
-  const startMusic = useCallback(async () => {
-    if (activeCombat) return;
+  const startMusic = useCallback(async (targetVolume = getSavedAdventureMusicVolume()) => {
+    if (activeCombat || getSavedAudioMuted() || targetVolume <= 0) return;
     try {
-      const savedVolume = getSavedMusicVolume();
-      const engine = getEngine();
-      setVolume(savedVolume);
-      engine.setVolume(savedVolume);
+      const engine = getEngine(targetVolume);
+      setVolume(targetVolume);
+      engine.setVolume(targetVolume);
       engine.setSuppressed(false);
       await engine.start();
       setStatus("playing");
@@ -386,7 +384,7 @@ export default function AdventureMusicControl() {
   }, [stopEngine]);
 
   useEffect(() => {
-    if (activeCombat || !enabled) {
+    if (activeCombat || muted || volume <= 0) {
       stopEngine();
       return;
     }
@@ -404,23 +402,34 @@ export default function AdventureMusicControl() {
       window.removeEventListener("pointerdown", resume);
       window.removeEventListener("keydown", resume);
     };
-  }, [activeCombat, enabled, startMusic, status, stopEngine]);
+  }, [activeCombat, muted, startMusic, status, stopEngine, volume]);
 
   useEffect(() => {
-    if (!enabled || activeCombat) {
+    if (muted || activeCombat || volume <= 0) {
       stopEngine();
       return;
     }
 
     engineRef.current?.setVolume(volume);
-  }, [activeCombat, enabled, stopEngine, volume]);
+  }, [activeCombat, muted, stopEngine, volume]);
 
   useEffect(() => () => stopEngine(), [stopEngine]);
 
   useEffect(() => {
     const syncPreferences = () => {
-      setEnabled(getSavedMusicEnabled());
-      setVolume(getSavedMusicVolume());
+      const nextMuted = getSavedAudioMuted();
+      const nextVolume = getSavedAdventureMusicVolume();
+      setMuted(nextMuted);
+      setVolume(nextVolume);
+
+      if (activeCombat || nextMuted || nextVolume <= 0) {
+        stopMusic();
+        return;
+      }
+
+      engineRef.current?.setVolume(nextVolume);
+      setStatus("waiting");
+      void startMusic(nextVolume);
     };
 
     window.addEventListener(MUSIC_PREFERENCE_EVENT, syncPreferences);
@@ -430,99 +439,13 @@ export default function AdventureMusicControl() {
       window.removeEventListener(MUSIC_PREFERENCE_EVENT, syncPreferences);
       window.removeEventListener("storage", syncPreferences);
     };
-  }, []);
-
-  const toggleMusic = () => {
-    const nextEnabled = !enabled;
-    setEnabled(nextEnabled);
-    saveMusicEnabled(nextEnabled);
-
-    if (nextEnabled) {
-      setStatus("waiting");
-      void startMusic();
-      return;
-    }
-
-    stopMusic();
-  };
-
-  const changeVolume = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextVolume = clampVolume(Number(event.currentTarget.value));
-    setVolume(nextVolume);
-    saveMusicVolume(nextVolume);
-    engineRef.current?.setVolume(nextVolume);
-  };
-
-  const label = activeCombat
-    ? "Combat"
-    : status === "playing"
-      ? "Ambiance"
-      : enabled
-        ? "Pret"
-        : "Muet";
-  const title = enabled ? "Couper la musique" : "Lancer la musique d'aventure";
+  }, [activeCombat, startMusic, stopMusic]);
 
   return (
-    <div
-      className={`flex h-[3.5rem] shrink-0 items-center gap-2 rounded-lg border px-2 shadow-inner shadow-black/40 transition ${
-        enabled
-          ? "border-emerald-400/50 bg-emerald-950/35 text-emerald-100"
-          : "border-amber-700/50 bg-stone-950/80 text-amber-200/90"
-      }`}
-      data-testid="adventure-music-control"
-    >
-      <button
-        type="button"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-current/35 bg-black/35 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
-        onClick={toggleMusic}
-        aria-label={title}
-        aria-pressed={enabled}
-        title={title}
-      >
-        {enabled ? <MusicOnIcon className="h-5 w-5" /> : <MusicOffIcon className="h-5 w-5" />}
-      </button>
-      <div className="hidden min-w-24 flex-col gap-1 sm:flex">
-        <span className="text-[10px] font-black uppercase leading-none tracking-[0.18em]">
-          {label}
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={0.65}
-          step={0.01}
-          value={volume}
-          onChange={changeVolume}
-          aria-label="Volume de la musique"
-          className="h-2 w-24 accent-amber-300"
-        />
-      </div>
-      {status === "error" && (
-        <span className="hidden text-[10px] font-bold uppercase tracking-wider text-red-200 lg:inline">
-          Audio indisponible
-        </span>
-      )}
-    </div>
-  );
-}
-
-function MusicOnIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 18V5l11-2v13" />
-      <circle cx="6" cy="18" r="3" fill="currentColor" stroke="none" />
-      <circle cx="17" cy="16" r="3" fill="currentColor" stroke="none" />
-      <path d="M9 9l11-2" />
-    </svg>
-  );
-}
-
-function MusicOffIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 18V5l8.5-1.55" />
-      <path d="M17 10v6" />
-      <circle cx="6" cy="18" r="3" fill="currentColor" stroke="none" />
-      <path d="m3 3 18 18" />
-    </svg>
+    <AudioSettingsButton
+      dataTestId="adventure-music-control"
+      error={status === "error"}
+      tone="adventure"
+    />
   );
 }

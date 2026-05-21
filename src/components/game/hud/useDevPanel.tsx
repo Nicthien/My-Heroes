@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { goldDivider, goldText } from "./theme";
@@ -21,11 +21,35 @@ import {
 
 void DEV_PANEL_MARGIN;
 
+type DevPanelTab = "performances" | "dev" | "cheats";
+
+const DEV_TABS: Array<{ id: DevPanelTab; label: string }> = [
+  { id: "performances", label: "Performances" },
+  { id: "dev", label: "Dev" },
+  { id: "cheats", label: "Cheats" },
+];
+
+const DEV_ROUTES = [
+  { href: "/dev/dashboard", label: "Dashboard dev" },
+  { href: "/dev/hud", label: "HUD de test" },
+  { href: "/dev/combat", label: "Combats de test" },
+  { href: "/dev/map-showcase", label: "Carte des tests" },
+  { href: "/dev/sprites", label: "Galerie de sprites" },
+  { href: "/dev/rmg", label: "RMG" },
+];
+
 export function useDevPanel(gameId: string | undefined) {
   const { data: session } = useSession();
+  const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
+  const setCombatMessage = useGameStore((state) => state.setCombatMessage);
+  const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const setDevRevealMap = useGameStore((state) => state.setDevRevealMap);
+  const devGodMode = useGameStore((state) => state.devGodMode);
+  const setDevGodMode = useGameStore((state) => state.setDevGodMode);
+  const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
+  const setDevTeleportArmed = useGameStore((state) => state.setDevTeleportArmed);
 
   const [showDevPassword, setShowDevPassword] = useState(false);
   const [devPassword, setDevPassword] = useState("");
@@ -33,7 +57,11 @@ export function useDevPanel(gameId: string | undefined) {
   const [showDevPanel, setShowDevPanel] = useState(getDevPanelVisible);
   const [devPanelCollapsed, setDevPanelCollapsed] = useState(getDevPanelCollapsed);
   const [devPanelPosition, setDevPanelPosition] = useState(getDevPanelPosition);
+  const [activeTab, setActiveTab] = useState<DevPanelTab>("performances");
   const devPerformanceStats = useDevPerformanceStats(showDevPanel);
+  const devFpsText = devPerformanceStats.hasFrameSample
+    ? `${Math.round(devPerformanceStats.fps)} FPS`
+    : "-- FPS";
   const devPanelRef = useRef<HTMLDivElement | null>(null);
   const devPanelDragRef = useRef<{
     startX: number;
@@ -125,6 +153,32 @@ export function useDevPanel(gameId: string | undefined) {
     if (refreshedState) setGameState(refreshedState);
   };
 
+  const toggleDevReveal = () => void setDevReveal(!devRevealMap);
+
+  const grantResources = async () => {
+    if (!gameId) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "DEV_GRANT_RESOURCES" }),
+    });
+    if (!response.ok) {
+      setCombatMessage("Impossible d'ajouter les ressources.");
+      return;
+    }
+    const refreshedState = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+    setCombatMessage("+1000 pour chaque ressource.");
+  };
+
+  const toggleTeleport = () => {
+    if (!selectedHeroId) {
+      setCombatMessage("Sélectionnez un héros avant d'armer la téléportation.");
+      return;
+    }
+    setDevTeleportArmed(!devTeleportArmed);
+  };
+
   useEffect(() => {
     if (!showDevPanel) return;
     if (typeof window === "undefined") return;
@@ -200,7 +254,12 @@ export function useDevPanel(gameId: string | undefined) {
             onPointerUp={stopDevPanelDrag}
             onPointerCancel={stopDevPanelDrag}
           >
-            <div className={`min-w-0 truncate text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`min-w-0 truncate text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+              <div className="shrink-0 rounded border border-amber-700/50 bg-black/35 px-2 py-0.5 font-mono text-[10px] font-black leading-none text-amber-100">
+                {devFpsText}
+              </div>
+            </div>
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
@@ -238,39 +297,90 @@ export function useDevPanel(gameId: string | undefined) {
           {!devPanelCollapsed && (
             <div className="max-h-[calc(100vh-6rem)] overflow-y-auto px-4 pb-4">
               <div className={goldDivider + " mb-3"} />
-              <DevPerformancePanel stats={devPerformanceStats} />
-              <div className="mt-3 space-y-2">
-                <button
-                  type="button"
-                  className="w-full rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300 disabled:cursor-default disabled:border-emerald-400/50 disabled:bg-emerald-900/70 disabled:text-emerald-100"
-                  onClick={() => void setDevReveal(true)}
-                  disabled={devRevealMap}
-                >
-                  {devRevealMap ? "Brouillard supprimé" : "Supprimer le brouillard"}
-                </button>
-                <button
-                  type="button"
-                  className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
-                  onClick={() => void setDevReveal(false)}
-                >
-                  Remettre le brouillard
-                </button>
-                <a
-                  href="/dev/map-showcase"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
-                >
-                  Showcase carte
-                </a>
-                <a
-                  href="/dev/sprites"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
-                >
-                  Galerie des sprites
-                </a>
+              <div className="grid grid-cols-3 gap-1 rounded-md border border-amber-900/45 bg-black/30 p-1">
+                {DEV_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`min-w-0 rounded px-1.5 py-1.5 text-[9px] font-black uppercase tracking-normal transition ${
+                      activeTab === tab.id
+                        ? "bg-amber-500 text-stone-950"
+                        : "text-amber-200/75 hover:bg-amber-950/60 hover:text-amber-100"
+                    }`}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                {activeTab === "performances" && <DevPerformancePanel stats={devPerformanceStats} />}
+
+                {activeTab === "dev" && (
+                  <div className="space-y-2">
+                    {DEV_ROUTES.map((route) => (
+                      <a
+                        key={route.href}
+                        href={route.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
+                      >
+                        {route.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {activeTab === "cheats" && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                        devRevealMap
+                          ? "border-emerald-400/50 bg-emerald-900/70 text-emerald-100 hover:border-emerald-200"
+                          : "border-amber-400/70 bg-amber-500 text-stone-950 hover:bg-amber-300"
+                      }`}
+                      onClick={toggleDevReveal}
+                    >
+                      {devRevealMap ? "Masquer la carte" : "Afficher la carte"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                        devGodMode
+                          ? "border-emerald-400/50 bg-emerald-900/70 text-emerald-100 hover:border-emerald-200"
+                          : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
+                      }`}
+                      onClick={() => setDevGodMode(!devGodMode)}
+                    >
+                      {devGodMode ? "Mode dieu actif" : "Activer le mode dieu"}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
+                      onClick={() => void grantResources()}
+                      disabled={!gameId}
+                    >
+                      Donner +1000 ressources
+                    </button>
+                    <button
+                      type="button"
+                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                        devTeleportArmed
+                          ? "border-sky-300/70 bg-sky-950 text-sky-100 hover:border-sky-100"
+                          : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
+                      }`}
+                      onClick={toggleTeleport}
+                    >
+                      {devTeleportArmed ? "Téléportation armée" : "Téléporter au prochain clic"}
+                    </button>
+                    <div className="rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2 text-[11px] font-semibold leading-snug text-amber-200/75">
+                      Héros cible : {getSelectedHeroName(gameState, selectedHeroId)}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -280,4 +390,13 @@ export function useDevPanel(gameId: string | undefined) {
   );
 
   return { openPassword, overlay };
+}
+
+function getSelectedHeroName(
+  gameState: ReturnType<typeof useGameStore.getState>["gameState"],
+  selectedHeroId: string | null
+) {
+  if (!selectedHeroId) return "aucun";
+  const hero = gameState?.players.flatMap((player) => player.heroes).find((item) => item.id === selectedHeroId);
+  return hero?.name ?? selectedHeroId;
 }

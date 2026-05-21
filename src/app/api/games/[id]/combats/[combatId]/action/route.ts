@@ -97,6 +97,10 @@ export async function POST(
   if (!gamePlayer.isAlive && !isAutomatedTurn) {
     return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
   }
+  const devGodModeHeroId = typeof action.devGodModeHeroId === "string" &&
+    ((gamePlayer as { heroes?: Array<{ id: string }> }).heroes ?? []).some((hero) => hero.id === action.devGodModeHeroId)
+      ? action.devGodModeHeroId
+      : null;
 
   const execution = executeActionThenNeutralTurns({
     units: boardState.units ?? [],
@@ -108,6 +112,7 @@ export async function POST(
     allowAutomatedAction: Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorIsAi)),
     attackerStats: { attack: attackerHero.attack, defense: attackerHero.defense },
     defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
+    immortalHeroId: devGodModeHeroId,
   });
 
   const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
@@ -177,6 +182,7 @@ function executeActionThenNeutralTurns(params: {
   allowAutomatedAction: boolean;
   attackerStats: { attack: number; defense: number };
   defenderStats: { attack: number; defense: number };
+  immortalHeroId?: string | null;
 }) {
   let units = params.units;
   let turnQueue = params.turnQueue;
@@ -207,6 +213,7 @@ function executeActionThenNeutralTurns(params: {
     action,
     attackerStats: params.attackerStats,
     defenderStats: params.defenderStats,
+    immortalHeroId: params.immortalHeroId,
   });
 
   units = execution.units;

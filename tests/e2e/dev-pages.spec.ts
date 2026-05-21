@@ -65,4 +65,24 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
       expect(consoleErrors, `console errors on ${devPage.path}:\n${consoleErrors.join("\n")}`).toEqual([]);
     });
   }
+
+  test("audio settings popup is available from HUD and combat previews", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("my-heroes:audio:muted", "true");
+    });
+
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("adventure-music-control").getByRole("button", { name: "Reglages audio" }).click();
+    await expect(page.getByLabel("Muet")).toBeVisible();
+    await expect(page.getByLabel("Musique aventure")).toBeVisible();
+    await expect(page.getByLabel("Musique combat")).toBeVisible();
+    await expect(page.getByLabel("Effets")).toBeVisible();
+
+    await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("combat-audio-control").getByRole("button", { name: "Reglages audio" }).click();
+    await expect(page.getByLabel("Muet")).toBeVisible();
+    await expect(page.getByLabel("Musique aventure")).toBeVisible();
+    await expect(page.getByLabel("Musique combat")).toBeVisible();
+    await expect(page.getByLabel("Effets")).toBeVisible();
+  });
 });

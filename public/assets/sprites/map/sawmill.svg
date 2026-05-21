@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="sawmill-title sawmill-desc">
-  <title id="sawmill-title">Scierie</title>
-  <desc id="sawmill-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Scierie.</desc>
-  
-  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#8b5a28" stroke="#5a3010" stroke-width="1.2"/><rect x="10" y="31" width="29" height="22" rx="2" fill="#8b5a28" stroke="#5a3010" stroke-width="1.5"/><path d="M8 31 L24 16 L44 31 Z" fill="#a06830" stroke="#5a3010" stroke-width="1.5"/><circle cx="39" cy="35" r="13" fill="#c0c8d0" stroke="#708090" stroke-width="1.6"/><circle cx="39" cy="35" r="4" fill="#a0a8b0"/><path d="M39 22 L42 28 L36 28 Z M52 35 L46 38 V32 Z M39 48 L36 42 H42 Z M26 35 L32 32 V38 Z" fill="#506070"/><path d="M48 44 H59 V54 H48 Z" fill="#7a4a20" stroke="#5a3010" stroke-width="1.2"/><ellipse cx="54" cy="44" rx="6" ry="3" fill="#9a6a38" stroke="#5a3010"/>
-</svg>

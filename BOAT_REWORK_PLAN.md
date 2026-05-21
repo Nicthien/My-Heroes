@@ -126,7 +126,7 @@ Modifier `src/app/dev/sprites/page.tsx`:
   - `DirectionalSheetPreview`;
   - `DirectionalSheetCard`.
 - Afficher les 8 directions avec idle/walk, comme les heros.
-- Ne pas remettre le SVG `hero-boat.svg` dans les assets statiques: le bateau est couvert par les spritesheets.
+- Ne pas remettre l'ancien asset vectoriel `hero-boat` dans les assets statiques: le bateau est couvert par les spritesheets.
 
 ## 8. Validation
 

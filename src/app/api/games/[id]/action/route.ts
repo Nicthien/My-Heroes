@@ -140,7 +140,6 @@ type MoveInteraction =
   | { type: "STOP"; message: string; destination: Position };
 
 const HERO_IN_COMBAT_ERROR = "Ce heros est deja engage dans un combat.";
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -159,6 +158,61 @@ export async function POST(
     if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
     if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
     if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
+
+    if (action.type === "DEV_GRANT_RESOURCES") {
+      const resources: Resources = {
+        gold: gamePlayer.gold + 1000,
+        wood: gamePlayer.wood + 1000,
+        ore: gamePlayer.ore + 1000,
+        mercury: gamePlayer.mercury + 1000,
+        crystals: gamePlayer.crystals + 1000,
+        gems: gamePlayer.gems + 1000,
+        sulfur: gamePlayer.sulfur + 1000,
+      };
+      await updatePlayerResources(supabase, gamePlayer.id, resources);
+      return NextResponse.json({ success: true, resources });
+    }
+
+    if (action.type === "DEV_TELEPORT_HERO") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const destination = getActionPosition(action.position);
+      if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
+      const tile = mapData.tiles[destination.y]?.[destination.x];
+      if (!tile || !isTileTraversable(tile)) {
+        return NextResponse.json({ error: "Destination infranchissable" }, { status: 400 });
+      }
+
+      const { error: heroUpdateError } = await supabase
+        .from("heroes")
+        .update({ x: destination.x, y: destination.y })
+        .eq("id", hero.id);
+      if (heroUpdateError) {
+        return NextResponse.json({ error: `Erreur mise a jour heros: ${heroUpdateError.message}` }, { status: 500 });
+      }
+
+      const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
+        item.id === hero.id ? { ...hero, x: destination.x, y: destination.y } : item
+      );
+      const newlyVisible = computeVisibleTiles(
+        mapData,
+        getPlayerVisionCenters({
+          heroes: movedHeroes.map((item) => ({ position: { x: item.x, y: item.y } })),
+          towns: gamePlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+        }),
+        5
+      );
+      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+      for (const key of newlyVisible) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+
+      return NextResponse.json({ success: true, destination });
+    }
 
     const players = game.players as unknown as Array<{
       id: string;

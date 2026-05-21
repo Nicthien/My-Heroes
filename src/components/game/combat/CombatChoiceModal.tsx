@@ -17,6 +17,8 @@ export default function CombatChoiceModal() {
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setGameState = useGameStore((state) => state.setGameState);
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
+  const selectedHeroId = useGameStore((state) => state.selectedHeroId);
+  const devGodMode = useGameStore((state) => state.devGodMode);
   const autoStartedRef = useRef<string | null>(null);
   const pendingKey = pendingCombat ? `${pendingCombat.attackerHeroId}:${pendingCombat.targetId}:${pendingCombat.targetType}` : null;
   const encounterInfo = useMemo(
@@ -62,6 +64,7 @@ export default function CombatChoiceModal() {
         destination: pendingCombat.destination,
         targetPosition: pendingCombat.targetPosition,
         path: pendingCombat.path,
+        ...(devGodMode && selectedHeroId === pendingCombat.attackerHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
       }),
     });
 
@@ -78,7 +81,7 @@ export default function CombatChoiceModal() {
     if (data.result) setCombatResult(data.result);
     if (mode === "MANUAL" && combatPayload) setActiveCombat(mapCombat(combatPayload));
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
-  }, [gameState, pendingCombat, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
+  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
 
   useEffect(() => {
     if (!pendingCombat || !pendingKey) return;

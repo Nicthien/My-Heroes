@@ -159,6 +159,9 @@ export async function POST(
   if (targetDefender.heroId && isHeroInActiveCombat(game.combats, targetDefender.heroId)) {
     return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
   }
+  const devGodModeHeroId = typeof body.devGodModeHeroId === "string" && body.devGodModeHeroId === attacker.id
+    ? attacker.id
+    : null;
 
   const defenderPosition = { x: targetDefender.x, y: targetDefender.y };
   const path = Array.isArray(body.path) ? body.path : null;
@@ -232,7 +235,8 @@ export async function POST(
         attack: targetDefender.attack,
         defense: targetDefender.defense,
         armies: targetDefender.armies,
-      }
+      },
+      { immortalHeroId: devGodModeHeroId }
     )
     : null;
   let result = autoResult

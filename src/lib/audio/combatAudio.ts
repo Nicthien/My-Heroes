@@ -1,3 +1,5 @@
+import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPreferences";
+
 const COMBAT_BPM = 92;
 const COMBAT_STEP_SECONDS = 60 / COMBAT_BPM / 2;
 const COMBAT_LOOKAHEAD_SECONDS = 1.6;
@@ -196,7 +198,7 @@ export function createCombatMusicEngine(initialVolume: number): CombatMusicEngin
   let intervalId = 0;
   let stepIndex = 0;
   let nextStepTime = 0;
-  let volume = clampVolume(initialVolume) * 1.4;
+  let volume = clampVolume(initialVolume);
 
   const setMasterVolume = (context: AudioContext, ramp = 0.14) => {
     if (!master) return;
@@ -250,13 +252,18 @@ export function createCombatMusicEngine(initialVolume: number): CombatMusicEngin
       master.gain.setTargetAtTime(0.0001, context.currentTime, 0.08);
     },
     setVolume: (nextVolume: number) => {
-      volume = clampVolume(nextVolume) * 1.4;
+      volume = clampVolume(nextVolume);
       if (sharedContext) setMasterVolume(sharedContext);
     },
   };
 }
 
 export async function playCombatDamageHit(intensity = 0.75) {
+  if (getSavedAudioMuted()) return;
+
+  const effectsVolume = getSavedEffectsVolume();
+  if (effectsVolume <= 0) return;
+
   const context = getAudioContext();
   await context.resume();
 
@@ -264,7 +271,7 @@ export async function playCombatDamageHit(intensity = 0.75) {
   const now = context.currentTime;
   const output = getOutput(context);
   const impactBus = context.createGain();
-  impactBus.gain.value = 0.62 * hitIntensity;
+  impactBus.gain.value = 0.62 * hitIntensity * effectsVolume;
   impactBus.connect(output);
 
   const low = context.createOscillator();

@@ -116,6 +116,7 @@ export default function GameMapComponent() {
   const cameraTarget = useGameStore((state) => state.cameraTarget);
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
+  const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const activeCombatHeroIds = useMemo(
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
@@ -639,6 +640,48 @@ export default function GameMapComponent() {
       selectedHeroId
     );
 
+    if (devTeleportArmed) {
+      if (!tile) return;
+      if (!selectedHeroId) {
+        setCombatMessage("Sélectionnez un héros avant de le téléporter.");
+        useGameStore.getState().setDevTeleportArmed(false);
+        return;
+      }
+
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      rendererRef.current.clearHighlights();
+      isSyncingMoveRef.current = true;
+      useGameStore.getState().setMovePending(true);
+      useGameStore.getState().setDevTeleportArmed(false);
+      fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "DEV_TELEPORT_HERO",
+          heroId: selectedHeroId,
+          position: { x: tile.x, y: tile.y },
+        }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            setCombatMessage(await getApiErrorMessage(response));
+            return null;
+          }
+          return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+        })
+        .then((state) => {
+          if (state) {
+            useGameStore.getState().setGameState(state);
+            setCombatMessage("Héros téléporté.");
+          }
+        })
+        .finally(() => {
+          isSyncingMoveRef.current = false;
+          useGameStore.getState().setMovePending(false);
+        });
+      return;
+    }
 
     if (isSyncingMoveRef.current) {
       return;
@@ -1853,7 +1896,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, activeCombatHeroIds]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, devTeleportArmed, activeCombatHeroIds]);
 
   return (
     <div

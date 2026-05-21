@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="crystal-cavern-title crystal-cavern-desc">
-  <title id="crystal-cavern-title">Caverne de cristaux</title>
-  <desc id="crystal-cavern-desc">Sprite de bâtiment sur la carte, avec détails liés à la ressource : Caverne de cristaux.</desc>
-  
-  <ellipse cx="32" cy="59" rx="23" ry="4" fill="#000" opacity=".25"/><ellipse cx="32" cy="54" rx="26" ry="8" fill="#2a4050" stroke="#1a3040" stroke-width="1.2"/><path d="M10 54 L32 26 L54 54 Z" fill="#2a4050" stroke="#1a3040" stroke-width="1.2"/><path d="M20 56 V44 Q32 30 44 44 V56 Z" fill="#0a1418"/><ellipse cx="32" cy="52" rx="10" ry="5" fill="#00e8ff" opacity=".25"/><path d="M32 12 L27 44 H37 Z M14 44 L10 58 H18 Z M50 44 L46 58 H54 Z M45 42 L42 55 H49 Z M18 42 L15 55 H22 Z" fill="#00e8ff" stroke="#00a0b8" stroke-width="1"/><path d="M32 12 V44 M14 44 V58 M50 44 V58" stroke="#80ffff" stroke-width="1" opacity=".55"/><circle cx="32" cy="14" r="2" fill="#fff" opacity=".85"/>
-</svg>

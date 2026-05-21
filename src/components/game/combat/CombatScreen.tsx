@@ -30,6 +30,8 @@ export default function CombatScreen() {
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setGameState = useGameStore((state) => state.setGameState);
   const gameState = useGameStore((state) => state.gameState);
+  const selectedHeroId = useGameStore((state) => state.selectedHeroId);
+  const devGodMode = useGameStore((state) => state.devGodMode);
   const minimizeCombat = useGameStore((state) => state.minimizeCombat);
   const focusTile = useGameStore((state) => state.focusTile);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -212,7 +214,7 @@ export default function CombatScreen() {
         const response = await fetchWithSupabaseAuth(`/api/games/${combat.gameId}/combats/${combat.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
         });
         if (!response.ok) {
           neutralActionKeyRef.current = null;
@@ -244,7 +246,7 @@ export default function CombatScreen() {
         releaseSubmissionLock(submissionToken);
       }
     };
-  }, [activeCombat, combatAnimationBlocked, gameState, releaseSubmissionLock, setActiveCombat, settleResolvedCombat]);
+  }, [activeCombat, combatAnimationBlocked, devGodMode, gameState, releaseSubmissionLock, selectedHeroId, setActiveCombat, settleResolvedCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -267,6 +269,7 @@ export default function CombatScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...action,
+          ...(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
           expectedCurrentUnitId: activeCombat.currentUnitId,
           expectedRound: activeCombat.round,
           expectedActionLogLength: activeCombat.actionLog.length,
@@ -368,7 +371,6 @@ export default function CombatScreen() {
     </div>
   );
 }
-
 
 
 

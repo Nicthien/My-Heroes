@@ -294,6 +294,29 @@ class PhaserMapScene extends Phaser.Scene {
     this.movementLabelLayer.setDepth(12);
     this.fogLayer.setDepth(20);
     this.hoverLabelLayer.setDepth(30);
+    // Slow Lissajous drift on the whole fog layer to fake clouds moving with
+    // wind. Two tweens with mismatched periods so the pattern never repeats
+    // exactly. Amplitude stays small (≤ 3px) because the fog edges are
+    // already feathered ~10px — the drift sits within that fuzzy band, so
+    // the visibility frontier never visibly slides against the map.
+    // Cost: 2 tweens on a single Container.x/y — no per-frame redraw, no
+    // chunk invalidation. Effectively free.
+    this.tweens.add({
+      targets: this.fogLayer,
+      x: { from: -3, to: 3 },
+      duration: 9000,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.inOut",
+    });
+    this.tweens.add({
+      targets: this.fogLayer,
+      y: { from: -2, to: 2 },
+      duration: 7000,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.inOut",
+    });
     generateTerrainAnimationTextures(this);
     generateFogStampTextures(this);
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -2806,7 +2829,7 @@ class PhaserMapScene extends Phaser.Scene {
         const localY = this.getFogSurfaceY(x, y) - bounds.top;
         const stampKey = this.getFogBaseStampKey(x, y, state);
         const stampConfig = stampKey === "fog-unexplored" ? FOG_UNEXPLORED_STAMP_CONFIG : FOG_STAMP_CONFIG;
-        baseTexture.stamp(this.getFogStampTextureKey(stampKey), undefined, localX, localY, stampConfig);
+        baseTexture.stamp(this.getFogStampTextureKey(stampKey, x, y), undefined, localX, localY, stampConfig);
       }
     }
 
@@ -2819,16 +2842,16 @@ class PhaserMapScene extends Phaser.Scene {
         const localY = this.getFogSurfaceY(x, y) - bounds.top;
 
         if (x > 0 && this.getFogTileState(x - 1, y) !== FOG_TILE_VISIBLE) {
-          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-nw"), undefined, localX, localY, FOG_STAMP_CONFIG);
+          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-nw", x, y), undefined, localX, localY, FOG_STAMP_CONFIG);
         }
         if (y > 0 && this.getFogTileState(x, y - 1) !== FOG_TILE_VISIBLE) {
-          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-ne"), undefined, localX, localY, FOG_STAMP_CONFIG);
+          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-ne", x, y), undefined, localX, localY, FOG_STAMP_CONFIG);
         }
         if (x < this.map!.width - 1 && this.getFogTileState(x + 1, y) !== FOG_TILE_VISIBLE) {
-          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-se"), undefined, localX, localY, FOG_STAMP_CONFIG);
+          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-se", x, y), undefined, localX, localY, FOG_STAMP_CONFIG);
         }
         if (y < this.map!.height - 1 && this.getFogTileState(x, y + 1) !== FOG_TILE_VISIBLE) {
-          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-sw"), undefined, localX, localY, FOG_STAMP_CONFIG);
+          edgeTexture.stamp(this.getFogStampTextureKey("fog-edge-sw", x, y), undefined, localX, localY, FOG_STAMP_CONFIG);
         }
       }
     }
@@ -2867,8 +2890,13 @@ class PhaserMapScene extends Phaser.Scene {
     dirtyChunkIndexes.add(chunkY * this.fogChunkColumns + chunkX);
   }
 
-  private getFogStampTextureKey(key: FogStampKey) {
-    return this.fogStampTextureKeys[key];
+  private getFogStampTextureKey(key: FogStampKey, x: number, y: number) {
+    const variants = this.fogStampTextureKeys[key];
+    if (variants.length === 1) return variants[0];
+    // Cheap deterministic hash on (x, y) to pick a variant. Same coords always
+    // map to the same variant, so chunk redraws stay stable.
+    const h = (Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663)) >>> 0;
+    return variants[h % variants.length];
   }
 
   private getFogBaseStampKey(x: number, y: number, state: FogTileState): FogStampKey {

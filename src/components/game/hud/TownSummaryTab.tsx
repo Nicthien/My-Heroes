@@ -1,0 +1,75 @@
+"use client";
+
+import type { Faction, Hero, Town } from "@/lib/game/types";
+import { useGameStore } from "@/lib/stores/gameStore";
+import { buildingTypeLabel } from "./helpers";
+import { goldText } from "./theme";
+
+export function TownSummaryTab({
+  selectedTown,
+  selectedTownFaction,
+  buildableBuildings,
+  recruitableUnits,
+  heroesAtSelectedTown,
+}: {
+  selectedTown: Town;
+  selectedTownFaction: Faction;
+  buildableBuildings: number;
+  recruitableUnits: number;
+  heroesAtSelectedTown: Hero[];
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className={`mb-2 text-xs font-black uppercase tracking-[0.2em] ${goldText}`}>Bâtiments</div>
+        {selectedTown.buildings.length === 0 ? (
+          <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucun bâtiment.</div>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {selectedTown.buildings.map((b, i) => (
+              <span key={i} className="rounded-md border border-amber-700/40 bg-black/50 px-2 py-0.5 text-[11px] text-amber-200/90">
+                {buildingTypeLabel(b, selectedTownFaction)}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+          <div className="text-lg font-black text-amber-100">{buildableBuildings}</div>
+          <div className="text-amber-200/60">constructible</div>
+        </div>
+        <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+          <div className="text-lg font-black text-amber-100">{recruitableUnits}</div>
+          <div className="text-amber-200/60">recrutable</div>
+        </div>
+        <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
+          <div className="text-lg font-black text-amber-100">{selectedTown.garrison.length}</div>
+          <div className="text-amber-200/60">garnison</div>
+        </div>
+      </div>
+      {heroesAtSelectedTown.length > 0 && (
+        <div className="rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-sm text-sky-100">
+          <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-sky-200/70">
+            Héros au château
+          </div>
+          <div className="space-y-1">
+            {heroesAtSelectedTown.map((hero) => (
+              <button
+                key={hero.id}
+                type="button"
+                className="flex w-full items-center justify-between gap-2 rounded-md border border-sky-400/20 bg-black/30 px-2 py-1 text-left transition hover:border-sky-300/60 hover:bg-sky-900/50"
+                onClick={() => useGameStore.getState().selectHero(hero.id)}
+              >
+                <span className="truncate font-black">{hero.name}</span>
+                <span className="shrink-0 text-xs text-sky-200/70">
+                  {hero.armies.length} stack{hero.armies.length > 1 ? "s" : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -139,8 +139,10 @@ function validateMap(
     addIssue("warning", templateId, seed, playerCount, size, `low road coverage: ${stats.roads} road tiles`);
   }
 
-  if (stats.decor < total * 0.12) {
-    addIssue("warning", templateId, seed, playerCount, size, `low decor density: ${percent(stats.decor / total)}`);
+  // Archipelago templates have a lot of water; measure decor against land area so the metric stays meaningful.
+  const decorDenominator = expectsArchipelago ? Math.max(1, stats.land) : total;
+  if (stats.decor < decorDenominator * 0.12) {
+    addIssue("warning", templateId, seed, playerCount, size, `low decor density: ${percent(stats.decor / decorDenominator)}`);
   }
 
   if (expectsArchipelago) {

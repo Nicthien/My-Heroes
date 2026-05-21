@@ -18,7 +18,6 @@ const { data, info } = await sharp(SRC).ensureAlpha().raw().toBuffer({ resolveWi
 const W = info.width, H = info.height;
 const a = new Uint8ClampedArray(data); // working RGBA
 
-const idx = (x, y) => (y * W + x) * 4;
 function isChecker(i) {
   const r = a[i], g = a[i + 1], b = a[i + 2];
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b);

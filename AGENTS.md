@@ -11,6 +11,30 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Always verify that no sensitive data is present in the code before pushing.
 - Supabase service role keys and database credentials must remain in `.env` (not versioned).
 
+# API Routes
+
+- Every route under `src/app/api/games/` must gate access with `requireCurrentUser(request)` and bail on the returned `response` if `user` is null.
+- Writes go through `createAdminClient()` (Supabase service role, bypasses RLS). Do not use the browser `createClient()` server-side.
+- The browser only does **reads** via Supabase realtime + the `/api/supabase/[...path]` proxy. Never add a client-side write path.
+- For new actions on an entity, follow the existing `if (action.type === "...")` chain in `src/app/api/games/[id]/action/route.ts` rather than creating a parallel handler file.
+
+# Database Schema
+
+- Source of truth for a fresh install: `supabase/schema.sql`. Source of truth for incremental changes: `supabase/migrations/`.
+- After any schema change, update **both** so that fresh installs and existing databases stay aligned.
+- Never write authoritative SQL in `supabase/snippets/` — that path is gitignored (Supabase Studio scratchpad) and not part of the source tree.
+- Game tables currently have **no RLS** (everything goes through service-role API routes). The proposed RLS migration is drafted in `IMPROVEMENTS.md` — don't enable RLS piecemeal without applying the full set, or realtime subscriptions silently break.
+
+# Localization
+
+- The in-game UI is in **French** (`Or`, `Bois`, `Construire`, `Recruter`, `À vous de jouer`, etc.). Do not anglicize player-facing strings.
+- Code identifiers, comments, commit messages, and developer-facing logs stay in English / standard programming convention.
+
+# Game State
+
+- The game state is **immutable**. `processAction()` and all server-side handlers must return a new `GameState` object — never mutate `state`, `state.players`, `state.players[i].heroes`, etc. in place. Reuse the spread/`map` patterns already present.
+- This rule applies to nested arrays/objects too (towns, garrisons, armies, recruits) — shallow copies are not enough when the change is deeper than one level.
+
 # Map Generation Design
 
 - Before changing adventure movement, pathfinding, route costs, map road generation, or server validation for adventure movement, read `ADVENTURE_MOVEMENT_RULES.md` and use the shared helpers in `src/lib/game/engine`.
@@ -26,3 +50,30 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - For game/map visuals, create and use pixel-art sprite assets in `.webp` under `public/assets/sprites/`.
 - Do not use generated SVGs or rough vector placeholders for in-game objects when a sprite can be used.
 - If a temporary fallback is needed for resilience, keep it internal to rendering code and replace it with a real `.webp` sprite before considering the feature visually complete.
+
+# Audio
+
+- Sound effects live under `public/sounds/`, audio helpers under `src/lib/audio/`.
+- New SFX should follow `combatAudio.ts`: lazy `Audio` instances created on first play, volume passed per call, errors swallowed (audio must never crash the game).
+- Respect user preferences via `musicPreferences.ts` rather than playing sounds unconditionally.
+
+# Local Dev Stack
+
+- `npm run dev` starts both Supabase (`supabase start`) and Next.js — preferred for end-to-end work.
+- `npm run dev:web` starts only Next.js (no DB) — sufficient for the Playwright smoke suite, which targets static auth/`/dev/*` pages.
+- The browser hits Supabase via the `/api/supabase/[...path]` proxy only when the configured URL is loopback/private; otherwise the browser talks to Supabase directly. Don't break that fallback in `src/lib/supabase/browser.ts`.
+
+# Component Layout
+
+- Heavy screens (HUD, CombatScreen, PhaserMapScene) are intentionally split into small sibling files. When adding code, place it next to the closest existing module rather than growing the orchestrator.
+- For new HUD panels, follow `HeroPanel.tsx` / `TownXxxTab.tsx`: one component, explicit props, no global store calls except via `useGameStore.getState()` for one-shot actions.
+- For new stateful behaviors, prefer a custom hook (`useDevPanel`, `useTurnNotifications`) over inlining `useState`/`useEffect` in the orchestrator.
+- For rendering helpers in `src/lib/rendering/phaser/`, prefer a pure free function in a sibling module over a new method on `PhaserMapScene`. Only add a class method when it must touch scene state (`this.add`, `this.fogLayer`, refs, etc.).
+- Never re-import `next-auth` or `bcryptjs`; auth flows through Supabase only.
+
+# Testing
+
+- Smoke tests live in `tests/e2e/` (Playwright). Run `npm run test:e2e` before considering UI changes complete.
+- The Playwright suite covers auth pages plus `/dev/*` preview pages (HUD, combat, map showcase, sprites, RMG). When changing a heavy component, add or update the matching `/dev/*` page so the smoke test exercises it with mocked state.
+- Pure logic changes (engine, combat rules, map generator) should also pass the corresponding `npm run validate:*` script.
+- `npm run lint` and `npx tsc --noEmit` must stay clean — both are zero-warning targets in this repo.

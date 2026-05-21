@@ -21,14 +21,13 @@
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
     "validate:combat": "tsx scripts/validate-combat-core.ts",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
-    "validate:phaser": "node scripts/validate-phaser.mjs"
+    "validate:phaser": "node scripts/validate-phaser.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
-    "bcryptjs": "^3.0.3",
     "next": "16.2.6",
-    "next-auth": "^5.0.0-beta.31",
     "phaser": "^4.1.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

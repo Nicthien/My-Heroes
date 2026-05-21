@@ -1,63 +1,142 @@
 import Phaser from "phaser";
-import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
-import { isCreatureBankType } from "@/lib/game/creature-banks";
-import { getResourceBuildingLabel } from "@/lib/game/economy";
-import { DecorItem, DecorKind, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
-import { UNIT_RULES } from "@/lib/game/units";
+import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress } from "@/lib/rendering/mapRenderer";
-import { BASE_HEIGHT, ELEVATION_SCALE, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, ROAD_TEXTURES, TERRAIN_TOP_TEXTURES, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type DirectionalSpritesheet, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
-
-const TERRAIN_TOP: Record<TerrainType, number> = {
-  grass: 0x6dbf58,
-  water: 0x2980b9,
-  mountain: 0x9a9ea0,
-  forest: 0x4a8f4b,
-  dirt: 0xb0934a,
-  sand: 0xf2cc7e,
-  snow: 0xffffff,
-  swamp: 0x6d7d4e,
-  lava: 0xd04030,
-};
-
-const TERRAIN_SIDE_LIT: Record<TerrainType, number> = {
-  grass: 0x7ecf68,
-  water: 0x1a6090,
-  mountain: 0xb0b4b6,
-  forest: 0x5aaf5b,
-  dirt: 0xc0a35a,
-  sand: 0xffdc8e,
-  snow: 0xffffff,
-  swamp: 0x7d8d5e,
-  lava: 0xe05040,
-};
-
-const TERRAIN_SIDE_DARK: Record<TerrainType, number> = {
-  grass: 0x4a7c3f,
-  water: 0x1a6090,
-  mountain: 0x606568,
-  forest: 0x2a6f2b,
-  dirt: 0x7b5924,
-  sand: 0xc4a44a,
-  snow: 0xc0c0c0,
-  swamp: 0x4d5d2e,
-  lava: 0xa03020,
-};
-
-const RESOURCE_LABELS: Record<string, string> = {
-  gold: "Or",
-  wood: "Bois",
-  ore: "Minerai",
-  mercury: "Mercure",
-  crystals: "Cristaux",
-  gems: "Gemmes",
-  sulfur: "Soufre",
-};
-
-type SpriteOrigin = {
-  originX: number;
-  originY: number;
-};
+import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
+import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
+import {
+  DEFAULT_SPRITE_ORIGIN,
+  GATE_DEPTH_CLEARANCE,
+  GATE_DISPLAY_HEIGHT,
+  GATE_DISPLAY_WIDTH,
+  GATE_OFFSET_Y,
+  GATE_ORIGIN_X,
+  GATE_ORIGIN_Y,
+  MAP_OBJECT_ORIGIN_X,
+  MAP_OBJECT_ORIGIN_Y,
+  MONSTER_OFFSET_Y,
+  RESOURCE_PICKUP_OFFSET_Y,
+  getMapObjectHoverText,
+  getMapObjectHoverY,
+  getOriginForMapTileObject,
+  getOriginForObject,
+  isEmptyPassableTile,
+} from "@/lib/rendering/phaser/mapObjectLayout";
+import { TERRAIN_SIDE_DARK, TERRAIN_SIDE_LIT, TERRAIN_TOP } from "@/lib/rendering/phaser/terrainColors";
+import {
+  ROAD_RENDER_STYLES,
+  ROAD_SIDE_SEEDS,
+  type RoadSide,
+} from "@/lib/rendering/phaser/roadConstants";
+import {
+  FOG_CHUNK_MARGIN,
+  FOG_CHUNK_SIZE,
+  FOG_PLANE_CLEARANCE,
+  FOG_STAMP_CONFIG,
+  FOG_STAMP_HALF_HEIGHT,
+  FOG_STAMP_HALF_WIDTH,
+  FOG_STAMP_TEXTURE_KEYS,
+  FOG_TILE_EXPLORED,
+  FOG_TILE_UNEXPLORED,
+  FOG_TILE_UNINITIALIZED,
+  FOG_TILE_VISIBLE,
+  FOG_UNEXPLORED_STAMP_CONFIG,
+  type FogChunk,
+  type FogChunkBounds,
+  type FogStampKey,
+  type FogTileState,
+} from "@/lib/rendering/phaser/fogConstants";
+import {
+  BOARD_LIP_EXTRA_HEIGHT,
+  BOARD_THICKNESS,
+  CAMERA_ZOOM_STEP,
+  HOVER_LABEL_SAMPLE_MS,
+  LAVA_TEXTURE_PREFIX,
+  MAP_LAYER_BASE_DEPTH,
+  MAP_LAYER_COVER_DEPTH,
+  MAX_CAMERA_ZOOM,
+  MIN_CAMERA_ZOOM,
+  MOVEMENT_SOUNDS,
+  REACHABLE_TILE_ALPHA,
+  REACHABLE_TILE_COLOR,
+  TERRAIN_ANIMATION_FRAME_COUNT,
+  TERRAIN_ANIMATION_INTERVAL_MS,
+  TERRAIN_FACE_RENDER_ORDER,
+  WATER_TEXTURE_PREFIX,
+  type MovementSoundKind,
+} from "@/lib/rendering/phaser/mapRenderSettings";
+import {
+  BLOCKING_DECOR_GROUND_OFFSET,
+  BLOCKING_DECOR_ORIGINS,
+  BLOCKING_DECOR_SPRITE_METRICS,
+  BLOCKING_DECOR_SPRITE_SIZE,
+  DECOR_SPRITES,
+} from "@/lib/rendering/phaser/decorConstants";
+import {
+  extendRoadPoint,
+  getRoadAnchorPoints,
+  getRoadCenterStampSpec,
+  getRoadStampSpec,
+} from "@/lib/rendering/phaser/roadGeometry";
+import { generateFogStampTextures } from "@/lib/rendering/phaser/fogRender";
+import { drawDiamondPath, hashTile, lerpPoint, pseudoRandom } from "@/lib/rendering/phaser/pointMath";
+import {
+  generateTerrainAnimationTextures,
+  getTerrainFrameOffset,
+  getTerrainTextureKey,
+  updateTerrainEffectFrame,
+  type LavaTileEffect,
+  type WaterTileEffect,
+} from "@/lib/rendering/phaser/terrainAnimation";
+import {
+  applyTerrainTopTextureCrop,
+  drawTileTexture,
+  getTerrainTopTextureTransform,
+  isAllowedDecor,
+} from "@/lib/rendering/phaser/decorTextures";
+import {
+  drawTerrainSideDetails,
+  drawTerrainSideEdges,
+  getMaxTileDepth,
+  getTerrainSideExposure,
+  getTerrainSideFaceColor,
+  getTerrainSideFacePoints,
+  getTerrainTopStroke,
+  getTileDepth,
+  type TerrainSideVisibility,
+} from "@/lib/rendering/phaser/terrainFaceRender";
+import {
+  getGateBannerPlacement,
+  getHeroBannerMetrics,
+  getHeroTravelMetrics,
+  getObjectHitboxScale,
+  getObjectMetrics,
+} from "@/lib/rendering/phaser/objectMetrics";
+import {
+  animateHeroSprite,
+  getDirectionalAnimationKey,
+  getHeroDirection,
+  type HeroSpriteAnimation,
+} from "@/lib/rendering/phaser/heroSprite";
+import {
+  drawBoulderCluster,
+  drawBush,
+  drawDeadGrove,
+  drawDeadTree,
+  drawDecorShadow,
+  drawFlowers,
+  drawGrassTuft,
+  drawOakGrove,
+  drawOakTree,
+  drawPineGrove,
+  drawPineTree,
+  drawRockCluster,
+  drawSmallRock,
+} from "@/lib/rendering/phaser/decorDrawing";
+import {
+  drawCornerBolts,
+  drawRoadSegment,
+  drawWoodGrain,
+} from "@/lib/rendering/phaser/boardAndWallDrawing";
 
 type FailedLoaderFile = {
   key?: unknown;
@@ -65,209 +144,23 @@ type FailedLoaderFile = {
   url?: unknown;
 };
 
-const TILE_FOOT_OFFSET_Y = TILE_HEIGHT / 2;
-const RESOURCE_BUILDING_SCALE = 1.24;
-const RESOURCE_BUILDING_OFFSET_Y = TILE_FOOT_OFFSET_Y;
-const RESOURCE_BUILDING_DISPLAY_SIZE = Math.round(52 * RESOURCE_BUILDING_SCALE);
-const MAP_OBJECT_ORIGIN_X = 0.5;
-const MAP_OBJECT_ORIGIN_Y = 1;
-const MAP_OBJECT_FOOT_OFFSET_Y = TILE_FOOT_OFFSET_Y;
-const RESOURCE_PICKUP_OFFSET_Y = -4;
-const MONSTER_OFFSET_Y = 6;
-// Gate artwork is 298x248 (aspect 1.202); keep that ratio. Width is chosen so
-// the structure spans ~3 tiles across the road (towers on the side tiles).
-// 3-tile footprint along the wall diagonal: outer corners of tiles -1..+1
-// span 128 game-px horizontally (TILE_WIDTH 64; per-tile step 32; ±64 outer).
-const GATE_DISPLAY_WIDTH = 128;
-const GATE_DISPLAY_HEIGHT = Math.round(GATE_DISPLAY_WIDTH / 1.202);
-// Sprite point pinned to the road tile centre. The gate's foundation sits on
-// the road tile, with the portcullis arch hovering above (you pass under it).
-const GATE_ORIGIN_X = 0.5;
-const GATE_ORIGIN_Y = 0.7;
-const GATE_OFFSET_Y = 0;
-const GATE_DEPTH_CLEARANCE = 256;
-const TOWN_OFFSET_Y = TILE_FOOT_OFFSET_Y + 7;
-const HERO_OFFSET_Y = 6;
-const TOWN_HERO_OFFSET_Y = TOWN_OFFSET_Y + 12;
-const ADVENTURE_BUILDING_OFFSET_Y = 8;
-const DEFAULT_SPRITE_ORIGIN: SpriteOrigin = { originX: MAP_OBJECT_ORIGIN_X, originY: MAP_OBJECT_ORIGIN_Y };
-const HERO_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.988 };
-const BOAT_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.925 };
-const MONSTER_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.507, originY: 0.865 };
-const RESOURCE_BUILDING_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.988 };
-const RESOURCE_PICKUP_ORIGINS: Record<string, SpriteOrigin> = {
-  gold: { originX: 0.51, originY: 0.576 },
-  wood: { originX: 0.504, originY: 0.543 },
-  ore: { originX: 0.498, originY: 0.557 },
-  mercury: { originX: 0.488, originY: 0.561 },
-  crystals: { originX: 0.5, originY: 0.506 },
-  gems: { originX: 0.498, originY: 0.572 },
-  sulfur: { originX: 0.48, originY: 0.586 },
-};
-const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
-  campfire: { originX: 0.502, originY: 0.891 },
-  lighthouse: { originX: 0.49, originY: 0.898 },
-  observatory: { originX: 0.475, originY: 0.938 },
-  stargate: { originX: 0.48, originY: 0.918 },
-  ancient_altar: { originX: 0.5, originY: 0.84 },
-  beholders_sanctuary: { originX: 0.5, originY: 0.84 },
-  black_tower: { originX: 0.5, originY: 0.88 },
-  churchyard: { originX: 0.5, originY: 0.84 },
-  crypt: { originX: 0.5, originY: 0.84 },
-  cyclops_stockpile: { originX: 0.5, originY: 0.84 },
-  derelict_ship: { originX: 0.5, originY: 0.84 },
-  dragon_fly_hive: { originX: 0.5, originY: 0.84 },
-  dragon_utopia: { originX: 0.5, originY: 0.86 },
-  dwarven_treasury: { originX: 0.5, originY: 0.84 },
-  experimental_shop: { originX: 0.5, originY: 0.84 },
-  griffin_conservatory: { originX: 0.5, originY: 0.84 },
-  imp_cache: { originX: 0.5, originY: 0.84 },
-  ivory_tower: { originX: 0.5, originY: 0.88 },
-  mansion: { originX: 0.5, originY: 0.84 },
-  medusa_stores: { originX: 0.5, originY: 0.84 },
-  naga_bank: { originX: 0.5, originY: 0.84 },
-  pirate_cavern: { originX: 0.5, originY: 0.84 },
-  red_tower: { originX: 0.5, originY: 0.88 },
-  ruins: { originX: 0.5, originY: 0.84 },
-  shipwreck: { originX: 0.5, originY: 0.84 },
-  spit: { originX: 0.5, originY: 0.84 },
-  temple_of_the_sea: { originX: 0.5, originY: 0.86 },
-  wolf_raider_picket: { originX: 0.5, originY: 0.84 },
-};
-const TOWN_ORIGINS: Record<string, SpriteOrigin> = {
-  castle: { originX: 0.495, originY: 0.904 },
-  rampart: { originX: 0.502, originY: 0.901 },
-  tower: { originX: 0.495, originY: 0.93 },
-  inferno: { originX: 0.495, originY: 0.909 },
-  necropolis: { originX: 0.497, originY: 0.898 },
-  dungeon: { originX: 0.5, originY: 0.919 },
-  stronghold: { originX: 0.498, originY: 0.927 },
-  fortress: { originX: 0.499, originY: 0.919 },
-  conflux: { originX: 0.498, originY: 0.927 },
-};
-
-function getMapObjectHoverText(object: MapObject) {
-  if (object.type === "resource" && object.subtype) {
-    return RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase();
-  }
-
-  if (object.type === "monster") return object.subtype && object.subtype in UNIT_RULES
-    ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
-    : "Armée neutre";
-  if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
-  if (object.type === "adventure_building") return getAdventureBuildingLabel(object.subtype);
-  if (object.type === "artifact") return "Artefact";
-  if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
-
-  return null;
-}
-
-function getMapObjectHoverY(object: MapObject, surfaceY: number) {
-  if (object.type === "building") {
-    return surfaceY + RESOURCE_BUILDING_OFFSET_Y - RESOURCE_BUILDING_DISPLAY_SIZE - 8;
-  }
-
-  if (object.type === "resource") return surfaceY + RESOURCE_PICKUP_OFFSET_Y - 38 - 6;
-  if (object.type === "monster") return surfaceY + MONSTER_OFFSET_Y - 46 - 8;
-  if (object.type === "gate") return surfaceY - 58;
-
-  return surfaceY - 34;
-}
-
-function getOriginForMapTileObject(object: MapObject): SpriteOrigin {
-  if (object.type === "resource" && object.subtype) {
-    return RESOURCE_PICKUP_ORIGINS[object.subtype] ?? DEFAULT_SPRITE_ORIGIN;
-  }
-  if (object.type === "monster") return MONSTER_SPRITE_ORIGIN;
-  return DEFAULT_SPRITE_ORIGIN;
-}
-
-function getOriginForObject(object: MapObjectData): SpriteOrigin {
-  if (object.type === "hero") return object.onWater ? BOAT_SPRITE_ORIGIN : HERO_SPRITE_ORIGIN;
-  if (object.type === "town") return TOWN_ORIGINS[object.faction] ?? DEFAULT_SPRITE_ORIGIN;
-  if (object.type === "building") return RESOURCE_BUILDING_ORIGIN;
-  if (object.type === "gate") return { originX: GATE_ORIGIN_X, originY: GATE_ORIGIN_Y };
-  if (object.type === "adventure_building" && object.buildingType) {
-    return ADVENTURE_BUILDING_ORIGINS[object.buildingType] ?? DEFAULT_SPRITE_ORIGIN;
-  }
-  return DEFAULT_SPRITE_ORIGIN;
-}
-
-function isEmptyPassableTile(tile: MapTile) {
-  return tile.isPassable && !tile.object && !tile.decor?.blocking;
-}
-
-const MIN_CAMERA_ZOOM = 0.65;
-const MAX_CAMERA_ZOOM = 1.85;
-const CAMERA_ZOOM_STEP = 1.15;
-const TERRAIN_ANIMATION_INTERVAL_MS = 120;
-const TERRAIN_EFFECT_VIEW_PADDING = 96;
-const TERRAIN_ANIMATION_FRAME_COUNT = 6;
-const TERRAIN_TEXTURE_WIDTH = 80;
-const TERRAIN_TEXTURE_HEIGHT = 56;
-const WATER_TEXTURE_PREFIX = "my-heroes-water";
-const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
-const HOVER_LABEL_SAMPLE_MS = 40;
-const BOARD_THICKNESS = 34;
-const BOARD_LIP_EXTRA_HEIGHT = ELEVATION_SCALE;
-const REACHABLE_TILE_COLOR = 0x2f80ff;
-const REACHABLE_TILE_ALPHA = 0.34;
-const VISUAL_ELEVATION_SCALE = 5;
-const TERRAIN_TOP_TEXTURE_CROP_INSET = 2;
-const TERRAIN_FACE_RENDER_ORDER: readonly TerrainFaceSide[] = ["left", "right"];
-const MAP_LAYER_BASE_DEPTH = -100000;
-const MAP_LAYER_COVER_DEPTH = -50000;
-const MOVEMENT_SOUNDS = {
-  horse: { key: "movement-horse-trot", path: "/sounds/movement/horse-trot.wav", volume: 0.3, minIntervalMs: 230 },
-  boat: { key: "movement-boat-water", path: "/sounds/movement/boat-water.wav", volume: 0.26, minIntervalMs: 320 },
-} as const;
-
-type BrickWallOrientation = "x" | "y" | "diagonalDown" | "diagonalUp";
-type MovementSoundKind = keyof typeof MOVEMENT_SOUNDS;
-
-type WaterTileEffect = {
-  sprite: Phaser.GameObjects.Image;
-  x: number;
-  y: number;
-  frameOffset: number;
-  frameIndex: number;
-};
-
-type LavaTileEffect = {
-  sprite: Phaser.GameObjects.Image;
-  x: number;
-  y: number;
-  frameOffset: number;
-  frameIndex: number;
-};
-
-type TerrainSideExposure = {
-  bottomDepth: number;
-  neighborTerrain?: TerrainType;
-};
-
-type TerrainFaceSide = "left" | "right";
-
-type TerrainSideVisibility = {
-  left: TerrainSideExposure | null;
-  right: TerrainSideExposure | null;
-};
-
-type TerrainSideFacePoints = {
-  topA: Position;
-  topB: Position;
-  bottomA: Position;
-  bottomB: Position;
-};
-
-type HeroSpriteAnimation = {
-  sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
-  baseY: number;
-  baseScaleX: number;
-  baseScaleY: number;
-  phase: number;
-  mode: "mounted" | "boat" | "idle";
-};
+import {
+  areObjectsRenderEquivalent,
+  type BrickWallOrientation,
+  drawPolygonPath,
+  drawRingPath,
+  getBrickRampartPlacement,
+  getBrickWallAxis,
+  getBrickWallVectors,
+  getMapOuterCorners,
+  isSpritePointInView,
+  isTerrainEffectInView,
+  liftPolygon,
+  parseHexColor,
+  pickNaturalWallTreeSprite,
+  pickTerrainTexture,
+  shouldRebuildHero,
+} from "@/lib/rendering/phaser/mapRenderHelpers";
 
 type RenderedHeroObject = {
   object: MapObjectData;
@@ -292,167 +185,6 @@ type RenderedStaticObject = {
   label?: Phaser.GameObjects.Text;
   banner?: Phaser.GameObjects.Graphics;
   badge?: RenderedBadge;
-};
-
-type FogTileState = 0 | 1 | 2;
-type FogEdgeSide = "northWest" | "northEast" | "southEast" | "southWest";
-type FogStampKey = "fog-near" | "fog-unexplored" | "fog-explored" | "fog-edge-nw" | "fog-edge-ne" | "fog-edge-se" | "fog-edge-sw";
-type RoadSide = "northEast" | "southEast" | "southWest" | "northWest";
-type RoadRenderStyle = {
-  edge: number;
-  fill: number;
-  highlight: number;
-  detail: number;
-  shadowAlpha: number;
-  halfWidth: number;
-  outline: number;
-  hubScale: number;
-  detailDensity: number;
-};
-
-type RoadStampSpec = {
-  texturePath: string;
-  cropX: number;
-  cropY: number;
-  cropWidth: number;
-  cropHeight: number;
-  displayWidth: number;
-  displayHeight: number;
-  alpha: number;
-};
-
-type FogChunkBounds = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
-
-type FogChunk = {
-  chunkX: number;
-  chunkY: number;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-  bounds: FogChunkBounds;
-  baseTexture: Phaser.GameObjects.RenderTexture;
-  edgeTexture: Phaser.GameObjects.RenderTexture;
-};
-
-const ROAD_RENDER_STYLES: Record<RoadType | "bridge", RoadRenderStyle> = {
-  dirt: {
-    edge: 0x5e3c1e,
-    fill: 0xb68445,
-    highlight: 0xe3bb72,
-    detail: 0x6a4520,
-    shadowAlpha: 0.16,
-    halfWidth: 5.8,
-    outline: 2.3,
-    hubScale: 1,
-    detailDensity: 1,
-  },
-  gravel: {
-    edge: 0x4d493f,
-    fill: 0xb6afa4,
-    highlight: 0xe9e3d3,
-    detail: 0x716b61,
-    shadowAlpha: 0.14,
-    halfWidth: 5.4,
-    outline: 2.1,
-    hubScale: 0.96,
-    detailDensity: 0.9,
-  },
-  paved: {
-    edge: 0x4f463c,
-    fill: 0xd8ccb7,
-    highlight: 0xf4edde,
-    detail: 0x887a68,
-    shadowAlpha: 0.12,
-    halfWidth: 5.1,
-    outline: 2,
-    hubScale: 0.94,
-    detailDensity: 0.72,
-  },
-  bridge: {
-    edge: 0x4c2d15,
-    fill: 0x9e6a36,
-    highlight: 0xc79253,
-    detail: 0x6d4422,
-    shadowAlpha: 0.18,
-    halfWidth: 6.2,
-    outline: 2.1,
-    hubScale: 1.06,
-    detailDensity: 1.05,
-  },
-};
-
-const ROAD_STAMP_MASK_BY_SIDE: Record<RoadSide, 5 | 10> = {
-  northEast: 5,
-  southEast: 10,
-  southWest: 5,
-  northWest: 10,
-};
-
-const ROAD_TEXTURE_BITS: Record<RoadSide, number> = {
-  northEast: 1,
-  southEast: 2,
-  southWest: 4,
-  northWest: 8,
-};
-
-const DECOR_SPRITES: Partial<Record<DecorKind, string>> = {
-  "grove-pine": MAP_SPRITES.decor.grove_pine,
-  "grove-oak": MAP_SPRITES.decor.grove_oak,
-  "grove-dead": MAP_SPRITES.decor.grove_dead,
-  "boulder-cluster": MAP_SPRITES.decor.boulder_cluster,
-};
-
-const BLOCKING_DECOR_ORIGINS: Partial<Record<DecorKind, SpriteOrigin>> = {
-  "grove-pine": { originX: 0.507, originY: 0.805 },
-  "grove-oak": { originX: 0.514, originY: 0.809 },
-  "grove-dead": { originX: 0.5, originY: 0.801 },
-  "boulder-cluster": { originX: 0.514, originY: 0.84 },
-};
-
-const BLOCKING_DECOR_SPRITE_SIZE = 72;
-const BLOCKING_DECOR_GROUND_OFFSET = 8;
-const BLOCKING_DECOR_SPRITE_METRICS: Partial<Record<DecorKind, { size: number; groundOffset: number }>> = {
-  "boulder-cluster": {
-    size: 58,
-    groundOffset: 8,
-  },
-};
-
-const FOG_CHUNK_SIZE = 16;
-const FOG_TILE_VISIBLE: FogTileState = 0;
-const FOG_TILE_EXPLORED: FogTileState = 1;
-const FOG_TILE_UNEXPLORED: FogTileState = 2;
-const FOG_TILE_UNINITIALIZED = 255;
-const FOG_STAMP_WIDTH = TILE_WIDTH + 16;
-const FOG_STAMP_HEIGHT = TILE_HEIGHT + 16;
-const FOG_STAMP_HALF_WIDTH = FOG_STAMP_WIDTH / 2;
-const FOG_STAMP_HALF_HEIGHT = FOG_STAMP_HEIGHT / 2;
-const FOG_CHUNK_MARGIN = 2;
-const FOG_PLANE_CLEARANCE = 1;
-const FOG_STAMP_CONFIG: Phaser.Types.Textures.StampConfig = {
-  originX: 0.5,
-  originY: 0.5,
-};
-const FOG_UNEXPLORED_STAMP_CONFIG: Phaser.Types.Textures.StampConfig = {
-  originX: 0.5,
-  originY: 0.5,
-  scaleX: 1.12,
-  scaleY: 1.12,
-};
-const FOG_STAMP_TEXTURE_KEYS: Record<FogStampKey, string> = {
-  "fog-near": "my-heroes-fog-near",
-  "fog-unexplored": "my-heroes-fog-unexplored",
-  "fog-explored": "my-heroes-fog-explored",
-  "fog-edge-nw": "my-heroes-fog-edge-nw",
-  "fog-edge-ne": "my-heroes-fog-edge-ne",
-  "fog-edge-se": "my-heroes-fog-edge-se",
-  "fog-edge-sw": "my-heroes-fog-edge-sw",
 };
 
 class PhaserMapScene extends Phaser.Scene {
@@ -759,60 +491,11 @@ class PhaserMapScene extends Phaser.Scene {
     drawPolygonPath(top, innerTop);
     top.strokePath();
 
-    this.drawWoodGrain(top, outerTop, innerTop);
-    this.drawCornerBolts(top, outerTop);
+    drawWoodGrain(top, outerTop, innerTop);
+    drawCornerBolts(top, outerTop);
     this.boardLipLayer.add(top);
   }
 
-  private drawWoodGrain(graphics: Phaser.GameObjects.Graphics, outer: Position[], inner: Position[]) {
-    const grainColor = 0x2d1709;
-    const highlightColor = 0xb98245;
-
-    for (let i = 0; i < outer.length; i++) {
-      const next = (i + 1) % outer.length;
-      const edgeLength = Phaser.Math.Distance.Between(outer[i].x, outer[i].y, outer[next].x, outer[next].y);
-      const plankCount = Math.max(3, Math.floor(edgeLength / 72));
-
-      for (let p = 1; p < plankCount; p++) {
-        const t = p / plankCount;
-        const outside = lerpPoint(outer[i], outer[next], t);
-        const inside = lerpPoint(inner[i], inner[next], t);
-        graphics.lineStyle(1, grainColor, 0.34);
-        graphics.beginPath();
-        graphics.moveTo(outside.x, outside.y);
-        graphics.lineTo(inside.x, inside.y);
-        graphics.strokePath();
-      }
-
-      const grainLines = Math.max(4, Math.floor(edgeLength / 46));
-      for (let g = 0; g < grainLines; g++) {
-        const t = (g + 0.5) / grainLines;
-        const outside = lerpPoint(outer[i], outer[next], t);
-        const inside = lerpPoint(inner[i], inner[next], t);
-        const start = lerpPoint(outside, inside, 0.24 + hashTile(i, g) * 0.14);
-        const end = lerpPoint(outside, inside, 0.66 + hashTile(g, i) * 0.14);
-        const bow = (hashTile(i + 9, g + 3) - 0.5) * 8;
-
-        graphics.lineStyle(1, g % 3 === 0 ? highlightColor : grainColor, g % 3 === 0 ? 0.2 : 0.3);
-        graphics.beginPath();
-        graphics.moveTo(start.x, start.y);
-        graphics.lineTo((start.x + end.x) / 2 + bow, (start.y + end.y) / 2 - bow * 0.35);
-        graphics.lineTo(end.x, end.y);
-        graphics.strokePath();
-      }
-    }
-  }
-
-  private drawCornerBolts(graphics: Phaser.GameObjects.Graphics, outer: Position[]) {
-    const center = getPolygonCenter(outer);
-    for (const corner of outer) {
-      const bolt = lerpPoint(corner, center, 0.12);
-      graphics.fillStyle(0x2b1a10, 0.9);
-      graphics.fillCircle(bolt.x, bolt.y, 4);
-      graphics.fillStyle(0xd0a66d, 0.35);
-      graphics.fillCircle(bolt.x - 1, bolt.y - 1, 1.5);
-    }
-  }
 
   private drawRoad(_graphics: Phaser.GameObjects.Graphics, tile: MapTile, isoX: number, isoY: number) {
     const road = tile.road;
@@ -826,7 +509,7 @@ class PhaserMapScene extends Phaser.Scene {
 
     for (const side of connections) {
       const anchor = extendRoadPoint(center, anchors[side], 1.15);
-      this.drawRoadSegment(_graphics, center, anchor, style);
+      drawRoadSegment(_graphics, center, anchor, style);
       this.drawRoadTextureStamp(center, anchor, isBridge ? "bridge" : road, tile.x, tile.y, side);
     }
 
@@ -846,19 +529,6 @@ class PhaserMapScene extends Phaser.Scene {
 
   private hasRoad(x: number, y: number) {
     return Boolean(this.map?.tiles[y]?.[x]?.road);
-  }
-
-  private drawRoadSegment(
-    graphics: Phaser.GameObjects.Graphics,
-    start: Position,
-    end: Position,
-    style: RoadRenderStyle
-  ) {
-    const shadowOffset = { x: 0, y: 1.3 };
-    fillRoadStrip(graphics, offsetPoint(start, shadowOffset), offsetPoint(end, shadowOffset), style.halfWidth + style.outline * 0.45, 0x000000, style.shadowAlpha);
-    fillRoadStrip(graphics, start, end, style.halfWidth + style.outline, style.edge, 1);
-    fillRoadStrip(graphics, start, end, style.halfWidth, style.fill, 1);
-    fillRoadStrip(graphics, start, end, style.halfWidth * 0.2, style.highlight, 0.12);
   }
 
   private drawRoadTextureStamp(
@@ -932,44 +602,44 @@ class PhaserMapScene extends Phaser.Scene {
     const baseY = isoY + 2;
     const scale = 0.92 + variant * 0.08;
 
-    this.drawDecorShadow(batchGraphics, isoX, baseY, kind);
+    drawDecorShadow(batchGraphics, isoX, baseY, kind);
 
     switch (kind) {
       case "tree-pine":
-        this.drawPineTree(batchGraphics, isoX, baseY, scale);
+        drawPineTree(batchGraphics, isoX, baseY, scale);
         break;
       case "tree-oak":
-        this.drawOakTree(batchGraphics, isoX, baseY, scale);
+        drawOakTree(batchGraphics, isoX, baseY, scale);
         break;
       case "tree-dead":
-        this.drawDeadTree(batchGraphics, isoX, baseY, scale);
+        drawDeadTree(batchGraphics, isoX, baseY, scale);
         break;
       case "grove-pine":
-        this.drawPineGrove(batchGraphics, isoX, baseY, scale);
+        drawPineGrove(batchGraphics, isoX, baseY, scale);
         break;
       case "grove-oak":
-        this.drawOakGrove(batchGraphics, isoX, baseY, scale);
+        drawOakGrove(batchGraphics, isoX, baseY, scale);
         break;
       case "grove-dead":
-        this.drawDeadGrove(batchGraphics, isoX, baseY, scale);
+        drawDeadGrove(batchGraphics, isoX, baseY, scale);
         break;
       case "rock-large":
-        this.drawRockCluster(batchGraphics, isoX, baseY, scale);
+        drawRockCluster(batchGraphics, isoX, baseY, scale);
         break;
       case "rock-small":
-        this.drawSmallRock(batchGraphics, isoX, baseY, scale);
+        drawSmallRock(batchGraphics, isoX, baseY, scale);
         break;
       case "boulder-cluster":
-        this.drawBoulderCluster(batchGraphics, isoX, baseY, scale);
+        drawBoulderCluster(batchGraphics, isoX, baseY, scale);
         break;
       case "bush":
-        this.drawBush(batchGraphics, isoX, baseY, scale);
+        drawBush(batchGraphics, isoX, baseY, scale);
         break;
       case "flower":
-        this.drawFlowers(batchGraphics, isoX, baseY, scale, variant);
+        drawFlowers(batchGraphics, isoX, baseY, scale, variant);
         break;
       case "grass-tuft":
-        this.drawGrassTuft(batchGraphics, isoX, baseY, scale, variant);
+        drawGrassTuft(batchGraphics, isoX, baseY, scale, variant);
         break;
     }
   }
@@ -985,354 +655,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.decorLayer.add(sprite);
   }
 
-  private drawNaturalWallStructuralFace(
-    graphics: Phaser.GameObjects.Graphics,
-    topA: Position,
-    topB: Position,
-    bottomA: Position,
-    bottomB: Position,
-    color: number,
-    alpha: number
-  ) {
-    graphics.fillStyle(color, alpha);
-    graphics.lineStyle(0.8, 0x0f2410, 0.24);
-    graphics.beginPath();
-    graphics.moveTo(topA.x, topA.y);
-    graphics.lineTo(topB.x, topB.y);
-    graphics.lineTo(bottomB.x, bottomB.y);
-    graphics.lineTo(bottomA.x, bottomA.y);
-    graphics.closePath();
-    graphics.fillPath();
-    graphics.strokePath();
 
-    graphics.fillStyle(0x0d260f, 0.18);
-    graphics.fillEllipse((topA.x + topB.x + bottomA.x + bottomB.x) / 4, (topA.y + topB.y + bottomA.y + bottomB.y) / 4 + 4, 24, 12);
-  }
-
-  private drawNaturalWallFace(
-    graphics: Phaser.GameObjects.Graphics,
-    topA: Position,
-    topB: Position,
-    bottomA: Position,
-    bottomB: Position,
-    color: number,
-    alpha: number
-  ) {
-    graphics.fillStyle(color, alpha * 0.28);
-    graphics.lineStyle(0.8, 0x13280f, 0.28);
-    graphics.beginPath();
-    graphics.moveTo(topA.x, topA.y);
-    graphics.lineTo(topB.x, topB.y);
-    graphics.lineTo(bottomB.x, bottomB.y);
-    graphics.lineTo(bottomA.x, bottomA.y);
-    graphics.closePath();
-    graphics.fillPath();
-    graphics.strokePath();
-
-    const leafColors = [color, 0x3f7d38, 0x6ba851, 0x224a22];
-    for (let i = 0; i < 8; i++) {
-      const t = (i + 0.5) / 8;
-      const top = lerpPoint(topA, topB, t);
-      const bottom = lerpPoint(bottomA, bottomB, t);
-      const center = lerpPoint(top, bottom, 0.34 + (i % 3) * 0.16);
-      const wobble = (i % 2 === 0 ? -1 : 1) * 3;
-      graphics.fillStyle(leafColors[i % leafColors.length], 0.72);
-      graphics.fillEllipse(center.x + wobble, center.y, 18 - (i % 3) * 2, 11 + (i % 2) * 3);
-      graphics.fillStyle(0xb7df8a, 0.16);
-      graphics.fillEllipse(center.x - 4 + wobble, center.y - 3, 8, 4);
-    }
-
-    graphics.lineStyle(1.2, 0x143010, 0.24);
-    graphics.beginPath();
-    for (const t of [0.24, 0.52, 0.78]) {
-      const a = lerpPoint(topA, bottomA, t);
-      const b = lerpPoint(topB, bottomB, t + 0.04);
-      graphics.moveTo(a.x, a.y);
-      graphics.lineTo((a.x + b.x) / 2, (a.y + b.y) / 2 - 3);
-      graphics.lineTo(b.x, b.y);
-    }
-    graphics.strokePath();
-  }
-
-  private drawNaturalWallCrown(
-    graphics: Phaser.GameObjects.Graphics,
-    north: Position,
-    east: Position,
-    south: Position,
-    west: Position,
-    jitter: number
-  ) {
-    const center = getPolygonCenter([north, east, south, west]);
-    graphics.fillStyle(0x183c1a, 0.48);
-    graphics.beginPath();
-    graphics.moveTo(north.x, north.y + 8 - jitter * 2);
-    graphics.lineTo((north.x + east.x) / 2 + 6, (north.y + east.y) / 2 - 8);
-    graphics.lineTo(east.x - 5, east.y + 5);
-    graphics.lineTo((east.x + south.x) / 2 + 7, (east.y + south.y) / 2 + 4);
-    graphics.lineTo(south.x + 2, south.y + 4);
-    graphics.lineTo((south.x + west.x) / 2 - 4, (south.y + west.y) / 2 + 9);
-    graphics.lineTo(west.x + 5, west.y + 4);
-    graphics.lineTo((west.x + north.x) / 2 - 8, (west.y + north.y) / 2 - 4);
-    graphics.closePath();
-    graphics.fillPath();
-
-    graphics.fillStyle(0x77b65a, 0.2);
-    graphics.fillEllipse(center.x - 3, center.y + 2, 44, 22);
-  }
-
-  private drawNaturalWallTop(
-    graphics: Phaser.GameObjects.Graphics,
-    north: Position,
-    east: Position,
-    south: Position,
-    west: Position,
-    jitter: number
-  ) {
-    const center = getPolygonCenter([north, east, south, west]);
-    const blobs = [
-      { x: north.x, y: north.y + 12, w: 20, h: 13, c: 0x6aa34d },
-      { x: west.x + 17, y: west.y + 5, w: 23, h: 15, c: 0x578f43 },
-      { x: center.x - 8, y: center.y - 1, w: 28, h: 18, c: 0x73ad55 },
-      { x: center.x + 10, y: center.y + 1 + jitter * 2, w: 28, h: 18, c: 0x619b49 },
-      { x: east.x - 16, y: east.y + 6, w: 23, h: 15, c: 0x79b85a },
-      { x: south.x - 6, y: south.y - 8, w: 30, h: 17, c: 0x4f823e },
-      { x: south.x + 9, y: south.y - 7, w: 24, h: 14, c: 0x5d9446 },
-    ];
-
-    for (const blob of blobs) {
-      graphics.fillStyle(0x142a12, 0.5);
-      graphics.fillEllipse(blob.x, blob.y + 1, blob.w + 3, blob.h + 3);
-      graphics.fillStyle(blob.c, 1);
-      graphics.fillEllipse(blob.x, blob.y, blob.w, blob.h);
-      graphics.fillStyle(0x9fca7b, 0.24);
-      graphics.fillEllipse(blob.x - blob.w * 0.16, blob.y - blob.h * 0.18, blob.w * 0.45, blob.h * 0.34);
-    }
-
-    graphics.fillStyle(0x2f5f2b, 0.38);
-    graphics.fillEllipse(center.x - 2, center.y + 9, 34, 9);
-
-    graphics.fillStyle(0xb7dd8d, 0.78);
-    graphics.fillCircle(west.x + 15, west.y + 3, 2);
-    graphics.fillCircle(east.x - 13, east.y + 4 + jitter * 2, 1.7);
-    graphics.fillCircle(center.x + 4, center.y - 5, 1.8);
-
-    graphics.lineStyle(1.4, 0xc4e79b, 0.34);
-    graphics.beginPath();
-    graphics.moveTo(west.x + 13, west.y + 3);
-    graphics.lineTo(center.x - 1, center.y - 6);
-    graphics.lineTo(east.x - 11, east.y + 3);
-    graphics.strokePath();
-  }
-
-  private drawDecorShadow(graphics: Phaser.GameObjects.Graphics, x: number, y: number, kind: DecorKind) {
-    const width = kind.includes("tree") ? 18 : kind === "rock-large" ? 20 : 14;
-    const alpha = kind === "flower" || kind === "grass-tuft" ? 0.1 : 0.18;
-    graphics.fillStyle(0x16210f, alpha);
-    graphics.fillEllipse(x, y - 1, width, 7);
-  }
-
-  private drawPineTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    graphics.fillStyle(0x5d3a1f, 1);
-    graphics.fillRect(x - 2, y - 8 * scale, 4, 8 * scale);
-
-    this.drawPineTier(graphics, x, y - 23 * scale, 10 * scale, 0x1f5a2d, 0x2f7a3b);
-    this.drawPineTier(graphics, x, y - 16 * scale, 13 * scale, 0x246a32, 0x3f9148);
-    this.drawPineTier(graphics, x, y - 9 * scale, 16 * scale, 0x2b7a3a, 0x4aa653);
-  }
-
-  private drawPineTier(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number, dark: number, light: number) {
-    graphics.fillStyle(dark, 1);
-    graphics.fillTriangle(x, y - size, x - size, y + size * 0.45, x + size, y + size * 0.45);
-    graphics.fillStyle(light, 0.45);
-    graphics.fillTriangle(x - 1, y - size * 0.7, x - size * 0.55, y + size * 0.25, x + 2, y + size * 0.2);
-  }
-
-  private drawOakTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    graphics.fillStyle(0x6d4523, 1);
-    graphics.fillRect(x - 2, y - 11 * scale, 4, 11 * scale);
-    graphics.fillStyle(0x2f6f32, 1);
-    graphics.fillCircle(x - 7 * scale, y - 14 * scale, 7 * scale);
-    graphics.fillCircle(x + 6 * scale, y - 15 * scale, 8 * scale);
-    graphics.fillCircle(x, y - 20 * scale, 8 * scale);
-    graphics.fillStyle(0x4ca64f, 0.55);
-    graphics.fillCircle(x - 4 * scale, y - 19 * scale, 4 * scale);
-    graphics.fillCircle(x + 4 * scale, y - 17 * scale, 4 * scale);
-  }
-
-  private drawDeadTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    graphics.lineStyle(4, 0x4a2e1b, 1);
-    graphics.beginPath();
-    graphics.moveTo(x, y);
-    graphics.lineTo(x, y - 20 * scale);
-    graphics.strokePath();
-    graphics.lineStyle(2, 0x6c4628, 1);
-    graphics.beginPath();
-    graphics.moveTo(x, y - 10 * scale);
-    graphics.lineTo(x - 8 * scale, y - 17 * scale);
-    graphics.moveTo(x, y - 13 * scale);
-    graphics.lineTo(x + 9 * scale, y - 22 * scale);
-    graphics.moveTo(x + 1, y - 7 * scale);
-    graphics.lineTo(x + 6 * scale, y - 11 * scale);
-    graphics.strokePath();
-  }
-
-  private drawPineGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawObstacleBase(graphics, x, y + 1, scale, 0x29471f, 0x182d16, 0x102410);
-    this.drawPineTree(graphics, x - 10 * scale, y + 1, scale * 0.92);
-    this.drawPineTree(graphics, x + 9 * scale, y + 1, scale * 0.98);
-    this.drawPineTree(graphics, x, y - 4 * scale, scale * 1.15);
-    graphics.lineStyle(2, 0x123417, 0.75);
-    graphics.beginPath();
-    graphics.moveTo(x - 17 * scale, y - 4 * scale);
-    graphics.lineTo(x, y - 33 * scale);
-    graphics.lineTo(x + 18 * scale, y - 4 * scale);
-    graphics.strokePath();
-  }
-
-  private drawOakGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawObstacleBase(graphics, x, y + 1, scale, 0x315625, 0x1b3518, 0x132911);
-    this.drawOakTree(graphics, x - 10 * scale, y + 1, scale * 0.9);
-    this.drawOakTree(graphics, x + 9 * scale, y + 1, scale);
-    this.drawOakTree(graphics, x, y - 4 * scale, scale * 1.08);
-    graphics.fillStyle(0x173f1d, 0.7);
-    graphics.fillEllipse(x, y - 17 * scale, 31 * scale, 21 * scale);
-    graphics.fillStyle(0x5da85d, 0.28);
-    graphics.fillEllipse(x - 6 * scale, y - 22 * scale, 15 * scale, 8 * scale);
-  }
-
-  private drawDeadGrove(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawObstacleBase(graphics, x, y + 1, scale, 0x4b3522, 0x2b1d13, 0x21150e);
-    this.drawDeadTree(graphics, x - 10 * scale, y + 1, scale * 0.9);
-    this.drawDeadTree(graphics, x + 9 * scale, y + 1, scale);
-    this.drawDeadTree(graphics, x, y - 3 * scale, scale * 1.12);
-    graphics.lineStyle(2, 0x21150d, 0.78);
-    graphics.beginPath();
-    graphics.moveTo(x - 17 * scale, y - 5 * scale);
-    graphics.lineTo(x + 16 * scale, y - 7 * scale);
-    graphics.strokePath();
-  }
-
-  private drawBoulderCluster(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawObstacleBase(graphics, x, y + 1, scale, 0x62686a, 0x3e4446, 0x2f3538);
-    this.drawRockCluster(graphics, x - 4 * scale, y, scale * 1.1);
-    graphics.fillStyle(0x4f5558, 1);
-    graphics.fillCircle(x - 13 * scale, y - 5 * scale, 8 * scale);
-    graphics.fillStyle(0x777d7e, 1);
-    graphics.fillCircle(x + 12 * scale, y - 6 * scale, 9 * scale);
-    graphics.fillStyle(0xa5a8a6, 0.42);
-    graphics.fillCircle(x + 8 * scale, y - 10 * scale, 3 * scale);
-    graphics.lineStyle(2, 0x2b2d2d, 0.9);
-    graphics.beginPath();
-    graphics.moveTo(x - 21 * scale, y - 2 * scale);
-    graphics.lineTo(x - 8 * scale, y - 14 * scale);
-    graphics.lineTo(x + 8 * scale, y - 15 * scale);
-    graphics.lineTo(x + 22 * scale, y - 3 * scale);
-    graphics.strokePath();
-  }
-
-  private drawObstacleBase(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    scale: number,
-    top: number,
-    left: number,
-    right: number
-  ) {
-    const halfW = 24 * scale;
-    const halfH = 11 * scale;
-    const drop = 7 * scale;
-
-    graphics.fillStyle(0x070806, 0.32);
-    graphics.fillEllipse(x, y + drop + 1, 56 * scale, 14 * scale);
-
-    graphics.fillStyle(left, 1);
-    graphics.beginPath();
-    graphics.moveTo(x - halfW, y);
-    graphics.lineTo(x, y + halfH);
-    graphics.lineTo(x, y + halfH + drop);
-    graphics.lineTo(x - halfW, y + drop);
-    graphics.closePath();
-    graphics.fillPath();
-
-    graphics.fillStyle(right, 1);
-    graphics.beginPath();
-    graphics.moveTo(x + halfW, y);
-    graphics.lineTo(x, y + halfH);
-    graphics.lineTo(x, y + halfH + drop);
-    graphics.lineTo(x + halfW, y + drop);
-    graphics.closePath();
-    graphics.fillPath();
-
-    graphics.fillStyle(top, 1);
-    drawDiamondPath(graphics, x, y);
-    graphics.fillPath();
-    graphics.lineStyle(1.5, 0x0b1209, 0.78);
-    drawDiamondPath(graphics, x, y);
-    graphics.strokePath();
-  }
-
-  private drawRockCluster(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawRock(graphics, x - 6 * scale, y - 4 * scale, 7 * scale, 5 * scale, 0x767d80);
-    this.drawRock(graphics, x + 3 * scale, y - 6 * scale, 9 * scale, 7 * scale, 0x8b9294);
-    this.drawRock(graphics, x + 9 * scale, y - 3 * scale, 5 * scale, 4 * scale, 0x686f72);
-  }
-
-  private drawSmallRock(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    this.drawRock(graphics, x, y - 4 * scale, 6 * scale, 4 * scale, 0x868d8f);
-  }
-
-  private drawRock(graphics: Phaser.GameObjects.Graphics, x: number, y: number, width: number, height: number, color: number) {
-    graphics.fillStyle(color, 1);
-    graphics.fillEllipse(x, y, width * 2, height * 2);
-    graphics.fillStyle(0xb7bec0, 0.38);
-    graphics.fillEllipse(x - width * 0.28, y - height * 0.35, width * 0.72, height * 0.5);
-    graphics.lineStyle(1, 0x4f5759, 0.45);
-    graphics.strokeEllipse(x, y, width * 2, height * 2);
-  }
-
-  private drawBush(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number) {
-    graphics.fillStyle(0x2e682f, 1);
-    graphics.fillCircle(x - 6 * scale, y - 5 * scale, 5 * scale);
-    graphics.fillCircle(x, y - 8 * scale, 6 * scale);
-    graphics.fillCircle(x + 6 * scale, y - 5 * scale, 5 * scale);
-    graphics.fillStyle(0x55a34e, 0.45);
-    graphics.fillCircle(x - 2 * scale, y - 10 * scale, 3 * scale);
-    graphics.fillCircle(x + 5 * scale, y - 7 * scale, 2.5 * scale);
-  }
-
-  private drawFlowers(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number, variant: number) {
-    this.drawGrassTuft(graphics, x, y, scale * 0.85, variant);
-    const colors = [0xff6f91, 0xffd166, 0xf6f7a8];
-    for (let i = 0; i < 3; i++) {
-      const px = x + (i - 1) * 4 * scale + (variant - 1);
-      const py = y - (5 + (i % 2) * 2) * scale;
-      graphics.fillStyle(colors[(variant + i) % colors.length], 1);
-      graphics.fillCircle(px, py, 1.6 * scale);
-      graphics.fillStyle(0xfff4b8, 0.7);
-      graphics.fillCircle(px - 0.4, py - 0.4, 0.6 * scale);
-    }
-  }
-
-  private drawGrassTuft(graphics: Phaser.GameObjects.Graphics, x: number, y: number, scale: number, variant: number) {
-    const blades = 5 + variant;
-    graphics.lineStyle(1.5, 0x356f2f, 1);
-    graphics.beginPath();
-    for (let i = 0; i < blades; i++) {
-      const offset = (i - (blades - 1) / 2) * 2.2 * scale;
-      const lean = (i % 2 === 0 ? -1 : 1) * (1.4 + variant * 0.2) * scale;
-      graphics.moveTo(x + offset, y);
-      graphics.lineTo(x + offset + lean, y - (5 + (i % 3)) * scale);
-    }
-    graphics.strokePath();
-    graphics.lineStyle(1, 0x6fbf5a, 0.6);
-    graphics.beginPath();
-    graphics.moveTo(x - 3 * scale, y - 1);
-    graphics.lineTo(x - 4 * scale, y - 5 * scale);
-    graphics.moveTo(x + 2 * scale, y - 1);
-    graphics.lineTo(x + 3 * scale, y - 6 * scale);
-    graphics.strokePath();
-  }
 
   setObjects(objects: MapObjectData[]) {
     this.objects = objects;
@@ -3703,1329 +3026,6 @@ export class PhaserMapRenderer implements MapRenderer {
   }
 }
 
-function getTileDepth(tile: MapTile) {
-  return tile.terrain === TerrainType.WATER
-    ? 2
-    : BASE_HEIGHT + Math.max(0, tile.elevation) * VISUAL_ELEVATION_SCALE;
-}
 
-function getMaxTileDepth(map: GameMap) {
-  let maxDepth = 0;
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      maxDepth = Math.max(maxDepth, getTileDepth(tile));
-    }
-  }
-  return maxDepth || BASE_HEIGHT;
-}
 
-function getTerrainSideExposure(depth: number, neighbor: MapTile | undefined): TerrainSideExposure | null {
-  const bottomDepth = neighbor ? getTileDepth(neighbor) : 0;
-  return bottomDepth < depth ? { bottomDepth, neighborTerrain: neighbor?.terrain } : null;
-}
 
-function getTerrainSideFaceColor(terrain: TerrainType, baseColor: number, exposure: TerrainSideExposure) {
-  const surfaceColor = TERRAIN_TOP[terrain] ?? baseColor;
-  const neighborColor = exposure.neighborTerrain ? TERRAIN_TOP[exposure.neighborTerrain] ?? surfaceColor : surfaceColor;
-  const surfaceBlend = terrain === TerrainType.MOUNTAIN ? 0.28 : 0.18;
-  const neighborBlend = terrain === TerrainType.MOUNTAIN ? 0.08 : 0.05;
-  return blendRgb(blendRgb(baseColor, surfaceColor, surfaceBlend), neighborColor, neighborBlend);
-}
-
-function getTerrainTopStroke(terrain: TerrainType) {
-  if (terrain === TerrainType.WATER) return { width: 0, color: 0x000000, alpha: 0 };
-  if (terrain === TerrainType.MOUNTAIN) return { width: 0.8, color: 0x384144, alpha: 0.34 };
-  if (terrain === TerrainType.SAND) return { width: 0.8, color: 0x7b5b2d, alpha: 0.24 };
-  return { width: 0.8, color: 0x1f241f, alpha: 0.28 };
-}
-
-function getTerrainSideFacePoints(
-  side: TerrainFaceSide,
-  isoX: number,
-  isoY: number,
-  depth: number,
-  bottomDepth: number
-): TerrainSideFacePoints {
-  const eastTop = { x: isoX + TILE_WIDTH / 2, y: isoY - depth };
-  const southTop = { x: isoX, y: isoY + TILE_HEIGHT / 2 - depth };
-  const westTop = { x: isoX - TILE_WIDTH / 2, y: isoY - depth };
-  const eastBottom = { x: isoX + TILE_WIDTH / 2, y: isoY - bottomDepth };
-  const southBottom = { x: isoX, y: isoY + TILE_HEIGHT / 2 - bottomDepth };
-  const westBottom = { x: isoX - TILE_WIDTH / 2, y: isoY - bottomDepth };
-
-  switch (side) {
-    case "left":
-      return { topA: westTop, topB: southTop, bottomA: westBottom, bottomB: southBottom };
-    case "right":
-    default:
-      return { topA: southTop, topB: eastTop, bottomA: southBottom, bottomB: eastBottom };
-  }
-}
-
-function drawTerrainSideDetails(
-  graphics: Phaser.GameObjects.Graphics,
-  tile: MapTile,
-  visibleSides: TerrainSideVisibility,
-  isoX: number,
-  isoY: number,
-  depth: number
-) {
-  for (const side of TERRAIN_FACE_RENDER_ORDER) {
-    const exposure = visibleSides[side];
-    if (!exposure) continue;
-    drawTerrainSideDetailLines(graphics, tile, side, isoX, isoY, depth, exposure.bottomDepth);
-  }
-}
-
-function drawTerrainSideEdges(
-  graphics: Phaser.GameObjects.Graphics,
-  tile: MapTile,
-  visibleSides: TerrainSideVisibility,
-  isoX: number,
-  isoY: number,
-  depth: number
-) {
-  const edgeColor = tile.terrain === TerrainType.MOUNTAIN ? 0x303a3d : 0x1f241f;
-  const lipColor = tile.terrain === TerrainType.MOUNTAIN ? 0xe0e5e1 : 0xffffff;
-  const bottomColor = tile.terrain === TerrainType.MOUNTAIN ? 0x151b1d : 0x161916;
-  const edgeAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.5 : 0.56;
-  const bottomAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.28 : 0.32;
-  const lipAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.24 : 0.32;
-
-  for (const side of TERRAIN_FACE_RENDER_ORDER) {
-    const exposure = visibleSides[side];
-    if (!exposure) continue;
-
-    const points = getTerrainSideFacePoints(side, isoX, isoY, depth, exposure.bottomDepth);
-
-    graphics.lineStyle(1.1, edgeColor, edgeAlpha);
-    graphics.beginPath();
-    graphics.moveTo(points.topA.x, points.topA.y);
-    graphics.lineTo(points.bottomA.x, points.bottomA.y);
-    graphics.moveTo(points.topB.x, points.topB.y);
-    graphics.lineTo(points.bottomB.x, points.bottomB.y);
-    graphics.strokePath();
-
-    graphics.lineStyle(1, bottomColor, bottomAlpha);
-    graphics.beginPath();
-    graphics.moveTo(points.bottomA.x, points.bottomA.y);
-    graphics.lineTo(points.bottomB.x, points.bottomB.y);
-    graphics.strokePath();
-
-    graphics.lineStyle(1, lipColor, lipAlpha);
-    graphics.beginPath();
-    graphics.moveTo(points.topA.x, points.topA.y);
-    graphics.lineTo(points.topB.x, points.topB.y);
-    graphics.strokePath();
-  }
-}
-
-function drawTerrainSideDetailLines(
-  graphics: Phaser.GameObjects.Graphics,
-  tile: MapTile,
-  side: TerrainFaceSide,
-  isoX: number,
-  isoY: number,
-  depth: number,
-  bottomDepth: number
-) {
-  const drop = depth - bottomDepth;
-  if (drop <= 0) return;
-
-  const { topA, topB, bottomA, bottomB } = getTerrainSideFacePoints(side, isoX, isoY, depth, bottomDepth);
-
-  const palette = getTerrainSideDetailPalette(tile.terrain);
-  const seed = hashTile(tile.x + (side === "left" ? 17 : 43), tile.y + (side === "left" ? 61 : 29));
-
-  graphics.lineStyle(1, palette.highlight, side === "left" ? palette.highlightAlpha : palette.highlightAlpha * 0.82);
-  graphics.beginPath();
-  graphics.moveTo(topA.x, topA.y);
-  graphics.lineTo(topB.x, topB.y);
-  graphics.strokePath();
-
-  if (tile.terrain === TerrainType.MOUNTAIN) {
-    drawMountainCliffDetails(graphics, topA, topB, bottomA, bottomB, seed, side);
-    return;
-  }
-
-  graphics.lineStyle(1, palette.strata, palette.strataAlpha);
-  graphics.beginPath();
-  for (const t of [0.22, 0.38, 0.55, 0.72, 0.86]) {
-    const offset = (seed - 0.5) * 0.05;
-    const left = lerpPoint(topA, bottomA, Math.max(0.08, Math.min(0.94, t + offset)));
-    const right = lerpPoint(topB, bottomB, Math.max(0.08, Math.min(0.94, t - offset)));
-    const inset = 3 + ((Math.floor(seed * 100 + t * 37) % 3) * 2);
-    graphics.moveTo(Phaser.Math.Linear(left.x, right.x, inset / TILE_WIDTH), Phaser.Math.Linear(left.y, right.y, inset / TILE_WIDTH));
-    graphics.lineTo(Phaser.Math.Linear(right.x, left.x, inset / TILE_WIDTH), Phaser.Math.Linear(right.y, left.y, inset / TILE_WIDTH));
-  }
-  graphics.strokePath();
-
-  const chipCount = 3;
-  for (let i = 0; i < chipCount; i++) {
-    const t = 0.18 + ((seed * 13 + i * 0.23) % 0.64);
-    const u = 0.2 + ((seed * 19 + i * 0.31) % 0.58);
-    const left = lerpPoint(topA, bottomA, t);
-    const right = lerpPoint(topB, bottomB, t + 0.05);
-    const center = lerpPoint(left, right, u);
-    const width = 3 + ((i + Math.floor(seed * 10)) % 3);
-    const height = 1.5 + (i % 2);
-
-    graphics.fillStyle(i % 2 === 0 ? palette.chipLight : palette.chipDark, i % 2 === 0 ? palette.chipLightAlpha : palette.chipDarkAlpha);
-    graphics.beginPath();
-    graphics.moveTo(center.x - width, center.y);
-    graphics.lineTo(center.x, center.y - height);
-    graphics.lineTo(center.x + width, center.y);
-    graphics.lineTo(center.x, center.y + height);
-    graphics.closePath();
-    graphics.fillPath();
-  }
-}
-
-function drawMountainCliffDetails(
-  graphics: Phaser.GameObjects.Graphics,
-  topA: Position,
-  topB: Position,
-  bottomA: Position,
-  bottomB: Position,
-  seed: number,
-  side: TerrainFaceSide
-) {
-  const point = (u: number, v: number) => {
-    const left = lerpPoint(topA, bottomA, v);
-    const right = lerpPoint(topB, bottomB, v);
-    return lerpPoint(left, right, u);
-  };
-
-  const facets = [
-    { u: 0.18, v: 0.18, w: 0.18, h: 0.16, color: 0xb9c0bc, alpha: 0.28 },
-    { u: 0.48, v: 0.24, w: 0.22, h: 0.19, color: 0x495154, alpha: 0.22 },
-    { u: 0.76, v: 0.2, w: 0.16, h: 0.17, color: 0xcbd0cc, alpha: 0.22 },
-    { u: 0.26, v: 0.54, w: 0.24, h: 0.2, color: 0x3c4447, alpha: 0.2 },
-    { u: 0.61, v: 0.58, w: 0.24, h: 0.22, color: 0xa7afab, alpha: 0.24 },
-    { u: 0.82, v: 0.72, w: 0.16, h: 0.14, color: 0x2f373a, alpha: 0.18 },
-  ];
-
-  for (const [index, facet] of facets.entries()) {
-    const drift = ((seed * 31 + index * 0.137) % 0.08) - 0.04;
-    const skew = side === "left" ? 0.05 : -0.05;
-    const a = point(Math.max(0.04, facet.u - facet.w / 2 + drift), Math.max(0.06, facet.v - facet.h / 2));
-    const b = point(Math.min(0.96, facet.u + facet.w / 2 + drift + skew), Math.max(0.08, facet.v - facet.h * 0.2));
-    const c = point(Math.min(0.96, facet.u + facet.w * 0.2 + drift), Math.min(0.94, facet.v + facet.h / 2));
-    const d = point(Math.max(0.04, facet.u - facet.w * 0.45 + drift - skew), Math.min(0.92, facet.v + facet.h * 0.2));
-
-    graphics.fillStyle(facet.color, facet.alpha);
-    graphics.beginPath();
-    graphics.moveTo(a.x, a.y);
-    graphics.lineTo(b.x, b.y);
-    graphics.lineTo(c.x, c.y);
-    graphics.lineTo(d.x, d.y);
-    graphics.closePath();
-    graphics.fillPath();
-  }
-
-  graphics.lineStyle(1, 0x242b2d, 0.26);
-  graphics.beginPath();
-  for (const [startU, startV, endU, endV] of [
-    [0.12, 0.22, 0.34, 0.5],
-    [0.44, 0.14, 0.37, 0.42],
-    [0.66, 0.32, 0.88, 0.58],
-    [0.28, 0.64, 0.56, 0.82],
-  ] as const) {
-    const start = point(startU, startV);
-    const end = point(endU, endV);
-    graphics.moveTo(start.x, start.y);
-    graphics.lineTo(end.x, end.y);
-  }
-  graphics.strokePath();
-
-  graphics.lineStyle(1, 0xd9dfdc, 0.2);
-  graphics.beginPath();
-  const lipA = point(0.08, 0.1);
-  const lipB = point(0.88, 0.08);
-  graphics.moveTo(lipA.x, lipA.y);
-  graphics.lineTo(lipB.x, lipB.y);
-  graphics.strokePath();
-}
-
-function getTerrainSideDetailPalette(terrain: TerrainType) {
-  switch (terrain) {
-    case TerrainType.MOUNTAIN:
-      return {
-        highlight: 0xd7ddd9,
-        highlightAlpha: 0.38,
-        strata: 0x2e3638,
-        strataAlpha: 0.22,
-        chipLight: 0xc2c8c3,
-        chipLightAlpha: 0.28,
-        chipDark: 0x2e3435,
-        chipDarkAlpha: 0.22,
-      };
-    case TerrainType.SNOW:
-      return {
-        highlight: 0xffffff,
-        highlightAlpha: 0.32,
-        strata: 0x8db0c1,
-        strataAlpha: 0.16,
-        chipLight: 0xffffff,
-        chipLightAlpha: 0.22,
-        chipDark: 0x81a6b8,
-        chipDarkAlpha: 0.16,
-      };
-    case TerrainType.SAND:
-      return {
-        highlight: 0xffe2a0,
-        highlightAlpha: 0.26,
-        strata: 0x88652e,
-        strataAlpha: 0.14,
-        chipLight: 0xf6d17c,
-        chipLightAlpha: 0.22,
-        chipDark: 0x7c5b27,
-        chipDarkAlpha: 0.14,
-      };
-    default:
-      return {
-        highlight: 0xffffff,
-        highlightAlpha: 0.24,
-        strata: 0x1f241f,
-        strataAlpha: 0.14,
-        chipLight: 0xd4d0b0,
-        chipLightAlpha: 0.16,
-        chipDark: 0x1f241f,
-        chipDarkAlpha: 0.12,
-      };
-  }
-}
-
-function blendRgb(from: number, to: number, amount: number) {
-  const fromR = (from >> 16) & 0xff;
-  const fromG = (from >> 8) & 0xff;
-  const fromB = from & 0xff;
-  const toR = (to >> 16) & 0xff;
-  const toG = (to >> 8) & 0xff;
-  const toB = to & 0xff;
-
-  return (
-    (Math.round(Phaser.Math.Linear(fromR, toR, amount)) << 16) |
-    (Math.round(Phaser.Math.Linear(fromG, toG, amount)) << 8) |
-    Math.round(Phaser.Math.Linear(fromB, toB, amount))
-  );
-}
-
-function getBrickRampartPlacement() {
-  return {
-    width: 58,
-    height: 64,
-    originX: 0.5,
-    offsetX: 0,
-    offsetY: 16,
-  };
-}
-
-function getBrickWallAxis(orientation: BrickWallOrientation): {
-  along: Position;
-  across: Position;
-  long: number;
-  thick: number;
-  shadowWidth: number;
-  crenelCount: number;
-} {
-  switch (orientation) {
-    case "diagonalDown":
-      return {
-        along: { x: 0, y: 1 },
-        across: { x: 1, y: 0 },
-        long: 18,
-        thick: 13,
-        shadowWidth: 38,
-        crenelCount: 3,
-      };
-    case "diagonalUp":
-      return {
-        along: { x: 1, y: 0 },
-        across: { x: 0, y: 1 },
-        long: 24,
-        thick: 10,
-        shadowWidth: 58,
-        crenelCount: 3,
-      };
-    case "y":
-      return {
-        along: { x: -0.9, y: 0.46 },
-        across: { x: 0.46, y: 0.9 },
-        long: 25,
-        thick: 10,
-        shadowWidth: 58,
-        crenelCount: 3,
-      };
-    case "x":
-    default:
-      return {
-        along: { x: 0.9, y: 0.46 },
-        across: { x: -0.46, y: 0.9 },
-        long: 25,
-        thick: 10,
-        shadowWidth: 58,
-        crenelCount: 3,
-      };
-  }
-}
-
-function getBrickWallVectors(orientation: BrickWallOrientation): { dir: Position; normal: Position } {
-  switch (orientation) {
-    case "y":
-      return { dir: { x: -26, y: 13 }, normal: { x: 10, y: 5 } };
-    case "diagonalDown":
-      return { dir: { x: 0, y: 25 }, normal: { x: 14, y: 0 } };
-    case "diagonalUp":
-      return { dir: { x: 28, y: 0 }, normal: { x: 0, y: 10 } };
-    case "x":
-    default:
-      return { dir: { x: 26, y: 13 }, normal: { x: -10, y: 5 } };
-  }
-}
-
-function drawDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
-  graphics.beginPath();
-  graphics.moveTo(x, y - TILE_HEIGHT / 2);
-  graphics.lineTo(x + TILE_WIDTH / 2, y);
-  graphics.lineTo(x, y + TILE_HEIGHT / 2);
-  graphics.lineTo(x - TILE_WIDTH / 2, y);
-  graphics.closePath();
-}
-
-function isTerrainEffectInView(
-  effect: WaterTileEffect | LavaTileEffect,
-  view: Phaser.Geom.Rectangle
-) {
-  return (
-    effect.x >= view.x - TERRAIN_EFFECT_VIEW_PADDING &&
-    effect.x <= view.x + view.width + TERRAIN_EFFECT_VIEW_PADDING &&
-    effect.y >= view.y - TERRAIN_EFFECT_VIEW_PADDING &&
-    effect.y <= view.y + view.height + TERRAIN_EFFECT_VIEW_PADDING
-  );
-}
-
-function isSpritePointInView(x: number, y: number, view: Phaser.Geom.Rectangle) {
-  return (
-    x >= view.x - TERRAIN_EFFECT_VIEW_PADDING &&
-    x <= view.x + view.width + TERRAIN_EFFECT_VIEW_PADDING &&
-    y >= view.y - TERRAIN_EFFECT_VIEW_PADDING &&
-    y <= view.y + view.height + TERRAIN_EFFECT_VIEW_PADDING
-  );
-}
-
-function areObjectsRenderEquivalent(left: MapObjectData, right: MapObjectData) {
-  return (
-    left.type === right.type &&
-    left.id === right.id &&
-    left.playerId === right.playerId &&
-    left.x === right.x &&
-    left.y === right.y &&
-    left.faction === right.faction &&
-    left.color === right.color &&
-    left.name === right.name &&
-    Boolean(left.onWater) === Boolean(right.onWater) &&
-    Boolean(left.inTown) === Boolean(right.inTown) &&
-    (left.renderOffsetX ?? 0) === (right.renderOffsetX ?? 0) &&
-    (left.renderOffsetY ?? 0) === (right.renderOffsetY ?? 0) &&
-    (left.buildingType ?? "") === (right.buildingType ?? "") &&
-    (left.guardianPower ?? 0) === (right.guardianPower ?? 0)
-  );
-}
-
-function shouldRebuildHero(left: MapObjectData, right: MapObjectData) {
-  return (
-    left.type !== right.type ||
-    left.id !== right.id ||
-    left.faction !== right.faction ||
-    left.color !== right.color ||
-    Boolean(left.onWater) !== Boolean(right.onWater) ||
-    Boolean(left.inTown) !== Boolean(right.inTown)
-  );
-}
-
-function generateTerrainAnimationTextures(scene: Phaser.Scene) {
-  if (!scene.textures.exists(getTerrainTextureKey(WATER_TEXTURE_PREFIX, 0))) {
-    generateTerrainTextureFrames(scene, WATER_TEXTURE_PREFIX, drawWaterAnimation);
-  }
-  if (!scene.textures.exists(getTerrainTextureKey(LAVA_TEXTURE_PREFIX, 0))) {
-    generateTerrainTextureFrames(scene, LAVA_TEXTURE_PREFIX, drawLavaAnimation);
-  }
-}
-
-function generateFogStampTextures(scene: Phaser.Scene) {
-  const centerX = FOG_STAMP_WIDTH / 2;
-  const centerY = FOG_STAMP_HEIGHT / 2;
-
-  for (const [stampKey, textureKey] of Object.entries(FOG_STAMP_TEXTURE_KEYS) as [FogStampKey, string][]) {
-    if (scene.textures.exists(textureKey)) continue;
-
-    const graphics = scene.add.graphics();
-    switch (stampKey) {
-      case "fog-near":
-        drawFogNearTileVisual(graphics, centerX, centerY);
-        break;
-      case "fog-unexplored":
-        drawFogTileVisual(graphics, centerX, centerY, false);
-        break;
-      case "fog-explored":
-        drawFogTileVisual(graphics, centerX, centerY, true);
-        break;
-      case "fog-edge-nw":
-        drawFogFrontierEdgeVisual(graphics, centerX, centerY, "northWest");
-        break;
-      case "fog-edge-ne":
-        drawFogFrontierEdgeVisual(graphics, centerX, centerY, "northEast");
-        break;
-      case "fog-edge-se":
-        drawFogFrontierEdgeVisual(graphics, centerX, centerY, "southEast");
-        break;
-      case "fog-edge-sw":
-        drawFogFrontierEdgeVisual(graphics, centerX, centerY, "southWest");
-        break;
-    }
-    graphics.generateTexture(textureKey, FOG_STAMP_WIDTH, FOG_STAMP_HEIGHT);
-    graphics.destroy();
-  }
-}
-
-function generateTerrainTextureFrames(
-  scene: Phaser.Scene,
-  prefix: string,
-  drawFrame: (graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) => void
-) {
-  const centerX = TERRAIN_TEXTURE_WIDTH / 2;
-  const centerY = TERRAIN_TEXTURE_HEIGHT / 2;
-
-  for (let frame = 0; frame < TERRAIN_ANIMATION_FRAME_COUNT; frame++) {
-    const key = getTerrainTextureKey(prefix, frame);
-    if (scene.textures.exists(key)) continue;
-
-    const graphics = scene.add.graphics();
-    drawFrame(graphics, centerX, centerY, 0, frame * TERRAIN_ANIMATION_INTERVAL_MS);
-    graphics.generateTexture(key, TERRAIN_TEXTURE_WIDTH, TERRAIN_TEXTURE_HEIGHT);
-    graphics.destroy();
-  }
-}
-
-function updateTerrainEffectFrame(
-  effect: WaterTileEffect | LavaTileEffect,
-  texturePrefix: string,
-  baseFrameIndex: number
-) {
-  const nextFrameIndex = (baseFrameIndex + effect.frameOffset) % TERRAIN_ANIMATION_FRAME_COUNT;
-  if (effect.frameIndex === nextFrameIndex) return;
-
-  effect.frameIndex = nextFrameIndex;
-  effect.sprite.setTexture(getTerrainTextureKey(texturePrefix, nextFrameIndex));
-}
-
-function getTerrainFrameOffset(x: number, y: number) {
-  return Math.floor(hashTile(x, y) * TERRAIN_ANIMATION_FRAME_COUNT) % TERRAIN_ANIMATION_FRAME_COUNT;
-}
-
-function getTerrainTextureKey(prefix: string, frame: number) {
-  return `${prefix}-${frame}`;
-}
-
-const ROAD_SIDE_SEEDS: Record<RoadSide, number> = {
-  northEast: 11,
-  southEast: 29,
-  southWest: 47,
-  northWest: 71,
-};
-
-function getRoadStampSpec(kind: RoadType | "bridge", side: RoadSide): RoadStampSpec {
-  const mask = ROAD_STAMP_MASK_BY_SIDE[side];
-  const texturePath = ROAD_TEXTURES[kind][mask];
-
-  if (kind === "paved") {
-    return {
-      texturePath,
-      cropX: mask === 5 ? 38 : 30,
-      cropY: 17,
-      cropWidth: 58,
-      cropHeight: 24,
-      displayWidth: 44,
-      displayHeight: 18,
-      alpha: 0.92,
-    };
-  }
-
-  if (kind === "bridge") {
-    return {
-      texturePath,
-      cropX: mask === 5 ? 32 : 24,
-      cropY: 18,
-      cropWidth: 64,
-      cropHeight: 28,
-      displayWidth: 48,
-      displayHeight: 21,
-      alpha: 0.95,
-    };
-  }
-
-  return {
-    texturePath,
-    cropX: mask === 5 ? 34 : 26,
-    cropY: 18,
-    cropWidth: 64,
-    cropHeight: 28,
-    displayWidth: kind === "gravel" ? 46 : 47,
-    displayHeight: kind === "gravel" ? 20 : 21,
-    alpha: 0.9,
-  };
-}
-
-function getRoadCenterStampSpec(kind: RoadType | "bridge", connections: RoadSide[]): RoadStampSpec {
-  const mask = connections.reduce((value, side) => value | ROAD_TEXTURE_BITS[side], 0);
-  const texturePath = ROAD_TEXTURES[kind][mask] ?? ROAD_TEXTURES[kind][5];
-
-  if (kind === "paved") {
-    return {
-      texturePath,
-      cropX: 40,
-      cropY: 16,
-      cropWidth: 48,
-      cropHeight: 28,
-      displayWidth: 31,
-      displayHeight: 18,
-      alpha: 0.96,
-    };
-  }
-
-  if (kind === "bridge") {
-    return {
-      texturePath,
-      cropX: 38,
-      cropY: 15,
-      cropWidth: 52,
-      cropHeight: 30,
-      displayWidth: 34,
-      displayHeight: 20,
-      alpha: 0.96,
-    };
-  }
-
-  return {
-    texturePath,
-    cropX: 38,
-    cropY: 16,
-    cropWidth: 52,
-    cropHeight: 30,
-    displayWidth: kind === "gravel" ? 33 : 34,
-    displayHeight: kind === "gravel" ? 19 : 20,
-    alpha: 0.94,
-  };
-}
-
-function getRoadAnchorPoints(x: number, y: number): Record<RoadSide, Position> {
-  return {
-    northEast: { x: x + TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
-    southEast: { x: x + TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
-    southWest: { x: x - TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
-    northWest: { x: x - TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
-  };
-}
-
-function extendRoadPoint(from: Position, to: Position, amount: number): Position {
-  const vector = getRoadVector(from, to);
-  return {
-    x: to.x + vector.direction.x * amount,
-    y: to.y + vector.direction.y * amount,
-  };
-}
-
-function getRoadVector(from: Position, to: Position) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const length = Math.hypot(dx, dy) || 1;
-  return {
-    direction: { x: dx / length, y: dy / length },
-    normal: { x: -dy / length, y: dx / length },
-    length,
-  };
-}
-
-function offsetPoint(point: Position, offset: Position): Position {
-  return {
-    x: point.x + offset.x,
-    y: point.y + offset.y,
-  };
-}
-
-function scalePoint(point: Position, amount: number): Position {
-  return {
-    x: point.x * amount,
-    y: point.y * amount,
-  };
-}
-
-function fillRoadStrip(
-  graphics: Phaser.GameObjects.Graphics,
-  from: Position,
-  to: Position,
-  halfWidth: number,
-  color: number,
-  alpha: number
-) {
-  const vector = getRoadVector(from, to);
-  const normal = scalePoint(vector.normal, halfWidth);
-  graphics.fillStyle(color, alpha);
-  graphics.beginPath();
-  graphics.moveTo(from.x + normal.x, from.y + normal.y);
-  graphics.lineTo(to.x + normal.x, to.y + normal.y);
-  graphics.lineTo(to.x - normal.x, to.y - normal.y);
-  graphics.lineTo(from.x - normal.x, from.y - normal.y);
-  graphics.closePath();
-  graphics.fillPath();
-}
-
-function pseudoRandom(seed: number, index: number) {
-  const value = Math.sin((seed + index * 17.371) * 43758.5453123);
-  return value - Math.floor(value);
-}
-
-function drawFogTileVisual(graphics: Phaser.GameObjects.Graphics, x: number, y: number, explored: boolean) {
-  if (explored) {
-    graphics.fillStyle(0x000000, 0.28);
-    drawFogDiamondPath(graphics, x, y, 0);
-    graphics.fillPath();
-  } else {
-    const jitter = 0.5;
-    graphics.fillStyle(0x010205, 1);
-    drawFogDiamondPath(graphics, x, y, 4);
-    graphics.fillPath();
-
-    graphics.fillStyle(0x030611, 1);
-    graphics.fillEllipse(x - 12 + jitter * 18, y - 4, 44, 17);
-    graphics.fillEllipse(x + 10 - jitter * 16, y + 5, 36, 13);
-
-    graphics.lineStyle(1, 0x0a1020, 0.9);
-    drawFogDiamondPath(graphics, x, y, 4);
-    graphics.strokePath();
-  }
-}
-
-function drawFogNearTileVisual(graphics: Phaser.GameObjects.Graphics, x: number, y: number) {
-  graphics.fillStyle(0x000000, 0.18);
-  drawFogDiamondPath(graphics, x, y, 0);
-  graphics.fillPath();
-}
-
-function drawFogFrontierEdgeVisual(graphics: Phaser.GameObjects.Graphics, x: number, y: number, side: FogEdgeSide) {
-  const points = getDiamondPoints(x, y);
-  const edge = getFogEdge(points, side);
-
-  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.42, 0xb9c9d0, 0.06);
-  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.26, 0x6f8490, 0.08);
-  fillEdgeStrip(graphics, edge.a, edge.b, { x, y }, 0.12, 0xf4fbff, 0.04);
-}
-
-function drawFogDiamondPath(graphics: Phaser.GameObjects.Graphics, x: number, y: number, padding: number) {
-  graphics.beginPath();
-  graphics.moveTo(x, y - TILE_HEIGHT / 2 - padding * 0.5);
-  graphics.lineTo(x + TILE_WIDTH / 2 + padding, y);
-  graphics.lineTo(x, y + TILE_HEIGHT / 2 + padding * 0.5);
-  graphics.lineTo(x - TILE_WIDTH / 2 - padding, y);
-  graphics.closePath();
-}
-
-function getDiamondPoints(x: number, y: number) {
-  return {
-    north: { x, y: y - TILE_HEIGHT / 2 },
-    east: { x: x + TILE_WIDTH / 2, y },
-    south: { x, y: y + TILE_HEIGHT / 2 },
-    west: { x: x - TILE_WIDTH / 2, y },
-  };
-}
-
-function getFogEdge(points: ReturnType<typeof getDiamondPoints>, side: FogEdgeSide) {
-  switch (side) {
-    case "northWest":
-      return { a: points.north, b: points.west };
-    case "northEast":
-      return { a: points.north, b: points.east };
-    case "southEast":
-      return { a: points.east, b: points.south };
-    case "southWest":
-      return { a: points.south, b: points.west };
-  }
-}
-
-function fillEdgeStrip(
-  graphics: Phaser.GameObjects.Graphics,
-  a: Position,
-  b: Position,
-  center: Position,
-  amount: number,
-  color: number,
-  alpha: number
-) {
-  const innerA = lerpPoint(a, center, amount);
-  const innerB = lerpPoint(b, center, amount);
-
-  graphics.fillStyle(color, alpha);
-  graphics.beginPath();
-  graphics.moveTo(a.x, a.y);
-  graphics.lineTo(b.x, b.y);
-  graphics.lineTo(innerB.x, innerB.y);
-  graphics.lineTo(innerA.x, innerA.y);
-  graphics.closePath();
-  graphics.fillPath();
-}
-
-function drawPolygonPath(graphics: Phaser.GameObjects.Graphics, points: Position[]) {
-  graphics.beginPath();
-  graphics.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) {
-    graphics.lineTo(points[i].x, points[i].y);
-  }
-  graphics.closePath();
-}
-
-function drawRingPath(graphics: Phaser.GameObjects.Graphics, outer: Position[], inner: Position[]) {
-  for (let i = 0; i < outer.length; i++) {
-    const next = (i + 1) % outer.length;
-    graphics.beginPath();
-    graphics.moveTo(outer[i].x, outer[i].y);
-    graphics.lineTo(outer[next].x, outer[next].y);
-    graphics.lineTo(inner[next].x, inner[next].y);
-    graphics.lineTo(inner[i].x, inner[i].y);
-    graphics.closePath();
-    graphics.fillPath();
-    graphics.strokePath();
-  }
-}
-
-function getMapOuterCorners(map: GameMap, paddingTiles = 0): Position[] {
-  const min = -paddingTiles;
-  const maxX = map.width - 1 + paddingTiles;
-  const maxY = map.height - 1 + paddingTiles;
-  const top = cartToIso(min, min);
-  const right = cartToIso(maxX, min);
-  const bottom = cartToIso(maxX, maxY);
-  const left = cartToIso(min, maxY);
-
-  return [
-    { x: top.x, y: top.y - TILE_HEIGHT / 2 },
-    { x: right.x + TILE_WIDTH / 2, y: right.y },
-    { x: bottom.x, y: bottom.y + TILE_HEIGHT / 2 },
-    { x: left.x - TILE_WIDTH / 2, y: left.y },
-  ];
-}
-
-function liftPolygon(points: Position[], height: number): Position[] {
-  return points.map((point) => ({ x: point.x, y: point.y - height }));
-}
-
-function getPolygonCenter(points: Position[]): Position {
-  return points.reduce(
-    (center, point) => ({
-      x: center.x + point.x / points.length,
-      y: center.y + point.y / points.length,
-    }),
-    { x: 0, y: 0 }
-  );
-}
-
-function lerpPoint(from: Position, to: Position, amount: number): Position {
-  return {
-    x: Phaser.Math.Linear(from.x, to.x, amount),
-    y: Phaser.Math.Linear(from.y, to.y, amount),
-  };
-}
-
-function parseHexColor(color: string): number | null {
-  const normalized = color.trim().replace(/^#/, "");
-  const hex = normalized.length === 3
-    ? normalized.split("").map((char) => char + char).join("")
-    : normalized;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
-  return Number.parseInt(hex, 16);
-}
-
-function pickTerrainTexture(tile: MapTile): TerrainTopTexture | null {
-  if (tile.terrain === TerrainType.WATER) return null;
-
-  const textures = TERRAIN_TOP_TEXTURES[tile.terrain] as readonly TerrainTopTexture[] | undefined;
-  if (!textures || textures.length === 0) return null;
-
-  if (tile.road) {
-    return findTextureByTag(textures, "clean") ?? textures[0];
-  }
-
-  const decorTags = getDecorTextureTags(tile.decor);
-  const matchingTextures = decorTags.length > 0
-    ? textures.filter((texture) => decorTags.some((tag) => texture.tags.includes(tag)))
-    : [];
-  const pool = matchingTextures.length > 0 ? matchingTextures : textures;
-  const variantOffset = tile.decor && !tile.decor.blocking ? (tile.decor.variant ?? 0) : 0;
-  const index = Math.floor(hashTile(tile.x + variantOffset * 11, tile.y + pool.length * 7) * pool.length);
-
-  return pool[index] ?? textures[0];
-}
-
-function findTextureByTag(textures: readonly TerrainTopTexture[], tag: string) {
-  return textures.find((texture) => texture.tags.includes(tag));
-}
-
-function getDecorTextureTags(decor: DecorItem | undefined): string[] {
-  if (!decor || decor.blocking) return [];
-
-  switch (decor.type) {
-    case "grass-tuft":
-      return ["grass"];
-    case "flower":
-      return ["flower"];
-    case "rock-small":
-    case "rock-large":
-      return ["rock"];
-    case "bush":
-      return ["grass", "moss"];
-    case "tree-pine":
-      return ["needle", "moss"];
-    case "tree-oak":
-      return ["leaf", "moss"];
-    case "tree-dead":
-      return ["root", "leaf"];
-    default:
-      return [];
-  }
-}
-
-function pickNaturalWallTreeSprite(tile: MapTile) {
-  const roll = hashTile(tile.x + 37, tile.y + 73);
-
-  if (tile.terrain === TerrainType.SNOW || tile.terrain === TerrainType.MOUNTAIN) {
-    return roll > 0.82 ? MAP_SPRITES.decor.grove_dead : MAP_SPRITES.decor.grove_pine;
-  }
-
-  if (tile.terrain === TerrainType.SWAMP || tile.terrain === TerrainType.LAVA) {
-    return roll > 0.72 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_dead;
-  }
-
-  if (tile.terrain === TerrainType.FOREST) {
-    return roll > 0.45 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_oak;
-  }
-
-  return roll > 0.64 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_oak;
-}
-
-function getTerrainTopTextureTransform(tile: MapTile) {
-  const value = Math.floor(hashTile(tile.x + 101, tile.y + 211) * 8);
-  return {
-    angle: value >= 4 ? 180 : 0,
-    flipX: value % 2 === 1,
-    flipY: value % 4 >= 2,
-  };
-}
-
-function applyTerrainTopTextureCrop(sprite: Phaser.GameObjects.Image) {
-  const frameWidth = sprite.frame.width;
-  const frameHeight = sprite.frame.height;
-  const cropInsetX = Math.min(TERRAIN_TOP_TEXTURE_CROP_INSET, Math.max(0, Math.floor(frameWidth / 8)));
-  const cropInsetY = Math.min(TERRAIN_TOP_TEXTURE_CROP_INSET, Math.max(0, Math.floor(frameHeight / 8)));
-
-  if (cropInsetX <= 0 && cropInsetY <= 0) return;
-
-  const cropWidth = Math.max(1, frameWidth - cropInsetX * 2);
-  const cropHeight = Math.max(1, frameHeight - cropInsetY * 2);
-  sprite.setCrop(cropInsetX, cropInsetY, cropWidth, cropHeight);
-}
-
-function drawTileTexture(graphics: Phaser.GameObjects.Graphics, tile: MapTile, isoX: number, isoY: number) {
-  const jitter = hashTile(tile.x, tile.y);
-  if (tile.terrain === TerrainType.WATER) {
-    graphics.lineStyle(1, 0x6fb7d8, 0.22);
-    graphics.beginPath();
-    graphics.moveTo(isoX - 13, isoY - 1 + jitter * 2);
-    graphics.lineTo(isoX + 13, isoY - 1 + jitter * 2);
-    graphics.moveTo(isoX - 8, isoY + 5 - jitter * 2);
-    graphics.lineTo(isoX + 8, isoY + 5 - jitter * 2);
-    graphics.strokePath();
-    return;
-  }
-
-  if (tile.terrain === TerrainType.SAND) {
-    graphics.fillStyle(0x7b5b37, 0.18);
-    graphics.fillCircle(isoX - 8 + jitter * 4, isoY + 3, 1.5);
-    graphics.fillCircle(isoX + 7, isoY - 4 + jitter * 3, 1.2);
-    drawScenicDecorTexture(graphics, tile, isoX, isoY, jitter);
-    return;
-  }
-
-  if (tile.terrain === TerrainType.MOUNTAIN) {
-    graphics.lineStyle(1, 0x3f3f3f, 0.32);
-    graphics.beginPath();
-    graphics.moveTo(isoX - 12, isoY + 3);
-    graphics.lineTo(isoX - 2, isoY - 7);
-    graphics.lineTo(isoX + 10, isoY + 4);
-    graphics.strokePath();
-    drawScenicDecorTexture(graphics, tile, isoX, isoY, jitter);
-    return;
-  }
-
-  if (tile.terrain === TerrainType.FOREST) {
-    graphics.fillStyle(0x17461f, 0.24);
-    graphics.fillCircle(isoX - 7, isoY, 3);
-    graphics.fillCircle(isoX + 4, isoY - 3, 2.5);
-    drawScenicDecorTexture(graphics, tile, isoX, isoY, jitter);
-    return;
-  }
-
-  if (tile.terrain === TerrainType.LAVA) {
-    graphics.lineStyle(2, 0xff5a1f, 0.35);
-    graphics.beginPath();
-    graphics.moveTo(isoX - 11, isoY + 2);
-    graphics.lineTo(isoX - 2, isoY - 2);
-    graphics.lineTo(isoX + 9, isoY + 3);
-    graphics.strokePath();
-    return;
-  }
-
-  drawScenicDecorTexture(graphics, tile, isoX, isoY, jitter);
-}
-
-function drawScenicDecorTexture(
-  graphics: Phaser.GameObjects.Graphics,
-  tile: MapTile,
-  isoX: number,
-  isoY: number,
-  jitter: number
-) {
-  const decor = tile.decor;
-  if (!decor || decor.blocking || !isAllowedDecor(decor.type)) return;
-
-  const variant = decor.variant ?? 0;
-  const offset = ((variant % 3) - 1) * 3;
-  const lean = jitter > 0.5 ? 1 : -1;
-
-  switch (decor.type) {
-    case "tree-pine":
-      drawNeedleTexture(graphics, isoX + offset, isoY, lean);
-      break;
-    case "tree-oak":
-      drawLeafTexture(graphics, isoX + offset, isoY, 0x2f7a34, 0x7fc96a);
-      break;
-    case "tree-dead":
-      drawTwigTexture(graphics, isoX + offset, isoY, lean);
-      break;
-    case "rock-large":
-      drawRockTexture(graphics, isoX + offset, isoY, 1);
-      break;
-    case "rock-small":
-      drawRockTexture(graphics, isoX + offset, isoY, 0.62);
-      break;
-    case "bush":
-      drawLeafTexture(graphics, isoX + offset, isoY + 1, 0x2d7430, 0x9ad877);
-      break;
-    case "flower":
-      drawFlowerTexture(graphics, isoX + offset, isoY, variant);
-      break;
-    case "grass-tuft":
-      drawGrassTexture(graphics, isoX + offset, isoY, variant);
-      break;
-  }
-}
-
-function drawNeedleTexture(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, lean: number) {
-  graphics.fillStyle(0x174d22, 0.28);
-  graphics.fillEllipse(isoX, isoY + 3, 30, 9);
-  graphics.lineStyle(2, 0x2f8b3f, 0.6);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 16, isoY + 4);
-  graphics.lineTo(isoX - 6 + lean, isoY - 4);
-  graphics.lineTo(isoX + 3, isoY + 5);
-  graphics.moveTo(isoX - 6, isoY + 6);
-  graphics.lineTo(isoX + 6 + lean, isoY - 5);
-  graphics.lineTo(isoX + 17, isoY + 4);
-  graphics.strokePath();
-  graphics.lineStyle(1, 0xa8d483, 0.22);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 12, isoY + 2);
-  graphics.lineTo(isoX + 13, isoY + 2);
-  graphics.strokePath();
-}
-
-function drawLeafTexture(
-  graphics: Phaser.GameObjects.Graphics,
-  isoX: number,
-  isoY: number,
-  baseColor: number,
-  highlightColor: number
-) {
-  graphics.fillStyle(0x0d2a12, 0.2);
-  graphics.fillEllipse(isoX, isoY + 4, 32, 9);
-  graphics.fillStyle(baseColor, 0.42);
-  graphics.fillCircle(isoX - 9, isoY + 1, 5);
-  graphics.fillCircle(isoX + 1, isoY - 3, 6);
-  graphics.fillCircle(isoX + 11, isoY + 2, 4.5);
-  graphics.fillEllipse(isoX + 1, isoY + 4, 25, 8);
-  graphics.fillStyle(highlightColor, 0.22);
-  graphics.fillCircle(isoX - 3, isoY - 4, 2.2);
-  graphics.fillCircle(isoX + 9, isoY, 1.8);
-}
-
-function drawTwigTexture(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, lean: number) {
-  graphics.fillStyle(0x1f130b, 0.18);
-  graphics.fillEllipse(isoX, isoY + 5, 34, 7);
-  graphics.lineStyle(2, 0x6f4b2d, 0.62);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 15, isoY + 4);
-  graphics.lineTo(isoX - 4, isoY - 2);
-  graphics.lineTo(isoX + 13, isoY + 4);
-  graphics.moveTo(isoX - 4, isoY - 2);
-  graphics.lineTo(isoX + lean * 2, isoY - 9);
-  graphics.moveTo(isoX + 4, isoY + 1);
-  graphics.lineTo(isoX + 14, isoY - 5);
-  graphics.strokePath();
-  graphics.lineStyle(1, 0xb98955, 0.32);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 10, isoY + 2);
-  graphics.lineTo(isoX + 8, isoY + 3);
-  graphics.strokePath();
-}
-
-function drawRockTexture(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, scale: number) {
-  drawFlatRock(graphics, isoX - 9 * scale, isoY + 2, 9 * scale, 4 * scale, 0x7d8587);
-  drawFlatRock(graphics, isoX + 3 * scale, isoY - 2, 12 * scale, 5 * scale, 0xa1aaa9);
-  drawFlatRock(graphics, isoX + 13 * scale, isoY + 4, 7 * scale, 3.5 * scale, 0x626b6e);
-}
-
-function drawFlatRock(
-  graphics: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: number
-) {
-  graphics.fillStyle(0x101516, 0.16);
-  graphics.fillEllipse(x, y + height * 0.8, width * 2, height * 1.2);
-  graphics.fillStyle(color, 0.72);
-  graphics.beginPath();
-  graphics.moveTo(x - width, y + height * 0.2);
-  graphics.lineTo(x - width * 0.35, y - height);
-  graphics.lineTo(x + width * 0.35, y - height * 0.75);
-  graphics.lineTo(x + width, y);
-  graphics.lineTo(x + width * 0.55, y + height);
-  graphics.lineTo(x - width * 0.55, y + height);
-  graphics.closePath();
-  graphics.fillPath();
-  graphics.fillStyle(0xffffff, 0.16);
-  graphics.fillCircle(x - width * 0.25, y - height * 0.35, Math.max(1, height * 0.25));
-}
-
-function drawFlowerTexture(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, variant: number) {
-  drawGrassTexture(graphics, isoX, isoY, variant);
-  const colors = [0xff7da2, 0xffd166, 0x9ad7ff, 0xf6f7a8];
-  const points = [
-    [isoX - 9, isoY + 2],
-    [isoX - 1, isoY - 2],
-    [isoX + 8, isoY + 3],
-    [isoX + 15, isoY + 6],
-  ];
-  for (let i = 0; i < points.length; i++) {
-    graphics.fillStyle(colors[(i + variant) % colors.length], 0.88);
-    graphics.fillCircle(points[i][0], points[i][1], 1.4);
-  }
-}
-
-function drawGrassTexture(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, variant: number) {
-  graphics.fillStyle(0x0a2a0d, 0.14);
-  graphics.fillEllipse(isoX, isoY + 6, 32, 6);
-  graphics.lineStyle(1, 0x2f7d34, 0.7);
-  graphics.beginPath();
-  for (let i = 0; i < 9; i++) {
-    const x = isoX - 16 + i * 4;
-    const h = 5 + ((i + variant) % 4);
-    const lean = i % 2 === 0 ? -2 : 2;
-    graphics.moveTo(x, isoY + 6);
-    graphics.lineTo(x + lean, isoY + 6 - h);
-  }
-  graphics.strokePath();
-  graphics.lineStyle(1, 0x9bd36d, 0.22);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 13, isoY + 4);
-  graphics.lineTo(isoX + 13, isoY + 5);
-  graphics.strokePath();
-}
-
-function drawWaterAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {
-  const phase = time * 0.0012 + seed * Math.PI * 2;
-  const pulse = (Math.sin(phase * 1.4) + 1) / 2;
-  const drift = ((phase * 9) % 18) - 9;
-
-  graphics.clear();
-  graphics.fillStyle(0x6cc9ee, 0.08 + pulse * 0.05);
-  drawDiamondPath(graphics, isoX, isoY);
-  graphics.fillPath();
-
-  graphics.lineStyle(1, 0xb8ecff, 0.18 + pulse * 0.14);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 20 + drift * 0.45, isoY - 7 + Math.sin(phase) * 1.5);
-  graphics.lineTo(isoX - 5 + drift * 0.45, isoY - 12 + Math.cos(phase) * 1.1);
-  graphics.lineTo(isoX + 16 + drift * 0.45, isoY - 7 + Math.sin(phase + 1.2) * 1.4);
-  graphics.moveTo(isoX - 14 - drift * 0.35, isoY + 4 + Math.cos(phase * 1.2) * 1.2);
-  graphics.lineTo(isoX + 2 - drift * 0.35, isoY + 8 + Math.sin(phase + 0.7) * 1.2);
-  graphics.lineTo(isoX + 18 - drift * 0.35, isoY + 4 + Math.cos(phase + 1.6) * 1.2);
-  graphics.strokePath();
-
-  graphics.lineStyle(1, 0x104b74, 0.14);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 24, isoY + 12 + Math.sin(phase + 2.1) * 1.2);
-  graphics.lineTo(isoX - 6, isoY + 15 + Math.cos(phase + 1.3) * 0.9);
-  graphics.lineTo(isoX + 24, isoY + 11 + Math.sin(phase + 0.4) * 1.2);
-  graphics.strokePath();
-}
-
-function drawLavaAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {
-  const phase = time * 0.0017 + seed * Math.PI * 2;
-  const pulse = (Math.sin(phase * 2.1) + 1) / 2;
-  const ember = (Math.sin(phase * 3.4 + seed * 5) + 1) / 2;
-
-  graphics.clear();
-  graphics.fillStyle(0xff7a1f, 0.08 + pulse * 0.1);
-  drawDiamondPath(graphics, isoX, isoY);
-  graphics.fillPath();
-
-  graphics.lineStyle(2, 0xffd15c, 0.32 + pulse * 0.28);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 24, isoY - 1 + Math.sin(phase) * 2);
-  graphics.lineTo(isoX - 12, isoY - 6 + Math.cos(phase * 0.9) * 2);
-  graphics.lineTo(isoX + 1, isoY - 2 + Math.sin(phase + 1.1) * 2);
-  graphics.lineTo(isoX + 20, isoY - 8 + Math.cos(phase + 0.8) * 2);
-  graphics.moveTo(isoX - 15, isoY + 8 + Math.cos(phase + 1.7) * 2);
-  graphics.lineTo(isoX - 2, isoY + 3 + Math.sin(phase * 1.1) * 2);
-  graphics.lineTo(isoX + 15, isoY + 9 + Math.cos(phase + 2.4) * 2);
-  graphics.strokePath();
-
-  graphics.lineStyle(1, 0x6f170f, 0.3);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 28, isoY + 11 + Math.sin(phase + 0.5));
-  graphics.lineTo(isoX - 8, isoY + 15 + Math.cos(phase + 0.2));
-  graphics.lineTo(isoX + 24, isoY + 10 + Math.sin(phase + 1.8));
-  graphics.strokePath();
-
-  graphics.fillStyle(0xfff0a3, 0.2 + ember * 0.28);
-  graphics.fillCircle(isoX - 9 + Math.sin(phase * 1.6) * 3, isoY - 3 + Math.cos(phase) * 2, 1.4);
-  graphics.fillCircle(isoX + 10 + Math.cos(phase * 1.2) * 3, isoY + 4 + Math.sin(phase * 1.3) * 2, 1.1);
-}
-
-function hashTile(x: number, y: number): number {
-  const n = Math.imul(x + 17, 374761393) ^ Math.imul(y + 31, 668265263);
-  return ((n ^ (n >>> 13)) >>> 0) / 4294967295;
-}
-
-function isAllowedDecor(kind: DecorKind) {
-  return (
-    kind === "tree-pine" ||
-    kind === "tree-oak" ||
-    kind === "tree-dead" ||
-    kind === "grove-pine" ||
-    kind === "grove-oak" ||
-    kind === "grove-dead" ||
-    kind === "rock-large" ||
-    kind === "rock-small" ||
-    kind === "boulder-cluster" ||
-    kind === "bush" ||
-    kind === "flower" ||
-    kind === "grass-tuft"
-  );
-}
-
-function getObjectMetrics(object: MapObjectData) {
-  if (object.type === "hero") {
-    const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
-    if (sheet) return object.inTown
-      ? { width: sheet.townDisplayWidth, height: sheet.townDisplayHeight, offsetY: TOWN_HERO_OFFSET_Y }
-      : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: object.onWater ? MAP_OBJECT_FOOT_OFFSET_Y : HERO_OFFSET_Y };
-    return object.inTown
-      ? { width: 30, height: 30, offsetY: TOWN_HERO_OFFSET_Y }
-      : { width: 44, height: 44, offsetY: HERO_OFFSET_Y };
-  }
-  if (object.type === "town") return { width: 146, height: 110, offsetY: TOWN_OFFSET_Y };
-  if (object.type === "building") return { width: RESOURCE_BUILDING_DISPLAY_SIZE, height: RESOURCE_BUILDING_DISPLAY_SIZE, offsetY: RESOURCE_BUILDING_OFFSET_Y };
-  if (object.type === "gate") return { width: GATE_DISPLAY_WIDTH, height: GATE_DISPLAY_HEIGHT, offsetY: GATE_OFFSET_Y };
-  if (object.type === "adventure_building") {
-    if (object.buildingType === "stargate") return { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
-    if (isCreatureBankType(object.buildingType)) {
-      return { width: 66, height: 66, offsetY: ADVENTURE_BUILDING_OFFSET_Y + 3 };
-    }
-    return { width: 50, height: 50, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
-  }
-  if (object.type === "combat") return { width: 48, height: 48, offsetY: MAP_OBJECT_FOOT_OFFSET_Y };
-  return null;
-}
-
-function getObjectHitboxScale(object: MapObjectData) {
-  if (object.type === "town") return { width: 0.62, height: 0.58 };
-  if (object.type === "hero") return object.inTown
-    ? { width: 0.72, height: 0.88 }
-    : { width: 0.64, height: 0.82 };
-  if (object.type === "building") return { width: 0.72, height: 0.74 };
-  if (object.type === "adventure_building") return { width: 0.72, height: 0.72 };
-  if (object.type === "combat") return { width: 0.78, height: 0.78 };
-  return { width: 0.8, height: 0.8 };
-}
-
-function getHeroTravelMetrics(object: MapObjectData) {
-  return getObjectMetrics({ ...object, inTown: false }) ?? getObjectMetrics(object)!;
-}
-
-function getHeroBannerMetrics(object: MapObjectData) {
-  if (object.inTown) return { xOffset: 7, baseOffsetY: 10, poleHeight: 27, width: 7, height: 5 };
-  return { xOffset: 10, baseOffsetY: 8, poleHeight: 42, width: 9, height: 6 };
-}
-
-function getGateBannerPlacement(textureKey: string) {
-  return textureKey === MAP_SPRITES.gates.diagonalUp
-    ? { xRatio: 0.77, yRatio: 0.18 }
-    : { xRatio: 0.23, yRatio: 0.18 };
-}
-
-function getHeroDirection(from: Position, to: Position, fallback: HeroDirection): HeroDirection {
-  const dx = Math.sign(to.x - from.x);
-  const dy = Math.sign(to.y - from.y);
-
-  if (dx === 0 && dy === 0) return fallback;
-  if (dx === 0 && dy > 0) return "sw";
-  if (dx === 0 && dy < 0) return "ne";
-  if (dx > 0 && dy === 0) return "se";
-  if (dx < 0 && dy === 0) return "nw";
-  if (dx > 0 && dy > 0) return "s";
-  if (dx < 0 && dy < 0) return "n";
-  if (dx > 0 && dy < 0) return "e";
-  return "w";
-}
-
-function getDirectionalAnimationKey(sheet: DirectionalSpritesheet, direction: HeroDirection, state: DirectionalSpriteState) {
-  return `${sheet.animationPrefix}-${direction}-${state}`;
-}
-
-function animateHeroSprite(hero: HeroSpriteAnimation, time: number) {
-  if (hero.mode === "mounted") {
-    const breath = time / 900 + hero.phase;
-    hero.sprite.y = hero.baseY;
-    hero.sprite.angle = Math.sin(breath) * 0.7;
-    hero.sprite.scaleX = hero.baseScaleX;
-    hero.sprite.scaleY = hero.baseScaleY;
-    return;
-  }
-
-  if (hero.mode === "boat") {
-    const wave = time / 700 + hero.phase;
-    hero.sprite.y = hero.baseY + Math.sin(wave) * 1.5;
-    hero.sprite.angle = Math.sin(wave * 0.8) * 1.6;
-    hero.sprite.scaleX = hero.baseScaleX;
-    hero.sprite.scaleY = hero.baseScaleY;
-    return;
-  }
-
-  hero.sprite.y = hero.baseY;
-  hero.sprite.angle = 0;
-  hero.sprite.scaleX = hero.baseScaleX;
-  hero.sprite.scaleY = hero.baseScaleY;
-}

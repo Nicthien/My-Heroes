@@ -359,9 +359,18 @@ export interface MapTile {
   zoneId?: number;
   decor?: DecorItem;
   road?: RoadType;
+  worldEdge?: WorldEdgeTile;
 }
 
 export type RoadType = "paved" | "gravel" | "dirt";
+
+export interface WorldEdgeTile {
+  kind: "rock" | "water";
+  rimHeight: number;
+  dropDepth: number;
+  variant: number;
+  retainsWater?: boolean;
+}
 
 export interface DecorItem {
   type: DecorKind;

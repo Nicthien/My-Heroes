@@ -209,7 +209,36 @@ export const MAP_SPRITES = {
     grove_dead: "/assets/sprites/map/grove-dead.webp",
     boulder_cluster: "/assets/sprites/map/boulder-cluster.webp",
   } as Record<string, string>,
+  worldEdge: {
+    cliff: "/assets/sprites/map/world-edge-cliff.webp",
+    foam: "/assets/sprites/map/world-edge-foam.webp",
+    mist: "/assets/sprites/map/world-edge-mist.webp",
+    waterfall: "/assets/sprites/map/world-edge-waterfall.webp",
+    waterfallFrames: [
+      "/assets/sprites/map/world-edge-waterfall-0.webp",
+      "/assets/sprites/map/world-edge-waterfall-1.webp",
+      "/assets/sprites/map/world-edge-waterfall-2.webp",
+      "/assets/sprites/map/world-edge-waterfall-3.webp",
+    ],
+    heavyWaterfallFrames: [
+      "/assets/sprites/map/world-edge-waterfall-heavy-0.webp",
+      "/assets/sprites/map/world-edge-waterfall-heavy-1.webp",
+      "/assets/sprites/map/world-edge-waterfall-heavy-2.webp",
+      "/assets/sprites/map/world-edge-waterfall-heavy-3.webp",
+      "/assets/sprites/map/world-edge-waterfall-heavy-4.webp",
+      "/assets/sprites/map/world-edge-waterfall-heavy-5.webp",
+    ],
+  },
 };
+
+export const WATER_TILE_FRAME_PATHS = [
+  "/assets/sprites/map/water/water-tile-iso-0.webp",
+  "/assets/sprites/map/water/water-tile-iso-1.webp",
+  "/assets/sprites/map/water/water-tile-iso-2.webp",
+  "/assets/sprites/map/water/water-tile-iso-3.webp",
+  "/assets/sprites/map/water/water-tile-iso-4.webp",
+  "/assets/sprites/map/water/water-tile-iso-5.webp",
+];
 
 const ROAD_TEXTURE_MASKS = Array.from({ length: 16 }, (_, index) => index);
 
@@ -427,6 +456,13 @@ export const MAP_SPRITE_PATHS = Array.from(new Set([
   ...Object.values(MAP_SPRITES.buildings),
   ...Object.values(MAP_SPRITES.adventureBuildings),
   ...Object.values(MAP_SPRITES.decor),
+  MAP_SPRITES.worldEdge.cliff,
+  MAP_SPRITES.worldEdge.foam,
+  MAP_SPRITES.worldEdge.mist,
+  MAP_SPRITES.worldEdge.waterfall,
+  ...MAP_SPRITES.worldEdge.waterfallFrames,
+  ...MAP_SPRITES.worldEdge.heavyWaterfallFrames,
+  ...WATER_TILE_FRAME_PATHS,
   ...Object.values(ROAD_TEXTURES).flatMap((textures) => Object.values(textures)),
   ...TERRAIN_TEXTURE_PATHS,
 ]));

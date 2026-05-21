@@ -1,11 +1,11 @@
 import Phaser from "phaser";
+import { WATER_TILE_FRAME_PATHS } from "@/lib/rendering/phaser/assets";
 import {
   LAVA_TEXTURE_PREFIX,
   TERRAIN_ANIMATION_FRAME_COUNT,
   TERRAIN_ANIMATION_INTERVAL_MS,
   TERRAIN_TEXTURE_HEIGHT,
   TERRAIN_TEXTURE_WIDTH,
-  WATER_TEXTURE_PREFIX,
 } from "@/lib/rendering/phaser/mapRenderSettings";
 import { drawDiamondPath, hashTile } from "@/lib/rendering/phaser/pointMath";
 
@@ -26,9 +26,6 @@ export type LavaTileEffect = {
 };
 
 export function generateTerrainAnimationTextures(scene: Phaser.Scene) {
-  if (!scene.textures.exists(getTerrainTextureKey(WATER_TEXTURE_PREFIX, 0))) {
-    generateTerrainTextureFrames(scene, WATER_TEXTURE_PREFIX, drawWaterAnimation);
-  }
   if (!scene.textures.exists(getTerrainTextureKey(LAVA_TEXTURE_PREFIX, 0))) {
     generateTerrainTextureFrames(scene, LAVA_TEXTURE_PREFIX, drawLavaAnimation);
   }
@@ -65,40 +62,20 @@ export function updateTerrainEffectFrame(
   effect.sprite.setTexture(getTerrainTextureKey(texturePrefix, nextFrameIndex));
 }
 
+export function updateWaterEffectFrame(effect: WaterTileEffect, baseFrameIndex: number) {
+  const nextFrameIndex = (baseFrameIndex + effect.frameOffset) % WATER_TILE_FRAME_PATHS.length;
+  if (effect.frameIndex === nextFrameIndex) return;
+
+  effect.frameIndex = nextFrameIndex;
+  effect.sprite.setTexture(WATER_TILE_FRAME_PATHS[nextFrameIndex]);
+}
+
 export function getTerrainFrameOffset(x: number, y: number) {
   return Math.floor(hashTile(x, y) * TERRAIN_ANIMATION_FRAME_COUNT) % TERRAIN_ANIMATION_FRAME_COUNT;
 }
 
 export function getTerrainTextureKey(prefix: string, frame: number) {
   return `${prefix}-${frame}`;
-}
-
-function drawWaterAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {
-  const phase = time * 0.0012 + seed * Math.PI * 2;
-  const pulse = (Math.sin(phase * 1.4) + 1) / 2;
-  const drift = ((phase * 9) % 18) - 9;
-
-  graphics.clear();
-  graphics.fillStyle(0x6cc9ee, 0.08 + pulse * 0.05);
-  drawDiamondPath(graphics, isoX, isoY);
-  graphics.fillPath();
-
-  graphics.lineStyle(1, 0xb8ecff, 0.18 + pulse * 0.14);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 20 + drift * 0.45, isoY - 7 + Math.sin(phase) * 1.5);
-  graphics.lineTo(isoX - 5 + drift * 0.45, isoY - 12 + Math.cos(phase) * 1.1);
-  graphics.lineTo(isoX + 16 + drift * 0.45, isoY - 7 + Math.sin(phase + 1.2) * 1.4);
-  graphics.moveTo(isoX - 14 - drift * 0.35, isoY + 4 + Math.cos(phase * 1.2) * 1.2);
-  graphics.lineTo(isoX + 2 - drift * 0.35, isoY + 8 + Math.sin(phase + 0.7) * 1.2);
-  graphics.lineTo(isoX + 18 - drift * 0.35, isoY + 4 + Math.cos(phase + 1.6) * 1.2);
-  graphics.strokePath();
-
-  graphics.lineStyle(1, 0x104b74, 0.14);
-  graphics.beginPath();
-  graphics.moveTo(isoX - 24, isoY + 12 + Math.sin(phase + 2.1) * 1.2);
-  graphics.lineTo(isoX - 6, isoY + 15 + Math.cos(phase + 1.3) * 0.9);
-  graphics.lineTo(isoX + 24, isoY + 11 + Math.sin(phase + 0.4) * 1.2);
-  graphics.strokePath();
 }
 
 function drawLavaAnimation(graphics: Phaser.GameObjects.Graphics, isoX: number, isoY: number, seed: number, time: number) {

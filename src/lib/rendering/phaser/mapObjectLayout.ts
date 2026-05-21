@@ -43,6 +43,7 @@ export const GATE_OFFSET_Y = 0;
 export const GATE_DEPTH_CLEARANCE = 256;
 export const TOWN_OFFSET_Y = TILE_FOOT_OFFSET_Y + 7;
 export const HERO_OFFSET_Y = 6;
+export const BOAT_OFFSET_Y = 6;
 export const TOWN_HERO_OFFSET_Y = TOWN_OFFSET_Y + 12;
 export const ADVENTURE_BUILDING_OFFSET_Y = 8;
 

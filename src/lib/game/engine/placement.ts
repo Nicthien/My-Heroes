@@ -82,7 +82,7 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
 }
 
 function isTileFree(tile: MapTile): boolean {
-  return tile.isPassable && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor;
+  return tile.isPassable && !tile.worldEdge && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor;
 }
 
 function hasMajorObjectNearby(
@@ -257,13 +257,14 @@ function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y:
 }
 
 function isTownDoorTileFree(tile: MapTile | undefined): tile is MapTile {
-  return Boolean(tile && tile.isPassable && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor);
+  return Boolean(tile && tile.isPassable && !tile.worldEdge && tile.terrain !== TerrainType.WATER && !tile.object && !tile.decor);
 }
 
 function isTownFootprintTileFree(tile: MapTile | undefined): tile is MapTile {
   return Boolean(
     tile &&
     tile.isPassable &&
+    !tile.worldEdge &&
     tile.terrain !== TerrainType.WATER &&
     tile.terrain !== TerrainType.LAVA &&
     !tile.object &&
@@ -383,6 +384,7 @@ function canPlaceStartingMineAt(
   allowCoastalWater: boolean,
 ): boolean {
   if (tile.object || tile.decor) return false;
+  if (tile.worldEdge) return false;
   if (isGateFrameTile(ctx, tile.x, tile.y)) return false;
   const isCoastalWater = allowCoastalWater && tile.terrain === TerrainType.WATER;
   if (!isSolidLandTile(tile) && !isCoastalWater) return false;
@@ -392,7 +394,7 @@ function canPlaceStartingMineAt(
 }
 
 function isSolidLandTile(tile: MapTile | undefined): tile is MapTile {
-  return Boolean(tile && tile.isPassable && tile.terrain !== TerrainType.WATER && tile.terrain !== TerrainType.LAVA);
+  return Boolean(tile && tile.isPassable && !tile.worldEdge && tile.terrain !== TerrainType.WATER && tile.terrain !== TerrainType.LAVA);
 }
 
 function hasLandSupportNearby(ctx: PlacementContext, x: number, y: number): boolean {

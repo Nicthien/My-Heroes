@@ -122,10 +122,7 @@ for (const [terrain, spec] of Object.entries(terrainCatalog)) {
   for (const [slug, features] of spec.variants) {
     const svg = terrainSvg(terrain, slug, spec.base, features);
     const output = path.join(terrainDir, `${terrain}-${slug}.webp`);
-    await sharp(Buffer.from(svg))
-      .resize(OUTPUT_WIDTH, OUTPUT_HEIGHT, { fit: "fill" })
-      .webp({ lossless: true, effort: 6 })
-      .toFile(output);
+    await writeTerrainTopTexture(svg, output, terrain);
     console.log(`Generated ${path.relative(process.cwd(), output)}`);
 
     for (const side of ["left", "right"]) {
@@ -138,6 +135,37 @@ for (const [terrain, spec] of Object.entries(terrainCatalog)) {
       console.log(`Generated ${path.relative(process.cwd(), sideOutput)}`);
     }
   }
+}
+
+async function writeTerrainTopTexture(svg, output, terrain) {
+  const image = sharp(Buffer.from(svg))
+    .resize(OUTPUT_WIDTH, OUTPUT_HEIGHT, { fit: "fill" });
+
+  if (terrain !== "sand") {
+    await image
+      .webp({ lossless: true, effort: 6 })
+      .toFile(output);
+    return;
+  }
+
+  const { data, info } = await image
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] > 0) data[i] = 255;
+  }
+
+  await sharp(data, {
+    raw: {
+      width: info.width,
+      height: info.height,
+      channels: info.channels,
+    },
+  })
+    .webp({ lossless: true, effort: 6 })
+    .toFile(output);
 }
 
 function terrainSvg(terrain, slug, colors, features) {

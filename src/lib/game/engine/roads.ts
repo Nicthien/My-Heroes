@@ -95,6 +95,9 @@ function findForcedRoadPath(
     for (const n of neighbors) {
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const tile = tiles[n.y][n.x];
+      const isStartOrEnd =
+        (n.x === start.x && n.y === start.y) || (n.x === end.x && n.y === end.y);
+      if (tile.worldEdge && !isStartOrEnd) continue;
       if (isTownFootprint(tile)) continue;
       if (tile.object?.type === "wall" && isProtectedGateFlank(tiles, n.x, n.y)) continue;
       if (!allowWaterRoads && tile.terrain === TerrainType.WATER) continue;
@@ -146,6 +149,7 @@ function findPathToNearestRoad(
     for (const n of neighbors) {
       if (n.x < 0 || n.x >= width || n.y < 0 || n.y >= height) continue;
       const nextTile = tiles[n.y][n.x];
+      if (nextTile.worldEdge) continue;
       if (!nextTile.isPassable) continue;
       if (!allowWaterRoads && nextTile.terrain === TerrainType.WATER) continue;
       if (nextTile.terrain === TerrainType.WATER && !canBridgeWater(tiles, width, height, n.x, n.y)) continue;
@@ -203,6 +207,7 @@ export function paintRoad(
   const allowWaterRoads = options.allowWaterRoads !== false;
   for (const p of path) {
     const tile = tiles[p.y][p.x];
+    if (tile.worldEdge) continue;
     if (!allowWaterRoads && tile.terrain === TerrainType.WATER) continue;
     if (isTownFootprint(tile)) continue;
     if (isProtectedGateFlank(tiles, p.x, p.y)) continue;

@@ -25,6 +25,8 @@ import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
 import { placeAdventureBuildings } from "./adventure-buildings";
+import { applyWorldEdge } from "./world-edge";
+import { measureDevPerformance } from "@/lib/dev/performanceMetrics";
 export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
 
 function isPassable(terrain: TerrainType): boolean {
@@ -98,6 +100,74 @@ function toPositionKeySet(positions: Position[]): Set<string> {
 
 function isBlockedPosition(pos: Position, blocked: Set<string>): boolean {
   return blocked.has(positionKey(pos));
+}
+
+class MinPriorityQueue<T> {
+  private items: Array<{ item: T; priority: number; order: number }> = [];
+  private nextOrder = 0;
+
+  get length() {
+    return this.items.length;
+  }
+
+  push(item: T, priority: number) {
+    const entry = { item, priority, order: this.nextOrder++ };
+    this.items.push(entry);
+    this.bubbleUp(this.items.length - 1);
+  }
+
+  shift(): T | undefined {
+    const first = this.items[0];
+    const last = this.items.pop();
+    if (!first || !last) return undefined;
+    if (this.items.length > 0) {
+      this.items[0] = last;
+      this.sinkDown(0);
+    }
+    return first.item;
+  }
+
+  private isLess(leftIndex: number, rightIndex: number) {
+    const left = this.items[leftIndex];
+    const right = this.items[rightIndex];
+    return left.priority < right.priority ||
+      (left.priority === right.priority && left.order < right.order);
+  }
+
+  private bubbleUp(index: number) {
+    let currentIndex = index;
+    while (currentIndex > 0) {
+      const parentIndex = Math.floor((currentIndex - 1) / 2);
+      if (!this.isLess(currentIndex, parentIndex)) break;
+      this.swap(currentIndex, parentIndex);
+      currentIndex = parentIndex;
+    }
+  }
+
+  private sinkDown(index: number) {
+    let currentIndex = index;
+    while (true) {
+      const leftIndex = currentIndex * 2 + 1;
+      const rightIndex = leftIndex + 1;
+      let smallestIndex = currentIndex;
+
+      if (leftIndex < this.items.length && this.isLess(leftIndex, smallestIndex)) {
+        smallestIndex = leftIndex;
+      }
+      if (rightIndex < this.items.length && this.isLess(rightIndex, smallestIndex)) {
+        smallestIndex = rightIndex;
+      }
+      if (smallestIndex === currentIndex) break;
+      this.swap(currentIndex, smallestIndex);
+      currentIndex = smallestIndex;
+    }
+  }
+
+  private swap(leftIndex: number, rightIndex: number) {
+    const left = this.items[leftIndex];
+    this.items[leftIndex] = this.items[rightIndex];
+    this.items[rightIndex] = left;
+  }
 }
 
 export function canMoveAdventureStep(map: GameMap, from: Position, to: Position): boolean {
@@ -331,6 +401,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   const zoneGrid = buildZoneGrid(template, width, height, rng, landmass);
   generateZoneTerrain(tiles, zoneGrid, width, height, rng, landmass);
   carveHydrology(tiles, width, height, rng);
+  applyWorldEdge(tiles, width, height, seed);
 
   // 2) Murs + chokepoints
   const chokepoints = buildConnectionsAndWalls(tiles, zoneGrid, template, width, height);
@@ -400,6 +471,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
 
   // 6) Décor (passe finale)
   placeDecor(tiles, width, height, rng);
+  applyWorldEdge(tiles, width, height, seed);
 
   // 7) Garantir que chaque chokepoint reste praticable même après décor
   for (const cp of chokepoints) {
@@ -483,7 +555,16 @@ export function findPath(
   end: Position,
   maxMovement: number
 ): Position[] {
-  const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
+  return measureDevPerformance("findPath", () => findPathInternal(map, start, end, maxMovement));
+}
+
+function findPathInternal(
+  map: GameMap,
+  start: Position,
+  end: Position,
+  maxMovement: number
+): Position[] {
+  const openSet = new MinPriorityQueue<{ pos: Position; g: number; path: Position[] }>();
   const closedSet = new Set<string>();
   const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
 
@@ -498,12 +579,10 @@ export function findPath(
   openSet.push({
     pos: start,
     g: 0,
-    f: heuristic(start, end),
     path: [start],
-  });
+  }, heuristic(start, end));
 
   while (openSet.length > 0) {
-    openSet.sort((a, b) => a.f - b.f);
     const current = openSet.shift()!;
 
     if (current.pos.x === end.x && current.pos.y === end.y) {
@@ -535,14 +614,11 @@ export function findPath(
       if (g >= (bestCost.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       bestCost.set(nKey, g);
-      const f = g + heuristic(neighbor, end);
-
       openSet.push({
         pos: neighbor,
         g,
-        f,
         path: [...current.path, neighbor],
-      });
+      }, g + heuristic(neighbor, end));
     }
   }
 
@@ -555,6 +631,18 @@ export function findPathToAdjacent(
   target: Position,
   maxMovement: number,
   blockedPositions: Position[] = [target]
+): Position[] {
+  return measureDevPerformance("findPathToAdjacent", () =>
+    findPathToAdjacentInternal(map, start, target, maxMovement, blockedPositions)
+  );
+}
+
+function findPathToAdjacentInternal(
+  map: GameMap,
+  start: Position,
+  target: Position,
+  maxMovement: number,
+  blockedPositions: Position[]
 ): Position[] {
   if (!isInsideMap(map, start) || !isInsideMap(map, target)) return [];
   if (areAdventurePositionsAdjacent(start, target)) return [start];
@@ -571,7 +659,7 @@ export function findPathToAdjacent(
   );
   if (goals.size === 0) return [];
 
-  const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
+  const openSet = new MinPriorityQueue<{ pos: Position; g: number; path: Position[] }>();
   const closedSet = new Set<string>();
   const bestCost = new Map<string, number>([[positionKey(start), 0]]);
 
@@ -586,12 +674,10 @@ export function findPathToAdjacent(
   openSet.push({
     pos: start,
     g: 0,
-    f: heuristic(start),
     path: [start],
-  });
+  }, heuristic(start));
 
   while (openSet.length > 0) {
-    openSet.sort((a, b) => a.f - b.f);
     const current = openSet.shift()!;
     const key = positionKey(current.pos);
 
@@ -615,9 +701,8 @@ export function findPathToAdjacent(
       openSet.push({
         pos: neighbor,
         g,
-        f: g + heuristic(neighbor),
         path: [...current.path, neighbor],
-      });
+      }, g + heuristic(neighbor));
     }
   }
 
@@ -629,12 +714,22 @@ export function computeReachableTiles(
   start: Position,
   maxMovement: number
 ): Set<string> {
+  return measureDevPerformance("computeReachableTiles", () =>
+    computeReachableTilesInternal(map, start, maxMovement)
+  );
+}
+
+function computeReachableTilesInternal(
+  map: GameMap,
+  start: Position,
+  maxMovement: number
+): Set<string> {
   const reachable = new Set<string>([`${start.x},${start.y}`]);
   const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
-  const openSet: { pos: Position; cost: number }[] = [{ pos: start, cost: 0 }];
+  const openSet = new MinPriorityQueue<{ pos: Position; cost: number }>();
+  openSet.push({ pos: start, cost: 0 }, 0);
 
   while (openSet.length > 0) {
-    openSet.sort((a, b) => a.cost - b.cost);
     const current = openSet.shift()!;
     const currentKey = `${current.pos.x},${current.pos.y}`;
     if (current.cost > (bestCost.get(currentKey) ?? Number.POSITIVE_INFINITY)) continue;
@@ -653,7 +748,7 @@ export function computeReachableTiles(
 
       bestCost.set(neighborKey, nextCost);
       reachable.add(neighborKey);
-      openSet.push({ pos: neighbor, cost: nextCost });
+      openSet.push({ pos: neighbor, cost: nextCost }, nextCost);
     }
   }
 

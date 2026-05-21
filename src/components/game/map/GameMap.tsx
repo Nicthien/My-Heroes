@@ -123,6 +123,19 @@ export default function GameMapComponent() {
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
   );
+  const selectedHeroReachableTileKeys = useMemo(() => {
+    if (!gameState || devRevealMap || !selectedHeroId) return null;
+    const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
+    if (!hero || activeCombatHeroIds.has(hero.id)) return null;
+    return computeReachableTiles(gameState.map, hero.position, hero.movement);
+  }, [activeCombatHeroIds, devRevealMap, gameState, selectedHeroId]);
+  const selectedHeroReachableTiles = useMemo(() => {
+    if (!selectedHeroReachableTileKeys) return [];
+    return Array.from(selectedHeroReachableTileKeys).map((key) => {
+      const [x, y] = key.split(",").map(Number);
+      return { x, y };
+    });
+  }, [selectedHeroReachableTileKeys]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -330,18 +343,13 @@ export default function GameMapComponent() {
       return;
     }
 
-    const reachableTiles = Array.from(computeReachableTiles(gameState.map, hero.position, hero.movement))
-      .map((key) => {
-        const [x, y] = key.split(",").map(Number);
-        return { x, y };
-      });
-    rendererRef.current.highlightTiles(reachableTiles, REACHABLE_TILE_COLOR, REACHABLE_TILE_ALPHA);
+    rendererRef.current.highlightTiles(selectedHeroReachableTiles, REACHABLE_TILE_COLOR, REACHABLE_TILE_ALPHA);
 
     if (lastCenteredHeroIdRef.current !== selectedHeroId) {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds]);
+  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds, selectedHeroReachableTiles]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -459,12 +467,13 @@ export default function GameMapComponent() {
         selectedTownId,
         currentPlayerId: currentPlayer?.id ?? null,
         visibleTiles: lastFogVisibleRef.current,
+        reachableTileKeys: selectedHeroReachableTileKeys,
         activeCombatHeroIds,
         screenX: e.clientX - rect.left,
         screenY: e.clientY - rect.top,
       }));
     },
-    [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]
+    [activeCombatHeroIds, gameState, selectedHeroId, selectedHeroReachableTileKeys, selectedTownId, session?.user?.id]
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -482,11 +491,12 @@ export default function GameMapComponent() {
       selectedTownId,
       currentPlayerId: currentPlayer?.id ?? null,
       visibleTiles: lastFogVisibleRef.current,
+      reachableTileKeys: selectedHeroReachableTileKeys,
       activeCombatHeroIds,
       screenX: e.clientX - rect.left,
       screenY: e.clientY - rect.top,
     }));
-  }, [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]);
+  }, [activeCombatHeroIds, gameState, selectedHeroId, selectedHeroReachableTileKeys, selectedTownId, session?.user?.id]);
 
   const handleMouseLeave = useCallback(() => {
     isDragging.current = false;
@@ -2182,6 +2192,7 @@ function getAdventureMapCursor({
   selectedTownId,
   currentPlayerId,
   visibleTiles,
+  reachableTileKeys,
   activeCombatHeroIds,
   screenX,
   screenY,
@@ -2192,6 +2203,7 @@ function getAdventureMapCursor({
   selectedTownId: string | null;
   currentPlayerId: string | null;
   visibleTiles: Set<string> | null;
+  reachableTileKeys: Set<string> | null;
   activeCombatHeroIds: Set<string>;
   screenX: number;
   screenY: number;
@@ -2209,7 +2221,7 @@ function getAdventureMapCursor({
   if (!targetTile) return ADVENTURE_CURSORS.forbidden;
 
   const tileKey = `${tile.x},${tile.y}`;
-  const isReachableTile = computeReachableTiles(gameState.map, hero.position, hero.movement).has(tileKey);
+  const isReachableTile = reachableTileKeys?.has(tileKey) ?? false;
 
   const objects = filterClickThroughTownSpriteHits(
     renderer.getObjectsAtScreen(screenX, screenY),

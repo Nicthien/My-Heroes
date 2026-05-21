@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import GameMapComponent from "@/components/game/map/GameMap";
 import { AuthContext } from "@/lib/auth/client";
+import { applyWorldEdge } from "@/lib/game/engine/world-edge";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   AdventureBuildingType,
@@ -255,6 +256,12 @@ function buildShowcaseMap(): GameMap {
   paintArea(map, 12, 10, 12, 10, TerrainType.GRASS, 2, true);
   paintArea(map, 14, 9, 14, 9, TerrainType.GRASS, 2, true);
   paintArea(map, 15, 10, 15, 10, TerrainType.GRASS, 2, true);
+  paintArea(map, 29, 3, 29, 7, TerrainType.WATER, 0, false);
+  paintArea(map, 29, 10, 29, 12, TerrainType.SNOW, 1, true);
+  paintArea(map, 29, 18, 29, 22, TerrainType.WATER, 0, false);
+  paintArea(map, 5, 27, 9, 27, TerrainType.SAND, 0, true);
+  paintArea(map, 16, 27, 23, 27, TerrainType.WATER, 0, false);
+  paintArea(map, 24, 27, 28, 27, TerrainType.SNOW, 1, true);
 
   drawRoad(map, [
     [2, 13], [3, 13], [4, 13], [5, 13], [6, 13], [7, 13], [8, 13], [9, 13],
@@ -346,6 +353,8 @@ function buildShowcaseMap(): GameMap {
   placeDecor(map, 25, 18, "flower", false);
   placeDecor(map, 26, 18, "bush", false);
   placeDecor(map, 27, 18, "grass-tuft", false);
+
+  applyWorldEdge(map.tiles, map.width, map.height, "SHOWCASE");
 
   return map;
 }

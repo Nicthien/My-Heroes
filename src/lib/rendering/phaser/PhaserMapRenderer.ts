@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPreferences";
+import { measureDevPerformance, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
@@ -47,8 +48,6 @@ import {
   type FogTileState,
 } from "@/lib/rendering/phaser/fogConstants";
 import {
-  BOARD_LIP_EXTRA_HEIGHT,
-  BOARD_THICKNESS,
   CAMERA_ZOOM_STEP,
   HOVER_LABEL_SAMPLE_MS,
   LAVA_TEXTURE_PREFIX,
@@ -62,7 +61,7 @@ import {
   TERRAIN_ANIMATION_FRAME_COUNT,
   TERRAIN_ANIMATION_INTERVAL_MS,
   TERRAIN_FACE_RENDER_ORDER,
-  WATER_TEXTURE_PREFIX,
+  WATER_ANIMATION_INTERVAL_MS,
   type MovementSoundKind,
 } from "@/lib/rendering/phaser/mapRenderSettings";
 import {
@@ -86,7 +85,6 @@ import {
   getTerrainTextureKey,
   updateTerrainEffectFrame,
   type LavaTileEffect,
-  type WaterTileEffect,
 } from "@/lib/rendering/phaser/terrainAnimation";
 import {
   applyTerrainTopTextureCrop,
@@ -100,11 +98,11 @@ import {
   getMaxTileDepth,
   getTerrainSideExposure,
   getTerrainSideFaceColor,
-  getTerrainSideFacePoints,
   getTerrainTopStroke,
   getTileDepth,
   type TerrainSideVisibility,
 } from "@/lib/rendering/phaser/terrainFaceRender";
+import { getCubeCorners, getCubeFacePoints } from "@/lib/rendering/phaser/isoCube";
 import {
   getGateBannerPlacement,
   getHeroBannerMetrics,
@@ -134,9 +132,7 @@ import {
   drawSmallRock,
 } from "@/lib/rendering/phaser/decorDrawing";
 import {
-  drawCornerBolts,
   drawRoadSegment,
-  drawWoodGrain,
 } from "@/lib/rendering/phaser/boardAndWallDrawing";
 
 type FailedLoaderFile = {
@@ -148,20 +144,19 @@ type FailedLoaderFile = {
 import {
   areObjectsRenderEquivalent,
   type BrickWallOrientation,
-  drawPolygonPath,
-  drawRingPath,
   getBrickRampartPlacement,
   getBrickWallAxis,
   getBrickWallVectors,
-  getMapOuterCorners,
   isSpritePointInView,
   isTerrainEffectInView,
-  liftPolygon,
   parseHexColor,
   pickNaturalWallTreeSprite,
   pickTerrainTexture,
   shouldRebuildHero,
 } from "@/lib/rendering/phaser/mapRenderHelpers";
+import {
+  renderFlatWorldEdge,
+} from "@/lib/rendering/phaser/worldEdgeRender";
 
 type RenderedHeroObject = {
   object: MapObjectData;
@@ -219,7 +214,10 @@ class PhaserMapScene extends Phaser.Scene {
   private fogStampTextureKeys = FOG_STAMP_TEXTURE_KEYS;
   private reachableOverlayObjects: Phaser.GameObjects.GameObject[] = [];
   private highlightOverlayObjects: Phaser.GameObjects.GameObject[] = [];
-  private waterTiles: WaterTileEffect[] = [];
+  private reachableOverlayKey = "";
+  private highlightOverlayKey = "";
+  private waterShimmerFrames: Phaser.GameObjects.Graphics[] = [];
+  private waterShimmerFrameIndex = 0;
   private lavaTiles: LavaTileEffect[] = [];
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
   private renderedHeroes = new Map<string, RenderedHeroObject>();
@@ -231,6 +229,7 @@ class PhaserMapScene extends Phaser.Scene {
   private queuedMapRender: GameMap | null = null;
   private lastMovementSoundAt: Record<MovementSoundKind, number> = { horse: -Infinity, boat: -Infinity };
   private lastTerrainAnimationAt = 0;
+  private lastWaterAnimationAt = 0;
   private lastHoverLabelAt = 0;
 
   constructor() {
@@ -268,7 +267,7 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor(0x1a1a2e);
+    this.cameras.main.setBackgroundColor(0x020510);
     this.boardLayer = this.add.container(0, 0);
     this.boardLipLayer = this.add.container(0, 0);
     this.mapLayer = this.add.container(0, 0);
@@ -295,12 +294,8 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogLayer.setDepth(20);
     this.hoverLabelLayer.setDepth(30);
     // Slow Lissajous drift on the whole fog layer to fake clouds moving with
-    // wind. Two tweens with mismatched periods so the pattern never repeats
-    // exactly. Amplitude stays small (≤ 3px) because the fog edges are
-    // already feathered ~10px — the drift sits within that fuzzy band, so
-    // the visibility frontier never visibly slides against the map.
-    // Cost: 2 tweens on a single Container.x/y — no per-frame redraw, no
-    // chunk invalidation. Effectively free.
+    // wind. It keeps the visibility frontier visually alive without redrawing
+    // fog chunks.
     this.tweens.add({
       targets: this.fogLayer,
       x: { from: -3, to: 3 },
@@ -330,11 +325,16 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   renderMap(map: GameMap) {
+    return measureDevPerformance("phaser.renderMap", () => this.renderMapMeasured(map));
+  }
+
+  private renderMapMeasured(map: GameMap) {
     this.map = map;
     if (this.loadMissingMapTextures(map)) return;
 
     this.fogPlaneDepth = getMaxTileDepth(map) + FOG_PLANE_CLEARANCE;
-    this.waterTiles = [];
+    this.waterShimmerFrames = [];
+    this.waterShimmerFrameIndex = 0;
     this.lavaTiles = [];
     this.fogTileStates = null;
     this.fogChunkColumns = 0;
@@ -342,6 +342,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogLayer.removeAll(true);
     this.fogChunks = [];
     this.lastTerrainAnimationAt = 0;
+    this.lastWaterAnimationAt = 0;
     this.boardLayer.removeAll(true);
     this.boardLipLayer.removeAll(true);
     this.mapLayer.removeAll(true);
@@ -351,6 +352,8 @@ class PhaserMapScene extends Phaser.Scene {
     this.objectLayer.removeAll(true);
     this.reachableOverlayObjects = [];
     this.highlightOverlayObjects = [];
+    this.reachableOverlayKey = "";
+    this.highlightOverlayKey = "";
     this.reachableLayer.removeAll(true);
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
@@ -358,7 +361,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.renderedStaticObjects.clear();
     this.heroSpriteAnimations = [];
     this.clearHoverLabel();
-    this.renderBoardFrame(map);
+    this.renderFlatWorldEdge(map);
     const terrainBase = this.add.graphics();
     const terrainCover = this.add.graphics();
     const decorGraphics = this.add.graphics();
@@ -381,6 +384,7 @@ class PhaserMapScene extends Phaser.Scene {
       }
     }
 
+    this.renderWaterShimmer(map);
     this.mapLayer.add(terrainCover);
     this.mapLayer.sort("depth");
     this.roadLayer.sort("depth");
@@ -434,14 +438,18 @@ class PhaserMapScene extends Phaser.Scene {
   update(time: number) {
     const view = this.cameras.main.worldView;
 
+    if (this.waterShimmerFrames.length > 1 && time - this.lastWaterAnimationAt >= WATER_ANIMATION_INTERVAL_MS) {
+      const nextFrameIndex = Math.floor(time / WATER_ANIMATION_INTERVAL_MS) % this.waterShimmerFrames.length;
+      if (nextFrameIndex !== this.waterShimmerFrameIndex) {
+        this.waterShimmerFrames[this.waterShimmerFrameIndex]?.setVisible(false);
+        this.waterShimmerFrames[nextFrameIndex]?.setVisible(true);
+        this.waterShimmerFrameIndex = nextFrameIndex;
+      }
+      this.lastWaterAnimationAt = time;
+    }
+
     if (time - this.lastTerrainAnimationAt >= TERRAIN_ANIMATION_INTERVAL_MS) {
       const frameIndex = Math.floor(time / TERRAIN_ANIMATION_INTERVAL_MS) % TERRAIN_ANIMATION_FRAME_COUNT;
-
-      for (const water of this.waterTiles) {
-        if (isTerrainEffectInView(water, view)) {
-          updateTerrainEffectFrame(water, WATER_TEXTURE_PREFIX, frameIndex);
-        }
-      }
 
       for (const lava of this.lavaTiles) {
         if (isTerrainEffectInView(lava, view)) {
@@ -459,66 +467,70 @@ class PhaserMapScene extends Phaser.Scene {
     }
   }
 
-  private renderBoardFrame(map: GameMap) {
-    const corners = getMapOuterCorners(map);
-    const boardLift = getMaxTileDepth(map) + BOARD_LIP_EXTRA_HEIGHT;
-    const outerBase = getMapOuterCorners(map, 1);
-    const outerTop = liftPolygon(outerBase, boardLift);
-    const innerTop = liftPolygon(corners, boardLift);
-    const side = outerBase.map((point) => ({ x: point.x, y: point.y + BOARD_THICKNESS }));
-
-    const shadow = this.add.graphics();
-    shadow.fillStyle(0x050307, 0.32);
-    drawPolygonPath(shadow, side);
-    shadow.fillPath();
-    this.boardLayer.add(shadow);
-
-    const outerWall = this.add.graphics();
-    outerWall.fillStyle(0x3a2112, 1);
-    outerWall.lineStyle(2, 0x170b05, 0.85);
-    for (let i = 0; i < outerTop.length; i++) {
-      const next = (i + 1) % outerTop.length;
-      outerWall.beginPath();
-      outerWall.moveTo(outerTop[i].x, outerTop[i].y);
-      outerWall.lineTo(outerTop[next].x, outerTop[next].y);
-      outerWall.lineTo(side[next].x, side[next].y);
-      outerWall.lineTo(side[i].x, side[i].y);
-      outerWall.closePath();
-      outerWall.fillPath();
-      outerWall.strokePath();
-    }
-    this.boardLayer.add(outerWall);
-
-    const innerWall = this.add.graphics();
-    innerWall.fillStyle(0x281509, 1);
-    innerWall.lineStyle(2, 0x120803, 0.82);
-    for (let i = 0; i < innerTop.length; i++) {
-      const next = (i + 1) % innerTop.length;
-      innerWall.beginPath();
-      innerWall.moveTo(innerTop[i].x, innerTop[i].y);
-      innerWall.lineTo(innerTop[next].x, innerTop[next].y);
-      innerWall.lineTo(corners[next].x, corners[next].y);
-      innerWall.lineTo(corners[i].x, corners[i].y);
-      innerWall.closePath();
-      innerWall.fillPath();
-      innerWall.strokePath();
-    }
-    this.boardLipLayer.add(innerWall);
-
-    const top = this.add.graphics();
-    top.fillStyle(0x7a4a25, 1);
-    top.lineStyle(3, 0x261308, 1);
-    drawRingPath(top, outerTop, innerTop);
-
-    top.lineStyle(2, 0xb77a3b, 0.55);
-    drawPolygonPath(top, innerTop);
-    top.strokePath();
-
-    drawWoodGrain(top, outerTop, innerTop);
-    drawCornerBolts(top, outerTop);
-    this.boardLipLayer.add(top);
+  private renderFlatWorldEdge(map: GameMap) {
+    renderFlatWorldEdge(this, map, this.boardLayer, this.boardLipLayer);
   }
 
+  private renderWaterShimmer(map: GameMap) {
+    const frameCount = 4;
+    for (let frame = 0; frame < frameCount; frame++) {
+      const graphics = this.add.graphics();
+      graphics.setDepth(MAP_LAYER_COVER_DEPTH - 0.5);
+      graphics.setVisible(frame === 0);
+
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          const tile = map.tiles[y]?.[x];
+          if (tile?.terrain !== TerrainType.WATER) continue;
+
+          const seed = hashTile(x, y);
+          const iso = cartToIso(x, y);
+          this.drawWaterShimmerTile(graphics, iso.x, iso.y - getTileDepth(tile), seed, frame);
+        }
+      }
+
+      this.mapLayer.add(graphics);
+      this.waterShimmerFrames.push(graphics);
+    }
+  }
+
+  private drawWaterShimmerTile(
+    graphics: Phaser.GameObjects.Graphics,
+    isoX: number,
+    isoY: number,
+    seed: number,
+    frame: number
+  ) {
+    const phase = (frame / 4 + seed) % 1;
+    const drift = (phase - 0.5) * 10;
+    const pulse = (Math.sin(phase * Math.PI * 2) + 1) / 2;
+
+    graphics.fillStyle(0x4ad8ff, 0.035 + pulse * 0.025);
+    drawDiamondPath(graphics, isoX, isoY);
+    graphics.fillPath();
+
+    graphics.lineStyle(1, 0x083f68, 0.08);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 27, isoY + 10 + drift * 0.12);
+    graphics.lineTo(isoX - 8, isoY + 14 - drift * 0.08);
+    graphics.lineTo(isoX + 25, isoY + 9 + drift * 0.05);
+    graphics.strokePath();
+
+    if (seed < 0.3) return;
+
+    graphics.lineStyle(1, 0xd8fbff, 0.12 + pulse * 0.06);
+    graphics.beginPath();
+    graphics.moveTo(isoX - 22 + drift, isoY - 5);
+    graphics.lineTo(isoX - 6 + drift * 0.4, isoY - 9);
+    graphics.lineTo(isoX + 14 - drift * 0.2, isoY - 5);
+
+    if (seed > 0.62) {
+      graphics.moveTo(isoX - 14 - drift * 0.3, isoY + 6);
+      graphics.lineTo(isoX + 2 - drift * 0.45, isoY + 9);
+      graphics.lineTo(isoX + 18 + drift * 0.15, isoY + 5);
+    }
+    graphics.strokePath();
+  }
 
   private drawRoad(_graphics: Phaser.GameObjects.Graphics, tile: MapTile, isoX: number, isoY: number) {
     const road = tile.road;
@@ -681,11 +693,17 @@ class PhaserMapScene extends Phaser.Scene {
 
 
   setObjects(objects: MapObjectData[]) {
-    this.objects = objects;
-    this.renderObjects();
+    measureDevPerformance("phaser.setObjects", () => {
+      this.objects = objects;
+      this.renderObjects();
+    });
   }
 
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
+    measureDevPerformance("phaser.setFog", () => this.setFogMeasured(visibleTiles, exploredTiles));
+  }
+
+  private setFogMeasured(visibleTiles: Set<string>, exploredTiles: Set<string>) {
     if (!this.map) return;
     this.visibleTiles = new Set(visibleTiles);
     this.exploredTiles = new Set(exploredTiles);
@@ -739,16 +757,26 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   highlightPath(path: Position[]) {
+    const key = this.getOverlayKey("path", path, 0xffff00, 0.08, 0.9, 2);
+    if (this.highlightOverlayKey === key) return;
     this.clearHighlights();
-    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, path, 0xffff00, 0.08, 0.9, 2);
+    this.highlightOverlayKey = key;
+    this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.highlightLayer, path, 0xffff00, 0.08, 0.9, 2);
   }
 
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string) {
+    const key = [
+      this.getOverlayKey("partial-reachable", reachable, 0xffff00, 0.08, 0.9, 2),
+      this.getOverlayKey("partial-unreachable", unreachable, 0xff0000, 0.08, 0.9, 2),
+      turnsLabel ?? "",
+    ].join("|");
+    if (this.highlightOverlayKey === key) return;
     this.clearDepthSortedOverlays(this.highlightOverlayObjects);
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
-    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, reachable, 0xffff00, 0.08, 0.9, 2);
-    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, unreachable, 0xff0000, 0.08, 0.9, 2);
+    this.highlightOverlayKey = key;
+    this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.highlightLayer, reachable, 0xffff00, 0.08, 0.9, 2);
+    this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.highlightLayer, unreachable, 0xff0000, 0.08, 0.9, 2);
 
     const labelTile = unreachable.at(-1) ?? reachable.at(-1);
     if (labelTile && turnsLabel) {
@@ -774,24 +802,38 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   highlightTiles(tiles: Position[], color = REACHABLE_TILE_COLOR, alpha = REACHABLE_TILE_ALPHA) {
+    measureDevPerformance("phaser.highlightTiles", () => this.highlightTilesMeasured(tiles, color, alpha));
+  }
+
+  private highlightTilesMeasured(tiles: Position[], color = REACHABLE_TILE_COLOR, alpha = REACHABLE_TILE_ALPHA) {
+    const key = this.getOverlayKey("reachable", tiles, color, Math.min(alpha, 0.08), 0.65, 1.5);
+    if (this.reachableOverlayKey === key) return;
     this.clearReachable();
-    this.drawDepthSortedDiamondOverlays(this.reachableOverlayObjects, tiles, color, Math.min(alpha, 0.08), 0.65, 1.5);
+    this.reachableOverlayKey = key;
+    this.drawBatchedDiamondOverlays(this.reachableOverlayObjects, this.reachableLayer, tiles, color, Math.min(alpha, 0.08), 0.65, 1.5);
   }
 
   highlightTile(x: number, y: number, color = 0x00ff00) {
+    const key = this.getOverlayKey("tile", [{ x, y }], color, 0.08, 0.95, 2);
+    if (this.highlightOverlayKey === key) return;
     this.clearHighlights();
-    this.drawDepthSortedDiamondOverlays(this.highlightOverlayObjects, [{ x, y }], color, 0.08, 0.95, 2);
+    this.highlightOverlayKey = key;
+    this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.highlightLayer, [{ x, y }], color, 0.08, 0.95, 2);
   }
 
   clearHighlights() {
+    if (this.highlightOverlayKey === "" && this.highlightOverlayObjects.length === 0) return;
     this.clearDepthSortedOverlays(this.highlightOverlayObjects);
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
+    this.highlightOverlayKey = "";
   }
 
   clearReachable() {
+    if (this.reachableOverlayKey === "" && this.reachableOverlayObjects.length === 0) return;
     this.clearDepthSortedOverlays(this.reachableOverlayObjects);
     this.reachableLayer.removeAll(true);
+    this.reachableOverlayKey = "";
   }
 
   centerOnTile(x: number, y: number) {
@@ -997,18 +1039,18 @@ class PhaserMapScene extends Phaser.Scene {
     const terrainTexture = pickTerrainTexture(tile);
     const visibleSides = depth > 0 ? this.getVisibleTerrainSides(tile, depth) : null;
 
-    if (depth > BASE_HEIGHT && tile.terrain !== TerrainType.WATER) {
+    if (depth > BASE_HEIGHT) {
       this.renderElevatedTerrainTile(tile, isoX, isoY, depth, topColor, sideLit, sideDark, terrainTexture, visibleSides);
       return;
     }
 
     if (visibleSides) {
-      for (const side of TERRAIN_FACE_RENDER_ORDER) {
-        const exposure = visibleSides[side];
+      for (const face of TERRAIN_FACE_RENDER_ORDER) {
+        const exposure = visibleSides[face];
         if (!exposure) continue;
 
-        const points = getTerrainSideFacePoints(side, isoX, isoY, depth, exposure.bottomDepth);
-        const baseColor = side === "left" ? sideLit : sideDark;
+        const points = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, exposure.bottomDepth));
+        const baseColor = face === "SW" ? sideLit : sideDark;
         coverGraphics.fillStyle(getTerrainSideFaceColor(tile.terrain, baseColor, exposure));
         coverGraphics.beginPath();
         coverGraphics.moveTo(points.topA.x, points.topA.y);
@@ -1023,13 +1065,13 @@ class PhaserMapScene extends Phaser.Scene {
     }
 
     const topStroke = getTerrainTopStroke(tile.terrain);
-    baseGraphics.fillStyle(topColor, tile.terrain === TerrainType.WATER ? 0.7 : 1);
+    baseGraphics.fillStyle(topColor, tile.terrain === TerrainType.WATER ? 0.86 : 1);
     baseGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
     drawDiamondPath(baseGraphics, isoX, isoY - depth);
     baseGraphics.fillPath();
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, isoY - depth);
     if (tile.terrain === TerrainType.WATER) {
-      this.addWaterAnimation(tile, isoX, isoY - depth);
+      drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
     } else if (tile.terrain === TerrainType.LAVA) {
       if (!renderedTopTexture) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
       this.addLavaAnimation(tile, isoX, isoY - depth);
@@ -1070,12 +1112,12 @@ class PhaserMapScene extends Phaser.Scene {
     tileGraphics.setDepth(tileDepth);
 
     if (visibleSides) {
-      for (const side of TERRAIN_FACE_RENDER_ORDER) {
-        const exposure = visibleSides[side];
+      for (const face of TERRAIN_FACE_RENDER_ORDER) {
+        const exposure = visibleSides[face];
         if (!exposure) continue;
 
-        const points = getTerrainSideFacePoints(side, isoX, isoY, depth, exposure.bottomDepth);
-        const baseColor = side === "left" ? sideLit : sideDark;
+        const points = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, exposure.bottomDepth));
+        const baseColor = face === "SW" ? sideLit : sideDark;
         tileGraphics.fillStyle(getTerrainSideFaceColor(tile.terrain, baseColor, exposure));
         tileGraphics.beginPath();
         tileGraphics.moveTo(points.topA.x, points.topA.y);
@@ -1089,6 +1131,27 @@ class PhaserMapScene extends Phaser.Scene {
       drawTerrainSideDetails(tileGraphics, tile, visibleSides, isoX, isoY, depth);
     }
 
+    // World-edge tiles also need their NE/NW back faces drawn for the rim
+    // portion so adjacent water tile TOPs (also on mapLayer) don't slice into
+    // the elevated rock. Without this, the boundary between an elevated rock
+    // pocket and an adjacent water pocket shows a "notch" at the upper-left or
+    // upper-right corner of the rock.
+    if (tile.worldEdge && depth > BASE_HEIGHT) {
+      const rimCorners = getCubeCorners(isoX, isoY, depth, BASE_HEIGHT);
+      for (const face of ["NW", "NE"] as const) {
+        const points = getCubeFacePoints(face, rimCorners);
+        const baseColor = face === "NW" ? sideLit : sideDark;
+        tileGraphics.fillStyle(baseColor);
+        tileGraphics.beginPath();
+        tileGraphics.moveTo(points.topA.x, points.topA.y);
+        tileGraphics.lineTo(points.topB.x, points.topB.y);
+        tileGraphics.lineTo(points.bottomB.x, points.bottomB.y);
+        tileGraphics.lineTo(points.bottomA.x, points.bottomA.y);
+        tileGraphics.closePath();
+        tileGraphics.fillPath();
+      }
+    }
+
     const topStroke = getTerrainTopStroke(tile.terrain);
     tileGraphics.fillStyle(topColor, 1);
     tileGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
@@ -1096,7 +1159,9 @@ class PhaserMapScene extends Phaser.Scene {
     tileGraphics.fillPath();
 
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, topY, tileDepth + 0.01);
-    if (tile.terrain === TerrainType.LAVA) {
+    if (tile.terrain === TerrainType.WATER) {
+      drawTileTexture(tileGraphics, tile, isoX, topY);
+    } else if (tile.terrain === TerrainType.LAVA) {
       if (!renderedTopTexture) drawTileTexture(tileGraphics, tile, isoX, topY);
       this.addLavaAnimation(tile, isoX, topY, tileDepth + 0.01);
     } else {
@@ -1141,9 +1206,21 @@ class PhaserMapScene extends Phaser.Scene {
     const southWest = this.map?.tiles[tile.y + 1]?.[tile.x];
     const southEast = this.map?.tiles[tile.y]?.[tile.x + 1];
     return {
-      left: getTerrainSideExposure(depth, southWest),
-      right: getTerrainSideExposure(depth, southEast),
+      SW: this.getTerrainSideExposureFor(tile, depth, southWest),
+      SE: this.getTerrainSideExposureFor(tile, depth, southEast),
     };
+  }
+
+  private getTerrainSideExposureFor(tile: MapTile, depth: number, neighbor: MapTile | undefined) {
+    if (neighbor) return getTerrainSideExposure(depth, neighbor);
+    // World-edge tiles still need the rim portion of their outward face drawn on
+    // the regular tile layer (down to sea level) so that adjacent water tops on
+    // mapLayer don't slice into the elevated rock. The voxel column on boardLayer
+    // handles everything below sea level.
+    if (tile.worldEdge) {
+      return depth > BASE_HEIGHT ? { bottomDepth: BASE_HEIGHT } : null;
+    }
+    return getTerrainSideExposure(depth, neighbor);
   }
 
   private renderTerrainTopTexture(
@@ -1166,15 +1243,6 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDepth(depth);
     layer.add(sprite);
     return true;
-  }
-
-  private addWaterAnimation(tile: MapTile, isoX: number, isoY: number, depth = isoY - 0.25) {
-    const frameOffset = getTerrainFrameOffset(tile.x, tile.y);
-    const sprite = this.add.image(isoX, isoY, getTerrainTextureKey(WATER_TEXTURE_PREFIX, frameOffset));
-    sprite.setOrigin(0.5);
-    sprite.setDepth(depth);
-    this.waterTiles.push({ sprite, x: isoX, y: isoY, frameOffset, frameIndex: frameOffset });
-    this.mapLayer.add(sprite);
   }
 
   private addLavaAnimation(tile: MapTile, isoX: number, isoY: number, depth = isoY - 0.25) {
@@ -2685,8 +2753,9 @@ class PhaserMapScene extends Phaser.Scene {
     layer.add(graphics);
   }
 
-  private drawDepthSortedDiamondOverlays(
+  private drawBatchedDiamondOverlays(
     overlayObjects: Phaser.GameObjects.GameObject[],
+    layer: Phaser.GameObjects.Container,
     tiles: Position[],
     color: number,
     fillAlpha: number,
@@ -2695,22 +2764,39 @@ class PhaserMapScene extends Phaser.Scene {
   ) {
     if (!this.map || tiles.length === 0) return;
 
+    const graphics = this.add.graphics();
+    graphics.fillStyle(color, fillAlpha);
+    graphics.lineStyle(strokeWidth, color, strokeAlpha);
+
     for (const tile of tiles) {
       const iso = cartToIso(tile.x, tile.y);
       const surfaceY = this.getSurfaceY(tile.x, tile.y);
-      const graphics = this.add.graphics();
-      graphics.fillStyle(color, fillAlpha);
-      graphics.lineStyle(strokeWidth, color, strokeAlpha);
       drawDiamondPath(graphics, iso.x, surfaceY);
       graphics.fillPath();
       drawDiamondPath(graphics, iso.x, surfaceY);
       graphics.strokePath();
-      graphics.setDepth(this.getTileOverlayDepth(tile.x, tile.y));
-      this.mapLayer.add(graphics);
-      overlayObjects.push(graphics);
     }
 
-    this.mapLayer.sort("depth");
+    layer.add(graphics);
+    overlayObjects.push(graphics);
+  }
+
+  private getOverlayKey(
+    prefix: string,
+    tiles: Position[],
+    color: number,
+    fillAlpha: number,
+    strokeAlpha: number,
+    strokeWidth: number
+  ) {
+    return [
+      prefix,
+      color,
+      fillAlpha,
+      strokeAlpha,
+      strokeWidth,
+      tiles.map((tile) => `${tile.x},${tile.y}`).join(";"),
+    ].join("|");
   }
 
   private clearDepthSortedOverlays(overlayObjects: Phaser.GameObjects.GameObject[]) {
@@ -2718,10 +2804,6 @@ class PhaserMapScene extends Phaser.Scene {
       overlayObject.destroy();
     }
     overlayObjects.length = 0;
-  }
-
-  private getTileOverlayDepth(x: number, y: number) {
-    return cartToIso(x, y).y + 0.2;
   }
 
   getSurfaceY(x: number, y: number): number {
@@ -2931,6 +3013,7 @@ export class PhaserMapRenderer implements MapRenderer {
   private initialized = false;
   private destroyed = false;
   private readyResolve: (() => void) | null = null;
+  private frameMeasureStartedAt: number | null = null;
 
   async init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress) {
     this.destroyed = false;
@@ -2965,6 +3048,17 @@ export class PhaserMapRenderer implements MapRenderer {
           mode: Phaser.Scale.RESIZE,
           parent: container,
         },
+      });
+      this.game.events.on("prestep", () => {
+        if (typeof performance !== "undefined") {
+          this.frameMeasureStartedAt = performance.now();
+        }
+      });
+      this.game.events.on("postrender", () => {
+        const startedAt = this.frameMeasureStartedAt;
+        this.frameMeasureStartedAt = null;
+        if (startedAt === null || typeof performance === "undefined") return;
+        recordDevPerformanceMeasure("phaser.frame", performance.now() - startedAt);
       });
 
       await ready;

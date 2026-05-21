@@ -9,12 +9,12 @@ import {
   findHexPath,
   findMeleeApproach,
   getBlockedCombatCells,
-  getHexDistance,
   getOccupiedCombatCells,
 } from "@/lib/game/combat/movement";
-import { hasAdjacentEnemy } from "@/lib/game/combat/rules";
+import { getAttackProfile, hasAdjacentEnemy } from "@/lib/game/combat/rules";
 import { getUnitRule } from "@/lib/game/units";
 import { playCombatDamageHit } from "@/lib/audio/combatAudio";
+import { GAME_CURSORS } from "@/lib/ui/cursors";
 import { BattlefieldScenery, IsoTile, TerrainModel } from "./battlefieldScenery";
 import { DamagePreviewPanel } from "./combatPanels";
 import { UnitBadges, UnitModel } from "./battlefieldUnits";
@@ -41,19 +41,19 @@ import {
   getUnitTitle,
 } from "./combatLayout";
 
-type CombatHoverAction = "move" | "melee" | "ranged";
+type CombatHoverAction = "move" | "melee" | "ranged" | "rangedHampered";
 
 const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
-  move: "url('/assets/cursors/combat-move-ground.webp') 4 4, pointer",
-  melee: "url('/assets/cursors/combat-melee.webp') 4 4, pointer",
-  ranged: "url('/assets/cursors/combat-ranged.webp') 4 4, pointer",
+  move: GAME_CURSORS.combat.moveWalk,
+  melee: GAME_CURSORS.combat.attack,
+  ranged: GAME_CURSORS.combat.shotGood,
+  rangedHampered: GAME_CURSORS.combat.shotBad,
 };
-const COMBAT_FLYING_MOVE_CURSOR = "url('/assets/cursors/combat-move-flying.webp') 4 4, pointer";
 
 function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
   if (action !== "move") return COMBAT_CURSORS[action];
   const abilities = currentUnit ? getUnitRule(currentUnit.unitType).abilities ?? [] : [];
-  return abilities.includes("flying") ? COMBAT_FLYING_MOVE_CURSOR : COMBAT_CURSORS.move;
+  return abilities.includes("flying") ? GAME_CURSORS.combat.moveFly : COMBAT_CURSORS.move;
 }
 
 export function IsoBattlefield({
@@ -237,24 +237,34 @@ export function IsoBattlefield({
     for (let q = 0; q < COMBAT_COLS; q++) {
       const unit = units.find((item) => item.q === q && item.r === r);
       const feature = terrain.find((item) => item.q === q && item.r === r);
-      const distance = currentUnit ? getHexDistance(currentUnit, { q, r }) : 999;
       const path = currentUnit && !unit && !feature ? findHexPath(currentUnit, { q, r }, occupied, blocked) : [];
       const reachable = Boolean(isMyAction && currentUnit && !unit && !feature && path.length > 1 && path.length - 1 <= currentUnit.speed);
       const isPendingDestination = activePendingMove?.q === q && activePendingMove.r === r;
       const isPendingPath = Boolean(activePendingMove?.path.some((step) => step.q === q && step.r === r));
       const enemyUnit = currentUnit && unit && unit.side !== currentUnit.side ? unit : null;
-      const canShoot = Boolean(currentUnit?.ranged && currentUnit.shots > 0 && distance > 1 && !hasAdjacentEnemy(currentUnit, units));
+      const shotProfile = currentUnit && enemyUnit
+        ? getAttackProfile({
+            actor: currentUnit,
+            target: enemyUnit,
+            actionType: "SHOOT",
+            terrain,
+            actorAdjacentToEnemy: hasAdjacentEnemy(currentUnit, units),
+          })
+        : null;
+      const canShoot = Boolean(shotProfile?.canStrike);
       const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain) : null;
       const hoverAction: CombatHoverAction | null = !isMyAction
         ? null
         : enemyUnit && canShoot
-          ? "ranged"
+          ? shotProfile && shotProfile.damagePenalty < 1
+            ? "rangedHampered"
+            : "ranged"
           : enemyUnit && meleeApproach
             ? "melee"
             : reachable
               ? "move"
               : null;
-      const attackable = hoverAction === "melee" || hoverAction === "ranged";
+      const attackable = hoverAction === "melee" || hoverAction === "ranged" || hoverAction === "rangedHampered";
       const { x, y } = getIsoPosition(q, r);
       const canClick = isMyAction && !feature && Boolean(hoverAction);
 
@@ -269,13 +279,19 @@ export function IsoBattlefield({
             width: TILE_WIDTH,
             height: TILE_HEIGHT + TILE_DEPTH,
             zIndex: r * 100 + (unit ? 30 : feature ? 18 : 1),
-            cursor: hoverAction ? getCombatCursor(hoverAction, currentUnit) : "default",
+            cursor: hoverAction
+              ? getCombatCursor(hoverAction, currentUnit)
+              : unit
+                ? GAME_CURSORS.combat.info
+                : isMyAction
+                  ? GAME_CURSORS.combat.invalid
+                  : GAME_CURSORS.default,
           }}
           aria-disabled={!canClick}
           tabIndex={canClick ? 0 : -1}
           onClick={() => {
             if (!canClick) return;
-            if (unit && hoverAction === "ranged") {
+            if (unit && (hoverAction === "ranged" || hoverAction === "rangedHampered")) {
               setPendingMove(null);
               onAction({ type: "SHOOT", targetUnitId: unit.id });
             } else if (unit && hoverAction === "melee") {
@@ -316,8 +332,16 @@ export function IsoBattlefield({
 
   const unitModels = visualUnits.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
-    const distance = currentUnit ? getHexDistance(currentUnit, unit) : 999;
-    const canShoot = Boolean(currentUnit?.ranged && currentUnit.shots > 0 && distance > 1 && !hasAdjacentEnemy(currentUnit, units));
+    const shotProfile = currentUnit
+      ? getAttackProfile({
+          actor: currentUnit,
+          target: unit,
+          actionType: "SHOOT",
+          terrain,
+          actorAdjacentToEnemy: hasAdjacentEnemy(currentUnit, units),
+        })
+      : null;
+    const canShoot = Boolean(shotProfile?.canStrike);
     const attackable = Boolean(
       isMyAction &&
       currentUnit &&
@@ -426,8 +450,3 @@ export function IsoBattlefield({
     </div>
   );
 }
-
-
-
-
-

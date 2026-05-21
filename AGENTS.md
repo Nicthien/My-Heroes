@@ -49,6 +49,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - For game/map visuals, create and use pixel-art sprite assets in `.webp` under `public/assets/sprites/`.
 - Do not use generated SVGs or rough vector placeholders for in-game objects when a sprite can be used.
+- Never use SVG/vector drawings as the source for generated sprites or cursor assets. Use raster generation (`imagegen`) or hand-edited raster sources, then export the final `.webp`.
 - If a temporary fallback is needed for resilience, keep it internal to rendering code and replace it with a real `.webp` sprite before considering the feature visually complete.
 
 # Audio

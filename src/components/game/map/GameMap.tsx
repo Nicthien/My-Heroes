@@ -9,6 +9,7 @@ import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/acti
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { UNIT_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { GAME_CURSORS } from "@/lib/ui/cursors";
 import {
   findPath,
   findPathToAdjacent,
@@ -24,14 +25,15 @@ import { refreshGameState } from "@/lib/game/refresh";
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
 const ADVENTURE_CURSORS = {
-  default: "default",
-  dragging: "grabbing",
-  boot: "url('/assets/cursors/adventure-horse.webp') 4 4, pointer",
-  castle: "url('/assets/cursors/adventure-castle.webp') 4 4, pointer",
-  sword: "url('/assets/cursors/combat-melee.webp') 4 4, pointer",
-  resource: "url('/assets/cursors/adventure-resource.webp') 4 4, pointer",
-  building: "url('/assets/cursors/adventure-building.webp') 4 4, pointer",
-  forbidden: "default",
+  default: GAME_CURSORS.default,
+  dragging: GAME_CURSORS.dragging,
+  move: GAME_CURSORS.adventure.moveLand,
+  visit: GAME_CURSORS.adventure.arriveLand,
+  town: GAME_CURSORS.adventure.town,
+  attack: GAME_CURSORS.adventure.attack,
+  trade: GAME_CURSORS.adventure.trade,
+  hero: GAME_CURSORS.adventure.hero,
+  forbidden: GAME_CURSORS.forbidden,
 } as const;
 const RESOURCE_BUILDING_LABEL_BY_TYPE = new Map<string, string>(
   RESOURCE_BUILDING_RULES.map((rule) => [rule.type, rule.label])
@@ -2224,18 +2226,18 @@ function getAdventureMapCursor({
 
   if (targetTile.object?.type === "gate") {
     const gate = findGateAt(gameState, targetTile.object.id, tile);
-    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.castle;
-    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.sword : ADVENTURE_CURSORS.boot;
+    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.town;
+    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.attack : ADVENTURE_CURSORS.move;
   }
 
   const tileObjectCursor = getAdventureTileObjectCursor(targetTile.object?.type);
   if (tileObjectCursor) return tileObjectCursor;
 
-  if (isReachableTile) return ADVENTURE_CURSORS.boot;
+  if (isReachableTile) return ADVENTURE_CURSORS.move;
   if (visibleTiles && !visibleTiles.has(tileKey)) return ADVENTURE_CURSORS.forbidden;
 
   return isTileTraversable(targetTile)
-    ? ADVENTURE_CURSORS.boot
+    ? ADVENTURE_CURSORS.move
     : ADVENTURE_CURSORS.forbidden;
 }
 
@@ -2244,31 +2246,34 @@ function getAdventureObjectCursor(
   gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
   currentPlayerId: string | null
 ) {
-  if (object.type === "combat") return ADVENTURE_CURSORS.sword;
+  if (object.type === "combat") return ADVENTURE_CURSORS.attack;
   if (object.type === "gate") {
     const gate = findGateAt(gameState, object.id, { x: object.x, y: object.y });
-    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.castle;
-    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.sword : ADVENTURE_CURSORS.boot;
+    if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.town;
+    return (gate?.garrison ?? []).some((unit) => unit.count > 0) ? ADVENTURE_CURSORS.attack : ADVENTURE_CURSORS.move;
   }
-  if (object.type === "adventure_building") return ADVENTURE_CURSORS.building;
-  if (object.type === "building") return ADVENTURE_CURSORS.resource;
+  if (object.type === "adventure_building") return ADVENTURE_CURSORS.visit;
+  if (object.type === "building") return ADVENTURE_CURSORS.visit;
   if (object.type === "town") {
     return object.playerId === currentPlayerId
-      ? ADVENTURE_CURSORS.castle
-      : ADVENTURE_CURSORS.sword;
+      ? ADVENTURE_CURSORS.town
+      : ADVENTURE_CURSORS.attack;
   }
   if (object.type === "hero" && currentPlayerId && object.playerId !== currentPlayerId) {
-    return ADVENTURE_CURSORS.sword;
+    return ADVENTURE_CURSORS.attack;
+  }
+  if (object.type === "hero") {
+    return object.playerId === currentPlayerId ? ADVENTURE_CURSORS.hero : ADVENTURE_CURSORS.trade;
   }
 
   return null;
 }
 
 function getAdventureTileObjectCursor(type: string | undefined) {
-  if (type === "monster" || type === "combat" || type === "gate") return ADVENTURE_CURSORS.sword;
-  if (type === "resource") return ADVENTURE_CURSORS.resource;
-  if (type === "building") return ADVENTURE_CURSORS.resource;
-  if (type === "adventure_building") return ADVENTURE_CURSORS.building;
+  if (type === "monster" || type === "combat" || type === "gate") return ADVENTURE_CURSORS.attack;
+  if (type === "resource") return ADVENTURE_CURSORS.visit;
+  if (type === "building") return ADVENTURE_CURSORS.visit;
+  if (type === "adventure_building") return ADVENTURE_CURSORS.visit;
   if (type === "wall" || type === "town_footprint") return ADVENTURE_CURSORS.forbidden;
 
   return null;

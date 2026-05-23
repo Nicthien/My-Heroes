@@ -292,7 +292,7 @@ async function fetchCombatHero(
 
 function isMissingSpellSchemaError(error: { message?: string; details?: string | null; code?: string }) {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("schema cache");
+  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("schema cache");
 }
 
 function findCombatSpellCaster(params: {

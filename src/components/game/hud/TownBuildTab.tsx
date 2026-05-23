@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { BuildingType, type Faction, type GameState, type Player, type Town } from "@/lib/game/types";
 import { canAfford, formatCost } from "@/lib/game/economy";
 import { type TownBuildingRule } from "@/lib/game/town-buildings";
 import { hasTownBuilding } from "@/lib/game/town-buildings";
+import { getTownBuildingSprite } from "@/lib/game/town-building-sprites";
 import { buildingTypeLabel } from "./helpers";
 
 export function TownBuildTab({
@@ -61,11 +63,26 @@ export function TownBuildTab({
           !canAct ||
           !isMyTown ||
           isPending;
+        const buildingSprite = getTownBuildingSprite(rule, selectedTownFaction);
 
         return (
           <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="flex min-w-0 items-start gap-3">
+                {buildingSprite && (
+                  <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-amber-700/35 bg-stone-950/70 shadow-inner shadow-black/50">
+                    <Image
+                      src={buildingSprite}
+                      alt=""
+                      width={56}
+                      height={56}
+                      className="h-14 w-14 object-contain"
+                      unoptimized
+                      aria-hidden="true"
+                    />
+                  </div>
+                )}
+                <div className="min-w-0">
                 <div className="text-sm font-bold text-amber-100">{rule.label}</div>
                 <div className="text-xs text-amber-200/60">{rule.description}</div>
                 <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
@@ -75,6 +92,7 @@ export function TownBuildTab({
                 {blockedByCapitolLimit && (
                   <div className="mt-1 text-xs text-red-300">Limite atteinte : un seul Capitole par joueur.</div>
                 )}
+                </div>
               </div>
               <button
                 type="button"

@@ -27,6 +27,10 @@ import {
   TILE_DEPTH,
   TILE_HEIGHT,
   TILE_WIDTH,
+  UNIT_ATTACK_ANIMATION_MS,
+  UNIT_ATTACK_IMPACT_OFFSET_MS,
+  UNIT_ATTACK_POST_PAUSE_MS,
+  UNIT_ATTACK_PRE_PAUSE_MS,
   UNIT_DAMAGE_ANIMATION_MS,
   UNIT_HEIGHT,
   UNIT_MOVE_TRANSITION_MS,
@@ -63,6 +67,9 @@ export function IsoBattlefield({
   isMyAction,
   onAction,
   onInspectUnit,
+  pendingSpellTarget = false,
+  onSpellTarget,
+  displayedCurrentUnitId,
 }: {
   combat: PersistentCombat;
   gameState: GameState;
@@ -70,6 +77,13 @@ export function IsoBattlefield({
   isMyAction: boolean;
   onAction: (action: Record<string, unknown>) => void;
   onInspectUnit: (unitId: string | null) => void;
+  pendingSpellTarget?: boolean;
+  onSpellTarget?: (unitId: string) => void;
+  // ID of the unit shown as "active" in the UI (yellow highlight, hover
+  // previews, pending move). Lags `combat.currentUnitId` while the previous
+  // action's animation is still playing so the selection doesn't visually
+  // jump to the next unit mid-attack.
+  displayedCurrentUnitId: string | null;
 }) {
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
@@ -78,20 +92,29 @@ export function IsoBattlefield({
   const terrain = combat.boardState.terrain ?? [];
   const [visualUnits, setVisualUnits] = useState<CombatBoardUnit[]>(units);
   const [damagedUnitIds, setDamagedUnitIds] = useState(() => new Set<string>());
+  const [attackingUnit, setAttackingUnit] = useState<{ id: string; kind: "melee" | "ranged" } | null>(null);
+  const [attackEffect, setAttackEffect] = useState<
+    | { kind: "melee"; targetQ: number; targetR: number; key: number }
+    | { kind: "ranged"; fromQ: number; fromR: number; targetQ: number; targetR: number; key: number }
+    | null
+  >(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const previousCombatIdRef = useRef<string | null>(null);
   const previousUnitsRef = useRef<CombatBoardUnit[]>(units);
+  const previousCurrentUnitIdRef = useRef<string | null>(combat.currentUnitId);
   const damageTimeoutsRef = useRef<number[]>([]);
   const revealDamageTimeoutsRef = useRef<number[]>([]);
+  const attackTimeoutsRef = useRef<number[]>([]);
   const environment = useMemo(
     () => combat.boardState.environment ?? buildCombatEnvironment(gameState.map, combat.position),
     [combat.boardState.environment, combat.position, gameState.map]
   );
-  const currentUnit = units.find((unit) => unit.id === combat.currentUnitId);
+  const effectiveCurrentUnitId = displayedCurrentUnitId ?? combat.currentUnitId;
+  const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
   const occupied = currentUnit ? getOccupiedCombatCells(units, currentUnit.id) : getOccupiedCombatCells(units);
   const blocked = getBlockedCombatCells(terrain);
-  const activePendingMove = pendingMove?.unitId === combat.currentUnitId ? pendingMove : null;
+  const activePendingMove = pendingMove?.unitId === effectiveCurrentUnitId ? pendingMove : null;
   const previewTarget = units.find((unit) => unit.id === (hoveredUnitId ?? inspectedUnitId));
   const preview = currentUnit && previewTarget && previewTarget.side !== currentUnit.side
     ? getDamagePreview(currentUnit, previewTarget, combat, gameState)
@@ -112,14 +135,18 @@ export function IsoBattlefield({
 
   useEffect(() => {
     const previousUnits = previousUnitsRef.current;
+    const previousActorId = previousCurrentUnitIdRef.current;
     const previousById = new Map(previousUnits.map((unit) => [unit.id, unit]));
     const currentById = new Map(units.map((unit) => [unit.id, unit]));
 
     if (previousCombatIdRef.current !== combat.id) {
       previousCombatIdRef.current = combat.id;
       previousUnitsRef.current = units;
+      previousCurrentUnitIdRef.current = combat.currentUnitId;
       setVisualUnits(units);
       setDamagedUnitIds(new Set());
+      setAttackingUnit(null);
+      setAttackEffect(null);
       return;
     }
 
@@ -140,27 +167,112 @@ export function IsoBattlefield({
       })
       .map((unit) => unit.id);
 
-    previousUnitsRef.current = units;
-    clearTimeouts(revealDamageTimeoutsRef);
+    const hasAnimatableDiff = movedIds.length > 0 || allDamagedIds.length > 0;
+    if (!hasAnimatableDiff) {
+      // No movement or damage in this state delta — likely a realtime echo,
+      // DEFEND/WAIT action, or pure currentUnitId rotation. Don't disturb any
+      // in-flight animation timers; just keep visualUnits in sync.
+      previousUnitsRef.current = units;
+      previousCurrentUnitIdRef.current = combat.currentUnitId;
+      setVisualUnits(units);
+      return;
+    }
 
-    if (movedIds.length > 0 && allDamagedIds.length > 0) {
-      setVisualUnits(buildPreAttackVisualUnits(previousUnits, units, allDamagedIds));
-      const revealTimeout = window.setTimeout(() => {
-        setVisualUnits(units);
-        flashDamagedUnits(allDamagedIds);
-      }, UNIT_MOVE_TRANSITION_MS);
+    previousUnitsRef.current = units;
+    previousCurrentUnitIdRef.current = combat.currentUnitId;
+    clearTimeouts(revealDamageTimeoutsRef);
+    clearTimeouts(attackTimeoutsRef);
+
+    if (allDamagedIds.length === 0) {
+      // movedIds only — schedule a move-only reveal so visualUnits commits
+      // to the final state at the end of the CSS transition. (Not strictly
+      // necessary since positions already match, but keeps the flow uniform.)
+      const revealTimeout = window.setTimeout(() => setVisualUnits(units), UNIT_MOVE_TRANSITION_MS);
       revealDamageTimeoutsRef.current.push(revealTimeout);
       return;
     }
 
-    setVisualUnits(units);
-    if (allDamagedIds.length > 0) flashDamagedUnits(allDamagedIds);
-  }, [combat.id, flashDamagedUnits, units]);
+    const actor = previousActorId
+      ? previousById.get(previousActorId) ?? null
+      : null;
+    const enemyDamagedId = actor
+      ? allDamagedIds.find((id) => {
+          const target = previousById.get(id) ?? previousUnits.find((u) => u.id === id);
+          return target ? target.side !== actor.side : false;
+        }) ?? null
+      : null;
+    const enemyTarget = enemyDamagedId
+      ? units.find((u) => u.id === enemyDamagedId) ?? previousUnits.find((u) => u.id === enemyDamagedId) ?? null
+      : null;
+    const actorMoved = actor ? movedIds.includes(actor.id) : false;
+    const attackKind: "melee" | "ranged" | null = actor && enemyTarget
+      ? actorMoved || !actor.ranged
+        ? "melee"
+        : "ranged"
+      : null;
+    // Actor position at the moment of impact: where it ends up after the move,
+    // which is the current state's q/r for the actor.
+    const actorAtImpact = actor ? units.find((u) => u.id === actor.id) ?? actor : null;
+
+    setVisualUnits(buildPreAttackVisualUnits(previousUnits, units, allDamagedIds));
+
+    const moveDelay = movedIds.length > 0 ? UNIT_MOVE_TRANSITION_MS : 0;
+    const preAttackPause = attackKind && moveDelay > 0 ? UNIT_ATTACK_PRE_PAUSE_MS : 0;
+    const attackStart = moveDelay + preAttackPause;
+
+    if (attackKind && actor) {
+      const actorId = actor.id;
+      const attackTimeout = window.setTimeout(() => {
+        setAttackingUnit({ id: actorId, kind: attackKind });
+      }, attackStart);
+      attackTimeoutsRef.current.push(attackTimeout);
+
+      const clearAttackTimeout = window.setTimeout(() => {
+        setAttackingUnit((prev) => (prev?.id === actorId ? null : prev));
+      }, attackStart + UNIT_ATTACK_ANIMATION_MS);
+      attackTimeoutsRef.current.push(clearAttackTimeout);
+
+      // Impact effect: slash overlay on target for melee, projectile from actor
+      // to target for ranged. Triggered at the strike apex of the lunge.
+      if (enemyTarget && actorAtImpact) {
+        const effectKey = Date.now();
+        const impactDelay = attackStart + UNIT_ATTACK_IMPACT_OFFSET_MS;
+        const effect =
+          attackKind === "melee"
+            ? { kind: "melee" as const, targetQ: enemyTarget.q, targetR: enemyTarget.r, key: effectKey }
+            : {
+                kind: "ranged" as const,
+                fromQ: actorAtImpact.q,
+                fromR: actorAtImpact.r,
+                targetQ: enemyTarget.q,
+                targetR: enemyTarget.r,
+                key: effectKey,
+              };
+        const effectTimeout = window.setTimeout(() => setAttackEffect(effect), impactDelay);
+        attackTimeoutsRef.current.push(effectTimeout);
+        const effectClearTimeout = window.setTimeout(
+          () => setAttackEffect((prev) => (prev?.key === effectKey ? null : prev)),
+          impactDelay + 420
+        );
+        attackTimeoutsRef.current.push(effectClearTimeout);
+      }
+    }
+
+    const damageDelay = attackKind
+      ? attackStart + UNIT_ATTACK_ANIMATION_MS + UNIT_ATTACK_POST_PAUSE_MS
+      : moveDelay;
+    const revealTimeout = window.setTimeout(() => {
+      setVisualUnits(units);
+      flashDamagedUnits(allDamagedIds);
+    }, damageDelay);
+    revealDamageTimeoutsRef.current.push(revealTimeout);
+  }, [combat.id, combat.currentUnitId, flashDamagedUnits, units]);
 
   useEffect(() => {
     return () => {
       clearTimeouts(damageTimeoutsRef);
       clearTimeouts(revealDamageTimeoutsRef);
+      clearTimeouts(attackTimeoutsRef);
     };
   }, []);
 
@@ -255,7 +367,9 @@ export function IsoBattlefield({
       const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain) : null;
       const hoverAction: CombatHoverAction | null = !isMyAction
         ? null
-        : enemyUnit && canShoot
+        : pendingSpellTarget
+          ? enemyUnit ? "ranged" : null
+          : enemyUnit && canShoot
           ? shotProfile && shotProfile.damagePenalty < 1
             ? "rangedHampered"
             : "ranged"
@@ -291,6 +405,10 @@ export function IsoBattlefield({
           tabIndex={canClick ? 0 : -1}
           onClick={() => {
             if (!canClick) return;
+            if (pendingSpellTarget) {
+              if (unit && enemyUnit) onSpellTarget?.(unit.id);
+              return;
+            }
             if (unit && (hoverAction === "ranged" || hoverAction === "rangedHampered")) {
               setPendingMove(null);
               onAction({ type: "SHOOT", targetUnitId: unit.id });
@@ -321,8 +439,10 @@ export function IsoBattlefield({
             attackable={attackable}
             pendingDestination={isPendingDestination}
             pendingPath={isPendingPath}
-            active={combat.currentUnitId === unit?.id}
+            active={effectiveCurrentUnitId === unit?.id}
             inspected={inspectedUnitId === unit?.id}
+            q={q}
+            r={r}
           />
           {feature && <TerrainModel feature={feature} />}
         </button>
@@ -349,6 +469,7 @@ export function IsoBattlefield({
       (canShoot || findMeleeApproach(currentUnit, unit, units, terrain))
     );
     const damaged = damagedUnitIds.has(unit.id);
+    const attacking = attackingUnit?.id === unit.id ? attackingUnit.kind : null;
 
     return (
       <span
@@ -364,7 +485,7 @@ export function IsoBattlefield({
           willChange: "left, top",
         }}
       >
-        <UnitModel unit={unit} active={combat.currentUnitId === unit.id} attackable={attackable} damaged={damaged} lifted depthScale={getDepthScale(unit.r)} />
+        <UnitModel unit={unit} active={effectiveCurrentUnitId === unit.id} attackable={attackable} damaged={damaged} attacking={attacking} lifted depthScale={getDepthScale(unit.r)} />
       </span>
     );
   });
@@ -446,6 +567,45 @@ export function IsoBattlefield({
         {cells}
         {unitModels}
         {unitBadges}
+        {attackEffect && (() => {
+          if (attackEffect.kind === "melee") {
+            const { x, y } = getIsoPosition(attackEffect.targetQ, attackEffect.targetR);
+            return (
+              <span
+                key={attackEffect.key}
+                className="pointer-events-none absolute block"
+                style={{
+                  left: x,
+                  top: y + UNIT_HEIGHT,
+                  width: TILE_WIDTH,
+                  height: TILE_HEIGHT + TILE_DEPTH,
+                  zIndex: attackEffect.targetR * 100 + 60,
+                }}
+              >
+                <span className="combat-melee-slash" />
+              </span>
+            );
+          }
+          const from = getIsoPosition(attackEffect.fromQ, attackEffect.fromR);
+          const to = getIsoPosition(attackEffect.targetQ, attackEffect.targetR);
+          const dx = to.x - from.x;
+          const dy = to.y - from.y;
+          return (
+            <span
+              key={attackEffect.key}
+              className="combat-projectile"
+              style={
+                {
+                  left: from.x + TILE_WIDTH / 2 - 7,
+                  top: from.y + UNIT_HEIGHT - 8,
+                  zIndex: Math.max(attackEffect.fromR, attackEffect.targetR) * 100 + 60,
+                  ["--proj-dx" as string]: `${dx}px`,
+                  ["--proj-dy" as string]: `${dy}px`,
+                } as React.CSSProperties
+              }
+            />
+          );
+        })()}
       </div>
     </div>
   );

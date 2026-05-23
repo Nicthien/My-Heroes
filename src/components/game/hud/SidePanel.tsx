@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
+import { MAP_SPRITES } from "@/lib/rendering/phaser/assets";
 import {
   HourglassIcon,
   MineIcon,
@@ -90,6 +92,8 @@ export default function SidePanel() {
         <Section title={`Châteaux (${towns.length})`}>
           {towns.map((t) => {
             const active = t.id === selectedTownId;
+            const factionKey = (t.townType ?? t.faction) as string;
+            const sprite = MAP_SPRITES.towns[factionKey] ?? MAP_SPRITES.town;
             return (
               <Row
                 key={t.id}
@@ -100,13 +104,21 @@ export default function SidePanel() {
                 }}
                 left={
                   <div
-                    className={`grid h-10 w-10 place-items-center rounded-lg border ${
+                    className={`grid h-10 w-10 place-items-center overflow-hidden rounded-lg border ${
                       active
                         ? "border-amber-300 bg-amber-700/40"
                         : "border-amber-700/60 bg-stone-900/80"
                     }`}
                   >
-                    <TowerIcon className="h-6 w-6 text-amber-300" />
+                    <Image
+                      src={sprite}
+                      alt={t.name}
+                      width={40}
+                      height={40}
+                      className="h-full w-full object-contain"
+                      style={{ imageRendering: "pixelated" }}
+                      draggable={false}
+                    />
                   </div>
                 }
                 title={t.name}
@@ -220,4 +232,3 @@ function Row({
     </div>
   );
 }
-

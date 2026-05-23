@@ -289,6 +289,27 @@ export interface HeroStats {
   defense: number;
   spellPower: number;
   knowledge: number;
+  morale: number;
+  luck: number;
+}
+
+export type HeroArtifactSlot =
+  | "weapon"
+  | "shield"
+  | "torso"
+  | "helmet"
+  | "necklace"
+  | "feet"
+  | "ringLeft"
+  | "ringRight"
+  | "misc1"
+  | "misc2"
+  | "misc3"
+  | "misc4";
+
+export interface HeroArtifactBag {
+  inventory: string[];
+  equipment: Partial<Record<HeroArtifactSlot, string>>;
 }
 
 export interface UnitStack {
@@ -308,6 +329,10 @@ export interface Hero {
   level: number;
   experience: number;
   stats: HeroStats;
+  mana: number;
+  hasSpellBook: boolean;
+  knownSpellIds?: string[] | null;
+  artifacts: HeroArtifactBag;
   position: Position;
   movement: number;
   maxMovement: number;
@@ -359,9 +384,18 @@ export interface MapTile {
   zoneId?: number;
   decor?: DecorItem;
   road?: RoadType;
+  worldEdge?: WorldEdgeTile;
 }
 
 export type RoadType = "paved" | "gravel" | "dirt";
+
+export interface WorldEdgeTile {
+  kind: "rock" | "water";
+  rimHeight: number;
+  dropDepth: number;
+  variant: number;
+  retainsWater?: boolean;
+}
 
 export interface DecorItem {
   type: DecorKind;
@@ -424,6 +458,42 @@ export enum AdventureBuildingType {
   CAMPFIRE = "campfire",
   LIGHTHOUSE = "lighthouse",
   STARGATE = "stargate",
+  EXTERNAL_DWELLING = "external_dwelling",
+  ARENA = "arena",
+  MERCENARY_CAMP = "mercenary_camp",
+  MARLETTO_TOWER = "marletto_tower",
+  STAR_AXIS = "star_axis",
+  GARDEN_OF_REVELATION = "garden_of_revelation",
+  LEARNING_STONE = "learning_stone",
+  SCHOOL_OF_WAR = "school_of_war",
+  SCHOOL_OF_MAGIC = "school_of_magic",
+  LIBRARY_OF_ENLIGHTENMENT = "library_of_enlightenment",
+  CARTOGRAPHER = "cartographer",
+  REDWOOD_OBSERVATORY = "redwood_observatory",
+  MYSTICAL_GARDEN = "mystical_garden",
+  STABLES = "stables",
+  TEMPLE = "temple",
+  FOUNTAIN_OF_FORTUNE = "fountain_of_fortune",
+  IDOL_OF_FORTUNE = "idol_of_fortune",
+  MAGIC_WELL = "magic_well",
+  MAGIC_SHRINE = "magic_shrine",
+  WATER_MILL = "water_mill",
+  WATER_WHEEL = "water_wheel",
+  ABANDONED_WAGON = "abandoned_wagon",
+  CRATE = "crate",
+  SKELETON = "skeleton",
+  OBELISK = "obelisk",
+  WARRIOR_TOMB = "warrior_tomb",
+  CURSED_ALTAR = "cursed_altar",
+  SPELL_SHRINE_1 = "spell_shrine_1",
+  SPELL_SHRINE_2 = "spell_shrine_2",
+  SPELL_SHRINE_3 = "spell_shrine_3",
+  TREE_OF_KNOWLEDGE = "tree_of_knowledge",
+  SEER_HUT = "seer_hut",
+  MERMAID = "mermaid",
+  BUOY = "buoy",
+  FLOTSAM = "flotsam",
+  SEA_CHEST = "sea_chest",
 }
 
 export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatable";
@@ -431,7 +501,10 @@ export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatabl
 export interface AdventureBuildingState {
   visitedAdventureBuildings?: string[];
   playerAdventureVisits?: Record<string, string[]>;
+  heroAdventureVisits?: Record<string, string[]>;
   signaledLighthouses?: Record<string, string[]>;
+  mysticalGardenVisits?: Record<string, string>;
+  weeklyAdventureVisits?: Record<string, string>;
 }
 
 export interface NeutralArmy {
@@ -486,6 +559,9 @@ export interface CombatBoardUnit extends UnitStack {
   hasRetaliated: boolean;
   defended: boolean;
   waited: boolean;
+  morale?: number;
+  moraleApplied?: boolean;
+  moraleBonus?: boolean;
 }
 
 export type CombatTerrainType = "rock" | "water";
@@ -546,7 +622,14 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[]; environment?: CombatEnvironment };
+  boardState: {
+    units: CombatBoardUnit[];
+    initialUnits?: CombatBoardUnit[];
+    terrain?: CombatTerrainFeature[];
+    environment?: CombatEnvironment;
+    spellCastsByRound?: Record<string, string[]>;
+    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+  };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
@@ -612,6 +695,8 @@ export interface Player {
 
 export type GameAction =
   | { type: "MOVE_HERO"; heroId: string; path: Position[] }
+  | { type: "VISIT_ADVENTURE_BUILDING"; heroId: string; buildingId: string; choice?: "attack" | "defense" | "spellPower" | "knowledge" }
+  | { type: "CAST_ADVENTURE_SPELL"; heroId: string; spellId: string; target?: Position | { townId?: string } }
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
@@ -620,6 +705,9 @@ export type GameAction =
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GATE_GARRISON_TO_HERO"; gateId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GATE_GARRISON"; gateId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "EQUIP_ARTIFACT"; heroId: string; artifactId: string; slot?: HeroArtifactSlot }
+  | { type: "UNEQUIP_ARTIFACT"; heroId: string; slot: HeroArtifactSlot }
+  | { type: "TRANSFER_ARTIFACT"; fromHeroId: string; toHeroId: string; artifactId: string }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "CLAIM_CREATURE_BANK_REWARD"; bankId: string; heroId: string; creatures?: Partial<Record<UnitType, number>> }

@@ -1,10 +1,15 @@
 import Phaser from "phaser";
 import { GameMap, MapTile, type Position, TerrainType } from "@/lib/game/types";
-import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH } from "@/lib/rendering/phaser/iso";
+import { BASE_HEIGHT, TILE_WIDTH } from "@/lib/rendering/phaser/iso";
+import {
+  type CubeFace,
+  type CubeFaceQuad,
+  getCubeCorners,
+  getCubeFacePoints,
+} from "@/lib/rendering/phaser/isoCube";
 import {
   TERRAIN_FACE_RENDER_ORDER,
   VISUAL_ELEVATION_SCALE,
-  type TerrainFaceSide,
 } from "@/lib/rendering/phaser/mapRenderSettings";
 import { hashTile, lerpPoint } from "@/lib/rendering/phaser/pointMath";
 import { TERRAIN_TOP } from "@/lib/rendering/phaser/terrainColors";
@@ -15,21 +20,17 @@ export type TerrainSideExposure = {
 };
 
 export type TerrainSideVisibility = {
-  left: TerrainSideExposure | null;
-  right: TerrainSideExposure | null;
+  SW: TerrainSideExposure | null;
+  SE: TerrainSideExposure | null;
 };
 
-export type TerrainSideFacePoints = {
-  topA: Position;
-  topB: Position;
-  bottomA: Position;
-  bottomB: Position;
-};
+export type TerrainSideFacePoints = CubeFaceQuad;
 
 export function getTileDepth(tile: MapTile) {
-  return tile.terrain === TerrainType.WATER
-    ? 2
-    : BASE_HEIGHT + Math.max(0, tile.elevation) * VISUAL_ELEVATION_SCALE;
+  if (tile.terrain === TerrainType.WATER) return BASE_HEIGHT;
+
+  const elevation = tile.worldEdge?.rimHeight ?? tile.elevation;
+  return BASE_HEIGHT + Math.max(0, elevation) * VISUAL_ELEVATION_SCALE;
 }
 
 export function getMaxTileDepth(map: GameMap) {
@@ -62,29 +63,6 @@ export function getTerrainTopStroke(terrain: TerrainType) {
   return { width: 0.8, color: 0x1f241f, alpha: 0.28 };
 }
 
-export function getTerrainSideFacePoints(
-  side: TerrainFaceSide,
-  isoX: number,
-  isoY: number,
-  depth: number,
-  bottomDepth: number
-): TerrainSideFacePoints {
-  const eastTop = { x: isoX + TILE_WIDTH / 2, y: isoY - depth };
-  const southTop = { x: isoX, y: isoY + TILE_HEIGHT / 2 - depth };
-  const westTop = { x: isoX - TILE_WIDTH / 2, y: isoY - depth };
-  const eastBottom = { x: isoX + TILE_WIDTH / 2, y: isoY - bottomDepth };
-  const southBottom = { x: isoX, y: isoY + TILE_HEIGHT / 2 - bottomDepth };
-  const westBottom = { x: isoX - TILE_WIDTH / 2, y: isoY - bottomDepth };
-
-  switch (side) {
-    case "left":
-      return { topA: westTop, topB: southTop, bottomA: westBottom, bottomB: southBottom };
-    case "right":
-    default:
-      return { topA: southTop, topB: eastTop, bottomA: southBottom, bottomB: eastBottom };
-  }
-}
-
 export function drawTerrainSideDetails(
   graphics: Phaser.GameObjects.Graphics,
   tile: MapTile,
@@ -93,10 +71,10 @@ export function drawTerrainSideDetails(
   isoY: number,
   depth: number
 ) {
-  for (const side of TERRAIN_FACE_RENDER_ORDER) {
-    const exposure = visibleSides[side];
+  for (const face of TERRAIN_FACE_RENDER_ORDER) {
+    const exposure = visibleSides[face];
     if (!exposure) continue;
-    drawTerrainSideDetailLines(graphics, tile, side, isoX, isoY, depth, exposure.bottomDepth);
+    drawTerrainSideDetailLines(graphics, tile, face, isoX, isoY, depth, exposure.bottomDepth);
   }
 }
 
@@ -108,18 +86,18 @@ export function drawTerrainSideEdges(
   isoY: number,
   depth: number
 ) {
-  const edgeColor = tile.terrain === TerrainType.MOUNTAIN ? 0x303a3d : 0x1f241f;
-  const lipColor = tile.terrain === TerrainType.MOUNTAIN ? 0xe0e5e1 : 0xffffff;
-  const bottomColor = tile.terrain === TerrainType.MOUNTAIN ? 0x151b1d : 0x161916;
-  const edgeAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.5 : 0.56;
-  const bottomAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.28 : 0.32;
-  const lipAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.24 : 0.32;
+  const edgeColor = tile.terrain === TerrainType.MOUNTAIN ? 0x303a3d : tile.terrain === TerrainType.WATER ? 0x0b5f8c : 0x1f241f;
+  const lipColor = tile.terrain === TerrainType.MOUNTAIN ? 0xe0e5e1 : tile.terrain === TerrainType.WATER ? 0x9ce8ff : 0xffffff;
+  const bottomColor = tile.terrain === TerrainType.MOUNTAIN ? 0x151b1d : tile.terrain === TerrainType.WATER ? 0x063655 : 0x161916;
+  const edgeAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.5 : tile.terrain === TerrainType.WATER ? 0.42 : 0.56;
+  const bottomAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.28 : tile.terrain === TerrainType.WATER ? 0.34 : 0.32;
+  const lipAlpha = tile.terrain === TerrainType.MOUNTAIN ? 0.24 : tile.terrain === TerrainType.WATER ? 0.52 : 0.32;
 
-  for (const side of TERRAIN_FACE_RENDER_ORDER) {
-    const exposure = visibleSides[side];
+  for (const face of TERRAIN_FACE_RENDER_ORDER) {
+    const exposure = visibleSides[face];
     if (!exposure) continue;
 
-    const points = getTerrainSideFacePoints(side, isoX, isoY, depth, exposure.bottomDepth);
+    const points = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, exposure.bottomDepth));
 
     graphics.lineStyle(1.1, edgeColor, edgeAlpha);
     graphics.beginPath();
@@ -146,7 +124,7 @@ export function drawTerrainSideEdges(
 function drawTerrainSideDetailLines(
   graphics: Phaser.GameObjects.Graphics,
   tile: MapTile,
-  side: TerrainFaceSide,
+  face: CubeFace,
   isoX: number,
   isoY: number,
   depth: number,
@@ -155,19 +133,24 @@ function drawTerrainSideDetailLines(
   const drop = depth - bottomDepth;
   if (drop <= 0) return;
 
-  const { topA, topB, bottomA, bottomB } = getTerrainSideFacePoints(side, isoX, isoY, depth, bottomDepth);
+  const { topA, topB, bottomA, bottomB } = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, bottomDepth));
 
   const palette = getTerrainSideDetailPalette(tile.terrain);
-  const seed = hashTile(tile.x + (side === "left" ? 17 : 43), tile.y + (side === "left" ? 61 : 29));
+  const seed = hashTile(tile.x + (face === "SW" ? 17 : 43), tile.y + (face === "SW" ? 61 : 29));
 
-  graphics.lineStyle(1, palette.highlight, side === "left" ? palette.highlightAlpha : palette.highlightAlpha * 0.82);
+  graphics.lineStyle(1, palette.highlight, face === "SW" ? palette.highlightAlpha : palette.highlightAlpha * 0.82);
   graphics.beginPath();
   graphics.moveTo(topA.x, topA.y);
   graphics.lineTo(topB.x, topB.y);
   graphics.strokePath();
 
   if (tile.terrain === TerrainType.MOUNTAIN) {
-    drawMountainCliffDetails(graphics, topA, topB, bottomA, bottomB, seed, side);
+    drawMountainCliffDetails(graphics, topA, topB, bottomA, bottomB, seed, face);
+    return;
+  }
+
+  if (tile.terrain === TerrainType.WATER) {
+    drawWaterVolumeDetails(graphics, topA, topB, bottomA, bottomB, seed, face);
     return;
   }
 
@@ -211,7 +194,7 @@ function drawMountainCliffDetails(
   bottomA: Position,
   bottomB: Position,
   seed: number,
-  side: TerrainFaceSide
+  face: CubeFace
 ) {
   const point = (u: number, v: number) => {
     const left = lerpPoint(topA, bottomA, v);
@@ -230,7 +213,7 @@ function drawMountainCliffDetails(
 
   for (const [index, facet] of facets.entries()) {
     const drift = ((seed * 31 + index * 0.137) % 0.08) - 0.04;
-    const skew = side === "left" ? 0.05 : -0.05;
+    const skew = face === "SW" ? 0.05 : -0.05;
     const a = point(Math.max(0.04, facet.u - facet.w / 2 + drift), Math.max(0.06, facet.v - facet.h / 2));
     const b = point(Math.min(0.96, facet.u + facet.w / 2 + drift + skew), Math.max(0.08, facet.v - facet.h * 0.2));
     const c = point(Math.min(0.96, facet.u + facet.w * 0.2 + drift), Math.min(0.94, facet.v + facet.h / 2));
@@ -270,6 +253,40 @@ function drawMountainCliffDetails(
   graphics.strokePath();
 }
 
+function drawWaterVolumeDetails(
+  graphics: Phaser.GameObjects.Graphics,
+  topA: Position,
+  topB: Position,
+  bottomA: Position,
+  bottomB: Position,
+  seed: number,
+  face: CubeFace
+) {
+  const waveColor = face === "SW" ? 0x98ecff : 0x6fd5f4;
+  const shadowColor = face === "SW" ? 0x0d6f9f : 0x083f68;
+
+  graphics.lineStyle(1, waveColor, face === "SW" ? 0.34 : 0.26);
+  graphics.beginPath();
+  for (const t of [0.18, 0.36, 0.54, 0.72]) {
+    const offset = (seed - 0.5) * 0.04;
+    const left = lerpPoint(topA, bottomA, Math.max(0.08, Math.min(0.9, t + offset)));
+    const right = lerpPoint(topB, bottomB, Math.max(0.08, Math.min(0.9, t - offset)));
+    graphics.moveTo(Phaser.Math.Linear(left.x, right.x, 0.12), Phaser.Math.Linear(left.y, right.y, 0.12));
+    graphics.lineTo(Phaser.Math.Linear(right.x, left.x, 0.16), Phaser.Math.Linear(right.y, left.y, 0.16));
+  }
+  graphics.strokePath();
+
+  graphics.lineStyle(1, shadowColor, 0.2);
+  graphics.beginPath();
+  for (const u of [0.22, 0.48, 0.74]) {
+    const top = lerpPoint(topA, topB, u);
+    const bottom = lerpPoint(bottomA, bottomB, Math.min(0.92, u + (face === "SW" ? 0.06 : -0.06)));
+    graphics.moveTo(top.x, top.y + 2);
+    graphics.lineTo(bottom.x, bottom.y - 2);
+  }
+  graphics.strokePath();
+}
+
 function getTerrainSideDetailPalette(terrain: TerrainType) {
   switch (terrain) {
     case TerrainType.MOUNTAIN:
@@ -282,6 +299,17 @@ function getTerrainSideDetailPalette(terrain: TerrainType) {
         chipLightAlpha: 0.28,
         chipDark: 0x2e3435,
         chipDarkAlpha: 0.22,
+      };
+    case TerrainType.WATER:
+      return {
+        highlight: 0x9ce8ff,
+        highlightAlpha: 0.42,
+        strata: 0x0b5f8c,
+        strataAlpha: 0.18,
+        chipLight: 0xc9f6ff,
+        chipLightAlpha: 0.2,
+        chipDark: 0x063655,
+        chipDarkAlpha: 0.18,
       };
     case TerrainType.SNOW:
       return {

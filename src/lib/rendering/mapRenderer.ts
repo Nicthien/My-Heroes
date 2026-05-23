@@ -14,7 +14,15 @@ export interface MapObjectData {
   renderOffsetX?: number;
   renderOffsetY?: number;
   buildingType?: string;
+  dwellingUnitType?: string;
   guardianPower?: number;
+}
+
+export interface SpellRevealHint {
+  x: number;
+  y: number;
+  kind: "resource" | "building" | "artifact" | "hero" | "town";
+  subtype?: string;
 }
 
 export type RendererLoadingProgress = (progress: number, message?: string) => void;
@@ -31,6 +39,8 @@ export interface MapRenderer {
   highlightTiles(tiles: Position[], color?: number, alpha?: number): void;
   highlightTile(x: number, y: number, color?: number): void;
   clearHighlights(): void;
+  setSpellRevealHighlights(tiles: Position[], color?: number, alpha?: number, hints?: SpellRevealHint[]): void;
+  clearSpellRevealHighlights(): void;
   clearReachable(): void;
   centerOnTile(x: number, y: number): void;
   panCamera(dx: number, dy: number): void;

@@ -5,7 +5,7 @@ import CombatScreen from "@/components/game/combat/CombatScreen";
 import { AuthContext } from "@/lib/auth/client";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { CombatBoardUnit, Faction, GameState, PersistentCombat, TerrainType, UnitType } from "@/lib/game/types";
+import { CombatBoardUnit, Faction, GameState, HeroClass, PersistentCombat, TerrainType, UnitType } from "@/lib/game/types";
 
 const MOCK_USER_ID = "dev-user";
 
@@ -26,6 +26,9 @@ function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id"
     hasRetaliated: false,
     defended: false,
     waited: false,
+    morale: 0,
+    moraleApplied: false,
+    moraleBonus: false,
     ...params,
   };
 }
@@ -67,7 +70,22 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
         faction: Faction.CASTLE,
         color: "#2563eb",
         resources: { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 },
-        heroes: [],
+        heroes: [{
+          id: "h1",
+          name: "Astral",
+          class: HeroClass.WIZARD,
+          level: 6,
+          experience: 2500,
+          stats: { attack: 1, defense: 1, spellPower: 5, knowledge: 4, morale: 0, luck: 0 },
+          mana: 40,
+          hasSpellBook: true,
+          knownSpellIds: null,
+          artifacts: { inventory: [], equipment: {} },
+          position: { x: 4, y: 4 },
+          movement: 1800,
+          maxMovement: 1800,
+          armies: [],
+        }],
         towns: [],
         resourceBuildings: [],
         isAlive: true,
@@ -83,7 +101,22 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
         faction: Faction.INFERNO,
         color: "#dc2626",
         resources: { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 },
-        heroes: [],
+        heroes: [{
+          id: "h2",
+          name: "Pyra",
+          class: HeroClass.HERETIC,
+          level: 4,
+          experience: 1200,
+          stats: { attack: 1, defense: 1, spellPower: 3, knowledge: 3, morale: 0, luck: 0 },
+          mana: 30,
+          hasSpellBook: true,
+          knownSpellIds: null,
+          artifacts: { inventory: [], equipment: {} },
+          position: { x: 4, y: 4 },
+          movement: 1800,
+          maxMovement: 1800,
+          armies: [],
+        }],
         towns: [],
         resourceBuildings: [],
         isAlive: true,

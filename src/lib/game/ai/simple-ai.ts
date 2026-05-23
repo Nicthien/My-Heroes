@@ -4,6 +4,7 @@ import { makeRng } from "@/lib/game/engine/rng";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { AdventureBuildingType, GameMap, Position, Resources, UnitStack } from "@/lib/game/types";
+import { SPELLS } from "@/lib/game/spells";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { buildAiContext, getResourcePileAmount, playerResources } from "./context";
 import { calculateHeroPower, calculateStacksPower, createBuildingGuardStacks, resolveAiAutoCombat } from "./combat";
@@ -193,6 +194,9 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   const object = objective.object;
   const buildingType = object?.subtype as AdventureBuildingType | undefined;
   if (!object || !buildingType) return;
+  const currentWeek = getAdventureWeekKey(Number(context.game.turnNumber ?? 1));
+  const weeklyHeroKey = `${object.id}:${hero.id}`;
+  const weeklyPlayerKey = `${object.id}:${context.player.id}`;
 
   if (buildingType === AdventureBuildingType.CAMPFIRE) {
     const reward = createCampfireReward(makeRng(`${context.game.id}:${object.id}:${context.player.id}`));
@@ -229,12 +233,301 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
     }
   }
 
+  if (buildingType === AdventureBuildingType.MERCENARY_CAMP || buildingType === AdventureBuildingType.ARENA || buildingType === AdventureBuildingType.SCHOOL_OF_WAR) {
+    const costPaid = buildingType === AdventureBuildingType.SCHOOL_OF_WAR;
+    if (!costPaid || context.player.gold >= 1000) {
+      if (costPaid) await supabase.from("game_players").update({ gold: context.player.gold - 1000 }).eq("id", context.player.id);
+      await supabase.from("heroes").update({ attack: Number(hero.attack ?? 0) + (buildingType === AdventureBuildingType.ARENA ? 2 : 1) }).eq("id", hero.id);
+      await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+      return;
+    }
+  }
+
+  if (buildingType === AdventureBuildingType.MARLETTO_TOWER) {
+    await supabase.from("heroes").update({ defense: Number(hero.defense ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.STAR_AXIS || buildingType === AdventureBuildingType.SCHOOL_OF_MAGIC) {
+    const costPaid = buildingType === AdventureBuildingType.SCHOOL_OF_MAGIC;
+    if (!costPaid || context.player.gold >= 1000) {
+      if (costPaid) await supabase.from("game_players").update({ gold: context.player.gold - 1000 }).eq("id", context.player.id);
+      await supabase.from("heroes").update({ spell_power: Number(hero.spellPower ?? 0) + 1 }).eq("id", hero.id);
+      await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+      return;
+    }
+  }
+
+  if (buildingType === AdventureBuildingType.GARDEN_OF_REVELATION) {
+    await supabase.from("heroes").update({ knowledge: Number(hero.knowledge ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.LEARNING_STONE) {
+    await supabase.from("heroes").update({ experience: Number(hero.experience ?? 0) + 1000 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT && Number(hero.level ?? 1) >= 10) {
+    await supabase.from("heroes").update({
+      attack: Number(hero.attack ?? 0) + 2,
+      defense: Number(hero.defense ?? 0) + 2,
+      spell_power: Number(hero.spellPower ?? 0) + 2,
+      knowledge: Number(hero.knowledge ?? 0) + 2,
+    }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.CARTOGRAPHER && context.player.gold >= 10000) {
+    await supabase.from("game_players").update({ gold: context.player.gold - 10000, explored_tiles: getAllMapTileKeys(context.map) }).eq("id", context.player.id);
+  }
+
+  if (buildingType === AdventureBuildingType.REDWOOD_OBSERVATORY) {
+    const explored = new Set(context.explored);
+    for (const key of computeVisibleTiles(context.map, [objective.position], 28)) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+  }
+
+  if (buildingType === AdventureBuildingType.MYSTICAL_GARDEN) {
+    if (context.weeklyAdventureVisits[weeklyPlayerKey] === currentWeek) return;
+    const resourceUpdate = makeRng(`${context.game.id}:${object.id}:${context.player.id}:${context.game.turnNumber ?? 1}`)() > 0.55
+      ? { gems: context.player.gems + 5 }
+      : { gold: context.player.gold + 1000 };
+    await supabase.from("game_players").update(resourceUpdate).eq("id", context.player.id);
+    await markAiWeeklyAdventureVisit(supabase, context, weeklyPlayerKey, currentWeek);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.STABLES) {
+    if (context.weeklyAdventureVisits[weeklyHeroKey] !== currentWeek) {
+      await supabase.from("heroes").update({ movement: hero.movement + 400 }).eq("id", hero.id);
+      await markAiWeeklyAdventureVisit(supabase, context, weeklyHeroKey, currentWeek);
+    }
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.TEMPLE) {
+    await supabase.from("heroes").update({ morale: Number(hero.morale ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.FOUNTAIN_OF_FORTUNE) {
+    await supabase.from("heroes").update({ luck: Number(hero.luck ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.IDOL_OF_FORTUNE) {
+    await supabase.from("heroes").update({
+      morale: Number(hero.morale ?? 0) + 1,
+      luck: Number(hero.luck ?? 0) + 1,
+    }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.MAGIC_WELL) {
+    if (context.weeklyAdventureVisits[weeklyHeroKey] !== currentWeek) {
+      await supabase.from("heroes").update({ mana: Math.max(0, Number(hero.knowledge ?? 0) * 10) }).eq("id", hero.id);
+      await markAiWeeklyAdventureVisit(supabase, context, weeklyHeroKey, currentWeek);
+    }
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.MAGIC_SHRINE) {
+    const maxMana = Math.max(0, Number(hero.knowledge ?? 0) * 10);
+    const currentMana = Number.isFinite(hero.mana) ? Number(hero.mana) : maxMana;
+    await supabase.from("heroes").update({ mana: Math.min(maxMana, currentMana + 20) }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.WATER_MILL || buildingType === AdventureBuildingType.WATER_WHEEL) {
+    if (context.weeklyAdventureVisits[weeklyPlayerKey] !== currentWeek) {
+      const gold = context.player.gold + (buildingType === AdventureBuildingType.WATER_MILL ? 1000 : 500);
+      await supabase.from("game_players").update({ gold }).eq("id", context.player.id);
+      await markAiWeeklyAdventureVisit(supabase, context, weeklyPlayerKey, currentWeek);
+    }
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.ABANDONED_WAGON && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ gold: context.player.gold + 500 }).eq("id", context.player.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.CRATE && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ wood: context.player.wood + 3, ore: context.player.ore + 3 }).eq("id", context.player.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.SKELETON && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ gold: context.player.gold + 300 }).eq("id", context.player.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.WARRIOR_TOMB && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ gold: context.player.gold + 700 }).eq("id", context.player.id);
+    await supabase.from("heroes").update({
+      experience: Number(hero.experience ?? 0) + 750,
+      morale: Number(hero.morale ?? 0) - 1,
+    }).eq("id", hero.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.CURSED_ALTAR) {
+    await supabase.from("heroes").update({
+      spell_power: Number(hero.spellPower ?? 0) + 1,
+      luck: Number(hero.luck ?? 0) - 1,
+    }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (
+    buildingType === AdventureBuildingType.SPELL_SHRINE_1 ||
+    buildingType === AdventureBuildingType.SPELL_SHRINE_2 ||
+    buildingType === AdventureBuildingType.SPELL_SHRINE_3
+  ) {
+    const level = buildingType === AdventureBuildingType.SPELL_SHRINE_1 ? 1 : buildingType === AdventureBuildingType.SPELL_SHRINE_2 ? 2 : 3;
+    const spell = pickAiShrineSpell(level, `${context.game.id}:${object.id}:${hero.id}`);
+    await supabase.from("heroes").update({
+      has_spell_book: true,
+      known_spells: Array.from(new Set([...(hero.knownSpellIds ?? []), spell.id])),
+    }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.TREE_OF_KNOWLEDGE) {
+    if (context.player.gold >= 2000) {
+      await supabase.from("game_players").update({ gold: context.player.gold - 2000 }).eq("id", context.player.id);
+      await supabase.from("heroes").update({ experience: Number(hero.experience ?? 0) + 2000 }).eq("id", hero.id);
+      await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    }
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.SEER_HUT) {
+    const maxMana = Math.max(0, Number(hero.knowledge ?? 0) * 10);
+    const currentMana = Number.isFinite(hero.mana) ? Number(hero.mana) : maxMana;
+    await supabase.from("heroes").update({
+      experience: Number(hero.experience ?? 0) + 1000,
+      mana: Math.min(maxMana, currentMana + 10),
+    }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.MERMAID) {
+    await supabase.from("heroes").update({ luck: Number(hero.luck ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.BUOY) {
+    await supabase.from("heroes").update({ morale: Number(hero.morale ?? 0) + 1 }).eq("id", hero.id);
+    await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.FLOTSAM && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ gold: context.player.gold + 250, wood: context.player.wood + 5 }).eq("id", context.player.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.SEA_CHEST && !context.visitedAdventureBuildings.has(object.id)) {
+    await supabase.from("game_players").update({ gold: context.player.gold + 600 }).eq("id", context.player.id);
+    await markAiVisitedAdventureBuilding(supabase, context, object.id);
+    return;
+  }
+
+  if (buildingType === AdventureBuildingType.OBELISK) {
+    const explored = new Set(context.explored);
+    for (const key of computeVisibleTiles(context.map, [objective.position], 24)) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+  }
+
   await supabase.from("games").update({
     map_state: {
       ...context.mapState,
       playerAdventureVisits: addVisit(context.playerAdventureVisits, context.player.id, object.id),
     },
   }).eq("id", context.game.id);
+}
+
+async function markAiHeroAdventureVisit(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  heroId: string,
+  buildingId: string,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...context.mapState,
+      heroAdventureVisits: addVisit(context.heroAdventureVisits, heroId, buildingId),
+    },
+  }).eq("id", context.game.id);
+}
+
+async function markAiWeeklyAdventureVisit(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  visitKey: string,
+  weekKey: string,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...context.mapState,
+      weeklyAdventureVisits: {
+        ...context.weeklyAdventureVisits,
+        [visitKey]: weekKey,
+      },
+    },
+  }).eq("id", context.game.id);
+}
+
+async function markAiVisitedAdventureBuilding(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  buildingId: string,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...context.mapState,
+      visitedAdventureBuildings: Array.from(new Set([...context.visitedAdventureBuildings, buildingId])),
+    },
+  }).eq("id", context.game.id);
+}
+
+function getAdventureWeekKey(turnNumber: number) {
+  return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
+}
+
+function pickAiShrineSpell(level: number, seed: string) {
+  const candidates = SPELLS.filter((spell) => spell.level === level && spell.context === "combat");
+  const pool = candidates.length > 0 ? candidates : SPELLS.filter((spell) => spell.level === level);
+  return pool[Math.floor(makeRng(seed)() * pool.length)] ?? SPELLS[0];
+}
+
+function getAllMapTileKeys(map: GameMap) {
+  const keys: string[] = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      keys.push(`${x},${y}`);
+    }
+  }
+  return keys;
 }
 
 async function captureOrFightResourceBuilding(

@@ -1,4 +1,6 @@
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getArtifactMapLabel } from "@/lib/game/artifacts";
+import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
@@ -43,6 +45,7 @@ export const GATE_OFFSET_Y = 0;
 export const GATE_DEPTH_CLEARANCE = 256;
 export const TOWN_OFFSET_Y = TILE_FOOT_OFFSET_Y + 7;
 export const HERO_OFFSET_Y = 6;
+export const BOAT_OFFSET_Y = 6;
 export const TOWN_HERO_OFFSET_Y = TOWN_OFFSET_Y + 12;
 export const ADVENTURE_BUILDING_OFFSET_Y = 8;
 
@@ -64,10 +67,47 @@ export const RESOURCE_PICKUP_ORIGINS: Record<string, SpriteOrigin> = {
 
 export const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
   campfire: { originX: 0.502, originY: 0.891 },
+  external_dwelling: { originX: 0.5, originY: 0.9 },
   lighthouse: { originX: 0.49, originY: 0.898 },
   observatory: { originX: 0.475, originY: 0.938 },
   stargate: { originX: 0.48, originY: 0.918 },
+  arena: { originX: 0.5, originY: 0.9 },
+  mercenary_camp: { originX: 0.5, originY: 0.9 },
+  marletto_tower: { originX: 0.5, originY: 0.92 },
+  star_axis: { originX: 0.5, originY: 0.9 },
+  garden_of_revelation: { originX: 0.5, originY: 0.9 },
+  learning_stone: { originX: 0.5, originY: 0.88 },
+  school_of_war: { originX: 0.5, originY: 0.9 },
+  school_of_magic: { originX: 0.5, originY: 0.9 },
+  library_of_enlightenment: { originX: 0.5, originY: 0.9 },
+  cartographer: { originX: 0.5, originY: 0.9 },
+  redwood_observatory: { originX: 0.5, originY: 0.92 },
+  mystical_garden: { originX: 0.5, originY: 0.9 },
+  stables: { originX: 0.5, originY: 0.9 },
+  temple: { originX: 0.5, originY: 0.9 },
+  fountain_of_fortune: { originX: 0.5, originY: 0.9 },
+  idol_of_fortune: { originX: 0.5, originY: 0.88 },
+  magic_well: { originX: 0.5, originY: 0.88 },
+  magic_shrine: { originX: 0.5, originY: 0.9 },
+  water_mill: { originX: 0.5, originY: 0.9 },
+  water_wheel: { originX: 0.5, originY: 0.9 },
+  abandoned_wagon: { originX: 0.5, originY: 0.86 },
+  crate: { originX: 0.5, originY: 0.82 },
+  skeleton: { originX: 0.5, originY: 0.8 },
+  obelisk: { originX: 0.5, originY: 0.92 },
+  warrior_tomb: { originX: 0.5, originY: 0.86 },
+  cursed_altar: { originX: 0.5, originY: 0.9 },
+  spell_shrine_1: { originX: 0.5, originY: 0.9 },
+  spell_shrine_2: { originX: 0.5, originY: 0.9 },
+  spell_shrine_3: { originX: 0.5, originY: 0.9 },
+  tree_of_knowledge: { originX: 0.5, originY: 0.92 },
+  seer_hut: { originX: 0.5, originY: 0.9 },
+  mermaid: { originX: 0.5, originY: 0.86 },
+  buoy: { originX: 0.5, originY: 0.82 },
+  flotsam: { originX: 0.5, originY: 0.82 },
+  sea_chest: { originX: 0.5, originY: 0.82 },
   ancient_altar: { originX: 0.5, originY: 0.84 },
+  bandit_camp: { originX: 0.5, originY: 0.84 },
   beholders_sanctuary: { originX: 0.5, originY: 0.84 },
   black_tower: { originX: 0.5, originY: 0.88 },
   churchyard: { originX: 0.5, originY: 0.84 },
@@ -114,8 +154,11 @@ export function getMapObjectHoverText(object: MapObject) {
     ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
     : "Armée neutre";
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
-  if (object.type === "adventure_building") return getAdventureBuildingLabel(object.subtype);
-  if (object.type === "artifact") return "Artefact";
+  if (object.type === "adventure_building") {
+    if (isExternalDwellingType(object.subtype)) return getExternalDwellingLabel(object.targetId);
+    return getAdventureBuildingLabel(object.subtype);
+  }
+  if (object.type === "artifact") return getArtifactMapLabel(object.subtype);
   if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
 
   return null;

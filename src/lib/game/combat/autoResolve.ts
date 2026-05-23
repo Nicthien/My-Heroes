@@ -1,10 +1,13 @@
 import { UnitStack } from "../types";
 import { getUnitRule } from "../units";
+import { clampMorale } from "./morale";
 
 export interface CombatHeroSnapshot {
   id: string;
   attack: number;
   defense: number;
+  morale?: number;
+  luck?: number;
   armies: UnitStack[];
 }
 
@@ -22,7 +25,9 @@ export function calculateArmyPower(hero: CombatHeroSnapshot) {
   }, 0);
 
   const statsMultiplier = 1 + hero.attack * 0.05 + hero.defense * 0.03;
-  return Math.max(1, Math.round(armyPower * statsMultiplier));
+  const moraleMultiplier = 1 + clampMorale(hero.morale ?? 0) * 0.04;
+  const luckMultiplier = 1 + Math.max(-3, Math.min(3, Math.trunc(hero.luck ?? 0))) * 0.035;
+  return Math.max(1, Math.round(armyPower * statsMultiplier * moraleMultiplier * luckMultiplier));
 }
 
 export function autoResolveCombat(

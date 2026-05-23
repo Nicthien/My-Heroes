@@ -48,6 +48,9 @@ export function normalizeCombatUnit(unit: CombatBoardUnit): CombatBoardUnit {
     hasRetaliated: Boolean(unit.hasRetaliated),
     defended: Boolean(unit.defended),
     waited: Boolean(unit.waited),
+    morale: Number.isFinite(unit.morale) ? unit.morale : 0,
+    moraleApplied: Boolean(unit.moraleApplied),
+    moraleBonus: Boolean(unit.moraleBonus),
   };
 }
 

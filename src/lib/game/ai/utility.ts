@@ -192,9 +192,17 @@ function getObjectObjective(
 
   if (object.type === "adventure_building") {
     if (object.subtype === "campfire" && context.visitedAdventureBuildings.has(object.id)) return null;
+    if (isSingleMapRewardBuilding(object.subtype) && context.visitedAdventureBuildings.has(object.id)) return null;
     if ((context.playerAdventureVisits[context.player.id] ?? []).includes(object.id)) return null;
+    if (path.length > 0) {
+      const heroAtStart = context.player.heroes.find((hero) => hero.x === path[0]?.x && hero.y === path[0]?.y);
+      if (heroAtStart && (context.heroAdventureVisits[heroAtStart.id] ?? []).includes(object.id)) return null;
+      const currentWeek = getAdventureWeekKey(Number(context.game.turnNumber ?? 1));
+      if (heroAtStart && isWeeklyHeroBuilding(object.subtype) && context.weeklyAdventureVisits[`${object.id}:${heroAtStart.id}`] === currentWeek) return null;
+      if (isWeeklyPlayerBuilding(object.subtype) && context.weeklyAdventureVisits[`${object.id}:${context.player.id}`] === currentWeek) return null;
+    }
     const rule = getAdventureBuildingRule(object.subtype);
-    const baseValue = object.subtype === "observatory" ? 1500 : object.subtype === "campfire" ? 900 : 650;
+    const baseValue = getAdventureBuildingBaseValue(object.subtype);
     return {
       type: "adventure_building",
       id: object.id,
@@ -239,6 +247,45 @@ function getObjectObjective(
   }
 
   return null;
+}
+
+function getAdventureBuildingBaseValue(subtype: string | undefined) {
+  if (subtype === "observatory" || subtype === "redwood_observatory") return 1500;
+  if (subtype === "obelisk") return 1200;
+  if (subtype === "cartographer" || subtype === "library_of_enlightenment") return 1200;
+  if (subtype === "stables" || subtype === "magic_well") return 1100;
+  if (subtype === "water_mill" || subtype === "water_wheel" || subtype === "abandoned_wagon" || subtype === "crate" || subtype === "skeleton") return 900;
+  if (subtype === "campfire" || subtype === "mystical_garden") return 900;
+  if (subtype === "temple" || subtype === "fountain_of_fortune" || subtype === "idol_of_fortune" || subtype === "magic_shrine") return 750;
+  if (subtype === "warrior_tomb") return 850;
+  if (subtype === "cursed_altar") return 700;
+  if (subtype === "spell_shrine_1" || subtype === "spell_shrine_2" || subtype === "spell_shrine_3") return 950;
+  if (subtype === "tree_of_knowledge") return 1050;
+  if (subtype === "seer_hut") return 900;
+  if (subtype === "mermaid" || subtype === "buoy") return 700;
+  if (subtype === "flotsam" || subtype === "sea_chest") return 850;
+  return 650;
+}
+
+function isWeeklyHeroBuilding(subtype: string | undefined) {
+  return subtype === "stables" || subtype === "magic_well";
+}
+
+function isWeeklyPlayerBuilding(subtype: string | undefined) {
+  return subtype === "water_mill" || subtype === "water_wheel" || subtype === "mystical_garden";
+}
+
+function isSingleMapRewardBuilding(subtype: string | undefined) {
+  return subtype === "abandoned_wagon" ||
+    subtype === "crate" ||
+    subtype === "skeleton" ||
+    subtype === "warrior_tomb" ||
+    subtype === "flotsam" ||
+    subtype === "sea_chest";
+}
+
+function getAdventureWeekKey(turnNumber: number) {
+  return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
 }
 
 function scoreObjective(

@@ -2,7 +2,7 @@
 
 import { HourglassIcon } from "./theme";
 
-export function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+export function Stat({ label, value, color }: { label: string; value: number | string; color: string }) {
   return (
     <div className="flex items-center justify-between rounded-md border border-amber-700/30 bg-black/40 px-2 py-1">
       <span className="text-[11px] uppercase tracking-wider text-amber-200/60">{label}</span>

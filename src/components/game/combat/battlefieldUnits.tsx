@@ -9,6 +9,7 @@ export function UnitModel({
   active,
   attackable,
   damaged = false,
+  attacking = null,
   lifted = false,
   depthScale = 1,
 }: {
@@ -16,6 +17,7 @@ export function UnitModel({
   active: boolean;
   attackable: boolean;
   damaged?: boolean;
+  attacking?: "melee" | "ranged" | null;
   lifted?: boolean;
   depthScale?: number;
 }) {
@@ -23,6 +25,9 @@ export function UnitModel({
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
   const renderOffsetX = getUnitRenderOffsetX(unit);
+  const attackClass = attacking
+    ? `combat-unit-attacking-${attacking}-${unit.side}`
+    : "";
 
   return (
     <span
@@ -36,11 +41,13 @@ export function UnitModel({
         transformOrigin: "50% 100%",
       }}
     >
-      <span
-        className="absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
-        style={{ transform: `translateX(-50%) ${sideFlip}` }}
-      >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+      <span className={`absolute inset-0 block ${attackClass}`}>
+        <span
+          className="absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
+          style={{ transform: `translateX(-50%) ${sideFlip}` }}
+        >
+          <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+        </span>
       </span>
       {damaged && <span className="combat-unit-hit-flash absolute left-1/2 top-4 h-24 w-24 -translate-x-1/2 rounded-full bg-red-500/35 blur-sm" />}
     </span>

@@ -1,6 +1,4 @@
-import { ELEVATION_SCALE } from "@/lib/rendering/phaser/iso";
-
-export type TerrainFaceSide = "left" | "right";
+// Cube face directions used by the iso renderer live in `isoCube.ts`.
 
 // Camera & zoom
 export const MIN_CAMERA_ZOOM = 0.65;
@@ -9,19 +7,16 @@ export const CAMERA_ZOOM_STEP = 1.15;
 
 // Terrain animation (water/lava ripples)
 export const TERRAIN_ANIMATION_INTERVAL_MS = 120;
+export const WATER_ANIMATION_INTERVAL_MS = 560;
+export const WATERFALL_ANIMATION_INTERVAL_MS = 260;
 export const TERRAIN_EFFECT_VIEW_PADDING = 96;
 export const TERRAIN_ANIMATION_FRAME_COUNT = 6;
 export const TERRAIN_TEXTURE_WIDTH = 80;
 export const TERRAIN_TEXTURE_HEIGHT = 56;
-export const WATER_TEXTURE_PREFIX = "my-heroes-water";
 export const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
 
 // Hover label sampling
 export const HOVER_LABEL_SAMPLE_MS = 40;
-
-// Board surrounds
-export const BOARD_THICKNESS = 34;
-export const BOARD_LIP_EXTRA_HEIGHT = ELEVATION_SCALE;
 
 // Reachable tile highlight
 export const REACHABLE_TILE_COLOR = 0x2f80ff;
@@ -30,7 +25,7 @@ export const REACHABLE_TILE_ALPHA = 0.34;
 // Elevation/depth tuning
 export const VISUAL_ELEVATION_SCALE = 5;
 export const TERRAIN_TOP_TEXTURE_CROP_INSET = 2;
-export const TERRAIN_FACE_RENDER_ORDER: readonly TerrainFaceSide[] = ["left", "right"];
+export const TERRAIN_FACE_RENDER_ORDER = ["SW", "SE"] as const;
 export const MAP_LAYER_BASE_DEPTH = -100000;
 export const MAP_LAYER_COVER_DEPTH = -50000;
 

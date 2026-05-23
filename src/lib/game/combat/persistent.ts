@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
+import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 import {
@@ -20,6 +20,7 @@ import {
   rollCombatDamage,
   type ManualCombatActionType,
 } from "./rules";
+import { assignMoraleToBoard, refreshMoraleForRound, rollMorale, type MoraleContext } from "./morale";
 
 export { COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
 
@@ -30,17 +31,21 @@ export interface CombatParticipantSnapshot {
   participantId?: string | null;
   attack: number;
   defense: number;
+  morale?: number;
+  luck?: number;
   armies: UnitStack[];
 }
 
 export function createCombatBoard(
   attacker: CombatParticipantSnapshot,
-  defender: CombatParticipantSnapshot
+  defender: CombatParticipantSnapshot,
+  options: { environment?: CombatEnvironment } = {}
 ) {
   const units: CombatBoardUnit[] = [];
   const terrain = createCombatTerrain();
   addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1, 1, undefined, terrain);
   addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2, 1, undefined, terrain);
+  assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
   return {
@@ -109,9 +114,23 @@ export function addReinforcementUnits(params: {
   heroId: string;
   participantId: string;
   joinsRound: number;
+  moraleContext?: MoraleContext;
 }) {
   const q = params.side === "attacker" ? 0 : COMBAT_COLS - 1;
   addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, q, params.joinsRound, [0, 1, 2, 3, 4, 5, 6, 7, 8], params.terrain ?? []);
+  assignMoraleToBoard(params.units, params.moraleContext ?? {});
+}
+
+function buildMoraleContext(params: {
+  attacker: CombatParticipantSnapshot;
+  defender: CombatParticipantSnapshot;
+  environment?: CombatEnvironment;
+}): MoraleContext {
+  return {
+    attackerHeroMorale: params.attacker.morale ?? 0,
+    defenderHeroMorale: params.defender.morale ?? 0,
+    terrain: params.environment?.terrain,
+  };
 }
 
 function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, terrain: CombatTerrainFeature[]) {
@@ -144,6 +163,7 @@ export function executeManualCombatAction(params: {
   attackerStats: { attack: number; defense: number };
   defenderStats: { attack: number; defense: number };
   immortalHeroId?: string | null;
+  moraleContext?: MoraleContext;
 }) {
   const log: string[] = [];
   let didAct = false;
@@ -152,6 +172,31 @@ export function executeManualCombatAction(params: {
   const units = params.units.map((unit) => normalizeCombatUnit({ ...unit }));
   const actor = units.find((unit) => unit.id === params.currentUnitId);
   if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
+
+  const actorMoraleAppliedBefore = actor.moraleApplied;
+  const actorMoraleBonusBefore = actor.moraleBonus;
+  if (!actor.moraleApplied) {
+    const moraleRoll = rollMorale(actor.morale ?? 0);
+    actor.moraleApplied = true;
+    if (moraleRoll === "bad") {
+      log.push(`${getUnitRule(actor.unitType).label} : moral negatif, le tour est saute.`);
+      const livingUnits = units.filter((unit) => unit.count > 0);
+      const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
+      return {
+        units: next.units,
+        turnQueue: next.turnQueue,
+        currentUnitId: next.currentUnitId,
+        currentPlayerId: next.units.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
+        round: next.round,
+        log,
+        result: null,
+      };
+    }
+    if (moraleRoll === "good") {
+      actor.moraleBonus = true;
+      log.push(`${getUnitRule(actor.unitType).label} : moral positif, action bonus.`);
+    }
+  }
   const actorWasDefended = actor.defended;
   actor.defended = false;
 
@@ -227,6 +272,8 @@ export function executeManualCombatAction(params: {
 
   if (!didAct) {
     actor.defended = actorWasDefended;
+    actor.moraleApplied = actorMoraleAppliedBefore;
+    actor.moraleBonus = actorMoraleBonusBefore;
     return {
       units,
       turnQueue: params.turnQueue,
@@ -242,9 +289,15 @@ export function executeManualCombatAction(params: {
   const result = getCombatResult(livingUnits);
   if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result };
 
-  const next = didWait
-    ? getNextTurn(livingUnits, deferredTurnQueue ?? params.turnQueue, params.round)
-    : advanceTurn(livingUnits, params.turnQueue, actor.id, params.round);
+  const grantsBonus = !didWait && actor.moraleBonus && actor.count > 0;
+  if (grantsBonus) {
+    actor.moraleBonus = false;
+  }
+  const next = grantsBonus
+    ? { units: livingUnits, turnQueue: params.turnQueue, currentUnitId: actor.id, round: params.round }
+    : didWait
+      ? getNextTurn(livingUnits, deferredTurnQueue ?? params.turnQueue, params.round, params.moraleContext)
+      : advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
   return {
     units: next.units,
     turnQueue: next.turnQueue,
@@ -306,16 +359,19 @@ function deferUnitToWaitPhase(turnQueue: string[], currentUnitId: string, units:
   return [...nonWaited, ...waited, currentUnitId];
 }
 
-function advanceTurn(units: CombatBoardUnit[], turnQueue: string[], currentUnitId: string, round: number) {
+function advanceTurn(units: CombatBoardUnit[], turnQueue: string[], currentUnitId: string, round: number, moraleContext?: MoraleContext) {
   const remaining = turnQueue.filter((id) => id !== currentUnitId && units.some((unit) => unit.id === id));
-  return getNextTurn(units, remaining, round);
+  return getNextTurn(units, remaining, round, moraleContext);
 }
 
-function getNextTurn(units: CombatBoardUnit[], turnQueue: string[], round: number) {
+function getNextTurn(units: CombatBoardUnit[], turnQueue: string[], round: number, moraleContext?: MoraleContext) {
   const remaining = turnQueue.filter((id) => units.some((unit) => unit.id === id));
   if (remaining.length > 0) return { units, turnQueue: remaining, currentUnitId: remaining[0] ?? null, round };
   const nextRound = round + 1;
-  const refreshedUnits = units.map((unit) => ({ ...unit, hasRetaliated: false, waited: false }));
+  const refreshedUnits = refreshMoraleForRound(
+    units.map((unit) => ({ ...unit, hasRetaliated: false, waited: false })),
+    moraleContext ?? {}
+  );
   const nextQueue = buildTurnQueue(refreshedUnits, nextRound);
   return { units: refreshedUnits, turnQueue: nextQueue, currentUnitId: nextQueue[0] ?? null, round: nextRound };
 }
@@ -392,6 +448,7 @@ export function heroToParticipant(hero: Hero, playerId: string): CombatParticipa
     playerId,
     attack: hero.stats.attack,
     defense: hero.stats.defense,
+    morale: hero.stats.morale,
     armies: hero.armies,
   };
 }

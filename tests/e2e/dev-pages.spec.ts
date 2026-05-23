@@ -85,4 +85,20 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByLabel("Musique combat")).toBeVisible();
     await expect(page.getByLabel("Effets")).toBeVisible();
   });
+
+  test("spell books are available from HUD and combat previews", async ({ page }) => {
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Livre de sorts" }).click();
+    const adventureSpellBook = page.getByRole("dialog", { name: "Livre de sorts - Aventure" });
+    await expect(adventureSpellBook).toBeVisible();
+    await expect(page.getByRole("button", { name: "Air" })).toBeVisible();
+    await expect(page.getByText("Vue de l'air")).toBeVisible();
+    await adventureSpellBook.getByRole("button", { name: "Fermer" }).click();
+
+    await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Livre de sorts combat" }).click();
+    await expect(page.getByRole("dialog", { name: "Livre de sorts - Combat" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Feu" })).toBeVisible();
+    await expect(page.getByText("Fleche magique")).toBeVisible();
+  });
 });

@@ -31,6 +31,10 @@ export const DEFENDER_RENDER_NUDGE_X = -5;
 // Animation timings
 export const UNIT_MOVE_TRANSITION_MS = 1700;
 export const UNIT_MOVE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+export const UNIT_ATTACK_ANIMATION_MS = 650;
+export const UNIT_ATTACK_PRE_PAUSE_MS = 120;
+export const UNIT_ATTACK_POST_PAUSE_MS = 80;
+export const UNIT_ATTACK_IMPACT_OFFSET_MS = 280;
 export const UNIT_DAMAGE_ANIMATION_MS = 520;
 export const AUTOMATED_COMBAT_THINK_DELAY_MS = 350;
 export const COMBAT_ACTION_SETTLE_BUFFER_MS = 140;
@@ -179,7 +183,11 @@ export function getCombatActionSettleMs(previousCombat: PersistentCombat, curren
   let duration = 0;
   if (moved) duration = Math.max(duration, UNIT_MOVE_TRANSITION_MS);
   if (damaged || defeated) {
-    duration = Math.max(duration, moved ? UNIT_MOVE_TRANSITION_MS + UNIT_DAMAGE_ANIMATION_MS : UNIT_DAMAGE_ANIMATION_MS);
+    const base = moved ? UNIT_MOVE_TRANSITION_MS + UNIT_ATTACK_PRE_PAUSE_MS : 0;
+    duration = Math.max(
+      duration,
+      base + UNIT_ATTACK_ANIMATION_MS + UNIT_ATTACK_POST_PAUSE_MS + UNIT_DAMAGE_ANIMATION_MS
+    );
   }
   if (duration === 0) duration = 450;
   return duration + COMBAT_ACTION_SETTLE_BUFFER_MS;

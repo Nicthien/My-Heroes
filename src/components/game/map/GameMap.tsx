@@ -5,6 +5,7 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { UNIT_RULES } from "@/lib/game/economy";
@@ -46,11 +47,27 @@ type PendingMove = {
   finalDestination?: Position;
 };
 
+type AdventureChoiceValue = "attack" | "defense" | "spellPower" | "knowledge";
+
+type AdventureChoice = {
+  value: AdventureChoiceValue;
+  label: string;
+};
+
+type PendingAdventureChoice = {
+  heroId: string;
+  buildingId: string;
+  buildingType: string;
+  message: string;
+  choices: AdventureChoice[];
+};
+
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination?: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
+  | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination?: Position }
@@ -82,6 +99,7 @@ export default function GameMapComponent() {
   const { data: session } = useSession();
   const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
   const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
+  const [pendingAdventureChoice, setPendingAdventureChoice] = useState<PendingAdventureChoice | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
@@ -119,10 +137,43 @@ export default function GameMapComponent() {
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
+  const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
+  const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
+  const setPendingAdventureSpell = useGameStore((state) => state.setPendingAdventureSpell);
+  const spellRevealHighlight = useGameStore((state) => state.spellRevealHighlight);
+  const setSpellRevealHighlight = useGameStore((state) => state.setSpellRevealHighlight);
   const activeCombatHeroIds = useMemo(
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
   );
+  const selectedHeroReachableTileKeys = useMemo(() => {
+    if (!gameState || devRevealMap || !selectedHeroId) return null;
+    const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
+    if (!hero || activeCombatHeroIds.has(hero.id)) return null;
+    return computeReachableTiles(gameState.map, hero.position, hero.movement);
+  }, [activeCombatHeroIds, devRevealMap, gameState, selectedHeroId]);
+  const selectedHeroReachableTiles = useMemo(() => {
+    if (!selectedHeroReachableTileKeys) return [];
+    return Array.from(selectedHeroReachableTileKeys).map((key) => {
+      const [x, y] = key.split(",").map(Number);
+      return { x, y };
+    });
+  }, [selectedHeroReachableTileKeys]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady() || !gameState) return;
+    const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
+    if (!spellRevealHighlight || spellRevealHighlight.turnNumber !== gameState.turnNumber || myPlayer?.hasEndedTurn) {
+      renderer.clearSpellRevealHighlights();
+      if (spellRevealHighlight && (spellRevealHighlight.turnNumber !== gameState.turnNumber || myPlayer?.hasEndedTurn)) {
+        setSpellRevealHighlight(null);
+      }
+      return;
+    }
+
+    renderer.setSpellRevealHighlights(spellRevealHighlight.tiles, 0x7dd3fc, 0.24, spellRevealHighlight.hints);
+  }, [gameState, rendererReadyVersion, session?.user?.id, setSpellRevealHighlight, spellRevealHighlight]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -330,18 +381,13 @@ export default function GameMapComponent() {
       return;
     }
 
-    const reachableTiles = Array.from(computeReachableTiles(gameState.map, hero.position, hero.movement))
-      .map((key) => {
-        const [x, y] = key.split(",").map(Number);
-        return { x, y };
-      });
-    rendererRef.current.highlightTiles(reachableTiles, REACHABLE_TILE_COLOR, REACHABLE_TILE_ALPHA);
+    rendererRef.current.highlightTiles(selectedHeroReachableTiles, REACHABLE_TILE_COLOR, REACHABLE_TILE_ALPHA);
 
     if (lastCenteredHeroIdRef.current !== selectedHeroId) {
       rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds]);
+  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds, selectedHeroReachableTiles]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -459,12 +505,13 @@ export default function GameMapComponent() {
         selectedTownId,
         currentPlayerId: currentPlayer?.id ?? null,
         visibleTiles: lastFogVisibleRef.current,
+        reachableTileKeys: selectedHeroReachableTileKeys,
         activeCombatHeroIds,
         screenX: e.clientX - rect.left,
         screenY: e.clientY - rect.top,
       }));
     },
-    [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]
+    [activeCombatHeroIds, gameState, selectedHeroId, selectedHeroReachableTileKeys, selectedTownId, session?.user?.id]
   );
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -482,11 +529,12 @@ export default function GameMapComponent() {
       selectedTownId,
       currentPlayerId: currentPlayer?.id ?? null,
       visibleTiles: lastFogVisibleRef.current,
+      reachableTileKeys: selectedHeroReachableTileKeys,
       activeCombatHeroIds,
       screenX: e.clientX - rect.left,
       screenY: e.clientY - rect.top,
     }));
-  }, [activeCombatHeroIds, gameState, selectedHeroId, selectedTownId, session?.user?.id]);
+  }, [activeCombatHeroIds, gameState, selectedHeroId, selectedHeroReachableTileKeys, selectedTownId, session?.user?.id]);
 
   const handleMouseLeave = useCallback(() => {
     isDragging.current = false;
@@ -547,6 +595,11 @@ export default function GameMapComponent() {
       return true;
     }
 
+    if (interaction.type === "ARTIFACT") {
+      setCombatMessage(`${interaction.label} recupere.`);
+      return true;
+    }
+
     if (interaction.type === "CAPTURE_BUILDING") {
       setCombatMessage(`Batiment capture : ${RESOURCE_BUILDING_RULES.find((rule) => rule.type === interaction.buildingType)?.label ?? "Batiment"}.`);
       return true;
@@ -564,7 +617,21 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "ADVENTURE_BUILDING") {
-      if (interaction.reward) {
+      if (interaction.choices?.length && interaction.buildingId) {
+        setPendingAdventureChoice({
+          heroId,
+          buildingId: interaction.buildingId,
+          buildingType: interaction.buildingType,
+          message: interaction.message ?? getAdventureBuildingLabel(interaction.buildingType),
+          choices: interaction.choices,
+        });
+        setCombatMessage(interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+        return true;
+      }
+      if (interaction.recruited) {
+        const rule = UNIT_RULES[interaction.recruited.unitType];
+        setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recrute(e)s.`);
+      } else if (interaction.reward) {
         const parts = [];
         if (interaction.reward.gold) parts.push(`+${interaction.reward.gold} Or`);
         for (const [resource, amount] of Object.entries(interaction.reward.resources ?? {})) {
@@ -587,6 +654,36 @@ export default function GameMapComponent() {
     return true;
   }, [setCombatMessage, setPendingCombat]);
 
+  const resolveAdventureChoice = useCallback(async (choice: AdventureChoiceValue) => {
+    if (!gameState || !pendingAdventureChoice) return;
+    isSyncingMoveRef.current = true;
+    useGameStore.getState().setMovePending(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "VISIT_ADVENTURE_BUILDING",
+          heroId: pendingAdventureChoice.heroId,
+          buildingId: pendingAdventureChoice.buildingId,
+          choice,
+        }),
+      });
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response));
+        return;
+      }
+      const data = await response.json();
+      setPendingAdventureChoice(null);
+      handleMoveInteraction(pendingAdventureChoice.heroId, data.interaction as MoveInteraction | null | undefined);
+      const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshed) useGameStore.getState().setGameState(refreshed);
+    } finally {
+      isSyncingMoveRef.current = false;
+      useGameStore.getState().setMovePending(false);
+    }
+  }, [devRevealMap, gameState, handleMoveInteraction, pendingAdventureChoice, session?.user?.id, setCombatMessage]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (!rendererRef.current || !gameState) return;
@@ -606,6 +703,29 @@ export default function GameMapComponent() {
     rendererRef.current.clearHighlights();
     selectTown(town.id);
   }, [gameState, selectTown]);
+
+  const collectArtifact = useCallback(async (gameId: string, heroId: string, targetPosition: Position, path: Position[]) => {
+    isSyncingMoveRef.current = true;
+    useGameStore.getState().setMovePending(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "COLLECT_ARTIFACT", heroId, targetPosition, path }),
+      });
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response));
+        return;
+      }
+      const data = await response.json();
+      handleMoveInteraction(heroId, data.interaction as MoveInteraction | null | undefined);
+      const refreshed = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshed) useGameStore.getState().setGameState(refreshed);
+    } finally {
+      isSyncingMoveRef.current = false;
+      useGameStore.getState().setMovePending(false);
+    }
+  }, [devRevealMap, handleMoveInteraction, session?.user?.id, setCombatMessage]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (!rendererRef.current || !gameState) return;
@@ -677,6 +797,70 @@ export default function GameMapComponent() {
             useGameStore.getState().setGameState(state);
             setCombatMessage("Héros téléporté.");
           }
+        })
+        .finally(() => {
+          isSyncingMoveRef.current = false;
+          useGameStore.getState().setMovePending(false);
+        });
+      return;
+    }
+
+    if (pendingAdventureSpell) {
+      if (!tile) return;
+      const hero = myPlayer?.heroes.find((item) => item.id === pendingAdventureSpell.heroId);
+      if (!hero) {
+        setPendingAdventureSpell(null);
+        setCombatMessage("Heros lanceur indisponible.");
+        return;
+      }
+      if (!canAct) {
+        setCombatMessage(blockedTurnMessage);
+        return;
+      }
+      if (activeCombatHeroIds.has(hero.id)) {
+        setPendingAdventureSpell(null);
+        setCombatMessage("Ce heros est deja engage dans un combat.");
+        return;
+      }
+
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      rendererRef.current.clearHighlights();
+      isSyncingMoveRef.current = true;
+      useGameStore.getState().setMovePending(true);
+      fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "CAST_ADVENTURE_SPELL",
+          heroId: hero.id,
+          spellId: pendingAdventureSpell.spellId,
+          target: { x: tile.x, y: tile.y },
+          ...(devInfiniteMana ? { devInfiniteManaHeroId: hero.id } : {}),
+        }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            setCombatMessage(await getApiErrorMessage(response));
+            rendererRef.current?.highlightTile(tile.x, tile.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 650);
+            return null;
+          }
+          const data = await response.json();
+          setPendingAdventureSpell(null);
+          const revealedTiles = normalizeRevealedTiles(data?.interaction?.revealedTiles);
+          const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
+          if (revealedTiles.length > 0) {
+            setSpellRevealHighlight({ turnNumber: gameState.turnNumber, tiles: revealedTiles, hints: revealHints, label: pendingAdventureSpell.label });
+          }
+          const message = typeof data?.interaction?.message === "string"
+            ? data.interaction.message
+            : `${pendingAdventureSpell.label} lance.`;
+          setCombatMessage(message);
+          return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+        })
+        .then((state) => {
+          if (state) useGameStore.getState().setGameState(state);
         })
         .finally(() => {
           isSyncingMoveRef.current = false;
@@ -1637,6 +1821,36 @@ export default function GameMapComponent() {
       if (blockIfHeroInCombat(hero.id)) return;
 
       const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
+      if (targetTile?.object?.type === "artifact") {
+        const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+        if (!approach) {
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current.highlightPath(approach.path);
+        rendererRef.current.highlightTile(tile.x, tile.y, 0xa78bfa);
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          return;
+        }
+        const guardianPower = Number(targetTile.object.guardianPower ?? 0);
+        if (guardianPower > 0) {
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: targetTile.object.id,
+            targetType: "artifact",
+            destination: approach.destination,
+            targetPosition: tile,
+            path: approach.path,
+          });
+          return;
+        }
+        void collectArtifact(gameState.id, selectedHeroId, tile, approach.path);
+        return;
+      }
       if (!isTileTraversable(targetTile)) {
         rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
         setCombatMessage(
@@ -1898,7 +2112,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, devTeleportArmed, activeCombatHeroIds]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div
@@ -1921,6 +2135,56 @@ export default function GameMapComponent() {
           onMessage={setCombatMessage}
         />
       )}
+      {pendingAdventureChoice && (
+        <AdventureChoiceModal
+          choice={pendingAdventureChoice}
+          onChoose={(value) => void resolveAdventureChoice(value)}
+          onClose={() => setPendingAdventureChoice(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AdventureChoiceModal({
+  choice,
+  onChoose,
+  onClose,
+}: {
+  choice: PendingAdventureChoice;
+  onChoose: (value: AdventureChoiceValue) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-40 grid place-items-center bg-black/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded border border-amber-500/50 bg-stone-950/95 p-4 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black text-amber-100">{getAdventureBuildingLabel(choice.buildingType)}</h2>
+            <p className="mt-1 text-sm leading-snug text-stone-300">{choice.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-400"
+            aria-label="Fermer"
+          >
+            x
+          </button>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {choice.choices.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onChoose(item.value)}
+              className="h-10 rounded border border-amber-600/50 bg-amber-500/15 px-3 text-sm font-black text-amber-100 hover:bg-amber-500/25"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2182,6 +2446,7 @@ function getAdventureMapCursor({
   selectedTownId,
   currentPlayerId,
   visibleTiles,
+  reachableTileKeys,
   activeCombatHeroIds,
   screenX,
   screenY,
@@ -2192,6 +2457,7 @@ function getAdventureMapCursor({
   selectedTownId: string | null;
   currentPlayerId: string | null;
   visibleTiles: Set<string> | null;
+  reachableTileKeys: Set<string> | null;
   activeCombatHeroIds: Set<string>;
   screenX: number;
   screenY: number;
@@ -2209,7 +2475,7 @@ function getAdventureMapCursor({
   if (!targetTile) return ADVENTURE_CURSORS.forbidden;
 
   const tileKey = `${tile.x},${tile.y}`;
-  const isReachableTile = computeReachableTiles(gameState.map, hero.position, hero.movement).has(tileKey);
+  const isReachableTile = reachableTileKeys?.has(tileKey) ?? false;
 
   const objects = filterClickThroughTownSpriteHits(
     renderer.getObjectsAtScreen(screenX, screenY),
@@ -2288,6 +2554,28 @@ async function getApiErrorMessage(response: Response) {
   }
 
   return "Action impossible pour le moment.";
+}
+
+function normalizeRevealedTiles(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const x = Number((item as { x?: unknown })?.x);
+    const y = Number((item as { y?: unknown })?.y);
+    return Number.isInteger(x) && Number.isInteger(y) ? [{ x, y }] : [];
+  });
+}
+
+function normalizeRevealHints(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const x = Number((item as { x?: unknown })?.x);
+    const y = Number((item as { y?: unknown })?.y);
+    const kind = String((item as { kind?: unknown })?.kind ?? "");
+    const subtype = (item as { subtype?: unknown })?.subtype;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return [];
+    if (!["resource", "building", "artifact", "hero", "town"].includes(kind)) return [];
+    return [{ x, y, kind: kind as "resource" | "building" | "artifact" | "hero" | "town", subtype: typeof subtype === "string" ? subtype : undefined }];
+  });
 }
 
 function animateHeroMovement(renderer: MapRenderer | null, heroId: string, path: Position[]) {
@@ -2555,6 +2843,7 @@ function buildObjects(
   );
   const buildingByPosition = new Map<string, ResourceBuilding>();
   const ownerByBuildingId = new Map<string, (typeof gameState.players)[number]>();
+  const playerById = new Map(gameState.players.map((player) => [player.id, player]));
 
   for (const player of gameState.players) {
     for (const building of player.resourceBuildings) {
@@ -2627,13 +2916,16 @@ function buildObjects(
         objects.push({
           type: "adventure_building",
           id: tile.object.id,
-          playerId: null,
+          playerId: tile.object.ownerId ?? null,
           x,
           y,
-          faction: "",
-          color: "",
-          name: tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
+          faction: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.faction as string ?? "") : "",
+          color: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.color ?? "") : "",
+          name: isExternalDwellingType(tile.object.subtype)
+            ? getExternalDwellingLabel(tile.object.targetId)
+            : tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
           buildingType: tile.object.subtype,
+          dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,
           guardianPower: tile.object.guardianPower ?? 0,
         });
       }
@@ -2641,7 +2933,6 @@ function buildObjects(
   }
 
   const gatePositions = new Set<string>();
-  const playerById = new Map(gameState.players.map((player) => [player.id, player]));
   for (const gate of gameState.gates ?? []) {
     const key = `${gate.position.x},${gate.position.y}`;
     if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;

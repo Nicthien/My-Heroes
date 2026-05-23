@@ -2,6 +2,11 @@
 
 import { type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useReportWebVitals } from "next/web-vitals";
+import {
+  getDevPerformanceMeasuresSnapshot,
+  setDevPerformanceMetricsEnabled,
+  type DevPerformanceMeasure,
+} from "@/lib/dev/performanceMetrics";
 
 const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
 const DEV_PANEL_COLLAPSED_KEY = "my-heroes:dev-panel-collapsed";
@@ -34,6 +39,7 @@ export type DevPerformanceStats = {
   heapUsedMb: number | null;
   heapLimitMb: number | null;
   vitals: Record<string, DevWebVital>;
+  measures: DevPerformanceMeasure[];
 };
 type PerformanceWithMemory = Performance & {
   memory?: {
@@ -55,6 +61,7 @@ const DEFAULT_DEV_PERFORMANCE_STATS: DevPerformanceStats = {
   heapUsedMb: null,
   heapLimitMb: null,
   vitals: {},
+  measures: [],
 };
 
 export function getDevPanelVisible() {
@@ -140,6 +147,11 @@ export function useDevPerformanceStats(enabled: boolean) {
   const [stats, setStats] = useState<DevPerformanceStats>(DEFAULT_DEV_PERFORMANCE_STATS);
   const longTaskRef = useRef({ count: 0, durationMs: 0, totalCount: 0, totalDurationMs: 0 });
 
+  useEffect(() => {
+    setDevPerformanceMetricsEnabled(enabled);
+    return () => setDevPerformanceMetricsEnabled(false);
+  }, [enabled]);
+
   const handleWebVitals = useCallback<ReportWebVitalsCallback>((metric) => {
     setStats((current) => ({
       ...current,
@@ -182,6 +194,7 @@ export function useDevPerformanceStats(enabled: boolean) {
           longTaskMs: 0,
           longTaskTotal: 0,
           longTaskTotalMs: 0,
+          measures: getDevPerformanceMeasuresSnapshot(),
           ...readHeapMemoryStats(),
         }));
         longTaskRef.current = { count: 0, durationMs: 0, totalCount: 0, totalDurationMs: 0 };
@@ -225,6 +238,7 @@ export function useDevPerformanceStats(enabled: boolean) {
           longTaskMs: longTaskSnapshot.durationMs,
           longTaskTotal: longTaskSnapshot.totalCount,
           longTaskTotalMs: longTaskSnapshot.totalDurationMs,
+          measures: getDevPerformanceMeasuresSnapshot(),
           ...memoryStats,
         }));
 
@@ -397,6 +411,21 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
           onTooltip={showTooltip}
           onTooltipClose={() => setTooltip(null)}
         />
+        {stats.measures.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Mesures carte</div>
+            {stats.measures.slice(0, 4).map((measure) => (
+              <DevPerformanceRow
+                key={measure.name}
+                label={measure.name}
+                value={`${formatNumber(measure.avgMs, 1)} ms avg / ${formatNumber(measure.maxMs, 1)} ms max`}
+                description={`${measure.count} appel(s), ${formatNumber(measure.totalMs, 1)} ms cumules depuis l'ouverture du panneau.`}
+                onTooltip={showTooltip}
+                onTooltipClose={() => setTooltip(null)}
+              />
+            ))}
+          </div>
+        )}
         <div className="space-y-1.5">
           <div
             className="cursor-help text-[10px] font-black uppercase tracking-wider text-amber-300/70"

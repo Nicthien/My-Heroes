@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CombatBoardUnit, PersistentCombat } from "@/lib/game/types";
+import type { CSSProperties } from "react";
+import type { CombatBoardUnit, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { getCreature } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
@@ -28,10 +29,12 @@ export function DamagePreviewPanel({ preview, actor, target }: { preview: Damage
 
 export function InitiativeQueue({
   combat,
+  gameState,
   inspectedUnitId,
   onInspectUnit,
 }: {
   combat: PersistentCombat;
+  gameState: GameState;
   inspectedUnitId: string | null;
   onInspectUnit: (unitId: string) => void;
 }) {
@@ -75,6 +78,7 @@ export function InitiativeQueue({
           const active = offset === 0;
           const inspected = inspectedUnitId === unit.id;
           const previous = offset < 0;
+          const buttonStyle = getInitiativeButtonStyle(unit, gameState, active, inspected);
           return (
             <div key={`${unit.id}-${offset}`} className="flex shrink-0 items-center gap-1.5">
               {startsNextRound && (
@@ -86,19 +90,12 @@ export function InitiativeQueue({
               )}
               <button
                 type="button"
-                className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${
-                  active
-                    ? "h-16 w-14 border-amber-200 bg-amber-950/90 shadow-[0_0_18px_rgba(251,191,36,0.68)]"
-                    : inspected
-                      ? "h-14 w-12 border-sky-300 bg-sky-950/85 shadow-[0_0_12px_rgba(125,211,252,0.42)]"
-                      : unit.side === "attacker"
-                        ? "h-14 w-12 border-blue-400/55 bg-blue-950/65"
-                        : "h-14 w-12 border-red-400/55 bg-red-950/65"
-                } ${previous ? "opacity-55 saturate-75" : ""}`}
+                className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${active ? "h-16 w-14" : "h-14 w-12"} ${previous ? "opacity-55 saturate-75" : ""}`}
+                style={buttonStyle}
                 title={`${offset === 0 ? "Actuel" : offset < 0 ? `${Math.abs(offset)} precedent` : `${offset} suivant`} - ${rule.label} x${unit.count} / v${unit.speed}`}
                 onClick={() => onInspectUnit(unit.id)}
               >
-                <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/75 to-black/30`}>
+                <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/55 to-black/30`}>
                   <InitiativeMiniature unit={unit} />
                 </span>
                 {active && <span className="absolute inset-x-1 bottom-4 h-px bg-amber-200/80" />}
@@ -112,6 +109,40 @@ export function InitiativeQueue({
       </div>
     </div>
   );
+}
+
+function getInitiativeButtonStyle(unit: CombatBoardUnit, gameState: GameState, active: boolean, inspected: boolean): CSSProperties {
+  const color = getCombatUnitAccentColor(unit, gameState);
+  const colorStrong = hexToRgba(color, 0.95);
+  const colorSoft = hexToRgba(color, 0.32);
+  const colorDim = hexToRgba(color, 0.16);
+  const focusGlow = active
+    ? `0 0 18px rgba(251,191,36,0.68), 0 0 0 2px rgba(251,191,36,0.32), inset 0 0 0 1px ${colorSoft}`
+    : inspected
+      ? `0 0 12px rgba(125,211,252,0.42), inset 0 0 0 1px ${colorSoft}`
+      : `inset 0 0 0 1px ${colorDim}`;
+
+  return {
+    borderColor: active ? "#fde68a" : colorStrong,
+    background: `linear-gradient(180deg, ${hexToRgba(color, active ? 0.36 : 0.28)}, rgba(2,6,23,0.88))`,
+    boxShadow: focusGlow,
+  };
+}
+
+function getCombatUnitAccentColor(unit: CombatBoardUnit, gameState: GameState) {
+  const ownerColor = unit.ownerPlayerId
+    ? gameState.players.find((player) => player.id === unit.ownerPlayerId)?.color
+    : null;
+  if (ownerColor && /^#[0-9a-fA-F]{6}$/.test(ownerColor)) return ownerColor;
+  return unit.side === "attacker" ? "#2563eb" : "#dc2626";
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#64748b";
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
@@ -156,6 +187,7 @@ export function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
           <span>Deg. {unit.minDamage}-{unit.maxDamage}</span>
           <span>PV/u {unit.maxHealth}</span>
           <span>PV {unit.health}/{unit.maxHealth * unit.count}</span>
+          <span className={moraleClass(unit.morale)}>Moral. {formatMorale(unit.morale)}</span>
         </div>
         {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">Tirs : {unit.shots}</div>}
         {creature.abilities.length > 0 && (
@@ -166,6 +198,19 @@ export function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
       </div>
     </div>
   );
+}
+
+function formatMorale(value: number | undefined) {
+  const v = Number.isFinite(value) ? Math.trunc(value as number) : 0;
+  if (v > 0) return `+${v}`;
+  return String(v);
+}
+
+function moraleClass(value: number | undefined) {
+  const v = Number.isFinite(value) ? Math.trunc(value as number) : 0;
+  if (v > 0) return "text-emerald-300";
+  if (v < 0) return "text-rose-300";
+  return "text-stone-300";
 }
 
 function UnitPortrait({ unit }: { unit: CombatBoardUnit }) {

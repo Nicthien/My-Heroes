@@ -141,6 +141,108 @@ export function getSceneryPreset(environment: CombatEnvironment): SceneryPreset 
   }
 }
 
+// Per-theme pools of terrain textures. The same hex always picks the same
+// variant (deterministic from q/r) so the battlefield stays stable across
+// re-renders but feels organic instead of a uniform color.
+const BATTLE_TILE_TEXTURE_POOLS: Record<CombatEnvironment["theme"], string[]> = {
+  grass: [
+    "/assets/textures/terrain/grass/grass-clean.webp",
+    "/assets/textures/terrain/grass/grass-dense-herb.webp",
+    "/assets/textures/terrain/grass/grass-flowers.webp",
+    "/assets/textures/terrain/grass/grass-herb-flowers.webp",
+    "/assets/textures/terrain/grass/grass-clover-moss.webp",
+  ],
+  forest: [
+    "/assets/textures/terrain/forest/forest-leafy-floor.webp",
+    "/assets/textures/terrain/forest/forest-dead-leaves.webp",
+    "/assets/textures/terrain/forest/forest-moss.webp",
+    "/assets/textures/terrain/forest/forest-ferns.webp",
+    "/assets/textures/terrain/forest/forest-pine-needles.webp",
+    "/assets/textures/terrain/forest/forest-rare-flowers.webp",
+  ],
+  dirt: [
+    "/assets/textures/terrain/dirt/dirt-bare.webp",
+    "/assets/textures/terrain/dirt/dirt-dry.webp",
+    "/assets/textures/terrain/dirt/dirt-rare-grass.webp",
+    "/assets/textures/terrain/dirt/dirt-dark.webp",
+    "/assets/textures/terrain/dirt/dirt-light-mud.webp",
+  ],
+  sand: [
+    "/assets/textures/terrain/sand/sand-clean.webp",
+    "/assets/textures/terrain/sand/sand-ripples.webp",
+    "/assets/textures/terrain/sand/sand-shells.webp",
+    "/assets/textures/terrain/sand/sand-dry.webp",
+    "/assets/textures/terrain/sand/sand-packed.webp",
+    "/assets/textures/terrain/sand/sand-rare-grass.webp",
+  ],
+  snow: [
+    "/assets/textures/terrain/snow/snow-clean.webp",
+    "/assets/textures/terrain/snow/snow-packed.webp",
+    "/assets/textures/terrain/snow/snow-blue.webp",
+    "/assets/textures/terrain/snow/snow-frozen-grass.webp",
+    "/assets/textures/terrain/snow/snow-soft-tracks.webp",
+  ],
+  swamp: [
+    "/assets/textures/terrain/swamp/swamp-green-mud.webp",
+    "/assets/textures/terrain/swamp/swamp-wet-moss.webp",
+    "/assets/textures/terrain/swamp/swamp-low-reeds.webp",
+    "/assets/textures/terrain/swamp/swamp-marsh-grass.webp",
+    "/assets/textures/terrain/swamp/swamp-dark-puddles.webp",
+    "/assets/textures/terrain/swamp/swamp-roots.webp",
+  ],
+  mountain: [
+    "/assets/textures/terrain/mountain/mountain-clean-rock.webp",
+    "/assets/textures/terrain/mountain/mountain-cracked-rock.webp",
+    "/assets/textures/terrain/mountain/mountain-rare-moss.webp",
+    "/assets/textures/terrain/mountain/mountain-dark-rock.webp",
+    "/assets/textures/terrain/mountain/mountain-light-rock.webp",
+    "/assets/textures/terrain/mountain/mountain-gravel.webp",
+  ],
+  lava: [
+    "/assets/textures/terrain/lava/lava-volcanic-rock.webp",
+    "/assets/textures/terrain/lava/lava-ash.webp",
+    "/assets/textures/terrain/lava/lava-hot-cracks.webp",
+    "/assets/textures/terrain/lava/lava-embers.webp",
+    "/assets/textures/terrain/lava/lava-black-rock.webp",
+    "/assets/textures/terrain/lava/lava-dry-flow.webp",
+  ],
+  road: [
+    "/assets/textures/terrain/dirt/dirt-ruts.webp",
+    "/assets/textures/terrain/dirt/dirt-bare.webp",
+    "/assets/textures/terrain/dirt/dirt-dry.webp",
+    "/assets/textures/terrain/dirt/dirt-light-mud.webp",
+  ],
+  settlement: [
+    "/assets/textures/terrain/dirt/dirt-bare.webp",
+    "/assets/textures/terrain/dirt/dirt-ruts.webp",
+    "/assets/textures/terrain/dirt/dirt-rare-grass.webp",
+    "/assets/textures/terrain/grass/grass-clean.webp",
+  ],
+  building: [
+    "/assets/textures/terrain/dirt/dirt-bare.webp",
+    "/assets/textures/terrain/dirt/dirt-dry.webp",
+    "/assets/textures/terrain/dirt/dirt-rare-grass.webp",
+  ],
+  water: [
+    "/assets/textures/terrain/sand/sand-clean.webp",
+    "/assets/textures/terrain/sand/sand-ripples.webp",
+    "/assets/textures/terrain/sand/sand-shells.webp",
+    "/assets/textures/terrain/sand/sand-dry.webp",
+  ],
+  coast: [
+    "/assets/textures/terrain/sand/sand-clean.webp",
+    "/assets/textures/terrain/sand/sand-ripples.webp",
+    "/assets/textures/terrain/sand/sand-rare-grass.webp",
+    "/assets/textures/terrain/grass/grass-clean.webp",
+  ],
+};
+
+export function getBattleTileTexture(theme: CombatEnvironment["theme"], q: number, r: number): string {
+  const pool = BATTLE_TILE_TEXTURE_POOLS[theme] ?? BATTLE_TILE_TEXTURE_POOLS.grass;
+  const seed = Math.abs(q * 73856093 + r * 19349663);
+  return pool[seed % pool.length];
+}
+
 export function getBattleTileBaseColor(theme: CombatEnvironment["theme"]) {
   switch (theme) {
     case "forest":

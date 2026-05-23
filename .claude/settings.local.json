@@ -18,7 +18,8 @@
       "Bash(powershell -Command \"Get-Content 'c:\\\\AI\\\\My Heroes\\\\.env.example'\")",
       "Bash(supabase start *)",
       "Bash(git diff *)",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

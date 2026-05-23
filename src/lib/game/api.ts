@@ -3,7 +3,9 @@ import {
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject,
 } from "./types";
+import { normalizeArtifactBag } from "./artifacts";
 import { isCreatureBankType } from "./creature-banks";
+import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { normalizeTownBuildings } from "./town-buildings";
@@ -48,6 +50,12 @@ interface ApiHero {
   defense: number;
   spellPower: number;
   knowledge: number;
+  morale?: number;
+  luck?: number;
+  mana?: number | null;
+  hasSpellBook?: boolean;
+  knownSpellIds?: string[] | null;
+  artifacts?: unknown;
   x: number;
   y: number;
   movement: number;
@@ -187,7 +195,13 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
         defense: hero.defense,
         spellPower: hero.spellPower,
         knowledge: hero.knowledge,
+        morale: Number(hero.morale ?? 0),
+        luck: Number(hero.luck ?? 0),
       },
+      mana: hero.mana ?? hero.knowledge * 10,
+      hasSpellBook: hero.hasSpellBook ?? true,
+      knownSpellIds: hero.knownSpellIds ?? null,
+      artifacts: normalizeArtifactBag(hero.artifacts),
       position: { x: hero.x, y: hero.y },
       movement: hero.movement,
       maxMovement: hero.maxMovement,
@@ -375,11 +389,13 @@ function applyDynamicMapState(
   const collected = new Set<string>((mapState.collected as string[]) ?? []);
   const killed = new Set<string>((mapState.killed as string[]) ?? []);
   const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
+  const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[]) ?? []);
   const defeatedCreatureBanks = new Set(
     Object.entries((mapState.creatureBanks as Record<string, { defeated?: boolean; claimed?: boolean }> | undefined) ?? {})
       .filter(([, state]) => state.defeated || state.claimed)
       .map(([bankId]) => bankId)
   );
+  const externalDwellings = (mapState.externalDwellings as Record<string, { ownerId?: string | null; unitType?: UnitType; available?: number }> | undefined) ?? {};
   const defeatedNeutralArmies = new Set(
     neutralArmies
       .filter((army) => army.status !== "ACTIVE")
@@ -444,6 +460,10 @@ function applyDynamicMapState(
           }
         } else if (object.type === "resource" && collected.has(object.id)) {
           delete tile.object;
+        } else if (object.type === "artifact" && collected.has(object.id)) {
+          delete tile.object;
+        } else if (object.type === "artifact" && defeatedArtifacts.has(object.id)) {
+          object.guardianPower = 0;
         } else if (object.type === "monster" && (killed.has(object.id) || defeatedNeutralArmies.has(object.id))) {
           delete tile.object;
         } else if (
@@ -458,6 +478,16 @@ function applyDynamicMapState(
           defeatedCreatureBanks.has(object.id)
         ) {
           delete tile.object;
+        } else if (
+          object.type === "adventure_building" &&
+          isExternalDwellingType(object.subtype)
+        ) {
+          const dwellingState = normalizeExternalDwellingState(object, externalDwellings[object.id]);
+          if (dwellingState) {
+            object.ownerId = dwellingState.ownerId;
+            object.targetId = dwellingState.unitType;
+            object.amount = dwellingState.available;
+          }
         } else if (object.type === "monster") {
           const dominantUnitType = dominantNeutralUnits.get(object.id);
           if (dominantUnitType) object.subtype = dominantUnitType;

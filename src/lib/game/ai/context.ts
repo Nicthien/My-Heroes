@@ -89,6 +89,8 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     collected: new Set((mapState.collected as string[] | undefined) ?? []),
     visitedAdventureBuildings: new Set((mapState.visitedAdventureBuildings as string[] | undefined) ?? []),
     playerAdventureVisits: (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    heroAdventureVisits: (mapState.heroAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    weeklyAdventureVisits: (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {},
     killedNeutralArmies,
     explored,
     difficulty,
@@ -123,7 +125,7 @@ function buildThreats(game: AiGame, playerId: string, explored: Set<string>): Ai
       threats.push({
         id: hero.id,
         position,
-        power: calculateStacksPower(hero.armies, hero.attack, hero.defense),
+        power: calculateStacksPower(hero.armies, hero.attack, hero.defense, hero.morale ?? 0),
         ownerPlayerId: player.id,
         kind: "human",
       });

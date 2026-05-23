@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { buildTurnQueue, executeManualCombatAction } from "../src/lib/game/combat/persistent";
+import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
 import {
   applyDamageToStack,
   calculateCombatDamageRange,
   getAttackDefenseMultiplier,
   rollCombatDamage,
 } from "../src/lib/game/combat/rules";
+import { SPELLS_BY_ID, calculateSpellDamage, getHeroMaxMana } from "../src/lib/game/spells";
 import { CombatBoardUnit, UnitType } from "../src/lib/game/types";
 
 function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "side" | "q" | "r">): CombatBoardUnit {
@@ -28,6 +30,9 @@ function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "u
     hasRetaliated: params.hasRetaliated ?? false,
     defended: params.defended ?? false,
     waited: params.waited ?? false,
+    morale: params.morale ?? 0,
+    moraleApplied: params.moraleApplied ?? false,
+    moraleBonus: params.moraleBonus ?? false,
     ...params,
   };
 }
@@ -330,6 +335,52 @@ function testMoveDoesNotAttack() {
   assert.equal(result.currentUnitId, "target");
 }
 
+function testSpellDamageAndMana() {
+  assert.equal(getHeroMaxMana({ knowledge: 4 }), 40);
+  assert.equal(calculateSpellDamage(SPELLS_BY_ID.implosion, 10, 2), 1050);
+  assert.equal(calculateSpellDamage(SPELLS_BY_ID.lightning_bolt, 4, 0), 110);
+}
+
+function testCombatSpellOncePerRoundAndDamage() {
+  const units = [
+    unit({ id: "caster-stack", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, heroId: "h1", ownerPlayerId: "p1" }),
+    unit({ id: "target", unitType: UnitType.PIKEMAN, side: "defender", q: 4, r: 1, count: 20, health: 200 }),
+  ];
+  const result = executeCombatSpell({
+    units,
+    caster: { heroId: "h1", playerId: "p1", side: "attacker", spellPower: 3 },
+    action: { type: "CAST_COMBAT_SPELL", spellId: "magic_arrow", targetUnitId: "target" },
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.units.find((item) => item.id === "target")?.health, 160);
+  }
+
+  const marked = markHeroCombatSpellCast(undefined, 1, "h1");
+  assert.equal(hasHeroCastCombatSpell(marked, 1, "h1"), true);
+  assert.equal(hasHeroCastCombatSpell(marked, 2, "h1"), false);
+}
+
+function testCombatSpellImmunityAndMitigation() {
+  const blackDragon = unit({ id: "dragon", unitType: UnitType.BLACK_DRAGON, side: "defender", q: 4, r: 1, count: 1, health: 300, maxHealth: 300 });
+  const immune = executeCombatSpell({
+    units: [unit({ id: "caster", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1 }), blackDragon],
+    caster: { heroId: "h1", playerId: "p1", side: "attacker", spellPower: 10 },
+    action: { type: "CAST_COMBAT_SPELL", spellId: "lightning_bolt", targetUnitId: "dragon" },
+  });
+  assert.equal(immune.ok, true);
+  if (immune.ok) assert.equal(immune.units.find((item) => item.id === "dragon")?.health, 300);
+
+  const ironGolem = unit({ id: "golem", unitType: UnitType.IRON_GOLEM, side: "defender", q: 4, r: 1, count: 10, health: 350, maxHealth: 35 });
+  const mitigated = executeCombatSpell({
+    units: [unit({ id: "caster", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1 }), ironGolem],
+    caster: { heroId: "h1", playerId: "p1", side: "attacker", spellPower: 4 },
+    action: { type: "CAST_COMBAT_SPELL", spellId: "magic_arrow", targetUnitId: "golem" },
+  });
+  assert.equal(mitigated.ok, true);
+  if (mitigated.ok) assert.equal(mitigated.units.find((item) => item.id === "golem")?.health, 338);
+}
+
 testInitiativeOrder();
 testWaitAndDefendTiming();
 testDamageFormulaCapsAndPartials();
@@ -339,5 +390,8 @@ testMoveAndMeleeAttack();
 testBlockedMoveAndMeleeAttack();
 testRangedShotAndMoveMeleeAttack();
 testMoveDoesNotAttack();
+testSpellDamageAndMana();
+testCombatSpellOncePerRoundAndDamage();
+testCombatSpellImmunityAndMitigation();
 
 console.log("Combat core validation passed.");

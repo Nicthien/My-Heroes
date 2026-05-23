@@ -1,6 +1,7 @@
 import { isCreatureBankType } from "@/lib/game/creature-banks";
 import {
   ADVENTURE_BUILDING_OFFSET_Y,
+  BOAT_OFFSET_Y,
   GATE_DISPLAY_HEIGHT,
   GATE_DISPLAY_WIDTH,
   GATE_OFFSET_Y,
@@ -19,7 +20,7 @@ export function getObjectMetrics(object: MapObjectData) {
     const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
     if (sheet) return object.inTown
       ? { width: sheet.townDisplayWidth, height: sheet.townDisplayHeight, offsetY: TOWN_HERO_OFFSET_Y }
-      : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: object.onWater ? MAP_OBJECT_FOOT_OFFSET_Y : HERO_OFFSET_Y };
+      : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: object.onWater ? BOAT_OFFSET_Y : HERO_OFFSET_Y };
     return object.inTown
       ? { width: 30, height: 30, offsetY: TOWN_HERO_OFFSET_Y }
       : { width: 44, height: 44, offsetY: HERO_OFFSET_Y };
@@ -29,6 +30,7 @@ export function getObjectMetrics(object: MapObjectData) {
   if (object.type === "gate") return { width: GATE_DISPLAY_WIDTH, height: GATE_DISPLAY_HEIGHT, offsetY: GATE_OFFSET_Y };
   if (object.type === "adventure_building") {
     if (object.buildingType === "stargate") return { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
+    if (object.buildingType === "external_dwelling") return { width: 58, height: 58, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
     if (isCreatureBankType(object.buildingType)) {
       return { width: 66, height: 66, offsetY: ADVENTURE_BUILDING_OFFSET_Y + 3 };
     }

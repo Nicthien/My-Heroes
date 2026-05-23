@@ -5,7 +5,7 @@ import { MAP_SPRITES, TERRAIN_TOP_TEXTURES, type TerrainTopTexture } from "@/lib
 import { TILE_HEIGHT, TILE_WIDTH, cartToIso } from "@/lib/rendering/phaser/iso";
 import { TERRAIN_EFFECT_VIEW_PADDING } from "@/lib/rendering/phaser/mapRenderSettings";
 import { hashTile } from "@/lib/rendering/phaser/pointMath";
-import type { LavaTileEffect, WaterTileEffect } from "@/lib/rendering/phaser/terrainAnimation";
+import type { LavaTileEffect } from "@/lib/rendering/phaser/terrainAnimation";
 
 export type BrickWallOrientation = "x" | "y" | "diagonalDown" | "diagonalUp";
 
@@ -83,7 +83,7 @@ export function getBrickWallVectors(orientation: BrickWallOrientation): { dir: P
 }
 
 export function isTerrainEffectInView(
-  effect: WaterTileEffect | LavaTileEffect,
+  effect: LavaTileEffect,
   view: Phaser.Geom.Rectangle
 ) {
   return (
@@ -118,6 +118,7 @@ export function areObjectsRenderEquivalent(left: MapObjectData, right: MapObject
     (left.renderOffsetX ?? 0) === (right.renderOffsetX ?? 0) &&
     (left.renderOffsetY ?? 0) === (right.renderOffsetY ?? 0) &&
     (left.buildingType ?? "") === (right.buildingType ?? "") &&
+    (left.dwellingUnitType ?? "") === (right.dwellingUnitType ?? "") &&
     (left.guardianPower ?? 0) === (right.guardianPower ?? 0)
   );
 }

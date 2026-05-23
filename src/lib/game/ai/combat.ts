@@ -7,20 +7,22 @@ import { UnitType, type UnitStack } from "@/lib/game/types";
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 import type { AiHero } from "./types";
 
-export function calculateHeroPower(hero: Pick<AiHero, "id" | "armies" | "attack" | "defense">) {
+export function calculateHeroPower(hero: Pick<AiHero, "id" | "armies" | "attack" | "defense" | "morale">) {
   return calculateArmyPower({
     id: hero.id,
     attack: Number(hero.attack ?? 1),
     defense: Number(hero.defense ?? 1),
+    morale: Number(hero.morale ?? 0),
     armies: hero.armies,
   });
 }
 
-export function calculateStacksPower(stacks: UnitStack[] | undefined | null, attack = 1, defense = 1) {
+export function calculateStacksPower(stacks: UnitStack[] | undefined | null, attack = 1, defense = 1, morale = 0) {
   return calculateArmyPower({
     id: "stacks",
     attack,
     defense,
+    morale,
     armies: stacks ?? [],
   });
 }
@@ -46,6 +48,7 @@ export async function resolveAiAutoCombat({
     id: string;
     attack?: number;
     defense?: number;
+    morale?: number;
     armies: UnitStack[];
   };
   onAttackerWon: () => Promise<void>;
@@ -56,12 +59,14 @@ export async function resolveAiAutoCombat({
       id: attacker.id,
       attack: Number(attacker.attack ?? 1),
       defense: Number(attacker.defense ?? 1),
+      morale: Number(attacker.morale ?? 0),
       armies: attacker.armies,
     },
     {
       id: defender.id,
       attack: Number(defender.attack ?? 1),
       defense: Number(defender.defense ?? 1),
+      morale: Number(defender.morale ?? 0),
       armies: defender.armies,
     },
   );

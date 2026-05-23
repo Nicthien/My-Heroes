@@ -9,6 +9,7 @@ import {
   Position,
   Resources,
   UnitStack,
+  Boat,
 } from "../types";
 
 import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "../economy";
@@ -56,6 +57,8 @@ function getMovementCost(terrain: TerrainType): number {
 const ORTHOGONAL_BASE = 100;
 const DIAGONAL_BASE = 141;
 export const MINIMUM_ADVENTURE_STEP_COST = 50;
+export const BOAT_DAILY_MOVEMENT = 1500;
+export type AdventureMovementMode = "land" | "boat";
 
 export function effectiveMovementCost(tile: MapTile): number {
   if (!isTileTraversable(tile)) return 999;
@@ -74,6 +77,31 @@ export function isTileTraversable(tile: MapTile | undefined): boolean {
     tile.object?.type !== "town_footprint" &&
     !tile.decor?.blocking
   );
+}
+
+export function getHeroBoat(boats: Pick<Boat, "heroId">[] | undefined | null, heroId: string): Pick<Boat, "heroId"> | null {
+  return boats?.find((boat) => boat.heroId === heroId) ?? null;
+}
+
+export function getHeroAdventureMovementMode(boats: Pick<Boat, "heroId">[] | undefined | null, heroId: string): AdventureMovementMode {
+  return getHeroBoat(boats, heroId) ? "boat" : "land";
+}
+
+export function isWaterTile(tile: MapTile | undefined): boolean {
+  return tile?.terrain === TerrainType.WATER;
+}
+
+export function isLandTile(tile: MapTile | undefined): boolean {
+  return Boolean(tile && tile.terrain !== TerrainType.WATER);
+}
+
+export function isTileTraversableForMode(tile: MapTile | undefined, mode: AdventureMovementMode): boolean {
+  if (!isTileTraversable(tile)) return false;
+  return mode === "boat" ? isWaterTile(tile) : isLandTile(tile);
+}
+
+function inferMovementMode(map: GameMap, from: Position): AdventureMovementMode {
+  return isWaterTile(map.tiles[from.y]?.[from.x]) ? "boat" : "land";
 }
 
 function getAdventureNeighbors(pos: Position): Position[] {
@@ -172,6 +200,10 @@ class MinPriorityQueue<T> {
 }
 
 export function canMoveAdventureStep(map: GameMap, from: Position, to: Position): boolean {
+  return canMoveAdventureStepForMode(map, from, to, inferMovementMode(map, from));
+}
+
+export function canMoveAdventureStepForMode(map: GameMap, from: Position, to: Position, mode: AdventureMovementMode): boolean {
   if (!isInsideMap(map, from) || !isInsideMap(map, to)) return false;
 
   const dx = to.x - from.x;
@@ -181,12 +213,12 @@ export function canMoveAdventureStep(map: GameMap, from: Position, to: Position)
   if (absDx > 1 || absDy > 1 || (absDx === 0 && absDy === 0)) return false;
 
   const targetTile = map.tiles[to.y]?.[to.x];
-  if (!isTileTraversable(targetTile)) return false;
+  if (!isTileTraversableForMode(targetTile, mode)) return false;
 
   if (absDx === 1 && absDy === 1) {
     const sideA = map.tiles[from.y]?.[from.x + dx];
     const sideB = map.tiles[from.y + dy]?.[from.x];
-    if (!isTileTraversable(sideA) || !isTileTraversable(sideB)) return false;
+    if (!isTileTraversableForMode(sideA, mode) || !isTileTraversableForMode(sideB, mode)) return false;
   }
 
   return true;
@@ -194,7 +226,8 @@ export function canMoveAdventureStep(map: GameMap, from: Position, to: Position)
 
 function canMoveAdventureStepAvoiding(map: GameMap, from: Position, to: Position, blocked: Set<string>): boolean {
   if (isBlockedPosition(to, blocked)) return false;
-  if (!canMoveAdventureStep(map, from, to)) return false;
+  const mode = inferMovementMode(map, from);
+  if (!canMoveAdventureStepForMode(map, from, to, mode)) return false;
 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -213,7 +246,11 @@ export function areAdventurePositionsAdjacent(a: Position, b: Position): boolean
 }
 
 export function getAdventureStepCost(map: GameMap, from: Position, to: Position): number {
-  if (!canMoveAdventureStep(map, from, to)) return Number.POSITIVE_INFINITY;
+  return getAdventureStepCostForMode(map, from, to, inferMovementMode(map, from));
+}
+
+export function getAdventureStepCostForMode(map: GameMap, from: Position, to: Position, mode: AdventureMovementMode): number {
+  if (!canMoveAdventureStepForMode(map, from, to, mode)) return Number.POSITIVE_INFINITY;
 
   const targetTile = map.tiles[to.y]?.[to.x];
   if (!targetTile) return Number.POSITIVE_INFINITY;
@@ -224,9 +261,14 @@ export function getAdventureStepCost(map: GameMap, from: Position, to: Position)
 }
 
 export function getAdventurePathCost(map: GameMap, path: Position[]): number {
+  if (path.length < 2) return 0;
+  return getAdventurePathCostForMode(map, path, inferMovementMode(map, path[0]));
+}
+
+export function getAdventurePathCostForMode(map: GameMap, path: Position[], mode: AdventureMovementMode): number {
   let total = 0;
   for (let i = 1; i < path.length; i++) {
-    const stepCost = getAdventureStepCost(map, path[i - 1], path[i]);
+    const stepCost = getAdventureStepCostForMode(map, path[i - 1], path[i], mode);
     if (!Number.isFinite(stepCost)) return Number.POSITIVE_INFINITY;
     total += stepCost;
   }
@@ -241,7 +283,12 @@ export function getAdventurePathCost(map: GameMap, path: Position[]): number {
  */
 export function getRequiredAdventureMovement(map: GameMap, path: Position[]): number {
   if (path.length < 2) return 0;
-  const fullCost = getAdventurePathCost(map, path);
+  return getRequiredAdventureMovementForMode(map, path, inferMovementMode(map, path[0]));
+}
+
+export function getRequiredAdventureMovementForMode(map: GameMap, path: Position[], mode: AdventureMovementMode): number {
+  if (path.length < 2) return 0;
+  const fullCost = getAdventurePathCostForMode(map, path, mode);
   if (!Number.isFinite(fullCost)) return Number.POSITIVE_INFINITY;
 
   const from = path[path.length - 2];

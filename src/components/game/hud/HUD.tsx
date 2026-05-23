@@ -238,6 +238,29 @@ function HUDContent() {
     });
   };
 
+  const handleBuildBoat = async () => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
+    if (myPlayer.resources.gold < 1000 || myPlayer.resources.wood < 10) {
+      setCombatMessage("Ressources insuffisantes pour construire un bateau.");
+      return;
+    }
+
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "BUILD_BOAT", townId: selectedTown.id }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Construction du bateau impossible."));
+      return;
+    }
+
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+    setCombatMessage("Bateau construit.");
+  };
+
   const handleRecruitHero = async (templateId: string) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
     if (myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD) {
@@ -718,6 +741,7 @@ function HUDContent() {
                 isPending={isPending}
                 isMyTown={isMyTown}
                 onBuild={handleBuild}
+                onBuildBoat={handleBuildBoat}
               />
             )}
 
@@ -853,5 +877,3 @@ function HUDContent() {
     </div>
   );
 }
-
-

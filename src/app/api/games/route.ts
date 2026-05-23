@@ -82,6 +82,10 @@ export async function POST(request: Request) {
     if (!spellSchema.ok) {
       console.warn("Migration Supabase sorts manquante; creation en compatibilite legacy.", spellSchema.message);
     }
+    const boatSchema = await getBoatSchemaStatus(supabase);
+    if (!boatSchema.ok) {
+      console.warn("Migration Supabase bateaux manquante; creation sans bateaux initiaux.", boatSchema.message);
+    }
 
     const { generateMap } = await import("@/lib/game/engine");
     const mapData = generateMap({
@@ -91,7 +95,9 @@ export async function POST(request: Request) {
       templateId,
       playerCount: maxPlayers,
     });
-    prefixMonsterIds(mapData, randomUUID());
+    const objectIdPrefix = randomUUID();
+    prefixMonsterIds(mapData, objectIdPrefix);
+    prefixGateIds(mapData, objectIdPrefix);
     assignMonsterSubtypes(mapData);
     assignNeutralTownTraits(mapData);
     const profileName = await getProfileName(supabase, user.id);
@@ -129,6 +135,10 @@ export async function POST(request: Request) {
     if (!neutralArmyResult.ok) return NextResponse.json({ error: neutralArmyResult.error }, { status: 500 });
     const gateResult = await createGates(supabase, gameRow.id, mapData);
     if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
+    if (boatSchema.ok) {
+      const boatResult = await createInitialBoats(supabase, gameRow.id, mapData, faction);
+      if (!boatResult.ok) return NextResponse.json({ error: boatResult.error }, { status: 500 });
+    }
     await createNeutralTowns(supabase, gameRow.id, mapData);
 
     const game = await getGameWithRelations(supabase, gameRow.id);
@@ -154,6 +164,12 @@ async function getSpellSchemaStatus(supabase: ReturnType<typeof createAdminClien
   return { ok: true };
 }
 
+async function getBoatSchemaStatus(supabase: ReturnType<typeof createAdminClient>): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { error } = await supabase.from("boats").select("id").limit(1);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true };
+}
+
 function apiRouteError(scope: string, error: unknown) {
   const normalized = normalizeRouteError(error);
   console.error(scope, normalized);
@@ -171,6 +187,47 @@ function normalizeRouteError(error: unknown) {
     };
   }
   return { error: error instanceof Error ? error.message : String(error || "Erreur serveur") };
+}
+
+async function createInitialBoats(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
+  faction: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const candidates = mapData.tiles
+    .flatMap((row) => row)
+    .filter((tile) =>
+      tile.terrain === TerrainType.WATER &&
+      tile.isPassable &&
+      hasAdjacentLand(mapData, tile.x, tile.y)
+    );
+  const selected = candidates
+    .filter((_, index) => index % Math.max(1, Math.floor(candidates.length / 4)) === 0)
+    .slice(0, 4);
+  if (selected.length === 0) return { ok: true };
+
+  const { error } = await supabase.from("boats").insert(selected.map((tile) => ({
+    game_id: gameId,
+    owner_player_id: null,
+    hero_id: null,
+    faction,
+    x: tile.x,
+    y: tile.y,
+  })));
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+function hasAdjacentLand(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>, x: number, y: number) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const tile = mapData.tiles[y + dy]?.[x + dx];
+      if (tile && tile.terrain !== TerrainType.WATER && tile.isPassable) return true;
+    }
+  }
+  return false;
 }
 
 async function createNeutralArmies(
@@ -258,6 +315,19 @@ function prefixMonsterIds(
   for (const row of mapData.tiles) {
     for (const tile of row) {
       if (tile.object?.type === "monster") {
+        tile.object.id = `${prefix}-${tile.object.id}`;
+      }
+    }
+  }
+}
+
+function prefixGateIds(
+  mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
+  prefix: string,
+) {
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "gate") {
         tile.object.id = `${prefix}-${tile.object.id}`;
       }
     }

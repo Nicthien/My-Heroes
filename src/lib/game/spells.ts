@@ -167,8 +167,8 @@ export const SPELLS: SpellDefinition[] = [
   { id: "fly", label: "Vol", school: "air", context: "adventure", level: 5, cost: { standard: 20, expert: 15 }, kind: "utility", implemented: false, effect: "Permet de survoler l'eau et les obstacles." },
   { id: "view_earth", label: "Vue de la terre", school: "earth", context: "adventure", level: 1, cost: { standard: 2, expert: 1 }, kind: "utility", implemented: true, effect: "Revele ressources, mines et terrain proche." },
   { id: "town_portal", label: "Portail de ville", school: "earth", context: "adventure", level: 4, cost: { standard: 16, expert: 12 }, kind: "utility", implemented: true, effect: "Teleporte le heros vers une ville alliee libre." },
-  { id: "summon_boat", label: "Invocation de bateau", school: "water", context: "adventure", level: 1, cost: { standard: 8, expert: 7 }, kind: "utility", implemented: false, effect: "Invoque ou cree un bateau." },
-  { id: "scuttle_boat", label: "Sabordage", school: "water", context: "adventure", level: 2, cost: { standard: 8, expert: 6 }, kind: "utility", implemented: false, effect: "Detruit un bateau inoccupe." },
+  { id: "summon_boat", label: "Invocation de bateau", school: "water", context: "adventure", level: 1, cost: { standard: 8, expert: 7 }, kind: "utility", implemented: true, effect: "Invoque un bateau vide proche." },
+  { id: "scuttle_boat", label: "Sabordage", school: "water", context: "adventure", level: 2, cost: { standard: 8, expert: 6 }, kind: "utility", implemented: true, effect: "Detruit un bateau inoccupe adjacent." },
   { id: "water_walk", label: "Marche sur l'eau", school: "water", context: "adventure", level: 4, cost: { standard: 12, expert: 8 }, kind: "utility", implemented: false, effect: "Permet de marcher sur l'eau." },
 ];
 

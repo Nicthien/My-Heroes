@@ -2143,7 +2143,7 @@ class PhaserMapScene extends Phaser.Scene {
     const seenStaticIds = new Set<string>();
 
     for (const object of this.objects) {
-      if (object.type === "hero") {
+      if (object.type === "hero" || object.type === "boat") {
         seenHeroIds.add(object.id);
         const previous = this.renderedHeroes.get(object.id);
         let rendered: RenderedHeroObject | null | undefined = previous;
@@ -2249,7 +2249,7 @@ class PhaserMapScene extends Phaser.Scene {
       baseScaleX: sprite.scaleX,
       baseScaleY: sprite.scaleY,
       phase: hashTile(object.x, object.y) * Math.PI * 2,
-      mode: object.onWater ? "boat" : object.inTown ? "idle" : "mounted",
+      mode: object.type === "boat" || object.onWater ? "boat" : object.inTown ? "idle" : "mounted",
     } satisfies HeroSpriteAnimation;
     const banner = this.addHeroStandard(
       this.objectLayer,
@@ -2282,7 +2282,7 @@ class PhaserMapScene extends Phaser.Scene {
     if (!metrics) return;
 
     renderedHero.object = object;
-    renderedHero.animation.mode = object.onWater ? "boat" : object.inTown ? "idle" : "mounted";
+    renderedHero.animation.mode = object.type === "boat" || object.onWater ? "boat" : object.inTown ? "idle" : "mounted";
 
     const origin = getOriginForObject(object);
     renderedHero.sprite.setOrigin(origin.originX, origin.originY);
@@ -2647,7 +2647,7 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private addHeroSprite(object: MapObjectData, x: number, y: number, width: number, height: number, direction: HeroDirection) {
-    const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
+    const sheet = object.type === "boat" || object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
     const origin = getOriginForObject(object);
 
     const sprite = this.add.sprite(x, y, sheet.key, 0);
@@ -2660,7 +2660,7 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private playHeroAnimation(renderedHero: RenderedHeroObject, state: DirectionalSpriteState) {
-    const sheet = renderedHero.object.onWater
+    const sheet = renderedHero.object.type === "boat" || renderedHero.object.onWater
       ? getBoatSpritesheet(renderedHero.object.faction)
       : getHeroSpritesheet(renderedHero.object.faction);
     const sprite = renderedHero.sprite;

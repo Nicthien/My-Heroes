@@ -23,6 +23,7 @@ export const OBJECT_COLOR: Record<MapObject["type"], string> = {
   monster: "#dc2626",
   building: "#f59e0b",
   combat: "#fb923c",
+  boat: "#e0f2fe",
   wall: "#111827",
   gate: "#78350f",
   town_footprint: "#6b5f4a",

@@ -160,6 +160,7 @@ export function getMapObjectHoverText(object: MapObject) {
   }
   if (object.type === "artifact") return getArtifactMapLabel(object.subtype);
   if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
+  if (object.type === "boat") return "Bateau";
 
   return null;
 }
@@ -185,6 +186,7 @@ export function getOriginForMapTileObject(object: MapObject): SpriteOrigin {
 }
 
 export function getOriginForObject(object: MapObjectData): SpriteOrigin {
+  if (object.type === "boat") return BOAT_SPRITE_ORIGIN;
   if (object.type === "hero") return object.onWater ? BOAT_SPRITE_ORIGIN : HERO_SPRITE_ORIGIN;
   if (object.type === "town") return TOWN_ORIGINS[object.faction] ?? DEFAULT_SPRITE_ORIGIN;
   if (object.type === "building") return RESOURCE_BUILDING_ORIGIN;

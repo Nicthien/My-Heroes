@@ -53,6 +53,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Never use SVG/vector drawings as the source for generated sprites or cursor assets. Use `imagegen` or hand-edited raster sources, then export the final `.webp`.
 - If a temporary fallback is needed for resilience, keep it internal to rendering code and replace it with a real `.webp` sprite before considering the feature visually complete.
 
+# Directional Naming
+
+- All world-space directions use the compass alphabet from `src/lib/rendering/phaser/directions.ts`: `Direction8` (`"N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW"`), with `Diagonal4` and `Cardinal4` as typed subsets. Do **not** introduce `"left"`, `"right"`, `"gauche"`, `"droite"`, `"up"`, `"down"`, lowercase compass tokens, or camelCase forms like `"northEast"`.
+- Asset filenames follow the same convention: hero/boat spritesheets are direction-rowed (rows ordered as in `HERO_DIRECTIONS`), gates use `gate-N-S.webp` / `gate-E-W.webp`, terrain side textures use the `-side-SW.webp` / `-side-SE.webp` suffix (perspective: `SW` = camera-left face of the iso cube, `SE` = camera-right face).
+- For wall/gate **segment orientations** (two endpoints, not a single facing direction), use the combined form: `"NW_SE"`, `"NE_SW"`, `"N_S"`, `"E_W"`. This is the `BrickWallOrientation` type in `mapRenderHelpers.ts`.
+- Iso cube geometry uses **typed subsets** of the unified alphabet — `CubeFace = Diagonal4` (the 4 vertical side faces sit between cardinal vertices), `CubeCorners` keys are cardinals × `top`/`bottom` (`topN`, `topE`, …, `bottomW`). Don't "fix" these to use Direction8 — the subset choice is geometric, not stylistic.
+- `roadAxis: "x" | "y"` in `MapObject` (game-state field) is **not** a direction — it names a tile-coordinate axis and stays as-is. Same for any other game-state field that refers to coordinate axes rather than headings.
+- UI alignment props (e.g. `AudioSettingsButton align?: "left" | "right"`) are HTML-screen anchors, not world directions — `"left"` / `"right"` are correct there. The compass rule applies only to world/iso/map directions.
+
 # Audio
 
 - Sound effects live under `public/sounds/`, audio helpers under `src/lib/audio/`.

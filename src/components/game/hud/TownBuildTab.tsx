@@ -4,8 +4,9 @@ import Image from "next/image";
 import { BuildingType, type Faction, type GameState, type Player, type Town } from "@/lib/game/types";
 import { canAfford, formatCost } from "@/lib/game/economy";
 import { type TownBuildingRule } from "@/lib/game/town-buildings";
-import { hasTownBuilding } from "@/lib/game/town-buildings";
+import { hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
 import { getTownBuildingSprite } from "@/lib/game/town-building-sprites";
+import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
 import { buildingTypeLabel } from "./helpers";
 
 export function TownBuildTab({
@@ -21,6 +22,7 @@ export function TownBuildTab({
   isPending,
   isMyTown,
   onBuild,
+  onBuildBoat,
 }: {
   selectedTown: Town;
   selectedTownFaction: Faction;
@@ -34,7 +36,20 @@ export function TownBuildTab({
   isPending: boolean;
   isMyTown: boolean;
   onBuild: (building: BuildingType) => void;
+  onBuildBoat?: () => void;
 }) {
+  const isCoastal = isTownCoastal(gameState, selectedTown);
+  const hasShipyard = hasShipyardBuilding(selectedTownFaction, selectedTown.buildings);
+  const canBuildBoat = Boolean(
+    onBuildBoat &&
+    hasShipyard &&
+    myPlayer &&
+    isCoastal &&
+    canAfford(myPlayer.resources, { gold: 1000, wood: 10 }) &&
+    canAct &&
+    isMyTown &&
+    !isPending
+  );
   return (
     <div className="space-y-2">
       <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
@@ -47,6 +62,7 @@ export function TownBuildTab({
         <span>Masquer les prérequis manquants</span>
       </label>
       {displayedBuildRules.map((rule) => {
+        if (isShipyardBuilding(selectedTownFaction, rule.type) && !isCoastal) return null;
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
         const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(selectedTown.buildings, requirement));
         const blockedByCapitolLimit =
@@ -128,6 +144,34 @@ export function TownBuildTab({
           </div>
         );
       })}
+      {hasShipyard && (
+        <div className="rounded-lg border border-sky-700/40 bg-gradient-to-b from-sky-950/70 to-black/60 p-3 shadow-inner shadow-black/40">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-sky-100">Bateau</div>
+              <div className="text-xs text-sky-200/65">Construire un bateau sur une case d&apos;eau côtière proche.</div>
+              <div className="mt-1 text-xs text-sky-200">1000 Or, 10 Bois</div>
+              {!isCoastal && <div className="mt-1 text-xs text-red-300">Ville non côtière : aucune eau proche.</div>}
+            </div>
+            <button
+              type="button"
+              disabled={!canBuildBoat}
+              onClick={onBuildBoat}
+              className={`rounded-md border px-3 py-2 text-sm font-black transition ${
+                canBuildBoat
+                  ? "border-sky-300/70 bg-sky-800/75 text-sky-50 hover:bg-sky-700"
+                  : "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+              }`}
+            >
+              Construire
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function isTownCoastal(gameState: GameState, town: Town) {
+  return isTownCoastalForBoats(gameState.map, town.position);
 }

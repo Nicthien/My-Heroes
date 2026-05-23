@@ -10,7 +10,7 @@ import {
   normalizeExternalDwellingState,
   type ExternalDwellingStateMap,
 } from "@/lib/game/external-dwellings";
-import { getDailyAdventureMovement } from "@/lib/game/engine";
+import { BOAT_DAILY_MOVEMENT, getDailyAdventureMovement } from "@/lib/game/engine";
 import { getEffectiveHeroMovementBonus } from "@/lib/game/artifacts";
 import {
   TAVERN_OFFER_SIZE,
@@ -119,6 +119,7 @@ export async function completePlayerTurn(
   const mapState = (game.mapState as Record<string, unknown>) ?? {};
   const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
   const mapData = game.mapData as GameMap | undefined;
+  const embarkedHeroIds = new Set(((game.boats as Array<{ heroId?: string | null }> | undefined) ?? []).map((boat) => boat.heroId).filter(Boolean));
   let nextExternalDwellings: ExternalDwellingStateMap | null = null;
 
   for (const player of alivePlayers) {
@@ -166,8 +167,8 @@ export async function completePlayerTurn(
 
     const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
     for (const hero of player.heroes ?? []) {
-      const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
-      const dailyMovement = getDailyAdventureMovement(hero.armies) + (isOnWater ? lighthouseCount * 500 : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
+      const isOnWater = embarkedHeroIds.has(hero.id);
+      const dailyMovement = (isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies)) + (isOnWater ? lighthouseCount * 500 : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
       await supabase.from("heroes").update({
         movement: dailyMovement,
         max_movement: dailyMovement,

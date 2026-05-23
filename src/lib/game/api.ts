@@ -1,7 +1,7 @@
 import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
-  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject,
+  ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject, Boat,
 } from "./types";
 import { normalizeArtifactBag } from "./artifacts";
 import { isCreatureBankType } from "./creature-banks";
@@ -87,6 +87,15 @@ interface ApiGate {
   y: number;
   guardianPower: number;
   garrison?: ApiArmy[];
+}
+
+interface ApiBoat {
+  id: string;
+  ownerId?: string | null;
+  heroId?: string | null;
+  faction?: string | null;
+  x: number;
+  y: number;
 }
 
 interface ApiTown {
@@ -351,6 +360,16 @@ function mapActiveCombats(data: Record<string, unknown>) {
     }));
 }
 
+function mapBoats(data: Record<string, unknown>): Boat[] {
+  return ((data.boats as ApiBoat[] | undefined) ?? []).map((boat): Boat => ({
+    id: boat.id,
+    ownerId: boat.ownerId ?? null,
+    heroId: boat.heroId ?? null,
+    faction: boat.faction ?? Faction.CASTLE,
+    position: { x: boat.x, y: boat.y },
+  }));
+}
+
 function buildExploredSet(
   map: GameMap,
   currentPlayer: Player | undefined,
@@ -531,6 +550,7 @@ export function mapApiToGameState(
   const players = mapPlayers(data, turnNumber);
   const neutralArmies = mapNeutralArmies(data);
   const gates = mapGates(data, neutralArmies);
+  const boats = mapBoats(data);
   const activeCombats = mapActiveCombats(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
   const mapId = data.id as string;
@@ -561,6 +581,7 @@ export function mapApiToGameState(
     winnerId: data.winnerId as string | undefined,
     neutralArmies,
     gates,
+    boats,
     activeCombats,
   };
 }
@@ -578,6 +599,7 @@ export function mergeGameDynamicState(
   const players = mapPlayers(data, turnNumber);
   const neutralArmies = mapNeutralArmies(data);
   const gates = mapGates(data, neutralArmies, staticMap);
+  const boats = mapBoats(data);
   const activeCombats = mapActiveCombats(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
 
@@ -601,6 +623,7 @@ export function mergeGameDynamicState(
     winnerId: (data.winnerId as string | undefined) ?? baseGameState.winnerId,
     neutralArmies,
     gates,
+    boats,
     activeCombats,
   };
 }

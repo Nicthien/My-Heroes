@@ -51,12 +51,13 @@ import {
   isTileTraversable,
   normalizeMapMovement,
 } from "@/lib/game/engine";
+import { findTownBoatLaunchTile, isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
 import { SPELLS, getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
-import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
+import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -99,6 +100,15 @@ interface MinimalGate {
   y: number;
   guardianPower?: number;
   garrison?: MinimalArmy[];
+}
+
+interface MinimalBoat {
+  id: string;
+  ownerId?: string | null;
+  heroId?: string | null;
+  faction?: string | null;
+  x: number;
+  y: number;
 }
 
 interface MinimalTurn {
@@ -273,6 +283,7 @@ export async function POST(
       heroes?: MinimalHero[];
     }>;
     const gates = (game.gates ?? []) as unknown as MinimalGate[];
+    const boats = (game.boats ?? []) as unknown as MinimalBoat[];
     const turns = game.turns as MinimalTurn[];
     const completedTurn = turns.find((turn) =>
       turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
@@ -549,6 +560,47 @@ export async function POST(
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
     }
 
+    if (action.type === "EMBARK_BOAT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      if (boats.some((boat) => boat.heroId === hero.id)) return NextResponse.json({ error: "Ce heros est deja embarque" }, { status: 400 });
+      const boat = boats.find((item) => item.id === action.boatId);
+      if (!boat || boat.heroId) return NextResponse.json({ error: "Bateau indisponible" }, { status: 400 });
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const boatPosition = { x: boat.x, y: boat.y };
+      const boatTile = mapData.tiles[boat.y]?.[boat.x];
+      if (boatTile?.terrain !== "water") return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, boatPosition)) return NextResponse.json({ error: "Le heros doit etre adjacent au bateau" }, { status: 400 });
+      await supabase.from("heroes").update({ x: boat.x, y: boat.y, movement: 0 }).eq("id", hero.id);
+      await supabase.from("boats").update({ hero_id: hero.id, owner_player_id: gamePlayer.id }).eq("id", boat.id);
+      const explored = new Set(gamePlayer.exploredTiles ?? []);
+      for (const key of computeVisibleTiles(mapData, [boatPosition], 5)) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      return NextResponse.json({ success: true, interaction: { type: "EMBARK_BOAT", destination: boatPosition, message: "Embarquement effectue." } });
+    }
+
+    if (action.type === "DISEMBARK_BOAT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      const boat = boats.find((item) => item.heroId === hero.id);
+      if (!boat) return NextResponse.json({ error: "Ce heros n'est pas embarque" }, { status: 400 });
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const destination = getActionPosition(action.position);
+      if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
+      const tile = mapData.tiles[destination.y]?.[destination.x];
+      if (!tile || tile.terrain === "water" || !isTileTraversable(tile)) return NextResponse.json({ error: "Debarquement impossible" }, { status: 400 });
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, destination)) return NextResponse.json({ error: "La rive est trop eloignee" }, { status: 400 });
+      if (isOccupiedByAnyHero(players, hero.id, destination)) return NextResponse.json({ error: "Destination occupee" }, { status: 400 });
+      await supabase.from("heroes").update({ x: destination.x, y: destination.y, movement: 0 }).eq("id", hero.id);
+      await supabase.from("boats").update({ hero_id: null, x: hero.x, y: hero.y }).eq("id", boat.id);
+      const explored = new Set(gamePlayer.exploredTiles ?? []);
+      for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      return NextResponse.json({ success: true, interaction: { type: "DISEMBARK_BOAT", destination, message: "Debarquement effectue." } });
+    }
+
     if (action.type === "VISIT_ADVENTURE_BUILDING") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
@@ -608,6 +660,7 @@ export async function POST(
         supabase,
         gamePlayer,
         players,
+        boats,
         hero,
         spellId: spell.id,
         target: action.target,
@@ -740,6 +793,34 @@ export async function POST(
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }
 
+    if (action.type === "BUILD_BOAT") {
+      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const buildings = (town.buildings ?? []) as string[];
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      if (!hasShipyardBuilding(townFaction, buildings)) return NextResponse.json({ error: "Construisez d'abord le Chantier naval" }, { status: 400 });
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const destination = findTownBoatLaunchTile(mapData, { x: town.x, y: town.y }, boats.map((boat) => ({ x: boat.x, y: boat.y })));
+      if (!destination) return NextResponse.json({ error: "Aucune eau cotiere libre pour construire un bateau" }, { status: 400 });
+      const cost = { gold: 1000, wood: 10 };
+      const resources = playerResources(gamePlayer);
+      if (!canAfford(resources, cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+      await supabase.from("game_players").update(subtractCost(resources, cost)).eq("id", gamePlayer.id);
+      const { error: boatError } = await supabase.from("boats").insert({
+        game_id: id,
+        owner_player_id: gamePlayer.id,
+        hero_id: null,
+        faction: townFaction,
+        x: destination.x,
+        y: destination.y,
+      });
+      if (boatError) return NextResponse.json({ error: `Erreur construction bateau: ${boatError.message}` }, { status: 500 });
+      const explored = new Set(gamePlayer.exploredTiles ?? []);
+      for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
+      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      return NextResponse.json({ success: true, interaction: { type: "BUILD_BOAT", destination, message: "Bateau construit." } });
+    }
+
     if (action.type === "BUILD") {
       const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
       const building = action.building as BuildingType;
@@ -749,6 +830,9 @@ export async function POST(
 
       const buildings = (town.buildings ?? []) as string[];
       if (buildings.includes(building)) return NextResponse.json({ error: "Batiment deja construit" }, { status: 400 });
+      if (isShipyardBuilding(townFaction, building) && !isTownCoastalForBoats(normalizeMapMovement(game.mapData as GameMap), { x: town.x, y: town.y })) {
+        return NextResponse.json({ error: "Le Chantier naval doit etre construit dans une ville cotiere" }, { status: 400 });
+      }
       const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(buildings, requirement));
       if (missingRequirement) return NextResponse.json({ error: "Prérequis manquant" }, { status: 400 });
       if (
@@ -1239,6 +1323,40 @@ function getEffectiveGates(gates: MinimalGate[], mapData: GameMap) {
 
 function areAdjacentOrSame(a: Position, b: Position) {
   return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+}
+
+function adjacentPositions(position: Position): Position[] {
+  const positions: Position[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      positions.push({ x: position.x + dx, y: position.y + dy });
+    }
+  }
+  return positions;
+}
+
+function findFreeAdjacentWaterTile(map: GameMap, position: Position, boats: MinimalBoat[]) {
+  const occupied = new Set(boats.filter((boat) => !boat.heroId).map((boat) => `${boat.x},${boat.y}`));
+  return adjacentPositions(position).find((candidate) => {
+    const tile = map.tiles[candidate.y]?.[candidate.x];
+    return tile?.terrain === "water" && isTileTraversable(tile) && !occupied.has(`${candidate.x},${candidate.y}`);
+  }) ?? null;
+}
+
+function findNearestEmptyBoat(boats: MinimalBoat[], position: Position) {
+  return boats
+    .filter((boat) => !boat.heroId)
+    .sort((a, b) =>
+      Math.max(Math.abs(a.x - position.x), Math.abs(a.y - position.y)) -
+      Math.max(Math.abs(b.x - position.x), Math.abs(b.y - position.y))
+    )[0] ?? null;
+}
+
+function isOccupiedByAnyHero(players: Array<{ heroes?: MinimalHero[] }>, movingHeroId: string, destination: Position) {
+  return players.some((player) => (player.heroes ?? []).some((hero) =>
+    hero.id !== movingHeroId && hero.x === destination.x && hero.y === destination.y
+  ));
 }
 
 async function captureGate(
@@ -2394,6 +2512,7 @@ async function applyAdventureSpell({
   supabase,
   gamePlayer,
   players,
+  boats,
   hero,
   spellId,
   target,
@@ -2403,6 +2522,7 @@ async function applyAdventureSpell({
   supabase: ReturnType<typeof createAdminClient>;
   gamePlayer: MinimalPlayer;
   players: Array<{ id: string; isAlive?: boolean; heroes?: MinimalHero[] }>;
+  boats: MinimalBoat[];
   hero: MinimalHero;
   spellId: string;
   target: unknown;
@@ -2455,6 +2575,7 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "dimension_door") {
+    if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Debarquez avant de lancer ce sort" };
     const destination = getActionPosition(target);
     if (!destination) return { ok: false, error: "Destination invalide" };
     if (!explored.has(`${destination.x},${destination.y}`)) return { ok: false, error: "La destination doit etre visible" };
@@ -2472,6 +2593,7 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "town_portal") {
+    if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Debarquez avant de lancer ce sort" };
     const townId = typeof target === "object" && target !== null ? String((target as { townId?: unknown }).townId ?? "") : "";
     const town = (townId ? gamePlayer.towns.find((item) => item.id === townId) : gamePlayer.towns[0]) ?? null;
     if (!town) return { ok: false, error: "Aucune ville alliee disponible" };
@@ -2484,6 +2606,37 @@ async function applyAdventureSpell({
     return {
       ok: true,
       interaction: { type: "ADVENTURE_SPELL", spellId, message: `Portail de ville : arrivee a ${town.id}.`, destination },
+    };
+  }
+
+  if (spellId === "summon_boat") {
+    if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Ce heros est deja embarque" };
+    const landing = findFreeAdjacentWaterTile(mapData, heroPosition, boats);
+    if (!landing) return { ok: false, error: "Aucune eau adjacente libre" };
+    const boat = findNearestEmptyBoat(boats, heroPosition);
+    if (!boat) return { ok: false, error: "Aucun bateau disponible" };
+    await supabase.from("boats").update({
+      x: landing.x,
+      y: landing.y,
+      owner_player_id: gamePlayer.id,
+    }).eq("id", boat.id);
+    return {
+      ok: true,
+      interaction: { type: "ADVENTURE_SPELL", spellId, message: "Invocation de bateau : un bateau approche de la rive.", destination: landing },
+    };
+  }
+
+  if (spellId === "scuttle_boat") {
+    const targetPosition = getActionPosition(target);
+    const boat = targetPosition
+      ? boats.find((item) => !item.heroId && item.x === targetPosition.x && item.y === targetPosition.y)
+      : boats.find((item) => !item.heroId && areAdjacentOrSame(heroPosition, { x: item.x, y: item.y }));
+    if (!boat) return { ok: false, error: "Aucun bateau vide a saborder" };
+    if (!areAdjacentOrSame(heroPosition, { x: boat.x, y: boat.y })) return { ok: false, error: "Le bateau est trop eloigne" };
+    await supabase.from("boats").delete().eq("id", boat.id);
+    return {
+      ok: true,
+      interaction: { type: "ADVENTURE_SPELL", spellId, message: "Sabordage : le bateau sombre.", destination: { x: boat.x, y: boat.y } },
     };
   }
 

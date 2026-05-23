@@ -315,6 +315,13 @@ export function getTownBuildingRules(
       cost: { gold: 2000, wood: 5, ore: 5 },
     },
     {
+      type: BuildingType.SHIPYARD,
+      label: "Chantier naval",
+      description: "Permet de construire un bateau dans une eau adjacente.",
+      category: "common",
+      cost: { gold: 1000, wood: 10 },
+    },
+    {
       type: BuildingType.RESOURCE_SILO,
       label: "Silo de ressources",
       description: `Produit ${formatProduction(RESOURCE_SILO_PRODUCTION[safeFaction])} chaque jour.`,
@@ -376,6 +383,15 @@ export function hasTownBuilding(buildings: Array<BuildingType | string>, buildin
     return built.has(BuildingType.VILLAGE_HALL) || built.has(BuildingType.CASTLE);
   }
   return built.has(building);
+}
+
+export function isShipyardBuilding(faction: Faction | string | undefined, building: BuildingType | string) {
+  return building === BuildingType.SHIPYARD ||
+    ((faction === Faction.CASTLE || faction === Faction.CONFLUX) && building === BuildingType.UNIQUE_2);
+}
+
+export function hasShipyardBuilding(faction: Faction | string | undefined, buildings: Array<BuildingType | string>) {
+  return buildings.some((building) => isShipyardBuilding(faction, building));
 }
 
 export function normalizeTownBuildings(buildings: Array<BuildingType | string>) {

@@ -24,6 +24,7 @@ export enum BuildingType {
   TAVERN = "tavern",
   MARKET = "market",
   BARRACKS = "barracks",
+  SHIPYARD = "shipyard",
   MAGE_GUILD = "mage_guild",
   RESOURCE_SILO = "resource_silo",
   DWELLING_1 = "dwelling_1",
@@ -453,6 +454,14 @@ export interface Gate {
   guardianPower: number;
 }
 
+export interface Boat {
+  id: string;
+  position: Position;
+  ownerId: string | null;
+  heroId: string | null;
+  faction: Faction | string;
+}
+
 export enum AdventureBuildingType {
   OBSERVATORY = "observatory",
   CAMPFIRE = "campfire",
@@ -523,6 +532,7 @@ export interface MapObject {
     | "monster"
     | "building"
     | "combat"
+    | "boat"
     | "wall"
     | "gate"
     | "town_footprint"
@@ -695,6 +705,9 @@ export interface Player {
 
 export type GameAction =
   | { type: "MOVE_HERO"; heroId: string; path: Position[] }
+  | { type: "BUILD_BOAT"; townId: string }
+  | { type: "EMBARK_BOAT"; heroId: string; boatId: string }
+  | { type: "DISEMBARK_BOAT"; heroId: string; position: Position }
   | { type: "VISIT_ADVENTURE_BUILDING"; heroId: string; buildingId: string; choice?: "attack" | "defense" | "spellPower" | "knowledge" }
   | { type: "CAST_ADVENTURE_SPELL"; heroId: string; spellId: string; target?: Position | { townId?: string } }
   | { type: "ATTACK"; heroId: string; targetId: string }
@@ -738,4 +751,5 @@ export interface GameState {
   activeCombats?: PersistentCombat[];
   neutralArmies?: NeutralArmy[];
   gates?: Gate[];
+  boats?: Boat[];
 }

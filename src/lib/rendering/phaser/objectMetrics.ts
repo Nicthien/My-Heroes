@@ -16,8 +16,8 @@ import { MAP_SPRITES, getBoatSpritesheet, getHeroSpritesheet } from "@/lib/rende
 import type { MapObjectData } from "@/lib/rendering/mapRenderer";
 
 export function getObjectMetrics(object: MapObjectData) {
-  if (object.type === "hero") {
-    const sheet = object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
+  if (object.type === "hero" || object.type === "boat") {
+    const sheet = object.type === "boat" || object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
     if (sheet) return object.inTown
       ? { width: sheet.townDisplayWidth, height: sheet.townDisplayHeight, offsetY: TOWN_HERO_OFFSET_Y }
       : { width: sheet.displayWidth, height: sheet.displayHeight, offsetY: object.onWater ? BOAT_OFFSET_Y : HERO_OFFSET_Y };
@@ -42,7 +42,7 @@ export function getObjectMetrics(object: MapObjectData) {
 
 export function getObjectHitboxScale(object: MapObjectData) {
   if (object.type === "town") return { width: 0.62, height: 0.58 };
-  if (object.type === "hero") return object.inTown
+  if (object.type === "hero" || object.type === "boat") return object.inTown
     ? { width: 0.72, height: 0.88 }
     : { width: 0.64, height: 0.82 };
   if (object.type === "building") return { width: 0.72, height: 0.74 };

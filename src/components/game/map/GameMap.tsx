@@ -71,6 +71,7 @@ type MoveInteraction =
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination?: Position }
+  | { type: "EMBARK_BOAT" | "DISEMBARK_BOAT" | "BUILD_BOAT"; destination?: Position; message?: string }
   | { type: "STOP"; message: string; destination?: Position };
 
 async function createMapRenderer(): Promise<MapRenderer> {
@@ -650,7 +651,7 @@ export default function GameMapComponent() {
       return true;
     }
 
-    setCombatMessage(interaction.message);
+    setCombatMessage(interaction.message ?? "Action effectuee.");
     return true;
   }, [setCombatMessage, setPendingCombat]);
 
@@ -1211,6 +1212,47 @@ export default function GameMapComponent() {
         } else {
           setCombatMessage("Selectionnez un heros pour rejoindre ce combat.");
         }
+        return;
+      }
+      if (obj.type === "boat" && selectedHeroId && myPlayer) {
+        const hero = myPlayer.heroes.find((item) => item.id === selectedHeroId);
+        if (!hero) return;
+        if (blockIfHeroInCombat(hero.id)) return;
+        const isAdjacent = Math.abs(hero.position.x - obj.x) <= 1 && Math.abs(hero.position.y - obj.y) <= 1;
+        if (!isAdjacent) {
+          rendererRef.current.highlightTile(obj.x, obj.y, 0xff0000);
+          setCombatMessage("Le bateau est trop eloigne.");
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          return;
+        }
+        isSyncingMoveRef.current = true;
+        useGameStore.getState().setMovePending(true);
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "EMBARK_BOAT", heroId: selectedHeroId, boatId: obj.id }),
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              setCombatMessage(await getApiErrorMessage(response));
+              return null;
+            }
+            return response.json();
+          })
+          .then(async (data) => {
+            if (!data) return;
+            setCombatMessage(data.interaction?.message ?? "Embarquement effectue.");
+            const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+            if (refreshed) useGameStore.getState().setGameState(refreshed);
+          })
+          .finally(() => {
+            isSyncingMoveRef.current = false;
+            useGameStore.getState().setMovePending(false);
+          });
         return;
       }
       const isEnemyHero =
@@ -1932,6 +1974,46 @@ export default function GameMapComponent() {
         }
       }
 
+      const heroBoat = gameState.boats?.find((boat) => boat.heroId === hero.id);
+      if (heroBoat && targetTile && targetTile.terrain !== "water" && isTileTraversable(targetTile)) {
+        const isAdjacent = Math.abs(hero.position.x - tile.x) <= 1 && Math.abs(hero.position.y - tile.y) <= 1;
+        if (!isAdjacent) {
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          setCombatMessage("La rive est trop eloignee.");
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          return;
+        }
+        isSyncingMoveRef.current = true;
+        useGameStore.getState().setMovePending(true);
+        fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "DISEMBARK_BOAT", heroId: hero.id, position: tile }),
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              setCombatMessage(await getApiErrorMessage(response));
+              return null;
+            }
+            return response.json();
+          })
+          .then(async (data) => {
+            if (!data) return;
+            setCombatMessage(data.interaction?.message ?? "Debarquement effectue.");
+            const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+            if (refreshed) useGameStore.getState().setGameState(refreshed);
+          })
+          .finally(() => {
+            isSyncingMoveRef.current = false;
+            useGameStore.getState().setMovePending(false);
+          });
+        return;
+      }
+
       const path = findPath(gameState.map, hero.position, tile, hero.movement);
       if (path.length > 1) {
         if (targetTile?.object?.type === "building") {
@@ -2513,6 +2595,7 @@ function getAdventureObjectCursor(
   currentPlayerId: string | null
 ) {
   if (object.type === "combat") return ADVENTURE_CURSORS.attack;
+  if (object.type === "boat") return ADVENTURE_CURSORS.move;
   if (object.type === "gate") {
     const gate = findGateAt(gameState, object.id, { x: object.x, y: object.y });
     if (gate?.ownerId === currentPlayerId) return ADVENTURE_CURSORS.town;
@@ -2680,6 +2763,9 @@ function selectObjectOnTile(
   const gate = objects.find((obj) => obj.type === "gate");
   if (gate) return gate;
 
+  const boat = objects.find((obj) => obj.type === "boat");
+  if (boat) return boat;
+
   const enemyBuilding = objects.find((obj) => obj.type === "building" && !obj.playerId);
   if (enemyBuilding) return enemyBuilding;
 
@@ -2755,6 +2841,7 @@ function buildObjects(
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
   const visiblePositions = new Set<string>();
   const heroCombatIds = new Map<string, string>();
+  const embarkedHeroIds = new Set((gameState.boats ?? []).map((boat) => boat.heroId).filter(Boolean));
 
   for (const combat of gameState.activeCombats ?? []) {
     for (const heroId of getCombatHeroIds(combat)) {
@@ -2812,7 +2899,7 @@ function buildObjects(
           faction: player.faction as string,
           color: player.color,
           name: hero.name,
-          onWater: gameState.map.tiles[hero.position.y]?.[hero.position.x]?.terrain === "water",
+          onWater: embarkedHeroIds.has(hero.id),
           inTown: townPositions.has(key),
           renderOffsetX: townHeroOffset?.x,
           renderOffsetY: townHeroOffset?.y,
@@ -2834,6 +2921,23 @@ function buildObjects(
         name: town.name,
       });
     }
+  }
+
+  for (const boat of gameState.boats ?? []) {
+    if (boat.heroId) continue;
+    const key = `${boat.position.x},${boat.position.y}`;
+    if (currentPlayer?.isAlive !== false && !exploredSet.has(key) && !visiblePositions.has(key)) continue;
+    objects.push({
+      type: "boat",
+      id: boat.id,
+      playerId: boat.ownerId,
+      x: boat.position.x,
+      y: boat.position.y,
+      faction: String(boat.faction ?? "castle"),
+      color: "#f8fafc",
+      name: "Bateau",
+      onWater: true,
+    });
   }
 
   const knownTownPositions = new Set(

@@ -73,6 +73,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Action impossible.");
     setPendingAdventureSpell(null);
+    if (typeof data?.interaction?.message === "string") setCombatMessage(data.interaction.message);
     const revealedTiles = normalizeRevealedTiles(data?.interaction?.revealedTiles);
     const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
     if (revealedTiles.length > 0 && gameState) {

@@ -46,5 +46,6 @@ export async function GET(
     ),
     neutralArmies: game.neutralArmies ?? [],
     gates: game.gates ?? [],
+    boats: game.boats ?? [],
   });
 }

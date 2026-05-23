@@ -32,6 +32,7 @@ export function toGame(row: DbRow) {
     combats: rows(row.combats).map(toCombat),
     neutralArmies: rows(row.neutral_armies).map(toNeutralArmy),
     gates: rows(row.gates).map(toGate),
+    boats: rows(row.boats).map(toBoat),
   };
 }
 
@@ -214,6 +215,18 @@ export function toGateStack(row: DbRow) {
   };
 }
 
+export function toBoat(row: DbRow) {
+  return {
+    id: row.id,
+    gameId: row.game_id,
+    ownerId: row.owner_player_id ?? null,
+    heroId: row.hero_id ?? null,
+    faction: row.faction ?? "castle",
+    x: row.x,
+    y: row.y,
+  };
+}
+
 export function toCombat(row: DbRow) {
   const boardState = row.board_state as { units?: CombatBoardUnit[] } | null;
   const currentUnitId = row.current_unit_id as string | null;
@@ -284,7 +297,7 @@ export async function getGameWithRelations(supabase: SupabaseAdmin, id: string) 
     .eq("id", id)
     .maybeSingle();
 
-  if (error && isMissingGateSchemaError(error)) {
+  if (error && isMissingOptionalGameSchemaError(error)) {
     const fallback = await supabase
       .from("games")
       .select(gameRelationsSelect(false))
@@ -305,7 +318,7 @@ export async function getGameSyncWithRelations(supabase: SupabaseAdmin, id: stri
     .eq("id", id)
     .maybeSingle();
 
-  if (error && isMissingGateSchemaError(error)) {
+  if (error && isMissingOptionalGameSchemaError(error)) {
     const fallback = await supabase
       .from("games")
       .select(gameSyncRelationsSelect(false))
@@ -332,7 +345,7 @@ function gameRelationsSelect(includeGates: boolean) {
     turns(*),
     combats(*, combat_participants(*)),
     neutral_armies(*, neutral_army_stacks(*))
-    ${includeGates ? ", gates(*, gate_stacks(*))" : ""}
+    ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
   `;
 }
 
@@ -358,13 +371,13 @@ function gameSyncRelationsSelect(includeGates: boolean) {
     turns(*),
     combats(*, combat_participants(*)),
     neutral_armies(*, neutral_army_stacks(*))
-    ${includeGates ? ", gates(*, gate_stacks(*))" : ""}
+    ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
   `;
 }
 
-function isMissingGateSchemaError(error: { code?: string; message?: string; details?: string | null }) {
+function isMissingOptionalGameSchemaError(error: { code?: string; message?: string; details?: string | null }) {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("gates") || text.includes("gate_stacks") || text.includes("gate_id");
+  return text.includes("gates") || text.includes("gate_stacks") || text.includes("gate_id") || text.includes("boats");
 }
 
 export async function getGameRow(supabase: SupabaseAdmin, id: string) {

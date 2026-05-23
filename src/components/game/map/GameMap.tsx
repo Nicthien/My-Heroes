@@ -5,6 +5,7 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
 import { UNIT_RULES } from "@/lib/game/economy";
@@ -48,7 +49,7 @@ type PendingMove = {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; message?: string; destination?: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination?: Position; targetPosition?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
@@ -119,6 +120,11 @@ export default function GameMapComponent() {
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
+  const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
+  const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
+  const setPendingAdventureSpell = useGameStore((state) => state.setPendingAdventureSpell);
+  const spellRevealHighlight = useGameStore((state) => state.spellRevealHighlight);
+  const setSpellRevealHighlight = useGameStore((state) => state.setSpellRevealHighlight);
   const activeCombatHeroIds = useMemo(
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
@@ -136,6 +142,21 @@ export default function GameMapComponent() {
       return { x, y };
     });
   }, [selectedHeroReachableTileKeys]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady() || !gameState) return;
+    const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
+    if (!spellRevealHighlight || spellRevealHighlight.turnNumber !== gameState.turnNumber || myPlayer?.hasEndedTurn) {
+      renderer.clearSpellRevealHighlights();
+      if (spellRevealHighlight && (spellRevealHighlight.turnNumber !== gameState.turnNumber || myPlayer?.hasEndedTurn)) {
+        setSpellRevealHighlight(null);
+      }
+      return;
+    }
+
+    renderer.setSpellRevealHighlights(spellRevealHighlight.tiles, 0x7dd3fc, 0.24, spellRevealHighlight.hints);
+  }, [gameState, rendererReadyVersion, session?.user?.id, setSpellRevealHighlight, spellRevealHighlight]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -574,7 +595,10 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "ADVENTURE_BUILDING") {
-      if (interaction.reward) {
+      if (interaction.recruited) {
+        const rule = UNIT_RULES[interaction.recruited.unitType];
+        setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recrute(e)s.`);
+      } else if (interaction.reward) {
         const parts = [];
         if (interaction.reward.gold) parts.push(`+${interaction.reward.gold} Or`);
         for (const [resource, amount] of Object.entries(interaction.reward.resources ?? {})) {
@@ -687,6 +711,70 @@ export default function GameMapComponent() {
             useGameStore.getState().setGameState(state);
             setCombatMessage("Héros téléporté.");
           }
+        })
+        .finally(() => {
+          isSyncingMoveRef.current = false;
+          useGameStore.getState().setMovePending(false);
+        });
+      return;
+    }
+
+    if (pendingAdventureSpell) {
+      if (!tile) return;
+      const hero = myPlayer?.heroes.find((item) => item.id === pendingAdventureSpell.heroId);
+      if (!hero) {
+        setPendingAdventureSpell(null);
+        setCombatMessage("Heros lanceur indisponible.");
+        return;
+      }
+      if (!canAct) {
+        setCombatMessage(blockedTurnMessage);
+        return;
+      }
+      if (activeCombatHeroIds.has(hero.id)) {
+        setPendingAdventureSpell(null);
+        setCombatMessage("Ce heros est deja engage dans un combat.");
+        return;
+      }
+
+      pendingMoveRef.current = null;
+      pendingAttackRef.current = null;
+      rendererRef.current.clearHighlights();
+      isSyncingMoveRef.current = true;
+      useGameStore.getState().setMovePending(true);
+      fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "CAST_ADVENTURE_SPELL",
+          heroId: hero.id,
+          spellId: pendingAdventureSpell.spellId,
+          target: { x: tile.x, y: tile.y },
+          ...(devInfiniteMana ? { devInfiniteManaHeroId: hero.id } : {}),
+        }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            setCombatMessage(await getApiErrorMessage(response));
+            rendererRef.current?.highlightTile(tile.x, tile.y, 0xff0000);
+            setTimeout(() => rendererRef.current?.clearHighlights(), 650);
+            return null;
+          }
+          const data = await response.json();
+          setPendingAdventureSpell(null);
+          const revealedTiles = normalizeRevealedTiles(data?.interaction?.revealedTiles);
+          const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
+          if (revealedTiles.length > 0) {
+            setSpellRevealHighlight({ turnNumber: gameState.turnNumber, tiles: revealedTiles, hints: revealHints, label: pendingAdventureSpell.label });
+          }
+          const message = typeof data?.interaction?.message === "string"
+            ? data.interaction.message
+            : `${pendingAdventureSpell.label} lance.`;
+          setCombatMessage(message);
+          return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+        })
+        .then((state) => {
+          if (state) useGameStore.getState().setGameState(state);
         })
         .finally(() => {
           isSyncingMoveRef.current = false;
@@ -1908,7 +1996,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, devTeleportArmed, activeCombatHeroIds]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div
@@ -2302,6 +2390,28 @@ async function getApiErrorMessage(response: Response) {
   return "Action impossible pour le moment.";
 }
 
+function normalizeRevealedTiles(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const x = Number((item as { x?: unknown })?.x);
+    const y = Number((item as { y?: unknown })?.y);
+    return Number.isInteger(x) && Number.isInteger(y) ? [{ x, y }] : [];
+  });
+}
+
+function normalizeRevealHints(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const x = Number((item as { x?: unknown })?.x);
+    const y = Number((item as { y?: unknown })?.y);
+    const kind = String((item as { kind?: unknown })?.kind ?? "");
+    const subtype = (item as { subtype?: unknown })?.subtype;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return [];
+    if (!["resource", "building", "artifact", "hero", "town"].includes(kind)) return [];
+    return [{ x, y, kind: kind as "resource" | "building" | "artifact" | "hero" | "town", subtype: typeof subtype === "string" ? subtype : undefined }];
+  });
+}
+
 function animateHeroMovement(renderer: MapRenderer | null, heroId: string, path: Position[]) {
   return renderer?.animateHeroMovement(heroId, path) ?? Promise.resolve();
 }
@@ -2567,6 +2677,7 @@ function buildObjects(
   );
   const buildingByPosition = new Map<string, ResourceBuilding>();
   const ownerByBuildingId = new Map<string, (typeof gameState.players)[number]>();
+  const playerById = new Map(gameState.players.map((player) => [player.id, player]));
 
   for (const player of gameState.players) {
     for (const building of player.resourceBuildings) {
@@ -2639,13 +2750,16 @@ function buildObjects(
         objects.push({
           type: "adventure_building",
           id: tile.object.id,
-          playerId: null,
+          playerId: tile.object.ownerId ?? null,
           x,
           y,
-          faction: "",
-          color: "",
-          name: tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
+          faction: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.faction as string ?? "") : "",
+          color: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.color ?? "") : "",
+          name: isExternalDwellingType(tile.object.subtype)
+            ? getExternalDwellingLabel(tile.object.targetId)
+            : tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
           buildingType: tile.object.subtype,
+          dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,
           guardianPower: tile.object.guardianPower ?? 0,
         });
       }
@@ -2653,7 +2767,6 @@ function buildObjects(
   }
 
   const gatePositions = new Set<string>();
-  const playerById = new Map(gameState.players.map((player) => [player.id, player]));
   for (const gate of gameState.gates ?? []) {
     const key = `${gate.position.x},${gate.position.y}`;
     if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;

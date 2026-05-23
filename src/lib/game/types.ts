@@ -289,6 +289,7 @@ export interface HeroStats {
   defense: number;
   spellPower: number;
   knowledge: number;
+  morale: number;
 }
 
 export interface UnitStack {
@@ -308,6 +309,9 @@ export interface Hero {
   level: number;
   experience: number;
   stats: HeroStats;
+  mana: number;
+  hasSpellBook: boolean;
+  knownSpellIds?: string[] | null;
   position: Position;
   movement: number;
   maxMovement: number;
@@ -433,6 +437,7 @@ export enum AdventureBuildingType {
   CAMPFIRE = "campfire",
   LIGHTHOUSE = "lighthouse",
   STARGATE = "stargate",
+  EXTERNAL_DWELLING = "external_dwelling",
 }
 
 export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatable";
@@ -495,6 +500,9 @@ export interface CombatBoardUnit extends UnitStack {
   hasRetaliated: boolean;
   defended: boolean;
   waited: boolean;
+  morale?: number;
+  moraleApplied?: boolean;
+  moraleBonus?: boolean;
 }
 
 export type CombatTerrainType = "rock" | "water";
@@ -555,7 +563,14 @@ export interface PersistentCombat {
   currentUnitId?: string | null;
   round: number;
   position: Position;
-  boardState: { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[]; environment?: CombatEnvironment };
+  boardState: {
+    units: CombatBoardUnit[];
+    initialUnits?: CombatBoardUnit[];
+    terrain?: CombatTerrainFeature[];
+    environment?: CombatEnvironment;
+    spellCastsByRound?: Record<string, string[]>;
+    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+  };
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
@@ -621,6 +636,7 @@ export interface Player {
 
 export type GameAction =
   | { type: "MOVE_HERO"; heroId: string; path: Position[] }
+  | { type: "CAST_ADVENTURE_SPELL"; heroId: string; spellId: string; target?: Position | { townId?: string } }
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }

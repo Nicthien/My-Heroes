@@ -2,7 +2,14 @@ import {
   RESOURCE_BUILDING_RULES,
   getFactionBuildingRule,
   getGrowthForBuiltTownBuilding,
+  UNIT_RULES,
 } from "@/lib/game/economy";
+import {
+  createExternalDwellingState,
+  isExternalDwellingType,
+  normalizeExternalDwellingState,
+  type ExternalDwellingStateMap,
+} from "@/lib/game/external-dwellings";
 import { getDailyAdventureMovement } from "@/lib/game/engine";
 import {
   TAVERN_OFFER_SIZE,
@@ -110,6 +117,7 @@ export async function completePlayerTurn(
   const mapState = (game.mapState as Record<string, unknown>) ?? {};
   const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
   const mapData = game.mapData as GameMap | undefined;
+  let nextExternalDwellings: ExternalDwellingStateMap | null = null;
 
   for (const player of alivePlayers) {
     let goldIncome = 0, woodIncome = 0, oreIncome = 0;
@@ -187,11 +195,19 @@ export async function completePlayerTurn(
     }
   }
 
+  if (shouldApplyWeeklyGrowth && mapData?.tiles) {
+    nextExternalDwellings = applyExternalDwellingGrowth(mapData, mapState);
+  }
+
   const firstPlayer = alivePlayers.sort((a, b) => Number(a.turnOrder ?? 0) - Number(b.turnOrder ?? 0))[0];
-  await supabase.from("games").update({
+  const gameUpdate: Record<string, unknown> = {
     turn_number: nextTurnNumber,
     current_turn_player_id: firstPlayer?.id ?? null,
-  }).eq("id", gameId);
+  };
+  if (nextExternalDwellings) {
+    gameUpdate.map_state = { ...mapState, externalDwellings: nextExternalDwellings };
+  }
+  await supabase.from("games").update(gameUpdate).eq("id", gameId);
 }
 
 function isStartOfWeek(dayNumber: number) {
@@ -205,4 +221,24 @@ async function updatePlayerResources(
 ) {
   const { error } = await supabase.from("game_players").update(resources).eq("id", playerId);
   if (error) throw error;
+}
+
+function applyExternalDwellingGrowth(mapData: GameMap, mapState: Record<string, unknown>): ExternalDwellingStateMap {
+  const current = ((mapState.externalDwellings as ExternalDwellingStateMap | undefined) ?? {});
+  const next: ExternalDwellingStateMap = { ...current };
+
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (object?.type !== "adventure_building" || !isExternalDwellingType(object.subtype)) continue;
+      const state = normalizeExternalDwellingState(object, next[object.id]) ?? createExternalDwellingState(object);
+      if (!state) continue;
+      next[object.id] = {
+        ...state,
+        available: state.available + (UNIT_RULES[state.unitType]?.growth ?? 0),
+      };
+    }
+  }
+
+  return next;
 }

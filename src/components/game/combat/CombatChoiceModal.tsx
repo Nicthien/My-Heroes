@@ -199,6 +199,7 @@ function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat) {
     id: attacker.id,
     attack: attacker.stats.attack,
     defense: attacker.stats.defense,
+    morale: attacker.stats.morale,
     armies: attacker.armies,
   }) : 1;
   const defenderPower = Math.max(1, getStacksPower(defenderStacks));

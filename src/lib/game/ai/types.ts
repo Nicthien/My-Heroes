@@ -23,6 +23,7 @@ export interface AiHero {
   movement: number;
   attack?: number;
   defense?: number;
+  morale?: number;
   experience?: number;
   armies: AiArmy[];
 }

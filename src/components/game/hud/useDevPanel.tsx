@@ -48,6 +48,8 @@ export function useDevPanel(gameId: string | undefined) {
   const setDevRevealMap = useGameStore((state) => state.setDevRevealMap);
   const devGodMode = useGameStore((state) => state.devGodMode);
   const setDevGodMode = useGameStore((state) => state.setDevGodMode);
+  const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
+  const setDevInfiniteMana = useGameStore((state) => state.setDevInfiniteMana);
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const setDevTeleportArmed = useGameStore((state) => state.setDevTeleportArmed);
 
@@ -356,6 +358,17 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={() => setDevGodMode(!devGodMode)}
                     >
                       {devGodMode ? "Mode dieu actif" : "Activer le mode dieu"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                        devInfiniteMana
+                          ? "border-violet-300/70 bg-violet-950 text-violet-100 hover:border-violet-100"
+                          : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
+                      }`}
+                      onClick={() => setDevInfiniteMana(!devInfiniteMana)}
+                    >
+                      {devInfiniteMana ? "Mana infini actif" : "Activer mana infini"}
                     </button>
                     <button
                       type="button"

@@ -11,7 +11,7 @@ import {
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { GameMap, UnitStack, UnitType } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
   areAdventurePositionsAdjacent,
   computeVisibleTiles,
@@ -67,12 +67,13 @@ export async function POST(
     isAi?: boolean;
     isAlive?: boolean;
     exploredTiles: string[];
-    towns: Array<{ x: number; y: number }>;
+    towns: Array<{ x: number; y: number; faction?: string; townType?: string; buildings?: string[] }>;
     resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
     heroes: Array<{
       id: string;
       attack: number;
       defense: number;
+      morale?: number;
       movement: number;
       armies: Parameters<typeof createCombatBoard>[0]["armies"];
       x: number;
@@ -200,6 +201,20 @@ export async function POST(
   }
 
   const environment = buildCombatEnvironment(mapData, { x: targetDefender.x, y: targetDefender.y });
+  const defenderTownMoraleBonus = getTownMoraleBonus(players, {
+    x: targetDefender.x,
+    y: targetDefender.y,
+    ownerPlayerId: targetDefender.playerId,
+  });
+  const attackerTownMoraleBonus = getTownMoraleBonus(players, {
+    x: attacker.x,
+    y: attacker.y,
+    ownerPlayerId: gamePlayer.id,
+  });
+  const baseAttackerMorale = Number(attacker.morale ?? 0);
+  const baseDefenderMorale = Number((targetDefender as { morale?: number }).morale ?? 0);
+  const effectiveAttackerMorale = baseAttackerMorale + attackerTownMoraleBonus;
+  const effectiveDefenderMorale = baseDefenderMorale + defenderTownMoraleBonus;
   const combatStart = createCombatBoard(
     {
       id: attacker.id,
@@ -207,6 +222,7 @@ export async function POST(
       heroId: attacker.id,
       attack: attacker.attack,
       defense: attacker.defense,
+      morale: effectiveAttackerMorale,
       armies: attacker.armies,
     },
     {
@@ -215,8 +231,10 @@ export async function POST(
       heroId: targetDefender.heroId,
       attack: targetDefender.attack,
       defense: targetDefender.defense,
+      morale: effectiveDefenderMorale,
       armies: targetDefender.armies,
-    }
+    },
+    { environment }
   );
   const autoResult = body.mode === "AUTO"
     ? resolveAutomaticCombat(
@@ -226,6 +244,7 @@ export async function POST(
         heroId: attacker.id,
         attack: attacker.attack,
         defense: attacker.defense,
+        morale: effectiveAttackerMorale,
         armies: attacker.armies,
       },
       {
@@ -234,6 +253,7 @@ export async function POST(
         heroId: targetDefender.heroId,
         attack: targetDefender.attack,
         defense: targetDefender.defense,
+        morale: effectiveDefenderMorale,
         armies: targetDefender.armies,
       },
       { immortalHeroId: devGodModeHeroId }
@@ -271,7 +291,14 @@ export async function POST(
       gate_id: body.targetType === "gate" ? targetDefender.id : null,
       x: targetDefender.x,
       y: targetDefender.y,
-      board_state: { ...combatStart.boardState, environment },
+      board_state: {
+        ...combatStart.boardState,
+        environment,
+        moraleContext: {
+          attackerHeroMorale: effectiveAttackerMorale,
+          defenderHeroMorale: effectiveDefenderMorale,
+        },
+      },
       current_player_id: result ? null : combatStart.currentPlayerId,
       current_unit_id: result ? null : combatStart.currentUnitId,
       turn_queue: combatStart.turnQueue,
@@ -633,7 +660,7 @@ function getDefender({
   players: Array<{
     id: string;
     resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
-    heroes: Array<{ id: string; attack: number; defense: number; armies: UnitStack[]; x: number; y: number }>;
+    heroes: Array<{ id: string; attack: number; defense: number; morale?: number; armies: UnitStack[]; x: number; y: number }>;
   }>;
   neutralArmies: Array<{ id: string; x: number; y: number; status: string; stacks: UnitStack[] }>;
 }) {
@@ -649,6 +676,7 @@ function getDefender({
         neutralArmyId: null,
         attack: hero.attack,
         defense: hero.defense,
+        morale: Number(hero.morale ?? 0),
         armies: hero.armies,
         x: hero.x,
         y: hero.y,
@@ -697,4 +725,17 @@ function getDefender({
   }
 
   return null;
+}
+
+function getTownMoraleBonus(
+  players: Array<{ id: string; towns: Array<{ x: number; y: number; faction?: string; townType?: string; buildings?: string[] }> }>,
+  params: { x: number; y: number; ownerPlayerId: string | null }
+) {
+  if (!params.ownerPlayerId) return 0;
+  const owner = players.find((player) => player.id === params.ownerPlayerId);
+  const town = owner?.towns.find((item) => item.x === params.x && item.y === params.y);
+  if (!town) return 0;
+  const faction = town.townType ?? town.faction;
+  if (faction !== Faction.CASTLE) return 0;
+  return (town.buildings ?? []).includes(BuildingType.UNIQUE_1) ? 2 : 0;
 }

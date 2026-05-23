@@ -1,4 +1,5 @@
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
@@ -65,6 +66,7 @@ export const RESOURCE_PICKUP_ORIGINS: Record<string, SpriteOrigin> = {
 
 export const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
   campfire: { originX: 0.502, originY: 0.891 },
+  external_dwelling: { originX: 0.5, originY: 0.9 },
   lighthouse: { originX: 0.49, originY: 0.898 },
   observatory: { originX: 0.475, originY: 0.938 },
   stargate: { originX: 0.48, originY: 0.918 },
@@ -115,7 +117,10 @@ export function getMapObjectHoverText(object: MapObject) {
     ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
     : "Armée neutre";
   if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
-  if (object.type === "adventure_building") return getAdventureBuildingLabel(object.subtype);
+  if (object.type === "adventure_building") {
+    if (isExternalDwellingType(object.subtype)) return getExternalDwellingLabel(object.targetId);
+    return getAdventureBuildingLabel(object.subtype);
+  }
   if (object.type === "artifact") return "Artefact";
   if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
 

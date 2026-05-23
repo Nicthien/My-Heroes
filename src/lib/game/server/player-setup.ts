@@ -113,6 +113,10 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     defense: heroStats.defense,
     spell_power: heroStats.spellPower,
     knowledge: heroStats.knowledge,
+    morale: heroStats.morale,
+    mana: heroStats.knowledge * 10,
+    has_spell_book: true,
+    known_spells: null,
     x: startPos.x,
     y: startPos.y,
     movement: dailyMovement,
@@ -125,9 +129,33 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     .select("*")
     .single();
 
+  if (heroError && isMissingSpellSchemaError(heroError)) {
+    delete heroInsert.mana;
+    delete heroInsert.has_spell_book;
+    delete heroInsert.known_spells;
+    delete heroInsert.morale;
+    ({ data: heroRow, error: heroError } = await supabase
+      .from("heroes")
+      .insert(heroInsert)
+      .select("*")
+      .single());
+  }
+
   if (heroError) {
     delete heroInsert.hero_class;
     delete heroInsert.specialty;
+    ({ data: heroRow, error: heroError } = await supabase
+      .from("heroes")
+      .insert(heroInsert)
+      .select("*")
+      .single());
+  }
+
+  if (heroError && isMissingSpellSchemaError(heroError)) {
+    delete heroInsert.mana;
+    delete heroInsert.has_spell_book;
+    delete heroInsert.known_spells;
+    delete heroInsert.morale;
     ({ data: heroRow, error: heroError } = await supabase
       .from("heroes")
       .insert(heroInsert)
@@ -165,4 +193,9 @@ function pickStartingHero(faction: Faction, seed: string) {
   if (factionHeroes.length === 0) return null;
   const rng = makeRng(seed);
   return factionHeroes[Math.floor(rng() * factionHeroes.length)];
+}
+
+function isMissingSpellSchemaError(error: { message?: string; details?: string | null; code?: string }) {
+  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("schema cache");
 }

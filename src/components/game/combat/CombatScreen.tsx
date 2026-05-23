@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { PersistentCombat } from "@/lib/game/types";
+import { getHeroMaxMana, spellRequiresCombatTarget, type SpellDefinition } from "@/lib/game/spells";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
+import { getCombatSpellRoundKey } from "@/lib/game/combat/spells";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
 import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
@@ -11,6 +13,7 @@ import CombatAudioControl from "./CombatAudioControl";
 import { goldText, ornateFrame, ornateFramePolished } from "@/components/game/hud/theme";
 import { InitiativeQueue, UnitDetails } from "./combatPanels";
 import { CombatFloatingPanel } from "./CombatFloatingPanel";
+import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
 
 import { UnitSilhouette, getUnitModel, getUnitPalette, type UnitModelKind } from "./unitSvg";
 export { UnitSilhouette, getUnitModel, getUnitPalette, type UnitModelKind };
@@ -27,16 +30,21 @@ export default function CombatScreen() {
   const { data: session } = useSession();
   const activeCombat = useGameStore((state) => state.activeCombat);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
+  const combatMessage = useGameStore((state) => state.combatMessage);
+  const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setGameState = useGameStore((state) => state.setGameState);
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const devGodMode = useGameStore((state) => state.devGodMode);
+  const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const minimizeCombat = useGameStore((state) => state.minimizeCombat);
   const focusTile = useGameStore((state) => state.focusTile);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [combatAnimationBlocked, setCombatAnimationBlocked] = useState(false);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
+  const [spellBookOpen, setSpellBookOpen] = useState(false);
+  const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
   const neutralActionKeyRef = useRef<string | null>(null);
@@ -258,36 +266,84 @@ export default function CombatScreen() {
   const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction && !combatAnimationBlocked;
 
   const submitAction = async (action: Record<string, unknown>) => {
-    if (!canSubmitAction || isSubmittingActionRef.current) return;
+    if (!canSubmitAction || isSubmittingActionRef.current) return false;
 
     const submissionToken = ++actionSubmissionTokenRef.current;
     isSubmittingActionRef.current = true;
     setIsSubmittingAction(true);
     try {
+      const actionDevInfiniteManaHeroId = typeof action.devInfiniteManaHeroId === "string"
+        ? action.devInfiniteManaHeroId
+        : null;
       const response = await fetchWithSupabaseAuth(`/api/games/${activeCombat.gameId}/combats/${activeCombat.id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...action,
           ...(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+          ...(devInfiniteMana && (actionDevInfiniteManaHeroId || selectedHeroId)
+            ? { devInfiniteManaHeroId: actionDevInfiniteManaHeroId ?? selectedHeroId }
+            : {}),
           expectedCurrentUnitId: activeCombat.currentUnitId,
           expectedRound: activeCombat.round,
           expectedActionLogLength: activeCombat.actionLog.length,
         }),
       });
       const data = await response.json();
-      if (!response.ok && !data.combat) return;
+      if (!response.ok && !data.combat) {
+        const message = typeof data?.error === "string" ? data.error : "Action impossible.";
+        console.warn("[combat action]", response.status, message, action);
+        setCombatMessage(message);
+        return false;
+      }
       const combatPayload = data.combat ?? data;
-      if (!combatPayload) return;
+      if (!combatPayload) return false;
       const mapped = mapCombat(combatPayload);
       if (mapped.status === "RESOLVED" || data.result) {
         await settleResolvedCombat(activeCombat, { ...mapped, result: mapped.result ?? data.result });
       } else {
         setActiveCombat(mapped);
       }
+      return true;
     } finally {
       releaseSubmissionLock(submissionToken);
     }
+  };
+
+  const combatHero = myPlayer?.heroes.find((hero) =>
+    hero.id === activeCombat.attackerHeroId || hero.id === activeCombat.defenderHeroId
+  ) ?? null;
+  const combatHeroHasCastSpell = Boolean(
+    combatHero && activeCombat.boardState.spellCastsByRound?.[getCombatSpellRoundKey(activeCombat.round)]?.includes(combatHero.id)
+  );
+  const canCastHeroSpell = canSubmitAction && !combatHeroHasCastSpell;
+  const spellBookHero = combatHero && devInfiniteMana ? { ...combatHero, mana: getHeroMaxMana(combatHero) } : combatHero;
+  const castCombatSpell = async (spell: SpellDefinition, targetUnitId?: string) => {
+    if (!combatHero) throw new Error("Heros indisponible.");
+    if (combatHeroHasCastSpell) {
+      setPendingTargetSpell(null);
+      setCombatMessage("Ce heros a deja lance un sort ce round.");
+      return;
+    }
+    if (spellRequiresCombatTarget(spell) && !targetUnitId) {
+      setPendingTargetSpell(spell);
+      setSpellBookOpen(false);
+      setCombatMessage(`${spell.label} : choisissez une cible ennemie.`);
+      return;
+    }
+    const cast = await submitAction({
+      type: "CAST_COMBAT_SPELL",
+      heroId: combatHero.id,
+      spellId: spell.id,
+      targetUnitId,
+      ...(devInfiniteMana ? { devInfiniteManaHeroId: combatHero.id } : {}),
+    });
+    if (cast) setPendingTargetSpell(null);
+  };
+
+  const castPendingCombatSpell = async (targetUnitId: string) => {
+    if (!pendingTargetSpell) return;
+    await castCombatSpell(pendingTargetSpell, targetUnitId);
   };
 
   return (
@@ -303,6 +359,16 @@ export default function CombatScreen() {
           {combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
         </div>
         <div className="flex items-center gap-3">
+          {pendingTargetSpell && (
+            <button
+              type="button"
+              onClick={() => setPendingTargetSpell(null)}
+              className="rounded-md border border-violet-400/60 bg-violet-950/80 px-3 py-1 text-sm font-black text-violet-100 transition hover:border-violet-200"
+            >
+              Cible: {pendingTargetSpell.label}
+            </button>
+          )}
+          {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label="Livre de sorts combat" />}
           <CombatAudioControl />
           <button
             type="button"
@@ -314,9 +380,15 @@ export default function CombatScreen() {
         </div>
       </header>
       <div className="relative z-10 flex min-h-0 flex-1">
+        {combatMessage && (
+          <div className="pointer-events-auto absolute left-1/2 top-4 z-40 flex max-w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-amber-500/50 bg-stone-950/92 px-4 py-2 text-sm font-bold text-amber-100 shadow-xl">
+            <span>{combatMessage}</span>
+            <button type="button" onClick={() => setCombatMessage(null)} className="text-amber-300/70 hover:text-amber-100">x</button>
+          </div>
+        )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <div className="absolute left-1/2 top-3 z-30 w-[min(760px,calc(100%-7rem))] -translate-x-1/2">
-            <InitiativeQueue combat={activeCombat} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
+            <InitiativeQueue combat={activeCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
           </div>
           <IsoBattlefield
             combat={activeCombat}
@@ -325,6 +397,8 @@ export default function CombatScreen() {
             isMyAction={canSubmitAction}
             onAction={submitAction}
             onInspectUnit={setInspectedUnitId}
+            pendingSpellTarget={Boolean(pendingTargetSpell)}
+            onSpellTarget={(unitId) => void castPendingCombatSpell(unitId)}
           />
         </main>
         <aside className="pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
@@ -368,12 +442,18 @@ export default function CombatScreen() {
           </CombatFloatingPanel>
         </aside>
       </div>
+      {spellBookOpen && spellBookHero && (
+        <SpellBookModal
+          hero={spellBookHero}
+          context="combat"
+          title="Livre de sorts - Combat"
+          targetLabel={pendingTargetSpell ? `${pendingTargetSpell.label} : choisissez une cible` : null}
+          canCast={canCastHeroSpell}
+          ignoreManaCost={devInfiniteMana}
+          onClose={() => setSpellBookOpen(false)}
+          onCast={(spell) => castCombatSpell(spell)}
+        />
+      )}
     </div>
   );
 }
-
-
-
-
-
-

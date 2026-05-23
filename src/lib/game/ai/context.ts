@@ -123,7 +123,7 @@ function buildThreats(game: AiGame, playerId: string, explored: Set<string>): Ai
       threats.push({
         id: hero.id,
         position,
-        power: calculateStacksPower(hero.armies, hero.attack, hero.defense),
+        power: calculateStacksPower(hero.armies, hero.attack, hero.defense, hero.morale ?? 0),
         ownerPlayerId: player.id,
         kind: "human",
       });

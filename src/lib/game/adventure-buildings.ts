@@ -1,6 +1,7 @@
 import { AdventureBuildingType, AdventureBuildingVisitMode, Resources, TerrainType } from "./types";
 import { RNG, randInt } from "./engine/rng";
 import { getCreatureBankLabel } from "./creature-banks";
+import { getExternalDwellingLabel, isExternalDwellingType } from "./external-dwellings";
 
 export interface AdventureBuildingRule {
   type: AdventureBuildingType;
@@ -49,6 +50,14 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.35,
   },
+  [AdventureBuildingType.EXTERNAL_DWELLING]: {
+    type: AdventureBuildingType.EXTERNAL_DWELLING,
+    label: "Demeure externe",
+    description: "Permet de recruter des creatures sur la carte.",
+    visitMode: "repeatable",
+    preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP, TerrainType.MOUNTAIN],
+    rarity: 0.8,
+  },
 };
 
 export const ADVENTURE_BUILDING_TYPES = Object.values(AdventureBuildingType);
@@ -60,6 +69,7 @@ export function getAdventureBuildingRule(type: string | undefined): AdventureBui
 export function getAdventureBuildingLabel(type: string | undefined): string {
   const creatureBankLabel = getCreatureBankLabel(type);
   if (creatureBankLabel) return creatureBankLabel;
+  if (isExternalDwellingType(type)) return getExternalDwellingLabel(undefined);
   return getAdventureBuildingRule(type)?.label ?? "Batiment d'aventure";
 }
 

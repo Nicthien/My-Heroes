@@ -1,5 +1,4 @@
 import Phaser from "phaser";
-import { WATER_TILE_FRAME_PATHS } from "@/lib/rendering/phaser/assets";
 import {
   LAVA_TEXTURE_PREFIX,
   TERRAIN_ANIMATION_FRAME_COUNT,
@@ -8,14 +7,6 @@ import {
   TERRAIN_TEXTURE_WIDTH,
 } from "@/lib/rendering/phaser/mapRenderSettings";
 import { drawDiamondPath, hashTile } from "@/lib/rendering/phaser/pointMath";
-
-export type WaterTileEffect = {
-  sprite: Phaser.GameObjects.Image;
-  x: number;
-  y: number;
-  frameOffset: number;
-  frameIndex: number;
-};
 
 export type LavaTileEffect = {
   sprite: Phaser.GameObjects.Image;
@@ -51,7 +42,7 @@ function generateTerrainTextureFrames(
 }
 
 export function updateTerrainEffectFrame(
-  effect: WaterTileEffect | LavaTileEffect,
+  effect: LavaTileEffect,
   texturePrefix: string,
   baseFrameIndex: number
 ) {
@@ -60,14 +51,6 @@ export function updateTerrainEffectFrame(
 
   effect.frameIndex = nextFrameIndex;
   effect.sprite.setTexture(getTerrainTextureKey(texturePrefix, nextFrameIndex));
-}
-
-export function updateWaterEffectFrame(effect: WaterTileEffect, baseFrameIndex: number) {
-  const nextFrameIndex = (baseFrameIndex + effect.frameOffset) % WATER_TILE_FRAME_PATHS.length;
-  if (effect.frameIndex === nextFrameIndex) return;
-
-  effect.frameIndex = nextFrameIndex;
-  effect.sprite.setTexture(WATER_TILE_FRAME_PATHS[nextFrameIndex]);
 }
 
 export function getTerrainFrameOffset(x: number, y: number) {

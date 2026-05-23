@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import GameMapComponent from "@/components/game/map/GameMap";
 import { AuthContext } from "@/lib/auth/client";
 import { applyWorldEdge } from "@/lib/game/engine/world-edge";
+import { EXTERNAL_DWELLING_TYPE, getExternalDwellingLabel } from "@/lib/game/external-dwellings";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   AdventureBuildingType,
@@ -323,6 +324,21 @@ function buildShowcaseMap(): GameMap {
     }, false);
   }
 
+  const externalDwellings = [
+    [UnitType.PIKEMAN, 17, 19],
+    [UnitType.WOOD_ELF, 19, 19],
+    [UnitType.SERPENT_FLY, 21, 19],
+  ] as const;
+  for (const [unitType, x, y] of externalDwellings) {
+    placeObject(map, x, y, {
+      type: "adventure_building",
+      id: `adv-external-dwelling-${unitType}`,
+      subtype: EXTERNAL_DWELLING_TYPE,
+      name: getExternalDwellingLabel(unitType),
+      targetId: unitType,
+    }, false);
+  }
+
   const monsters = [
     [UnitType.PHOENIX, 11, 3],
     [UnitType.BLACK_DRAGON, 13, 4],
@@ -460,7 +476,10 @@ function buildHero(
     class: heroClass,
     level: 7,
     experience: 4300,
-    stats: { attack: 5, defense: 4, spellPower: 2, knowledge: 2 },
+    stats: { attack: 5, defense: 4, spellPower: 2, knowledge: 2, morale: 0 },
+    mana: 20,
+    hasSpellBook: true,
+    knownSpellIds: null,
     position,
     movement,
     maxMovement,

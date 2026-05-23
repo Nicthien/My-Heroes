@@ -30,6 +30,7 @@ export function getObjectMetrics(object: MapObjectData) {
   if (object.type === "gate") return { width: GATE_DISPLAY_WIDTH, height: GATE_DISPLAY_HEIGHT, offsetY: GATE_OFFSET_Y };
   if (object.type === "adventure_building") {
     if (object.buildingType === "stargate") return { width: 56, height: 56, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
+    if (object.buildingType === "external_dwelling") return { width: 58, height: 58, offsetY: ADVENTURE_BUILDING_OFFSET_Y };
     if (isCreatureBankType(object.buildingType)) {
       return { width: 66, height: 66, offsetY: ADVENTURE_BUILDING_OFFSET_Y + 3 };
     }

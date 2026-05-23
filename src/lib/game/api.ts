@@ -4,6 +4,7 @@ import {
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject,
 } from "./types";
 import { isCreatureBankType } from "./creature-banks";
+import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { normalizeTownBuildings } from "./town-buildings";
@@ -48,6 +49,10 @@ interface ApiHero {
   defense: number;
   spellPower: number;
   knowledge: number;
+  morale?: number;
+  mana?: number | null;
+  hasSpellBook?: boolean;
+  knownSpellIds?: string[] | null;
   x: number;
   y: number;
   movement: number;
@@ -187,7 +192,11 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
         defense: hero.defense,
         spellPower: hero.spellPower,
         knowledge: hero.knowledge,
+        morale: Number(hero.morale ?? 0),
       },
+      mana: hero.mana ?? hero.knowledge * 10,
+      hasSpellBook: hero.hasSpellBook ?? true,
+      knownSpellIds: hero.knownSpellIds ?? null,
       position: { x: hero.x, y: hero.y },
       movement: hero.movement,
       maxMovement: hero.maxMovement,
@@ -380,6 +389,7 @@ function applyDynamicMapState(
       .filter(([, state]) => state.defeated || state.claimed)
       .map(([bankId]) => bankId)
   );
+  const externalDwellings = (mapState.externalDwellings as Record<string, { ownerId?: string | null; unitType?: UnitType; available?: number }> | undefined) ?? {};
   const defeatedNeutralArmies = new Set(
     neutralArmies
       .filter((army) => army.status !== "ACTIVE")
@@ -458,6 +468,16 @@ function applyDynamicMapState(
           defeatedCreatureBanks.has(object.id)
         ) {
           delete tile.object;
+        } else if (
+          object.type === "adventure_building" &&
+          isExternalDwellingType(object.subtype)
+        ) {
+          const dwellingState = normalizeExternalDwellingState(object, externalDwellings[object.id]);
+          if (dwellingState) {
+            object.ownerId = dwellingState.ownerId;
+            object.targetId = dwellingState.unitType;
+            object.amount = dwellingState.available;
+          }
         } else if (object.type === "monster") {
           const dominantUnitType = dominantNeutralUnits.get(object.id);
           if (dominantUnitType) object.subtype = dominantUnitType;

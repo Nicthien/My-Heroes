@@ -17,94 +17,104 @@ const MAP_SIZES: Record<string, number> = {
 };
 
 export async function GET(request: Request) {
-  const { user, response } = await requireCurrentUser(request);
-  if (!user) return response;
+  try {
+    const { user, response } = await requireCurrentUser(request);
+    if (!user) return response;
 
-  const supabase = createAdminClient();
-  const { data: memberships, error: memberError } = await supabase
-    .from("game_players")
-    .select("game_id")
-    .eq("user_id", user.id);
+    const supabase = createAdminClient();
+    const { data: memberships, error: memberError } = await supabase
+      .from("game_players")
+      .select("game_id")
+      .eq("user_id", user.id);
 
-  if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 });
+    if (memberError) return apiRouteError("api/games GET memberships", memberError);
 
-  const gameIds = memberships.map((item) => item.game_id);
-  if (gameIds.length === 0) return NextResponse.json([]);
+    const gameIds = memberships.map((item) => item.game_id);
+    if (gameIds.length === 0) return NextResponse.json([]);
 
-  const { data, error } = await supabase
-    .from("games")
-    .select("*, game_players!game_players_game_id_fkey(*, profiles(name))")
-    .in("id", gameIds)
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("games")
+      .select("*, game_players!game_players_game_id_fkey(*, profiles(name))")
+      .in("id", gameIds)
+      .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiRouteError("api/games GET games", error);
 
-  return NextResponse.json((data ?? []).map(toGame));
+    return NextResponse.json((data ?? []).map(toGame));
+  } catch (error) {
+    return apiRouteError("api/games GET", error);
+  }
 }
 
 export async function POST(request: Request) {
-  const { user, response } = await requireCurrentUser(request);
-  if (!user) return response;
-
-  const supabase = createAdminClient();
-  await supabase.from("profiles").upsert({
-    id: user.id,
-    email: user.email,
-    name: user.name ?? user.email ?? "Joueur",
-  }, { onConflict: "id" });
-
-  const body = await request.json();
-  const {
-    name,
-    maxPlayers = 2,
-    mapSize = "M",
-    seed,
-    templateId,
-    faction = "castle",
-  } = body;
-
-  const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
-  const gateSchema = await getGateSchemaStatus(supabase);
-  if (!gateSchema.ok) {
-    return NextResponse.json({
-      error: "Migration Supabase manquante: appliquez supabase/migrations/20260519000100_add_gates.sql avant de creer une partie avec les portes fortifiees.",
-      details: gateSchema.message,
-    }, { status: 500 });
-  }
-
-  const { generateMap } = await import("@/lib/game/engine");
-  const mapData = generateMap({
-    width: size,
-    height: size,
-    seed,
-    templateId,
-    playerCount: maxPlayers,
-  });
-  prefixMonsterIds(mapData, randomUUID());
-  assignMonsterSubtypes(mapData);
-  assignNeutralTownTraits(mapData);
-  const profileName = await getProfileName(supabase, user.id);
-
-  const { data: gameRow, error: gameError } = await supabase
-    .from("games")
-    .insert({
-      name: name || `Partie de ${profileName}`,
-      max_players: maxPlayers,
-      map_width: size,
-      map_height: size,
-      status: "PENDING",
-      map_data: mapData,
-      game_config: { turnTimeLimit: 86400 },
-      seed: mapData.seed,
-      map_size: mapSize,
-      template_id: mapData.templateId,
-    })
-    .select("*")
-    .single();
-
-  if (gameError) return NextResponse.json({ error: gameError.message }, { status: 500 });
-
   try {
+    const { user, response } = await requireCurrentUser(request);
+    if (!user) return response;
+
+    const supabase = createAdminClient();
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: user.id,
+      email: user.email,
+      name: user.name ?? user.email ?? "Joueur",
+    }, { onConflict: "id" });
+    if (profileError) return apiRouteError("api/games POST profile", profileError);
+
+    const body = await request.json();
+    const {
+      name,
+      maxPlayers = 2,
+      mapSize = "M",
+      seed,
+      templateId,
+      faction = "castle",
+    } = body;
+
+    const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
+    const gateSchema = await getGateSchemaStatus(supabase);
+    if (!gateSchema.ok) {
+      return NextResponse.json({
+        error: "Migration Supabase manquante: appliquez supabase/migrations/20260519000100_add_gates.sql avant de creer une partie avec les portes fortifiees.",
+        details: gateSchema.message,
+      }, { status: 500 });
+    }
+
+    const spellSchema = await getSpellSchemaStatus(supabase);
+    if (!spellSchema.ok) {
+      console.warn("Migration Supabase sorts manquante; creation en compatibilite legacy.", spellSchema.message);
+    }
+
+    const { generateMap } = await import("@/lib/game/engine");
+    const mapData = generateMap({
+      width: size,
+      height: size,
+      seed,
+      templateId,
+      playerCount: maxPlayers,
+    });
+    prefixMonsterIds(mapData, randomUUID());
+    assignMonsterSubtypes(mapData);
+    assignNeutralTownTraits(mapData);
+    const profileName = await getProfileName(supabase, user.id);
+
+    const { data: gameRow, error: gameError } = await supabase
+      .from("games")
+      .insert({
+        name: name || `Partie de ${profileName}`,
+        max_players: maxPlayers,
+        map_width: size,
+        map_height: size,
+        status: "PENDING",
+        map_data: mapData,
+        game_config: { turnTimeLimit: 86400 },
+        seed: mapData.seed,
+        map_size: mapSize,
+        template_id: mapData.templateId,
+      })
+      .select("*")
+      .single();
+
+    if (gameError) return apiRouteError("api/games POST game", gameError);
+
     await createGamePlayerSetup({
       supabase,
       gameId: gameRow.id,
@@ -114,19 +124,18 @@ export async function POST(request: Request) {
       turnOrder: 0,
       mapData,
     });
+
+    const neutralArmyResult = await createNeutralArmies(supabase, gameRow.id, mapData);
+    if (!neutralArmyResult.ok) return NextResponse.json({ error: neutralArmyResult.error }, { status: 500 });
+    const gateResult = await createGates(supabase, gameRow.id, mapData);
+    if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
+    await createNeutralTowns(supabase, gameRow.id, mapData);
+
+    const game = await getGameWithRelations(supabase, gameRow.id);
+    return NextResponse.json(game, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Impossible de creer le joueur";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiRouteError("api/games POST", error);
   }
-
-  const neutralArmyResult = await createNeutralArmies(supabase, gameRow.id, mapData);
-  if (!neutralArmyResult.ok) return NextResponse.json({ error: neutralArmyResult.error }, { status: 500 });
-  const gateResult = await createGates(supabase, gameRow.id, mapData);
-  if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
-  await createNeutralTowns(supabase, gameRow.id, mapData);
-
-  const game = await getGameWithRelations(supabase, gameRow.id);
-  return NextResponse.json(game, { status: 201 });
 }
 
 async function getGateSchemaStatus(supabase: ReturnType<typeof createAdminClient>): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -137,6 +146,31 @@ async function getGateSchemaStatus(supabase: ReturnType<typeof createAdminClient
   if (stacksError) return { ok: false, message: stacksError.message };
 
   return { ok: true };
+}
+
+async function getSpellSchemaStatus(supabase: ReturnType<typeof createAdminClient>): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { error } = await supabase.from("heroes").select("mana,has_spell_book,known_spells").limit(1);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true };
+}
+
+function apiRouteError(scope: string, error: unknown) {
+  const normalized = normalizeRouteError(error);
+  console.error(scope, normalized);
+  return NextResponse.json(normalized, { status: 500 });
+}
+
+function normalizeRouteError(error: unknown) {
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; details?: unknown; code?: unknown; hint?: unknown };
+    return {
+      error: typeof value.message === "string" ? value.message : "Erreur serveur",
+      details: typeof value.details === "string" ? value.details : undefined,
+      code: typeof value.code === "string" ? value.code : undefined,
+      hint: typeof value.hint === "string" ? value.hint : undefined,
+    };
+  }
+  return { error: error instanceof Error ? error.message : String(error || "Erreur serveur") };
 }
 
 async function createNeutralArmies(

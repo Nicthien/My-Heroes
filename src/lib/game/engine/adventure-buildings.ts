@@ -6,6 +6,7 @@ import {
   CreatureBankType,
   getCreatureBankGuardPower,
 } from "../creature-banks";
+import { EXTERNAL_DWELLING_TYPE, getExternalDwellingLabel, pickExternalDwellingUnit } from "../external-dwellings";
 import { PlacementContext } from "./placement";
 import { shuffle } from "./rng";
 import { tilesInZone } from "./zones";
@@ -40,6 +41,7 @@ export function placeAdventureBuildings(ctx: PlacementContext): void {
 
   placeStargatePairs(ctx, stargateCandidates);
   placeCreatureBanks(ctx);
+  placeExternalDwellings(ctx);
 }
 
 function adventureTargetForZone(type: string, value: number): number {
@@ -166,6 +168,55 @@ function placeCreatureBanks(ctx: PlacementContext): void {
   }
 }
 
+function placeExternalDwellings(ctx: PlacementContext): void {
+  const seed = `${ctx.width}x${ctx.height}`;
+  for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
+    const meta = ctx.zoneGrid.meta[zoneId];
+    const targetCount = externalDwellingTargetForZone(meta.type, meta.value);
+    if (targetCount <= 0) continue;
+
+    for (let index = 0; index < targetCount; index++) {
+      const tile = findExternalDwellingTile(ctx, zoneId);
+      if (!tile) continue;
+      const unitType = pickExternalDwellingUnit(tile, `${seed}:${zoneId}:${index}`, externalDwellingMaxTierForZone(meta.value));
+      tile.object = {
+        type: "adventure_building",
+        id: `external-dwelling-${unitType}-${tile.x}-${tile.y}`,
+        subtype: EXTERNAL_DWELLING_TYPE,
+        name: getExternalDwellingLabel(unitType),
+        targetId: unitType,
+      };
+    }
+  }
+}
+
+function externalDwellingTargetForZone(type: string, value: number): number {
+  if (value < 2600) return 0;
+  if (type === "treasure") return value >= 7000 ? 2 : 1;
+  if (type === "junction") return value >= 4200 ? 1 : 0;
+  return value >= 5200 ? 1 : 0;
+}
+
+function externalDwellingMaxTierForZone(value: number): number {
+  if (value >= 9000) return 6;
+  if (value >= 7000) return 5;
+  if (value >= 5200) return 4;
+  if (value >= 3600) return 3;
+  return 2;
+}
+
+function findExternalDwellingTile(ctx: PlacementContext, zoneId: number): MapTile | null {
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
+  for (const roadBuffer of [1, 0]) {
+    for (const pos of candidates) {
+      const tile = ctx.tiles[pos.y][pos.x];
+      if (!isValidExternalDwellingTile(ctx, tile, roadBuffer)) continue;
+      return tile;
+    }
+  }
+  return null;
+}
+
 function creatureBankTargetForZone(type: string, value: number): number {
   if (value < 2200) return 0;
   if (type === "treasure") return value >= 8000 ? 3 : 2;
@@ -212,6 +263,14 @@ function isValidCreatureBankTile(ctx: PlacementContext, tile: MapTile, type: Cre
   if (tile.terrain === TerrainType.WATER && !definition.aquatic) return false;
   if (tile.terrain !== TerrainType.WATER && (!tile.isPassable || tile.terrain === TerrainType.LAVA)) return false;
   if (!definition.preferredTerrain.includes(tile.terrain) && ctx.rng() > 0.28) return false;
+  if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
+  if (hasMajorObjectNearby(ctx, tile.x, tile.y, 3)) return false;
+  return true;
+}
+
+function isValidExternalDwellingTile(ctx: PlacementContext, tile: MapTile, roadBuffer: number): boolean {
+  if (!tile.isPassable || tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) return false;
+  if (tile.object || tile.decor || tile.road) return false;
   if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
   if (hasMajorObjectNearby(ctx, tile.x, tile.y, 3)) return false;
   return true;

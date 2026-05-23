@@ -72,6 +72,8 @@ export async function POST(
       units: CombatBoardUnit[];
       initialUnits?: CombatBoardUnit[];
       terrain?: CombatTerrainFeature[];
+      environment?: { terrain?: import("@/lib/game/types").TerrainType };
+      moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
     };
     const units = [...(boardState.units ?? [])];
     const initialUnits = [...(boardState.initialUnits ?? boardState.units ?? [])];
@@ -90,6 +92,11 @@ export async function POST(
         heroId: hero.id,
         participantId: participantRow.id,
         joinsRound: round + 1,
+        moraleContext: {
+          attackerHeroMorale: Number(boardState.moraleContext?.attackerHeroMorale ?? 0),
+          defenderHeroMorale: Number(boardState.moraleContext?.defenderHeroMorale ?? 0),
+          terrain: boardState.environment?.terrain,
+        },
       });
       initialUnits.push(...cloneCombatUnits(units.slice(beforeReinforcements)));
 

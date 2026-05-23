@@ -5,6 +5,11 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { CREATURE_BANK_DEFINITIONS, CREATURE_BANK_TYPES } from "@/lib/game/creature-banks";
+import {
+  EXTERNAL_DWELLING_UNIT_TYPES,
+  getExternalDwellingLabel,
+  getExternalDwellingSprite,
+} from "@/lib/game/external-dwellings";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { UnitRule } from "@/lib/game/units";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
@@ -54,6 +59,12 @@ const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/adventure-campfire.webp", label: "Feu de camp", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-lighthouse.webp", label: "Phare", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-stargate.webp", label: "Stargate", group: "Aventures" },
+  { path: "/assets/sprites/map/external-dwelling.webp", label: "Demeure externe générique", group: "Demeures externes" },
+  ...EXTERNAL_DWELLING_UNIT_TYPES.map((unitType) => ({
+    path: getExternalDwellingSprite(unitType) ?? "/assets/sprites/map/external-dwelling.webp",
+    label: `${getExternalDwellingLabel(unitType)} - ${UNIT_RULES[unitType].label}`,
+    group: "Demeures externes",
+  })),
   ...CREATURE_BANK_TYPES.map((type) => ({
     path: `/assets/sprites/map/creature-bank-${type.replace(/_/g, "-")}.webp`,
     label: CREATURE_BANK_DEFINITIONS[type].label,
@@ -65,26 +76,6 @@ const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/grove-oak.webp", label: "Bosquet de chenes", group: "Obstacles" },
   { path: "/assets/sprites/map/grove-dead.webp", label: "Bosquet mort", group: "Obstacles" },
   { path: "/assets/sprites/map/boulder-cluster.webp", label: "Amas de rochers", group: "Obstacles" },
-  { path: "/assets/sprites/map/world-edge-cliff.webp", label: "Falaise du bord du monde", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-foam.webp", label: "Ecume du bord du monde", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-mist.webp", label: "Brume du bord du monde", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall.webp", label: "Cascade du bord du monde", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-0.webp", label: "Cascade bord du monde 1", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-1.webp", label: "Cascade bord du monde 2", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-2.webp", label: "Cascade bord du monde 3", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-3.webp", label: "Cascade bord du monde 4", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-0.webp", label: "Cascade forte bord du monde 1", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-1.webp", label: "Cascade forte bord du monde 2", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-2.webp", label: "Cascade forte bord du monde 3", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-3.webp", label: "Cascade forte bord du monde 4", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-4.webp", label: "Cascade forte bord du monde 5", group: "Environnement" },
-  { path: "/assets/sprites/map/world-edge-waterfall-heavy-5.webp", label: "Cascade forte bord du monde 6", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-0.webp", label: "Eau carte 1", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-1.webp", label: "Eau carte 2", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-2.webp", label: "Eau carte 3", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-3.webp", label: "Eau carte 4", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-4.webp", label: "Eau carte 5", group: "Environnement" },
-  { path: "/assets/sprites/map/water/water-tile-iso-5.webp", label: "Eau carte 6", group: "Environnement" },
   { path: "/assets/sprites/resources/gold.webp", label: "Or", group: "Ressources" },
   { path: "/assets/sprites/resources/wood.webp", label: "Bois", group: "Ressources" },
   { path: "/assets/sprites/resources/ore.webp", label: "Minerai", group: "Ressources" },

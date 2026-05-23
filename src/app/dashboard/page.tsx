@@ -212,7 +212,8 @@ export default function DashboardPage() {
   const loadMyGames = useCallback(async () => {
     const response = await fetchWithAuth("/api/games", { cache: "no-store" });
     if (!response.ok) {
-      console.warn("loadMyGames failed", response.status);
+      const data = await parseJsonResponse(response);
+      console.warn("loadMyGames failed", response.status, data);
       setGames([]);
       return;
     }
@@ -271,6 +272,13 @@ export default function DashboardPage() {
     if (res.ok) {
       const game = await res.json();
       router.push(`/game/${game.id}`);
+    } else {
+      const data = await parseJsonResponse(res);
+      setDashboardMessage({
+        kind: "error",
+        text: data?.error || "Impossible de creer la partie.",
+      });
+      console.warn("createGame failed", res.status, data);
     }
     setCreating(false);
   };

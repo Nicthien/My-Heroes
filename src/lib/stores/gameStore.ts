@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import { CombatSummary, GameState, GameAction, PersistentCombat } from "@/lib/game/types";
+import { CombatSummary, GameState, GameAction, PersistentCombat, Position } from "@/lib/game/types";
 import { processAction } from "@/lib/game/engine";
+import type { SpellId } from "@/lib/game/spells";
+import type { SpellRevealHint } from "@/lib/rendering/mapRenderer";
 
 interface GameStore {
   gameState: GameState | null;
@@ -17,6 +19,8 @@ interface GameStore {
     path?: Array<{ x: number; y: number }>;
   } | null;
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
+  pendingAdventureSpell: { heroId: string; spellId: SpellId; label: string } | null;
+  spellRevealHighlight: { turnNumber: number; tiles: Position[]; label: string; hints?: SpellRevealHint[] } | null;
   activeCombat: PersistentCombat | null;
   minimizedCombatIds: string[];
   lastCombatResult: CombatSummary | null;
@@ -28,6 +32,7 @@ interface GameStore {
   isMovePending: boolean;
   devRevealMap: boolean;
   devGodMode: boolean;
+  devInfiniteMana: boolean;
   devTeleportArmed: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
@@ -39,6 +44,8 @@ interface GameStore {
   setCombatMessage: (message: string | null) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
+  setPendingAdventureSpell: (spell: GameStore["pendingAdventureSpell"]) => void;
+  setSpellRevealHighlight: (highlight: GameStore["spellRevealHighlight"]) => void;
   setActiveCombat: (combat: PersistentCombat | null) => void;
   minimizeCombat: (combatId: string) => void;
   restoreCombat: (combat: PersistentCombat) => void;
@@ -52,6 +59,7 @@ interface GameStore {
   updateLoadingProgress: (progress: number, message?: string) => void;
   setDevRevealMap: (reveal: boolean) => void;
   setDevGodMode: (enabled: boolean) => void;
+  setDevInfiniteMana: (enabled: boolean) => void;
   setDevTeleportArmed: (armed: boolean) => void;
   resetGame: () => void;
 }
@@ -68,6 +76,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   combatMessage: null,
   pendingCombat: null,
   pendingJoinCombat: null,
+  pendingAdventureSpell: null,
+  spellRevealHighlight: null,
   activeCombat: null,
   minimizedCombatIds: [],
   lastCombatResult: null,
@@ -79,6 +89,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isMovePending: false,
   devRevealMap: false,
   devGodMode: false,
+  devInfiniteMana: false,
   devTeleportArmed: false,
   cameraTarget: null,
   zoomRequest: null,
@@ -109,6 +120,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setCombatMessage: (message) => set({ combatMessage: message }),
   setPendingCombat: (combat) => set({ pendingCombat: combat }),
   setPendingJoinCombat: (combat) => set({ pendingJoinCombat: combat }),
+  setPendingAdventureSpell: (spell) => set({ pendingAdventureSpell: spell }),
+  setSpellRevealHighlight: (highlight) => set({ spellRevealHighlight: highlight }),
   setActiveCombat: (combat) => {
     const openCombat = combat?.visibility === "joinable_summary" ? null : combat;
     set({ activeCombat: openCombat, isCombatMode: Boolean(openCombat) });
@@ -160,6 +173,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })),
   setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
   setDevGodMode: (enabled) => set({ devGodMode: enabled }),
+  setDevInfiniteMana: (enabled) => set({ devInfiniteMana: enabled }),
   setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
 
   resetGame: () =>
@@ -171,6 +185,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       combatMessage: null,
       pendingCombat: null,
       pendingJoinCombat: null,
+      pendingAdventureSpell: null,
+      spellRevealHighlight: null,
       activeCombat: null,
       minimizedCombatIds: [],
       lastCombatResult: null,
@@ -182,6 +198,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isMovePending: false,
       devRevealMap: false,
       devGodMode: false,
+      devInfiniteMana: false,
       devTeleportArmed: false,
       cameraTarget: null,
       zoomRequest: null,

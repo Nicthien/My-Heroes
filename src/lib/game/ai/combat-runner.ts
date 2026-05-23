@@ -30,7 +30,13 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     if (error) throw error;
     if (!combat || combat.status !== "ACTIVE") return combat ? toCombat(combat) : null;
 
-    const boardState = combat.board_state as { units: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[]; terrain?: CombatTerrainFeature[] };
+    const boardState = combat.board_state as {
+      units: CombatBoardUnit[];
+      initialUnits?: CombatBoardUnit[];
+      terrain?: CombatTerrainFeature[];
+      environment?: { terrain?: import("@/lib/game/types").TerrainType };
+      moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+    };
     const actor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
     if (!actor) return toCombat(combat);
     if (actor.ownerPlayerId === null) return toCombat(combat);
@@ -66,6 +72,11 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       action,
       attackerStats: sideStats.attacker,
       defenderStats: sideStats.defender,
+      moraleContext: {
+        attackerHeroMorale: Number(boardState.moraleContext?.attackerHeroMorale ?? 0),
+        defenderHeroMorale: Number(boardState.moraleContext?.defenderHeroMorale ?? 0),
+        terrain: boardState.environment?.terrain,
+      },
     });
 
     const initialUnits = boardState.initialUnits ?? boardState.units ?? [];

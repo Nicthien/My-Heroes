@@ -63,6 +63,8 @@ export function IsoBattlefield({
   isMyAction,
   onAction,
   onInspectUnit,
+  pendingSpellTarget = false,
+  onSpellTarget,
 }: {
   combat: PersistentCombat;
   gameState: GameState;
@@ -70,6 +72,8 @@ export function IsoBattlefield({
   isMyAction: boolean;
   onAction: (action: Record<string, unknown>) => void;
   onInspectUnit: (unitId: string | null) => void;
+  pendingSpellTarget?: boolean;
+  onSpellTarget?: (unitId: string) => void;
 }) {
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
@@ -255,7 +259,9 @@ export function IsoBattlefield({
       const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain) : null;
       const hoverAction: CombatHoverAction | null = !isMyAction
         ? null
-        : enemyUnit && canShoot
+        : pendingSpellTarget
+          ? enemyUnit ? "ranged" : null
+          : enemyUnit && canShoot
           ? shotProfile && shotProfile.damagePenalty < 1
             ? "rangedHampered"
             : "ranged"
@@ -291,6 +297,10 @@ export function IsoBattlefield({
           tabIndex={canClick ? 0 : -1}
           onClick={() => {
             if (!canClick) return;
+            if (pendingSpellTarget) {
+              if (unit && enemyUnit) onSpellTarget?.(unit.id);
+              return;
+            }
             if (unit && (hoverAction === "ranged" || hoverAction === "rangedHampered")) {
               setPendingMove(null);
               onAction({ type: "SHOOT", targetUnitId: unit.id });

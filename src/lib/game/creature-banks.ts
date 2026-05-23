@@ -4,6 +4,7 @@ import { getUnitRule } from "./units";
 
 export const CREATURE_BANK_TYPES = [
   "ancient_altar",
+  "bandit_camp",
   "beholders_sanctuary",
   "black_tower",
   "churchyard",
@@ -73,6 +74,12 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 2600, [[UnitType.FIRE_ELEMENTAL, 24], [UnitType.EARTH_ELEMENTAL, 24]], { experience: 1100, artifactTokens: ["minor"], resources: { mercury: 3 } }),
     variant(30, 3600, [[UnitType.PSYCHIC_ELEMENTAL, 20], [UnitType.MAGIC_ELEMENTAL, 16]], { experience: 1500, artifactTokens: ["major"] }),
     variant(10, 5200, [[UnitType.MAGIC_ELEMENTAL, 32], [UnitType.PHOENIX, 4]], { experience: 2200, artifactTokens: ["relic"], creatures: [{ unitType: UnitType.MAGIC_ELEMENTAL, count: 2 }] }),
+  ]),
+  bandit_camp: bank("bandit_camp", "Camp de bandits", "Camp de pillards protege par des voleurs et nomades.", [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.FOREST], 1.15, [
+    variant(30, 550, [[UnitType.ROGUE, 35]], { gold: 800, resources: { wood: 2 } }),
+    variant(30, 900, [[UnitType.ROGUE, 55], [UnitType.NOMAD, 8]], { gold: 1300, resources: { wood: 3, ore: 2 } }),
+    variant(30, 1450, [[UnitType.ROGUE, 80], [UnitType.NOMAD, 18]], { gold: 2200, artifactTokens: ["treasure"] }),
+    variant(10, 2300, [[UnitType.ROGUE, 120], [UnitType.NOMAD, 32], [UnitType.ENCHANTER, 4]], { gold: 3500, artifactTokens: ["minor"], creatures: [{ unitType: UnitType.ROGUE, count: 10 }] }),
   ]),
   beholders_sanctuary: bank("beholders_sanctuary", "Sanctuaire des beholders", "Sanctuaire souterrain aux regards mortels.", [TerrainType.DIRT, TerrainType.MOUNTAIN, TerrainType.SWAMP], 0.85, [
     variant(30, 900, [[UnitType.BEHOLDER, 24]], { gold: 1200, resources: { gems: 2 } }),

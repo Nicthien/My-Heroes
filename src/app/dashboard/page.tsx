@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
 import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
+import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { generateMap } from "@/lib/game/engine";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
 import { GameMap, TerrainType } from "@/lib/game/types";
@@ -125,6 +127,10 @@ const ALIGNMENT_GROUPS: { key: FactionAlignment; label: string; accent: string }
   { key: "evil", label: "Les mauvais", accent: "text-rose-200" },
   { key: "barbarian", label: "Les barbares", accent: "text-orange-200" },
 ];
+
+const FACTION_FIRST_UNIT: Record<string, string | undefined> = Object.fromEntries(
+  CREATURE_GROUPS.map((group) => [group.key, group.units[0]]),
+);
 
 const MAP_SIZES = {
   S: 36,
@@ -532,13 +538,41 @@ export default function DashboardPage() {
                               : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base" aria-hidden>{meta.emblem}</span>
-                            <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                            <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                          <div className="flex items-start gap-3">
+                            <div className="flex shrink-0 flex-col items-center gap-1">
+                              <Image
+                                src={`/assets/sprites/map/town-${key}.webp`}
+                                alt=""
+                                aria-hidden
+                                width={56}
+                                height={56}
+                                unoptimized
+                                className="h-14 w-14 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
+                                style={{ imageRendering: "pixelated" }}
+                              />
+                              {FACTION_FIRST_UNIT[key] && (
+                                <Image
+                                  src={`/assets/sprites/units/${FACTION_FIRST_UNIT[key]}.webp`}
+                                  alt=""
+                                  aria-hidden
+                                  width={48}
+                                  height={48}
+                                  unoptimized
+                                  className="h-12 w-12 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
+                                  style={{ imageRendering: "pixelated" }}
+                                />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base" aria-hidden>{meta.emblem}</span>
+                                <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                                <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                              </div>
+                              <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
+                              <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
+                            </div>
                           </div>
-                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
-                          <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
                         </button>
                       ))}
                   </div>

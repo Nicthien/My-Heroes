@@ -459,6 +459,41 @@ export enum AdventureBuildingType {
   LIGHTHOUSE = "lighthouse",
   STARGATE = "stargate",
   EXTERNAL_DWELLING = "external_dwelling",
+  ARENA = "arena",
+  MERCENARY_CAMP = "mercenary_camp",
+  MARLETTO_TOWER = "marletto_tower",
+  STAR_AXIS = "star_axis",
+  GARDEN_OF_REVELATION = "garden_of_revelation",
+  LEARNING_STONE = "learning_stone",
+  SCHOOL_OF_WAR = "school_of_war",
+  SCHOOL_OF_MAGIC = "school_of_magic",
+  LIBRARY_OF_ENLIGHTENMENT = "library_of_enlightenment",
+  CARTOGRAPHER = "cartographer",
+  REDWOOD_OBSERVATORY = "redwood_observatory",
+  MYSTICAL_GARDEN = "mystical_garden",
+  STABLES = "stables",
+  TEMPLE = "temple",
+  FOUNTAIN_OF_FORTUNE = "fountain_of_fortune",
+  IDOL_OF_FORTUNE = "idol_of_fortune",
+  MAGIC_WELL = "magic_well",
+  MAGIC_SHRINE = "magic_shrine",
+  WATER_MILL = "water_mill",
+  WATER_WHEEL = "water_wheel",
+  ABANDONED_WAGON = "abandoned_wagon",
+  CRATE = "crate",
+  SKELETON = "skeleton",
+  OBELISK = "obelisk",
+  WARRIOR_TOMB = "warrior_tomb",
+  CURSED_ALTAR = "cursed_altar",
+  SPELL_SHRINE_1 = "spell_shrine_1",
+  SPELL_SHRINE_2 = "spell_shrine_2",
+  SPELL_SHRINE_3 = "spell_shrine_3",
+  TREE_OF_KNOWLEDGE = "tree_of_knowledge",
+  SEER_HUT = "seer_hut",
+  MERMAID = "mermaid",
+  BUOY = "buoy",
+  FLOTSAM = "flotsam",
+  SEA_CHEST = "sea_chest",
 }
 
 export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatable";
@@ -466,7 +501,10 @@ export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatabl
 export interface AdventureBuildingState {
   visitedAdventureBuildings?: string[];
   playerAdventureVisits?: Record<string, string[]>;
+  heroAdventureVisits?: Record<string, string[]>;
   signaledLighthouses?: Record<string, string[]>;
+  mysticalGardenVisits?: Record<string, string>;
+  weeklyAdventureVisits?: Record<string, string>;
 }
 
 export interface NeutralArmy {
@@ -657,6 +695,7 @@ export interface Player {
 
 export type GameAction =
   | { type: "MOVE_HERO"; heroId: string; path: Position[] }
+  | { type: "VISIT_ADVENTURE_BUILDING"; heroId: string; buildingId: string; choice?: "attack" | "defense" | "spellPower" | "knowledge" }
   | { type: "CAST_ADVENTURE_SPELL"; heroId: string; spellId: string; target?: Position | { townId?: string } }
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }

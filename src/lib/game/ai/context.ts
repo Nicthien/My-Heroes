@@ -89,6 +89,8 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     collected: new Set((mapState.collected as string[] | undefined) ?? []),
     visitedAdventureBuildings: new Set((mapState.visitedAdventureBuildings as string[] | undefined) ?? []),
     playerAdventureVisits: (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    heroAdventureVisits: (mapState.heroAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    weeklyAdventureVisits: (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {},
     killedNeutralArmies,
     explored,
     difficulty,

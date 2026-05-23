@@ -21,9 +21,15 @@ export interface AiHero {
   x: number;
   y: number;
   movement: number;
+  level?: number;
   attack?: number;
   defense?: number;
+  spellPower?: number;
+  knowledge?: number;
   morale?: number;
+  luck?: number;
+  mana?: number | null;
+  knownSpellIds?: string[] | null;
   experience?: number;
   armies: AiArmy[];
 }
@@ -136,6 +142,8 @@ export interface AiContext {
   collected: Set<string>;
   visitedAdventureBuildings: Set<string>;
   playerAdventureVisits: Record<string, string[]>;
+  heroAdventureVisits: Record<string, string[]>;
+  weeklyAdventureVisits: Record<string, string>;
   killedNeutralArmies: Set<string>;
   explored: Set<string>;
   difficulty: AiDifficulty;

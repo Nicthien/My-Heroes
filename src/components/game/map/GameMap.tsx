@@ -47,9 +47,24 @@ type PendingMove = {
   finalDestination?: Position;
 };
 
+type AdventureChoiceValue = "attack" | "defense" | "spellPower" | "knowledge";
+
+type AdventureChoice = {
+  value: AdventureChoiceValue;
+  label: string;
+};
+
+type PendingAdventureChoice = {
+  heroId: string;
+  buildingId: string;
+  buildingType: string;
+  message: string;
+  choices: AdventureChoice[];
+};
+
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
@@ -84,6 +99,7 @@ export default function GameMapComponent() {
   const { data: session } = useSession();
   const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
   const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
+  const [pendingAdventureChoice, setPendingAdventureChoice] = useState<PendingAdventureChoice | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
@@ -601,6 +617,17 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "ADVENTURE_BUILDING") {
+      if (interaction.choices?.length && interaction.buildingId) {
+        setPendingAdventureChoice({
+          heroId,
+          buildingId: interaction.buildingId,
+          buildingType: interaction.buildingType,
+          message: interaction.message ?? getAdventureBuildingLabel(interaction.buildingType),
+          choices: interaction.choices,
+        });
+        setCombatMessage(interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+        return true;
+      }
       if (interaction.recruited) {
         const rule = UNIT_RULES[interaction.recruited.unitType];
         setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recrute(e)s.`);
@@ -626,6 +653,36 @@ export default function GameMapComponent() {
     setCombatMessage(interaction.message);
     return true;
   }, [setCombatMessage, setPendingCombat]);
+
+  const resolveAdventureChoice = useCallback(async (choice: AdventureChoiceValue) => {
+    if (!gameState || !pendingAdventureChoice) return;
+    isSyncingMoveRef.current = true;
+    useGameStore.getState().setMovePending(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "VISIT_ADVENTURE_BUILDING",
+          heroId: pendingAdventureChoice.heroId,
+          buildingId: pendingAdventureChoice.buildingId,
+          choice,
+        }),
+      });
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response));
+        return;
+      }
+      const data = await response.json();
+      setPendingAdventureChoice(null);
+      handleMoveInteraction(pendingAdventureChoice.heroId, data.interaction as MoveInteraction | null | undefined);
+      const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshed) useGameStore.getState().setGameState(refreshed);
+    } finally {
+      isSyncingMoveRef.current = false;
+      useGameStore.getState().setMovePending(false);
+    }
+  }, [devRevealMap, gameState, handleMoveInteraction, pendingAdventureChoice, session?.user?.id, setCombatMessage]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -2078,6 +2135,56 @@ export default function GameMapComponent() {
           onMessage={setCombatMessage}
         />
       )}
+      {pendingAdventureChoice && (
+        <AdventureChoiceModal
+          choice={pendingAdventureChoice}
+          onChoose={(value) => void resolveAdventureChoice(value)}
+          onClose={() => setPendingAdventureChoice(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AdventureChoiceModal({
+  choice,
+  onChoose,
+  onClose,
+}: {
+  choice: PendingAdventureChoice;
+  onChoose: (value: AdventureChoiceValue) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-40 grid place-items-center bg-black/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded border border-amber-500/50 bg-stone-950/95 p-4 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black text-amber-100">{getAdventureBuildingLabel(choice.buildingType)}</h2>
+            <p className="mt-1 text-sm leading-snug text-stone-300">{choice.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-400"
+            aria-label="Fermer"
+          >
+            x
+          </button>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {choice.choices.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onChoose(item.value)}
+              className="h-10 rounded border border-amber-600/50 bg-amber-500/15 px-3 text-sm font-black text-amber-100 hover:bg-amber-500/25"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

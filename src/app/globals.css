@@ -110,3 +110,88 @@ body::before {
 .combat-unit-count-damaged {
   animation: combat-unit-count-hit 520ms ease-out both;
 }
+
+@keyframes combat-unit-attack-melee-attacker {
+  0% { transform: translate(0, 0) scale(1); }
+  18% { transform: translate(-12px, -6px) scale(1.07); }
+  52% { transform: translate(58px, 8px) scale(1.16); }
+  72% { transform: translate(42px, 6px) scale(1.1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes combat-unit-attack-melee-defender {
+  0% { transform: translate(0, 0) scale(1); }
+  18% { transform: translate(12px, -6px) scale(1.07); }
+  52% { transform: translate(-58px, 8px) scale(1.16); }
+  72% { transform: translate(-42px, 6px) scale(1.1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes combat-unit-attack-ranged-attacker {
+  0% { transform: translate(0, 0) scale(1); }
+  35% { transform: translate(-14px, -3px) scale(1.06); }
+  60% { transform: translate(10px, 0) scale(1.03); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes combat-unit-attack-ranged-defender {
+  0% { transform: translate(0, 0) scale(1); }
+  35% { transform: translate(14px, -3px) scale(1.06); }
+  60% { transform: translate(-10px, 0) scale(1.03); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.combat-unit-attacking-melee-attacker {
+  animation: combat-unit-attack-melee-attacker 650ms cubic-bezier(0.3, 0.05, 0.2, 1) both;
+}
+
+.combat-unit-attacking-melee-defender {
+  animation: combat-unit-attack-melee-defender 650ms cubic-bezier(0.3, 0.05, 0.2, 1) both;
+}
+
+.combat-unit-attacking-ranged-attacker {
+  animation: combat-unit-attack-ranged-attacker 650ms ease-out both;
+}
+
+.combat-unit-attacking-ranged-defender {
+  animation: combat-unit-attack-ranged-defender 650ms ease-out both;
+}
+
+@keyframes combat-melee-slash {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-40deg) scale(0.35); }
+  28% { opacity: 1; transform: translate(-50%, -50%) rotate(-15deg) scale(1.05); }
+  55% { opacity: 0.95; transform: translate(-50%, -50%) rotate(10deg) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(28deg) scale(1.2); }
+}
+
+.combat-melee-slash {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 96px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 245, 200, 0.0) 6%, rgba(255, 240, 180, 0.95) 38%, rgba(255, 255, 255, 1) 50%, rgba(255, 240, 180, 0.95) 62%, rgba(255, 245, 200, 0.0) 94%, transparent 100%);
+  box-shadow: 0 0 18px rgba(255, 220, 130, 0.85), 0 0 36px rgba(255, 180, 60, 0.45);
+  filter: blur(0.4px);
+  pointer-events: none;
+  animation: combat-melee-slash 380ms cubic-bezier(0.2, 0.6, 0.3, 1) both;
+}
+
+@keyframes combat-projectile-travel {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  14% { opacity: 1; transform: translate(calc(var(--proj-dx) * 0.12), calc(var(--proj-dy) * 0.12)) scale(1); }
+  86% { opacity: 1; transform: translate(calc(var(--proj-dx) * 0.92), calc(var(--proj-dy) * 0.92)) scale(1); }
+  100% { transform: translate(var(--proj-dx), var(--proj-dy)) scale(0.7); opacity: 0; }
+}
+
+.combat-projectile {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 240, 180, 1) 0%, rgba(255, 180, 70, 0.95) 45%, rgba(180, 80, 0, 0) 75%);
+  box-shadow: 0 0 14px rgba(255, 200, 90, 0.95), 0 0 28px rgba(255, 150, 40, 0.55);
+  pointer-events: none;
+  animation: combat-projectile-travel 380ms cubic-bezier(0.4, 0.05, 0.6, 1) both;
+}

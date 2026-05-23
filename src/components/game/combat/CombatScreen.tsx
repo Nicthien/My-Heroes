@@ -42,6 +42,7 @@ export default function CombatScreen() {
   const focusTile = useGameStore((state) => state.focusTile);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [combatAnimationBlocked, setCombatAnimationBlocked] = useState(false);
+  const [displayedCurrentUnitId, setDisplayedCurrentUnitId] = useState<string | null>(null);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const [spellBookOpen, setSpellBookOpen] = useState(false);
   const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
@@ -50,6 +51,7 @@ export default function CombatScreen() {
   const neutralActionKeyRef = useRef<string | null>(null);
   const fetchCombatInFlightRef = useRef(false);
   const combatAnimationTimeoutRef = useRef<number | null>(null);
+  const displayedSwapTimeoutRef = useRef<number | null>(null);
   const previousCombatForAnimationRef = useRef<PersistentCombat | null>(null);
   const activeCombatId = activeCombat?.id;
 
@@ -113,23 +115,56 @@ export default function CombatScreen() {
         window.clearTimeout(combatAnimationTimeoutRef.current);
         combatAnimationTimeoutRef.current = null;
       }
-      window.setTimeout(() => setCombatAnimationBlocked(false), 0);
+      if (displayedSwapTimeoutRef.current !== null) {
+        window.clearTimeout(displayedSwapTimeoutRef.current);
+        displayedSwapTimeoutRef.current = null;
+      }
+      window.setTimeout(() => {
+        setDisplayedCurrentUnitId(null);
+        setCombatAnimationBlocked(false);
+      }, 0);
       return;
     }
 
     const previousCombat = previousCombatForAnimationRef.current;
     previousCombatForAnimationRef.current = activeCombat;
     if (!previousCombat || previousCombat.id !== activeCombat.id) {
-      window.setTimeout(() => setCombatAnimationBlocked(false), 0);
+      const newDisplay = activeCombat.currentUnitId ?? null;
+      if (displayedSwapTimeoutRef.current !== null) {
+        window.clearTimeout(displayedSwapTimeoutRef.current);
+        displayedSwapTimeoutRef.current = null;
+      }
+      // setState inside an effect must be deferred — calling it synchronously
+      // in this render-phase commit is silently dropped under React 19.
+      window.setTimeout(() => {
+        setDisplayedCurrentUnitId(newDisplay);
+        setCombatAnimationBlocked(false);
+      }, 0);
       return;
     }
 
-    blockCombatAnimation(getCombatActionSettleMs(previousCombat, activeCombat));
+    const settleMs = getCombatActionSettleMs(previousCombat, activeCombat);
+    blockCombatAnimation(settleMs);
+
+    if (displayedSwapTimeoutRef.current !== null) {
+      window.clearTimeout(displayedSwapTimeoutRef.current);
+      displayedSwapTimeoutRef.current = null;
+    }
+    const nextDisplayed = activeCombat.currentUnitId ?? null;
+    if (settleMs <= 0 || previousCombat.currentUnitId === activeCombat.currentUnitId) {
+      window.setTimeout(() => setDisplayedCurrentUnitId(nextDisplayed), 0);
+    } else {
+      displayedSwapTimeoutRef.current = window.setTimeout(() => {
+        setDisplayedCurrentUnitId(useGameStore.getState().activeCombat?.currentUnitId ?? null);
+        displayedSwapTimeoutRef.current = null;
+      }, settleMs);
+    }
   }, [activeCombat, blockCombatAnimation]);
 
   useEffect(() => {
     return () => {
       if (combatAnimationTimeoutRef.current !== null) window.clearTimeout(combatAnimationTimeoutRef.current);
+      if (displayedSwapTimeoutRef.current !== null) window.clearTimeout(displayedSwapTimeoutRef.current);
     };
   }, []);
 
@@ -259,11 +294,17 @@ export default function CombatScreen() {
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
   const units = activeCombat.boardState.units;
-  const currentUnit = units.find((unit) => unit.id === activeCombat.currentUnitId);
+  // Lag the displayed "active unit" behind the canonical state so panels,
+  // queue, and gating only swap once the previous action finishes animating.
+  const effectiveCurrentUnitId = displayedCurrentUnitId ?? activeCombat.currentUnitId ?? null;
+  const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
   const inspectedUnit = units.find((unit) => unit.id === inspectedUnitId) ?? null;
-  const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, activeCombat.currentUnitId, activeCombat.currentPlayerId);
+  const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, effectiveCurrentUnitId, activeCombat.currentPlayerId);
   const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
   const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction && !combatAnimationBlocked;
+  const displayedCombat = effectiveCurrentUnitId === activeCombat.currentUnitId
+    ? activeCombat
+    : { ...activeCombat, currentUnitId: effectiveCurrentUnitId };
 
   const submitAction = async (action: Record<string, unknown>) => {
     if (!canSubmitAction || isSubmittingActionRef.current) return false;
@@ -388,10 +429,11 @@ export default function CombatScreen() {
         )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <div className="absolute left-1/2 top-3 z-30 w-[min(760px,calc(100%-7rem))] -translate-x-1/2">
-            <InitiativeQueue combat={activeCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
+            <InitiativeQueue combat={displayedCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
           </div>
           <IsoBattlefield
             combat={activeCombat}
+            displayedCurrentUnitId={effectiveCurrentUnitId}
             gameState={gameState}
             inspectedUnitId={inspectedUnitId}
             isMyAction={canSubmitAction}

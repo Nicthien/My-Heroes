@@ -54,7 +54,7 @@ import {
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
-import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
+import { SPELLS, getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
@@ -123,6 +123,7 @@ interface MinimalHero {
   specialty?: string | null;
   x: number;
   y: number;
+  level?: number;
   movement: number;
   mana?: number | null;
   hasSpellBook?: boolean;
@@ -158,7 +159,7 @@ interface MinimalPlayer {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }
@@ -166,6 +167,27 @@ type MoveInteraction =
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination: Position }
   | { type: "STOP"; message: string; destination: Position };
+
+type HeroStatKey = "attack" | "defense" | "spellPower" | "knowledge";
+
+type AdventureBuildingChoice = {
+  value: HeroStatKey;
+  label: string;
+};
+
+const ADVENTURE_SCHOOL_COST_GOLD = 1000;
+const CARTOGRAPHER_COST_GOLD = 10000;
+const LEARNING_STONE_EXPERIENCE = 1000;
+const STABLES_MOVEMENT_BONUS = 400;
+const MAGIC_SHRINE_MANA_RESTORE = 20;
+const WATER_MILL_GOLD_REWARD = 1000;
+const WATER_WHEEL_GOLD_REWARD = 500;
+const OBELISK_REVEAL_RADIUS = 24;
+const WARRIOR_TOMB_GOLD_REWARD = 700;
+const WARRIOR_TOMB_EXPERIENCE_REWARD = 750;
+const TREE_OF_KNOWLEDGE_COST_GOLD = 2000;
+const TREE_OF_KNOWLEDGE_EXPERIENCE = 2000;
+const SEER_HUT_EXPERIENCE = 1000;
 
 const HERO_IN_COMBAT_ERROR = "Ce heros est deja engage dans un combat.";
 export async function POST(
@@ -466,6 +488,7 @@ export async function POST(
           gameId: id,
           gamePlayer,
           hero,
+          turnNumber: Number(game.turnNumber ?? 1),
           mapData,
           mapState,
           object: tile.object,
@@ -524,6 +547,39 @@ export async function POST(
       }
 
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
+    }
+
+    if (action.type === "VISIT_ADVENTURE_BUILDING") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const found = findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
+      if (!found) return NextResponse.json({ error: "Batiment d'aventure introuvable" }, { status: 404 });
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
+        return NextResponse.json({ error: "Le heros doit etre sur place pour visiter ce batiment" }, { status: 400 });
+      }
+
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+      const interaction = await handleAdventureBuildingVisit({
+        supabase,
+        gameId: id,
+        gamePlayer,
+        hero,
+        turnNumber: Number(game.turnNumber ?? 1),
+        mapData,
+        mapState,
+        object: found.object,
+        position: found.position,
+        explored,
+        choice: normalizeHeroStatChoice(action.choice),
+      });
+
+      return NextResponse.json({ success: true, interaction });
     }
 
     if (action.type === "CAST_ADVENTURE_SPELL") {
@@ -1341,26 +1397,33 @@ async function handleAdventureBuildingVisit({
   gameId,
   gamePlayer,
   hero,
+  turnNumber,
   mapData,
   mapState,
   object,
   position,
   explored,
+  choice,
 }: {
   supabase: ReturnType<typeof createAdminClient>;
   gameId: string;
   gamePlayer: MinimalPlayer;
   hero: MinimalHero;
+  turnNumber: number;
   mapData: GameMap;
   mapState: Record<string, unknown>;
   object: MapObject;
   position: Position;
   explored: Set<string>;
+  choice?: HeroStatKey;
 }): Promise<MoveInteraction> {
   const buildingType = object.subtype as AdventureBuildingType | undefined;
   const visitedAdventureBuildings = new Set<string>((mapState.visitedAdventureBuildings as string[]) ?? []);
   const playerAdventureVisits = (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {};
+  const heroAdventureVisits = (mapState.heroAdventureVisits as Record<string, string[]> | undefined) ?? {};
   const signaledLighthouses = (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {};
+  const mysticalGardenVisits = (mapState.mysticalGardenVisits as Record<string, string> | undefined) ?? {};
+  const weeklyAdventureVisits = (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {};
 
   if (!buildingType) {
     return { type: "ADVENTURE_BUILDING", buildingType: "unknown", destination: position, message: "Batiment d'aventure visite." };
@@ -1375,6 +1438,24 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       message: `${getAdventureBuildingLabel(buildingType)} deja visite.`,
+    };
+  }
+
+  if (isHeroVisitBuilding(buildingType) && hasHeroVisited(heroAdventureVisits, hero.id, object.id)) {
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: `${getAdventureBuildingLabel(buildingType)} deja visite par ce heros.`,
+    };
+  }
+
+  if (isSingleMapRewardBuilding(buildingType) && visitedAdventureBuildings.has(object.id)) {
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: `${getAdventureBuildingLabel(buildingType)} deja fouille.`,
     };
   }
 
@@ -1530,12 +1611,610 @@ async function handleAdventureBuildingVisit({
     };
   }
 
+  if (buildingType === AdventureBuildingType.ARENA) {
+    if (!choice || !["attack", "defense"].includes(choice)) {
+      return {
+        type: "ADVENTURE_BUILDING",
+        buildingType,
+        destination: position,
+        buildingId: object.id,
+        message: "Arène : choisissez l'entrainement du heros.",
+        choices: [
+          { value: "attack", label: "+2 Attaque" },
+          { value: "defense", label: "+2 Defense" },
+        ],
+      };
+    }
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 2);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: choice === "attack" ? "Arène visitee : +2 Attaque." : "Arène visitee : +2 Defense.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.SCHOOL_OF_WAR) {
+    if (!choice || !["attack", "defense"].includes(choice)) {
+      return {
+        type: "ADVENTURE_BUILDING",
+        buildingType,
+        destination: position,
+        buildingId: object.id,
+        message: "École de guerre : choisissez l'entrainement pour 1000 Or.",
+        choices: [
+          { value: "attack", label: "+1 Attaque" },
+          { value: "defense", label: "+1 Defense" },
+        ],
+      };
+    }
+    if (gamePlayer.gold < ADVENTURE_SCHOOL_COST_GOLD) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cet entrainement." };
+    }
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: choice === "attack" ? "École de guerre : +1 Attaque." : "École de guerre : +1 Defense.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.SCHOOL_OF_MAGIC) {
+    if (!choice || !["spellPower", "knowledge"].includes(choice)) {
+      return {
+        type: "ADVENTURE_BUILDING",
+        buildingType,
+        destination: position,
+        buildingId: object.id,
+        message: "École de magie : choisissez l'etude pour 1000 Or.",
+        choices: [
+          { value: "spellPower", label: "+1 Pouvoir" },
+          { value: "knowledge", label: "+1 Savoir" },
+        ],
+      };
+    }
+    if (gamePlayer.gold < ADVENTURE_SCHOOL_COST_GOLD) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cette etude." };
+    }
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      message: choice === "spellPower" ? "École de magie : +1 Pouvoir." : "École de magie : +1 Savoir.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.MERCENARY_CAMP) {
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "attack", 1);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Camp de mercenaires visite : +1 Attaque." };
+  }
+
+  if (buildingType === AdventureBuildingType.MARLETTO_TOWER) {
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "defense", 1);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Tour de Marletto visitee : +1 Defense." };
+  }
+
+  if (buildingType === AdventureBuildingType.STAR_AXIS) {
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "spellPower", 1);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Axe étoilé visite : +1 Pouvoir." };
+  }
+
+  if (buildingType === AdventureBuildingType.GARDEN_OF_REVELATION) {
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "knowledge", 1);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Jardin de révélation visite : +1 Savoir." };
+  }
+
+  if (buildingType === AdventureBuildingType.LEARNING_STONE) {
+    await supabase.from("heroes").update({ experience: hero.experience + LEARNING_STONE_EXPERIENCE }).eq("id", hero.id);
+    await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Pierre de savoir visitee : +1000 XP." };
+  }
+
+  if (buildingType === AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT) {
+    if ((hero.level ?? 1) < 10) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La bibliotheque exige un heros de niveau 10." };
+    }
+    await supabase.from("heroes").update({
+      attack: (hero.attack ?? 0) + 2,
+      defense: (hero.defense ?? 0) + 2,
+      spell_power: (hero.spellPower ?? 0) + 2,
+      knowledge: (hero.knowledge ?? 0) + 2,
+    }).eq("id", hero.id);
+    await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bibliothèque d'illumination : +2 a toutes les caracteristiques." };
+  }
+
+  if (buildingType === AdventureBuildingType.CARTOGRAPHER) {
+    if (gamePlayer.gold < CARTOGRAPHER_COST_GOLD) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 10000 Or pour acheter ces cartes." };
+    }
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - CARTOGRAPHER_COST_GOLD });
+    await supabase.from("game_players").update({ explored_tiles: getAllMapTileKeys(mapData) }).eq("id", gamePlayer.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+      },
+    }).eq("id", gameId);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cartographe consulte : carte revelee." };
+  }
+
+  if (buildingType === AdventureBuildingType.REDWOOD_OBSERVATORY) {
+    const revealed = computeVisibleTiles(mapData, [position], 28);
+    for (const key of revealed) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+      },
+    }).eq("id", gameId);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Observatoire sylvestre visite : vaste zone revelee." };
+  }
+
+  if (buildingType === AdventureBuildingType.MYSTICAL_GARDEN) {
+    const weekKey = `${object.id}:${gamePlayer.id}`;
+    const currentWeek = getMysticalGardenWeekKey(turnNumber);
+    if (mysticalGardenVisits[weekKey] === currentWeek) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le jardin mystique a deja fleuri cette semaine." };
+    }
+    const rewardGems = makeRng(`${gameId}:${object.id}:${gamePlayer.id}:${currentWeek}`)() > 0.55;
+    const resourceUpdate: Partial<Resources> = rewardGems
+      ? { gems: gamePlayer.gems + 5 }
+      : { gold: gamePlayer.gold + 1000 };
+    await updatePlayerResources(supabase, gamePlayer.id, resourceUpdate);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        mysticalGardenVisits: {
+          ...mysticalGardenVisits,
+          [weekKey]: currentWeek,
+        },
+      },
+    }).eq("id", gameId);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: rewardGems ? { resources: { gems: 5 } } : { gold: 1000 },
+      message: rewardGems ? "Jardin mystique : +5 Gemmes." : "Jardin mystique : +1000 Or.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.STABLES) {
+    const weekKey = `${object.id}:${hero.id}`;
+    const currentWeek = getAdventureWeekKey(turnNumber);
+    if (weeklyAdventureVisits[weekKey] === currentWeek) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Les ecuries ont deja equipe ce heros cette semaine." };
+    }
+    await supabase.from("heroes").update({ movement: hero.movement + STABLES_MOVEMENT_BONUS }).eq("id", hero.id);
+    await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Ecuries visitees : +400 deplacement cette semaine." };
+  }
+
+  if (buildingType === AdventureBuildingType.TEMPLE) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { morale: Number(hero.morale ?? 0) + 1 });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Temple visite : +1 Moral." };
+  }
+
+  if (buildingType === AdventureBuildingType.FOUNTAIN_OF_FORTUNE) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { luck: Number(hero.luck ?? 0) + 1 });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Fontaine de fortune visitee : +1 Chance." };
+  }
+
+  if (buildingType === AdventureBuildingType.IDOL_OF_FORTUNE) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, {
+      morale: Number(hero.morale ?? 0) + 1,
+      luck: Number(hero.luck ?? 0) + 1,
+    });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Idole de fortune visitee : +1 Moral, +1 Chance." };
+  }
+
+  if (buildingType === AdventureBuildingType.MAGIC_WELL) {
+    const weekKey = `${object.id}:${hero.id}`;
+    const currentWeek = getAdventureWeekKey(turnNumber);
+    if (weeklyAdventureVisits[weekKey] === currentWeek) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise cette semaine." };
+    }
+    const effectiveStats = getEffectiveHeroStatsFromValues(hero);
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
+    await supabase.from("heroes").update({ mana: maxMana }).eq("id", hero.id);
+    await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Puits magique visite : mana restauree." };
+  }
+
+  if (buildingType === AdventureBuildingType.MAGIC_SHRINE) {
+    const effectiveStats = getEffectiveHeroStatsFromValues(hero);
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
+    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, {
+      mana: Math.min(maxMana, currentMana + MAGIC_SHRINE_MANA_RESTORE),
+    });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Sanctuaire magique visite : +20 mana." };
+  }
+
+  if (buildingType === AdventureBuildingType.WATER_MILL || buildingType === AdventureBuildingType.WATER_WHEEL) {
+    const weekKey = `${object.id}:${gamePlayer.id}`;
+    const currentWeek = getAdventureWeekKey(turnNumber);
+    if (weeklyAdventureVisits[weekKey] === currentWeek) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette roue a eau a deja produit cette semaine." };
+    }
+    const reward = buildingType === AdventureBuildingType.WATER_MILL ? WATER_MILL_GOLD_REWARD : WATER_WHEEL_GOLD_REWARD;
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + reward });
+    await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: { gold: reward },
+      message: buildingType === AdventureBuildingType.WATER_MILL ? "Moulin a eau : +1000 Or." : "Roue a eau : +500 Or.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.ABANDONED_WAGON) {
+    const rewardGold = makeRng(`${gameId}:${object.id}:wagon`)() > 0.5;
+    visitedAdventureBuildings.add(object.id);
+    if (rewardGold) {
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + 500 });
+    } else {
+      await updatePlayerResources(supabase, gamePlayer.id, { wood: gamePlayer.wood + 5, ore: gamePlayer.ore + 5 });
+    }
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: rewardGold ? { gold: 500 } : { resources: { wood: 5, ore: 5 } },
+      message: rewardGold ? "Chariot abandonne fouille : +500 Or." : "Chariot abandonne fouille : +5 Bois, +5 Minerai.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.CRATE) {
+    const resources = playerResources(gamePlayer);
+    const rng = makeRng(`${gameId}:${object.id}:crate`);
+    const rewardGold = rng() > 0.45;
+    visitedAdventureBuildings.add(object.id);
+    let resourceReward: Partial<Record<keyof Resources, number>> | undefined;
+    if (rewardGold) {
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: resources.gold + 300 });
+    } else {
+      const resource: keyof Resources = rng() > 0.5 ? "wood" : "ore";
+      resourceReward = { [resource]: 6 };
+      await updatePlayerResources(supabase, gamePlayer.id, { [resource]: Number(resources[resource] ?? 0) + 6 });
+    }
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: rewardGold ? { gold: 300 } : { resources: resourceReward },
+      message: rewardGold ? "Caisse ouverte : +300 Or." : "Caisse ouverte : ressources trouvees.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.SKELETON) {
+    const rewardGems = makeRng(`${gameId}:${object.id}:skeleton`)() > 0.65;
+    visitedAdventureBuildings.add(object.id);
+    if (rewardGems) {
+      await updatePlayerResources(supabase, gamePlayer.id, { gems: gamePlayer.gems + 2 });
+    } else {
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + 300 });
+    }
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: rewardGems ? { resources: { gems: 2 } } : { gold: 300 },
+      message: rewardGems ? "Squelette fouille : +2 Gemmes." : "Squelette fouille : +300 Or.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.OBELISK) {
+    const revealed = computeVisibleTiles(mapData, [position], OBELISK_REVEAL_RADIUS);
+    for (const key of revealed) explored.add(key);
+    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+      },
+    }).eq("id", gameId);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Obelisque visite : region revelee." };
+  }
+
+  if (buildingType === AdventureBuildingType.WARRIOR_TOMB) {
+    visitedAdventureBuildings.add(object.id);
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + WARRIOR_TOMB_GOLD_REWARD });
+    await supabase.from("heroes").update({
+      experience: hero.experience + WARRIOR_TOMB_EXPERIENCE_REWARD,
+      morale: Number(hero.morale ?? 0) - 1,
+    }).eq("id", hero.id);
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: { gold: WARRIOR_TOMB_GOLD_REWARD },
+      message: "Tombe du guerrier profanee : +700 Or, +750 XP, -1 Moral.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.CURSED_ALTAR) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, {
+      spellPower: Number(hero.spellPower ?? 0) + 1,
+      luck: Number(hero.luck ?? 0) - 1,
+    });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Autel maudit visite : +1 Pouvoir, -1 Chance." };
+  }
+
+  if (
+    buildingType === AdventureBuildingType.SPELL_SHRINE_1 ||
+    buildingType === AdventureBuildingType.SPELL_SHRINE_2 ||
+    buildingType === AdventureBuildingType.SPELL_SHRINE_3
+  ) {
+    const level = buildingType === AdventureBuildingType.SPELL_SHRINE_1 ? 1 : buildingType === AdventureBuildingType.SPELL_SHRINE_2 ? 2 : 3;
+    const spell = pickShrineSpell(level, `${gameId}:${object.id}:${hero.id}`);
+    const knownSpellIds = addKnownSpell(hero.knownSpellIds, spell.id);
+    await supabase.from("heroes").update({
+      has_spell_book: true,
+      known_spells: knownSpellIds,
+    }).eq("id", hero.id);
+    await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: `${getAdventureBuildingLabel(buildingType)} visite : ${spell.label} appris.` };
+  }
+
+  if (buildingType === AdventureBuildingType.TREE_OF_KNOWLEDGE) {
+    if (gamePlayer.gold < TREE_OF_KNOWLEDGE_COST_GOLD) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 2000 Or pour recevoir l'enseignement de l'arbre." };
+    }
+    await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - TREE_OF_KNOWLEDGE_COST_GOLD });
+    await supabase.from("heroes").update({ experience: hero.experience + TREE_OF_KNOWLEDGE_EXPERIENCE }).eq("id", hero.id);
+    await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Arbre de connaissance : +2000 XP contre 2000 Or." };
+  }
+
+  if (buildingType === AdventureBuildingType.SEER_HUT) {
+    const effectiveStats = getEffectiveHeroStatsFromValues(hero);
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
+    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    await supabase.from("heroes").update({
+      experience: hero.experience + SEER_HUT_EXPERIENCE,
+      mana: Math.min(maxMana, currentMana + 10),
+    }).eq("id", hero.id);
+    await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Hutte d'erudit visitee : +1000 XP, +10 mana." };
+  }
+
+  if (buildingType === AdventureBuildingType.MERMAID) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { luck: Number(hero.luck ?? 0) + 1 });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Sirene rencontree : +1 Chance." };
+  }
+
+  if (buildingType === AdventureBuildingType.BUOY) {
+    await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { morale: Number(hero.morale ?? 0) + 1 });
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bouee visitee : +1 Moral." };
+  }
+
+  if (buildingType === AdventureBuildingType.FLOTSAM) {
+    visitedAdventureBuildings.add(object.id);
+    await updatePlayerResources(supabase, gamePlayer.id, { wood: gamePlayer.wood + 5, gold: gamePlayer.gold + 250 });
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, reward: { gold: 250, resources: { wood: 5 } }, message: "Debris flottants fouilles : +250 Or, +5 Bois." };
+  }
+
+  if (buildingType === AdventureBuildingType.SEA_CHEST) {
+    const rewardGems = makeRng(`${gameId}:${object.id}:sea_chest`)() > 0.6;
+    visitedAdventureBuildings.add(object.id);
+    if (rewardGems) {
+      await updatePlayerResources(supabase, gamePlayer.id, { gems: gamePlayer.gems + 3 });
+    } else {
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + 600 });
+    }
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: rewardGems ? { resources: { gems: 3 } } : { gold: 600 },
+      message: rewardGems ? "Coffre marin ouvert : +3 Gemmes." : "Coffre marin ouvert : +600 Or.",
+    };
+  }
+
   return {
     type: "ADVENTURE_BUILDING",
     buildingType,
     destination: position,
     message: `${getAdventureBuildingLabel(buildingType)} visite.`,
   };
+}
+
+function isHeroVisitBuilding(type: AdventureBuildingType) {
+  return [
+    AdventureBuildingType.ARENA,
+    AdventureBuildingType.MERCENARY_CAMP,
+    AdventureBuildingType.MARLETTO_TOWER,
+    AdventureBuildingType.STAR_AXIS,
+    AdventureBuildingType.GARDEN_OF_REVELATION,
+    AdventureBuildingType.LEARNING_STONE,
+    AdventureBuildingType.SCHOOL_OF_WAR,
+    AdventureBuildingType.SCHOOL_OF_MAGIC,
+    AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT,
+    AdventureBuildingType.TEMPLE,
+    AdventureBuildingType.FOUNTAIN_OF_FORTUNE,
+    AdventureBuildingType.IDOL_OF_FORTUNE,
+    AdventureBuildingType.MAGIC_SHRINE,
+    AdventureBuildingType.CURSED_ALTAR,
+    AdventureBuildingType.SPELL_SHRINE_1,
+    AdventureBuildingType.SPELL_SHRINE_2,
+    AdventureBuildingType.SPELL_SHRINE_3,
+    AdventureBuildingType.TREE_OF_KNOWLEDGE,
+    AdventureBuildingType.SEER_HUT,
+    AdventureBuildingType.MERMAID,
+    AdventureBuildingType.BUOY,
+  ].includes(type);
+}
+
+function isSingleMapRewardBuilding(type: AdventureBuildingType) {
+  return [
+    AdventureBuildingType.ABANDONED_WAGON,
+    AdventureBuildingType.CRATE,
+    AdventureBuildingType.SKELETON,
+    AdventureBuildingType.WARRIOR_TOMB,
+    AdventureBuildingType.FLOTSAM,
+    AdventureBuildingType.SEA_CHEST,
+  ].includes(type);
+}
+
+function hasHeroVisited(visits: Record<string, string[]> | undefined, heroId: string, buildingId: string) {
+  return visits?.[heroId]?.includes(buildingId) ?? false;
+}
+
+async function applyHeroStatVisit(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapState: Record<string, unknown>,
+  hero: MinimalHero,
+  visits: Record<string, string[]>,
+  buildingId: string,
+  stat: HeroStatKey,
+  amount: number,
+) {
+  await supabase.from("heroes").update({
+    [heroStatColumn(stat)]: Number(heroStatValue(hero, stat)) + amount,
+  }).eq("id", hero.id);
+  await updateHeroAdventureVisits(supabase, gameId, mapState, visits, hero.id, buildingId);
+}
+
+async function updateHeroAdventureVisits(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapState: Record<string, unknown>,
+  visits: Record<string, string[]>,
+  heroId: string,
+  buildingId: string,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      heroAdventureVisits: addVisit(visits, heroId, buildingId),
+    },
+  }).eq("id", gameId);
+}
+
+async function applyHeroAttributeVisit(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapState: Record<string, unknown>,
+  hero: MinimalHero,
+  visits: Record<string, string[]>,
+  buildingId: string,
+  update: Partial<Pick<MinimalHero, "morale" | "luck" | "mana" | "spellPower">>,
+) {
+  const payload = {
+    morale: update.morale,
+    luck: update.luck,
+    mana: update.mana,
+    spell_power: update.spellPower,
+  };
+  await supabase.from("heroes").update(
+    Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined))
+  ).eq("id", hero.id);
+  await updateHeroAdventureVisits(supabase, gameId, mapState, visits, hero.id, buildingId);
+}
+
+async function updateWeeklyAdventureVisit(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapState: Record<string, unknown>,
+  visits: Record<string, string>,
+  visitKey: string,
+  weekKey: string,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      weeklyAdventureVisits: {
+        ...visits,
+        [visitKey]: weekKey,
+      },
+    },
+  }).eq("id", gameId);
+}
+
+async function updateVisitedAdventureBuildings(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  mapState: Record<string, unknown>,
+  visitedAdventureBuildings: Set<string>,
+) {
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      visitedAdventureBuildings: Array.from(visitedAdventureBuildings),
+    },
+  }).eq("id", gameId);
+}
+
+function heroStatColumn(stat: HeroStatKey) {
+  if (stat === "spellPower") return "spell_power";
+  return stat;
+}
+
+function heroStatValue(hero: MinimalHero, stat: HeroStatKey) {
+  if (stat === "attack") return hero.attack ?? 0;
+  if (stat === "defense") return hero.defense ?? 0;
+  if (stat === "spellPower") return hero.spellPower ?? 0;
+  return hero.knowledge ?? 0;
+}
+
+function normalizeHeroStatChoice(value: unknown): HeroStatKey | undefined {
+  return value === "attack" || value === "defense" || value === "spellPower" || value === "knowledge"
+    ? value
+    : undefined;
+}
+
+function pickShrineSpell(level: number, seed: string) {
+  const candidates = SPELLS.filter((spell) => spell.level === level && spell.context === "combat");
+  const pool = candidates.length > 0 ? candidates : SPELLS.filter((spell) => spell.level === level);
+  return pool[Math.floor(makeRng(seed)() * pool.length)] ?? SPELLS[0];
+}
+
+function addKnownSpell(current: string[] | null | undefined, spellId: SpellId) {
+  return Array.from(new Set([...(current ?? []), spellId]));
+}
+
+function findAdventureBuildingById(map: GameMap, buildingId: string): { object: MapObject; position: Position } | null {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "adventure_building" && tile.object.id === buildingId) {
+        return { object: tile.object, position: { x: tile.x, y: tile.y } };
+      }
+    }
+  }
+  return null;
+}
+
+function getAllMapTileKeys(map: GameMap) {
+  const keys: string[] = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      keys.push(`${x},${y}`);
+    }
+  }
+  return keys;
+}
+
+function getMysticalGardenWeekKey(turnNumber: number) {
+  return getAdventureWeekKey(turnNumber);
+}
+
+function getAdventureWeekKey(turnNumber: number) {
+  return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
 }
 
 function findStargateDestination(map: GameMap, targetId: string | undefined): Position | null {

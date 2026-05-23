@@ -24,7 +24,7 @@ import {
 } from "@/lib/game/types";
 
 const MOCK_USER_ID = "dev-map-user";
-const WIDTH = 30;
+const WIDTH = 36;
 const HEIGHT = 28;
 const RESOURCE_BUILDING_Y = 23;
 const RESOURCE_PICKUP_Y = 25;
@@ -314,6 +314,41 @@ function buildShowcaseMap(): GameMap {
     [AdventureBuildingType.CAMPFIRE, 19, 17],
     [AdventureBuildingType.LIGHTHOUSE, 21, 17],
     [AdventureBuildingType.STARGATE, 23, 17],
+    [AdventureBuildingType.ARENA, 25, 17],
+    [AdventureBuildingType.MERCENARY_CAMP, 27, 17],
+    [AdventureBuildingType.MARLETTO_TOWER, 29, 17],
+    [AdventureBuildingType.STAR_AXIS, 17, 21],
+    [AdventureBuildingType.GARDEN_OF_REVELATION, 19, 21],
+    [AdventureBuildingType.LEARNING_STONE, 21, 21],
+    [AdventureBuildingType.SCHOOL_OF_WAR, 23, 21],
+    [AdventureBuildingType.SCHOOL_OF_MAGIC, 25, 21],
+    [AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT, 27, 21],
+    [AdventureBuildingType.CARTOGRAPHER, 29, 21],
+    [AdventureBuildingType.REDWOOD_OBSERVATORY, 31, 21],
+    [AdventureBuildingType.MYSTICAL_GARDEN, 33, 21],
+    [AdventureBuildingType.STABLES, 17, 23],
+    [AdventureBuildingType.TEMPLE, 19, 23],
+    [AdventureBuildingType.FOUNTAIN_OF_FORTUNE, 21, 23],
+    [AdventureBuildingType.IDOL_OF_FORTUNE, 23, 23],
+    [AdventureBuildingType.MAGIC_WELL, 25, 23],
+    [AdventureBuildingType.MAGIC_SHRINE, 27, 23],
+    [AdventureBuildingType.WATER_MILL, 29, 23],
+    [AdventureBuildingType.WATER_WHEEL, 31, 23],
+    [AdventureBuildingType.ABANDONED_WAGON, 33, 23],
+    [AdventureBuildingType.CRATE, 17, 25],
+    [AdventureBuildingType.SKELETON, 19, 25],
+    [AdventureBuildingType.OBELISK, 21, 25],
+    [AdventureBuildingType.WARRIOR_TOMB, 23, 25],
+    [AdventureBuildingType.CURSED_ALTAR, 25, 25],
+    [AdventureBuildingType.SPELL_SHRINE_1, 27, 26],
+    [AdventureBuildingType.SPELL_SHRINE_2, 29, 26],
+    [AdventureBuildingType.SPELL_SHRINE_3, 31, 26],
+    [AdventureBuildingType.TREE_OF_KNOWLEDGE, 33, 26],
+    [AdventureBuildingType.SEER_HUT, 17, 26],
+    [AdventureBuildingType.MERMAID, 19, 26],
+    [AdventureBuildingType.BUOY, 21, 26],
+    [AdventureBuildingType.FLOTSAM, 23, 26],
+    [AdventureBuildingType.SEA_CHEST, 25, 26],
   ] as const;
   for (const [type, x, y] of adventureBuildings) {
     placeObject(map, x, y, {
@@ -321,6 +356,22 @@ function buildShowcaseMap(): GameMap {
       id: `adv-${type}`,
       subtype: type,
       name: type,
+    }, false);
+  }
+
+  const riskyBanks = [
+    ["crypt", 27, 25],
+    ["ruins", 29, 25],
+    ["shipwreck", 31, 25],
+    ["bandit_camp", 33, 25],
+  ] as const;
+  for (const [type, x, y] of riskyBanks) {
+    placeObject(map, x, y, {
+      type: "adventure_building",
+      id: `creature-bank-${type}`,
+      subtype: type,
+      name: type,
+      guardianPower: 1200,
     }, false);
   }
 

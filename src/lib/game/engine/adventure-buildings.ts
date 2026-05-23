@@ -54,16 +54,63 @@ function adventureTargetForZone(type: string, value: number): number {
 function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count: number): AdventureBuildingType[] {
   if (count <= 0) return [];
   const meta = ctx.zoneGrid.meta[zoneId];
-  const base: AdventureBuildingType[] = meta.type === "treasure"
-    ? [AdventureBuildingType.CAMPFIRE, AdventureBuildingType.OBSERVATORY, AdventureBuildingType.LIGHTHOUSE]
-    : [AdventureBuildingType.CAMPFIRE, AdventureBuildingType.OBSERVATORY];
+  const base: AdventureBuildingType[] = [
+    AdventureBuildingType.CAMPFIRE,
+    AdventureBuildingType.OBSERVATORY,
+    AdventureBuildingType.MERCENARY_CAMP,
+    AdventureBuildingType.MARLETTO_TOWER,
+    AdventureBuildingType.STAR_AXIS,
+    AdventureBuildingType.GARDEN_OF_REVELATION,
+    AdventureBuildingType.LEARNING_STONE,
+    AdventureBuildingType.ARENA,
+    AdventureBuildingType.SCHOOL_OF_WAR,
+    AdventureBuildingType.SCHOOL_OF_MAGIC,
+    AdventureBuildingType.MYSTICAL_GARDEN,
+    AdventureBuildingType.REDWOOD_OBSERVATORY,
+    AdventureBuildingType.STABLES,
+    AdventureBuildingType.TEMPLE,
+    AdventureBuildingType.FOUNTAIN_OF_FORTUNE,
+    AdventureBuildingType.IDOL_OF_FORTUNE,
+    AdventureBuildingType.MAGIC_WELL,
+    AdventureBuildingType.MAGIC_SHRINE,
+    AdventureBuildingType.WATER_MILL,
+    AdventureBuildingType.WATER_WHEEL,
+    AdventureBuildingType.ABANDONED_WAGON,
+    AdventureBuildingType.CRATE,
+    AdventureBuildingType.SKELETON,
+    AdventureBuildingType.OBELISK,
+    AdventureBuildingType.WARRIOR_TOMB,
+    AdventureBuildingType.CURSED_ALTAR,
+    AdventureBuildingType.SPELL_SHRINE_1,
+    AdventureBuildingType.SPELL_SHRINE_2,
+    AdventureBuildingType.TREE_OF_KNOWLEDGE,
+    AdventureBuildingType.SEER_HUT,
+    AdventureBuildingType.MERMAID,
+    AdventureBuildingType.BUOY,
+    AdventureBuildingType.FLOTSAM,
+    AdventureBuildingType.SEA_CHEST,
+  ];
+  const treasureOnly = [
+    AdventureBuildingType.LIGHTHOUSE,
+    AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT,
+    AdventureBuildingType.CARTOGRAPHER,
+    AdventureBuildingType.SPELL_SHRINE_3,
+  ];
+  const pool = meta.type === "treasure" ? [...base, ...treasureOnly] : base;
 
-  const out: AdventureBuildingType[] = [];
-  for (const type of shuffle(ctx.rng, base)) {
-    if (out.length >= count) break;
-    out.push(type);
-  }
-  return out;
+  return pool
+    .map((type) => {
+      const terrainMatch = getAdventureBuildingPreferredTerrain(type).includes(meta.baseTerrain);
+      const rarity = getAdventureBuildingRarity(type);
+      const treasureBoost = meta.type === "treasure" && isRareAdventureBuilding(type) ? 1.5 : 1;
+      return {
+        type,
+        score: (terrainMatch ? 2 : 0.7) * rarity * treasureBoost * (0.65 + ctx.rng() * 0.7),
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, count)
+    .map((entry) => entry.type);
 }
 
 function findAdventureTile(
@@ -282,7 +329,128 @@ function isValidAdventureTile(ctx: PlacementContext, tile: MapTile, type: Advent
   if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
   if (hasMajorObjectNearby(ctx, tile.x, tile.y, 2)) return false;
   if (type === AdventureBuildingType.LIGHTHOUSE && !hasWaterNearby(ctx, tile.x, tile.y, 3)) return false;
+  if ((type === AdventureBuildingType.WATER_MILL || type === AdventureBuildingType.WATER_WHEEL) && !hasWaterNearby(ctx, tile.x, tile.y, 3)) return false;
+  if (isCoastalAdventureBuilding(type) && !hasWaterNearby(ctx, tile.x, tile.y, 2)) return false;
+  if (!getAdventureBuildingPreferredTerrain(type).includes(tile.terrain) && ctx.rng() > 0.32) return false;
   return true;
+}
+
+function getAdventureBuildingPreferredTerrain(type: AdventureBuildingType): TerrainType[] {
+  switch (type) {
+    case AdventureBuildingType.CAMPFIRE:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.DIRT, TerrainType.SWAMP];
+    case AdventureBuildingType.OBSERVATORY:
+      return [TerrainType.MOUNTAIN, TerrainType.GRASS, TerrainType.SNOW];
+    case AdventureBuildingType.LIGHTHOUSE:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW];
+    case AdventureBuildingType.STARGATE:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.MERCENARY_CAMP:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.FOREST];
+    case AdventureBuildingType.MARLETTO_TOWER:
+      return [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.STAR_AXIS:
+      return [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.DIRT];
+    case AdventureBuildingType.GARDEN_OF_REVELATION:
+    case AdventureBuildingType.MYSTICAL_GARDEN:
+    case AdventureBuildingType.REDWOOD_OBSERVATORY:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP];
+    case AdventureBuildingType.LEARNING_STONE:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.SCHOOL_OF_WAR:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND];
+    case AdventureBuildingType.SCHOOL_OF_MAGIC:
+    case AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT:
+      return [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.CARTOGRAPHER:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW];
+    case AdventureBuildingType.STABLES:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND];
+    case AdventureBuildingType.TEMPLE:
+      return [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.FOUNTAIN_OF_FORTUNE:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SNOW];
+    case AdventureBuildingType.IDOL_OF_FORTUNE:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SWAMP, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.MAGIC_WELL:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SNOW, TerrainType.SWAMP];
+    case AdventureBuildingType.MAGIC_SHRINE:
+      return [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.WATER_MILL:
+    case AdventureBuildingType.WATER_WHEEL:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP];
+    case AdventureBuildingType.ABANDONED_WAGON:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW];
+    case AdventureBuildingType.CRATE:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP];
+    case AdventureBuildingType.SKELETON:
+      return [TerrainType.DIRT, TerrainType.SAND, TerrainType.SWAMP, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.OBELISK:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.WARRIOR_TOMB:
+      return [TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.CURSED_ALTAR:
+      return [TerrainType.DIRT, TerrainType.SWAMP, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.SPELL_SHRINE_1:
+      return [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.SPELL_SHRINE_2:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.MOUNTAIN];
+    case AdventureBuildingType.SPELL_SHRINE_3:
+      return [TerrainType.SNOW, TerrainType.MOUNTAIN, TerrainType.SWAMP];
+    case AdventureBuildingType.TREE_OF_KNOWLEDGE:
+      return [TerrainType.GRASS, TerrainType.FOREST];
+    case AdventureBuildingType.SEER_HUT:
+      return [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP];
+    case AdventureBuildingType.MERMAID:
+    case AdventureBuildingType.BUOY:
+    case AdventureBuildingType.FLOTSAM:
+    case AdventureBuildingType.SEA_CHEST:
+      return [TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS];
+    default:
+      return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SNOW];
+  }
+}
+
+function getAdventureBuildingRarity(type: AdventureBuildingType): number {
+  if (type === AdventureBuildingType.CRATE) return 1.1;
+  if (type === AdventureBuildingType.LEARNING_STONE) return 1;
+  if (type === AdventureBuildingType.ABANDONED_WAGON) return 1;
+  if (type === AdventureBuildingType.SKELETON) return 0.9;
+  if (type === AdventureBuildingType.MERCENARY_CAMP) return 0.9;
+  if (type === AdventureBuildingType.WATER_MILL) return 0.85;
+  if (type === AdventureBuildingType.MARLETTO_TOWER) return 0.8;
+  if (type === AdventureBuildingType.STABLES || type === AdventureBuildingType.MAGIC_WELL || type === AdventureBuildingType.WATER_WHEEL) return 0.8;
+  if (type === AdventureBuildingType.STAR_AXIS || type === AdventureBuildingType.GARDEN_OF_REVELATION) return 0.75;
+  if (type === AdventureBuildingType.TEMPLE || type === AdventureBuildingType.FOUNTAIN_OF_FORTUNE) return 0.7;
+  if (type === AdventureBuildingType.SPELL_SHRINE_1 || type === AdventureBuildingType.SEA_CHEST) return 0.7;
+  if (type === AdventureBuildingType.BUOY) return 0.65;
+  if (type === AdventureBuildingType.MYSTICAL_GARDEN) return 0.65;
+  if (type === AdventureBuildingType.WARRIOR_TOMB) return 0.65;
+  if (type === AdventureBuildingType.SPELL_SHRINE_2 || type === AdventureBuildingType.SEER_HUT || type === AdventureBuildingType.MERMAID) return 0.55;
+  if (type === AdventureBuildingType.MAGIC_SHRINE) return 0.55;
+  if (type === AdventureBuildingType.ARENA) return 0.55;
+  if (type === AdventureBuildingType.REDWOOD_OBSERVATORY) return 0.5;
+  if (type === AdventureBuildingType.CURSED_ALTAR) return 0.5;
+  if (type === AdventureBuildingType.TREE_OF_KNOWLEDGE) return 0.45;
+  if (type === AdventureBuildingType.IDOL_OF_FORTUNE) return 0.45;
+  if (type === AdventureBuildingType.SCHOOL_OF_WAR || type === AdventureBuildingType.SCHOOL_OF_MAGIC) return 0.45;
+  if (type === AdventureBuildingType.SPELL_SHRINE_3) return 0.4;
+  if (type === AdventureBuildingType.OBELISK) return 0.4;
+  if (type === AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT || type === AdventureBuildingType.CARTOGRAPHER) return 0.25;
+  return 0.8;
+}
+
+function isCoastalAdventureBuilding(type: AdventureBuildingType): boolean {
+  return type === AdventureBuildingType.MERMAID ||
+    type === AdventureBuildingType.BUOY ||
+    type === AdventureBuildingType.FLOTSAM ||
+    type === AdventureBuildingType.SEA_CHEST;
+}
+
+function isRareAdventureBuilding(type: AdventureBuildingType): boolean {
+  return type === AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT ||
+    type === AdventureBuildingType.CARTOGRAPHER ||
+    type === AdventureBuildingType.OBELISK;
 }
 
 function hasRoadNearby(ctx: PlacementContext, x: number, y: number, radius: number): boolean {

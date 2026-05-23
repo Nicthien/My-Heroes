@@ -7,7 +7,7 @@ import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { getCreature } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
 import { goldText } from "@/components/game/hud/theme";
-import { type DamagePreview, formatRange, getCenteredInitiativeSlots } from "./combatLayout";
+import { type DamagePreview, formatRange } from "./combatLayout";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
 
 export function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview; actor?: CombatBoardUnit; target?: CombatBoardUnit }) {
@@ -41,17 +41,34 @@ export function InitiativeQueue({
   const queueRef = useRef<HTMLDivElement>(null);
   const [visibleRadius, setVisibleRadius] = useState(3);
   const unitsById = new Map(combat.boardState.units.map((unit) => [unit.id, unit]));
-  const currentRoundOrder = (combat.turnQueue.length > 0 ? combat.turnQueue : buildTurnQueue(combat.boardState.units, combat.round))
+  const fullRoundOrder = buildTurnQueue(combat.boardState.units, combat.round)
     .filter((id) => unitsById.get(id)?.count);
+  const previousRoundOrder = buildTurnQueue(combat.boardState.units, Math.max(1, combat.round - 1))
+    .filter((id) => unitsById.get(id)?.count);
+  const remainingRoundOrder = (combat.turnQueue.length > 0 ? combat.turnQueue : fullRoundOrder)
+    .filter((id) => unitsById.get(id)?.count);
+  const playedRoundOrder = subtractOrdered(fullRoundOrder, remainingRoundOrder);
   const nextRoundOrder = buildTurnQueue(combat.boardState.units, combat.round + 1)
     .filter((id) => unitsById.get(id)?.count);
-  const initiativeOrder = [...currentRoundOrder, ...nextRoundOrder];
-  const queue = getCenteredInitiativeSlots(initiativeOrder, combat.currentUnitId, visibleRadius, currentRoundOrder.length)
+  const initiativeTimeline = buildInitiativeTimeline({
+    previousRoundOrder,
+    playedRoundOrder,
+    remainingRoundOrder,
+    nextRoundOrder,
+    radius: visibleRadius,
+  });
+  const activeTimelineIndex = initiativeTimeline.currentRoundStartIndex + playedRoundOrder.length;
+  const queue = getVisibleInitiativeSlots(
+    initiativeTimeline.order,
+    activeTimelineIndex,
+    visibleRadius,
+    initiativeTimeline.roundStartIndices,
+  )
     .map((slot) => {
       const unit = unitsById.get(slot.id);
       return unit && unit.count > 0 ? { ...slot, unit } : null;
     })
-    .filter((slot): slot is { id: string; offset: number; startsNextRound: boolean; unit: CombatBoardUnit } => Boolean(slot));
+    .filter((slot): slot is InitiativeVisibleSlot & { unit: CombatBoardUnit } => Boolean(slot));
 
   useEffect(() => {
     const element = queueRef.current;
@@ -73,19 +90,19 @@ export function InitiativeQueue({
   return (
     <div ref={queueRef} className="mx-auto flex max-w-full items-center justify-center overflow-hidden">
       <div className="flex max-w-full items-center gap-1.5 overflow-hidden rounded-md border border-amber-700/50 bg-black/55 px-2 py-1.5 shadow-[0_10px_26px_rgba(0,0,0,0.5),0_0_0_1px_rgba(252,211,77,0.12)_inset] backdrop-blur-sm">
-        {queue.map(({ unit, offset, startsNextRound }) => {
+        {queue.map(({ unit, offset, startsRound, key }) => {
           const rule = getUnitRule(unit.unitType);
           const active = offset === 0;
           const inspected = inspectedUnitId === unit.id;
           const previous = offset < 0;
           const buttonStyle = getInitiativeButtonStyle(unit, gameState, active, inspected);
           return (
-            <div key={`${unit.id}-${offset}`} className="flex shrink-0 items-center gap-1.5">
-              {startsNextRound && (
+            <div key={key} className="flex shrink-0 items-center gap-1.5">
+              {startsRound && (
                 <span
-                  className="h-14 w-1 shrink-0 rounded-full border border-amber-200/70 bg-gradient-to-b from-amber-100 via-amber-300 to-orange-700 shadow-[0_0_12px_rgba(251,191,36,0.72)]"
-                  title="Debut du prochain round"
-                  aria-label="Debut du prochain round"
+                  className="mx-1 h-14 w-1.5 shrink-0 rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-50 via-amber-300 to-orange-700 shadow-[0_0_16px_rgba(251,191,36,0.88)]"
+                  title="Debut d'un tour"
+                  aria-label="Debut d'un tour"
                 />
               )}
               <button
@@ -106,9 +123,98 @@ export function InitiativeQueue({
             </div>
           );
         })}
+        {queue.some((slot) => slot.endsRound) && (
+          <span
+            className="mx-1 h-14 w-1.5 shrink-0 rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-50 via-amber-300 to-orange-700 shadow-[0_0_16px_rgba(251,191,36,0.88)]"
+            title="Debut d'un tour"
+            aria-label="Debut d'un tour"
+          />
+        )}
       </div>
     </div>
   );
+}
+
+type InitiativeVisibleSlot = {
+  id: string;
+  key: string;
+  offset: number;
+  startsRound: boolean;
+  endsRound: boolean;
+};
+
+function subtractOrdered(order: string[], remaining: string[]) {
+  const remainingCounts = new Map<string, number>();
+  for (const id of remaining) {
+    remainingCounts.set(id, (remainingCounts.get(id) ?? 0) + 1);
+  }
+
+  return order.filter((id) => {
+    const count = remainingCounts.get(id) ?? 0;
+    if (count === 0) return true;
+    remainingCounts.set(id, count - 1);
+    return false;
+  });
+}
+
+function buildInitiativeTimeline(params: {
+  previousRoundOrder: string[];
+  playedRoundOrder: string[];
+  remainingRoundOrder: string[];
+  nextRoundOrder: string[];
+  radius: number;
+}) {
+  const currentRoundOrder = [...params.playedRoundOrder, ...params.remainingRoundOrder];
+  const previousRound = params.previousRoundOrder.length > 0
+    ? params.previousRoundOrder
+    : currentRoundOrder;
+  const futureRound = params.nextRoundOrder.length > 0
+    ? params.nextRoundOrder
+    : currentRoundOrder;
+  if (currentRoundOrder.length === 0 && futureRound.length === 0) {
+    return { order: [] as string[], currentRoundStartIndex: 0, roundStartIndices: [] as number[] };
+  }
+
+  const prefixBase = previousRound.length > 0 ? previousRound : futureRound;
+  const suffixBase = futureRound.length > 0 ? futureRound : previousRound;
+  const prefixRepeats = prefixBase.length > 0 ? Math.max(1, Math.ceil(Math.max(0, params.radius - params.playedRoundOrder.length) / prefixBase.length)) : 0;
+  const suffixRepeats = suffixBase.length > 0 ? Math.max(1, Math.ceil(Math.max(0, params.radius - params.remainingRoundOrder.length + 1) / suffixBase.length)) : 0;
+  const prefixOrder = Array.from({ length: prefixRepeats }, () => prefixBase).flat();
+  const suffixOrder = Array.from({ length: suffixRepeats }, () => suffixBase).flat();
+  const currentRoundStartIndex = prefixOrder.length;
+  const nextRoundStartIndex = currentRoundStartIndex + currentRoundOrder.length;
+  const roundStartIndices = [
+    ...Array.from({ length: prefixRepeats + 1 }, (_, index) => index * prefixBase.length).filter(() => prefixBase.length > 0),
+    ...Array.from({ length: suffixRepeats }, (_, index) => nextRoundStartIndex + index * suffixBase.length).filter(() => suffixBase.length > 0),
+  ];
+
+  return {
+    order: [...prefixOrder, ...currentRoundOrder, ...suffixOrder],
+    currentRoundStartIndex,
+    roundStartIndices,
+  };
+}
+
+function getVisibleInitiativeSlots(
+  order: string[],
+  activeTimelineIndex: number,
+  radius: number,
+  roundStartIndices: number[],
+): InitiativeVisibleSlot[] {
+  if (order.length === 0) return [];
+
+  const firstRawIndex = activeTimelineIndex - radius;
+  const lastRawIndex = activeTimelineIndex + radius;
+  return Array.from({ length: radius * 2 + 1 }, (_, index) => {
+    const rawIndex = firstRawIndex + index;
+    return {
+      id: order[rawIndex] ?? null,
+      key: `${order[rawIndex] ?? "empty"}-${rawIndex}`,
+      offset: rawIndex - activeTimelineIndex,
+      startsRound: roundStartIndices.includes(rawIndex),
+      endsRound: roundStartIndices.includes(rawIndex + 1) && rawIndex === lastRawIndex,
+    };
+  }).filter((slot): slot is InitiativeVisibleSlot => slot.id !== null);
 }
 
 function getInitiativeButtonStyle(unit: CombatBoardUnit, gameState: GameState, active: boolean, inspected: boolean): CSSProperties {

@@ -22,6 +22,9 @@ export const ISO_ORIGIN_Y = BOARD_PADDING_TOP;
 // Camera / interaction
 export const MIN_BATTLE_ZOOM = 0.58;
 export const MAX_BATTLE_ZOOM = 1.55;
+export const DEFAULT_BATTLE_ZOOM = 0.82;
+export const DEFAULT_BATTLE_PAN_X = -95;
+export const DEFAULT_BATTLE_PAN_Y = 12;
 export const RIGHT_DRAG_THRESHOLD = 5;
 
 // Unit rendering offsets

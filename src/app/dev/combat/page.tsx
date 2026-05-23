@@ -1,13 +1,39 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import { AuthContext } from "@/lib/auth/client";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
+import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { CombatBoardUnit, Faction, GameState, HeroClass, PersistentCombat, TerrainType, UnitType } from "@/lib/game/types";
+import {
+  CombatBoardUnit,
+  Faction,
+  GameState,
+  HeroClass,
+  MapTile,
+  PersistentCombat,
+  ResourceBuildingType,
+  TerrainType,
+  UnitType,
+} from "@/lib/game/types";
 
 const MOCK_USER_ID = "dev-user";
+type CombatPreviewScenario = "hero" | "mine" | "town" | "adventure";
+type CombatPreviewPhase = "start" | "mid" | "end" | "death";
+
+const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
+  { id: "hero", label: "Heros" },
+  { id: "mine", label: "Mine" },
+  { id: "town", label: "Chateau" },
+  { id: "adventure", label: "Batiment" },
+];
+const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; label: string }> = [
+  { id: "start", label: "Debut" },
+  { id: "mid", label: "Milieu" },
+  { id: "end", label: "Fin" },
+  { id: "death", label: "Mort" },
+];
 
 function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "count" | "side" | "q" | "r">): CombatBoardUnit {
   return {
@@ -33,8 +59,8 @@ function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id"
   };
 }
 
-function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
-  const tiles = Array.from({ length: 12 }, (_, y) =>
+function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPhase): { gameState: GameState; combat: PersistentCombat } {
+  const tiles: MapTile[][] = Array.from({ length: 12 }, (_, y) =>
     Array.from({ length: 12 }, (_, x) => ({
       x,
       y,
@@ -44,6 +70,30 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
       movementCost: 1,
     }))
   );
+
+  if (scenario === "mine") {
+    tiles[4][4].object = {
+      type: "building",
+      id: "gold-mine-preview",
+      subtype: ResourceBuildingType.GOLD_MINE,
+      guardianPower: 120,
+    };
+  } else if (scenario === "town") {
+    tiles[4][4].object = {
+      type: "town",
+      id: "neutral-town-preview",
+      subtype: Faction.CASTLE,
+      name: "Chateau neutre",
+    };
+  } else if (scenario === "adventure") {
+    tiles[4][4].object = {
+      type: "adventure_building",
+      id: "dragon-utopia-preview",
+      subtype: "dragon_utopia",
+      name: "Utopie des dragons",
+      guardianPower: 280,
+    };
+  }
 
   const gameState: GameState = {
     id: "dev-combat-game",
@@ -136,6 +186,16 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
     buildUnit({ id: "u6", unitType: UnitType.GOG, count: 16, side: "defender", q: 10, r: 4, ranged: true, shots: 12, speed: 4 }),
     buildUnit({ id: "u7", unitType: UnitType.EFREET, count: 3, side: "defender", q: 11, r: 7, speed: 9, maxHealth: 90, health: 270 }),
   ];
+  const scenarioUnits = scenario === "hero"
+    ? units
+    : units.map((unit) => unit.side === "defender" ? { ...unit, ownerPlayerId: null, heroId: null } : unit);
+  const combatUnits = phase === "death"
+    ? scenarioUnits.map((unit) => unit.id === "u6" ? { ...unit, count: 0, health: 0 } : unit)
+    : scenarioUnits;
+  const fullTurnQueue = buildTurnQueue(combatUnits, 1);
+  const phaseTurnQueue = getPhaseTurnQueue(fullTurnQueue, phase);
+  const currentUnitId = phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;
+  const currentPlayerId = combatUnits.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
 
   const combat: PersistentCombat = {
     id: "dev-combat",
@@ -143,16 +203,16 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
     mode: "MANUAL",
     status: "ACTIVE",
     attackerPlayerId: "p1",
-    defenderPlayerId: "p2",
+    defenderPlayerId: scenario === "hero" ? "p2" : null,
     attackerHeroId: "h1",
-    defenderHeroId: "h2",
+    defenderHeroId: scenario === "hero" ? "h2" : null,
     neutralArmyId: null,
-    currentPlayerId: "p1",
-    currentUnitId: "u3",
+    currentPlayerId,
+    currentUnitId,
     round: 1,
     position: { x: 4, y: 4 },
     boardState: {
-      units,
+      units: combatUnits,
       environment: buildCombatEnvironment(gameState.map, { x: 4, y: 4 }),
       terrain: [
         { type: "rock", q: 5, r: 2 },
@@ -161,13 +221,20 @@ function buildMockState(): { gameState: GameState; combat: PersistentCombat } {
         { type: "water", q: 6, r: 5 },
       ],
     },
-    turnQueue: units.map((unit) => unit.id),
+    turnQueue: phaseTurnQueue,
     actionLog: ["Combat lance."],
     participants: [],
     result: null,
   };
 
   return { gameState: { ...gameState, activeCombats: [combat] }, combat };
+}
+
+function getPhaseTurnQueue(fullTurnQueue: string[], phase: CombatPreviewPhase) {
+  if (phase === "mid") return fullTurnQueue.slice(Math.min(2, fullTurnQueue.length));
+  if (phase === "end") return fullTurnQueue.slice(-1);
+  if (phase === "death") return fullTurnQueue.slice(Math.min(2, fullTurnQueue.length));
+  return fullTurnQueue;
 }
 
 const mockAuthValue = {
@@ -177,15 +244,52 @@ const mockAuthValue = {
 };
 
 export default function DevCombatPage() {
+  const [scenario, setScenario] = useState<CombatPreviewScenario>("hero");
+  const [phase, setPhase] = useState<CombatPreviewPhase>("mid");
+
   useEffect(() => {
-    const { gameState, combat } = buildMockState();
+    const { gameState, combat } = buildMockState(scenario, phase);
     useGameStore.getState().setGameState(gameState);
     useGameStore.getState().setActiveCombat(combat);
-  }, []);
+  }, [phase, scenario]);
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
       <div className="relative h-screen w-screen overflow-hidden bg-stone-950">
+        <div className="absolute bottom-4 left-4 z-50 space-y-2 rounded-md border border-amber-600/40 bg-black/70 p-2 shadow-xl">
+          <div className="flex gap-2">
+            {COMBAT_PREVIEW_SCENARIOS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`rounded-md border px-3 py-1 text-xs font-black text-amber-100 transition ${
+                  scenario === item.id
+                    ? "border-amber-300 bg-amber-800/80"
+                    : "border-amber-700/50 bg-stone-900/80 hover:border-amber-400"
+                }`}
+                onClick={() => setScenario(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {COMBAT_PREVIEW_PHASES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`rounded-md border px-3 py-1 text-xs font-black text-amber-100 transition ${
+                  phase === item.id
+                    ? "border-sky-300 bg-sky-900/80"
+                    : "border-sky-700/50 bg-stone-900/80 hover:border-sky-400"
+                }`}
+                onClick={() => setPhase(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <CombatScreen />
       </div>
     </AuthContext.Provider>

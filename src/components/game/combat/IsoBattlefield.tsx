@@ -17,8 +17,12 @@ import { playCombatDamageHit } from "@/lib/audio/combatAudio";
 import { GAME_CURSORS } from "@/lib/ui/cursors";
 import { BattlefieldScenery, IsoTile, TerrainModel } from "./battlefieldScenery";
 import { DamagePreviewPanel } from "./combatPanels";
+import { CombatSceneActors } from "./combatSceneActors";
 import { UnitBadges, UnitModel } from "./battlefieldUnits";
 import {
+  DEFAULT_BATTLE_PAN_X,
+  DEFAULT_BATTLE_PAN_Y,
+  DEFAULT_BATTLE_ZOOM,
   ISO_GRID_HEIGHT,
   ISO_GRID_WIDTH,
   MAX_BATTLE_ZOOM,
@@ -87,7 +91,7 @@ export function IsoBattlefield({
 }) {
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
-  const [camera, setCamera] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const [camera, setCamera] = useState({ zoom: DEFAULT_BATTLE_ZOOM, panX: DEFAULT_BATTLE_PAN_X, panY: DEFAULT_BATTLE_PAN_Y });
   const units = combat.boardState.units;
   const terrain = combat.boardState.terrain ?? [];
   const [visualUnits, setVisualUnits] = useState<CombatBoardUnit[]>(units);
@@ -276,7 +280,7 @@ export function IsoBattlefield({
     };
   }, []);
 
-  const resetCamera = () => setCamera({ zoom: 1, panX: 0, panY: 0 });
+  const resetCamera = () => setCamera({ zoom: DEFAULT_BATTLE_ZOOM, panX: DEFAULT_BATTLE_PAN_X, panY: DEFAULT_BATTLE_PAN_Y });
   const zoomCamera = (factor: number) => {
     const centerX = viewportRef.current?.clientWidth ? viewportRef.current.clientWidth / 2 : 0;
     const centerY = viewportRef.current?.clientHeight ? viewportRef.current.clientHeight / 2 : 0;
@@ -532,7 +536,7 @@ export function IsoBattlefield({
           className="rounded-md border border-amber-500/50 bg-black/55 px-2 py-1 text-xs font-black text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
           onClick={resetCamera}
         >
-          100%
+          Vue
         </button>
         <button
           type="button"
@@ -564,6 +568,7 @@ export function IsoBattlefield({
           filter: "drop-shadow(0 20px 28px rgba(0,0,0,0.45))",
         }}
       >
+        <CombatSceneActors combat={combat} gameState={gameState} />
         {cells}
         {unitModels}
         {unitBadges}

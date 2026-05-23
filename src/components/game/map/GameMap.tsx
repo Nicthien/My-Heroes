@@ -51,7 +51,8 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination?: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
+  | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
   | { type: "CAPTURE_TOWN"; destination?: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination?: Position }
@@ -578,6 +579,11 @@ export default function GameMapComponent() {
       return true;
     }
 
+    if (interaction.type === "ARTIFACT") {
+      setCombatMessage(`${interaction.label} recupere.`);
+      return true;
+    }
+
     if (interaction.type === "CAPTURE_BUILDING") {
       setCombatMessage(`Batiment capture : ${RESOURCE_BUILDING_RULES.find((rule) => rule.type === interaction.buildingType)?.label ?? "Batiment"}.`);
       return true;
@@ -640,6 +646,29 @@ export default function GameMapComponent() {
     rendererRef.current.clearHighlights();
     selectTown(town.id);
   }, [gameState, selectTown]);
+
+  const collectArtifact = useCallback(async (gameId: string, heroId: string, targetPosition: Position, path: Position[]) => {
+    isSyncingMoveRef.current = true;
+    useGameStore.getState().setMovePending(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "COLLECT_ARTIFACT", heroId, targetPosition, path }),
+      });
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response));
+        return;
+      }
+      const data = await response.json();
+      handleMoveInteraction(heroId, data.interaction as MoveInteraction | null | undefined);
+      const refreshed = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshed) useGameStore.getState().setGameState(refreshed);
+    } finally {
+      isSyncingMoveRef.current = false;
+      useGameStore.getState().setMovePending(false);
+    }
+  }, [devRevealMap, handleMoveInteraction, session?.user?.id, setCombatMessage]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (!rendererRef.current || !gameState) return;
@@ -1735,6 +1764,36 @@ export default function GameMapComponent() {
       if (blockIfHeroInCombat(hero.id)) return;
 
       const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
+      if (targetTile?.object?.type === "artifact") {
+        const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+        if (!approach) {
+          rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
+          setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+          return;
+        }
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current.highlightPath(approach.path);
+        rendererRef.current.highlightTile(tile.x, tile.y, 0xa78bfa);
+        if (!canAct) {
+          setCombatMessage(blockedTurnMessage);
+          return;
+        }
+        const guardianPower = Number(targetTile.object.guardianPower ?? 0);
+        if (guardianPower > 0) {
+          setPendingCombat({
+            attackerHeroId: selectedHeroId,
+            targetId: targetTile.object.id,
+            targetType: "artifact",
+            destination: approach.destination,
+            targetPosition: tile,
+            path: approach.path,
+          });
+          return;
+        }
+        void collectArtifact(gameState.id, selectedHeroId, tile, approach.path);
+        return;
+      }
       if (!isTileTraversable(targetTile)) {
         rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
         setCombatMessage(
@@ -1996,7 +2055,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
+  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div

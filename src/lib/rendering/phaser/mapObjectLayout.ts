@@ -1,4 +1,5 @@
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getArtifactMapLabel } from "@/lib/game/artifacts";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { MapObject, MapTile } from "@/lib/game/types";
@@ -121,7 +122,7 @@ export function getMapObjectHoverText(object: MapObject) {
     if (isExternalDwellingType(object.subtype)) return getExternalDwellingLabel(object.targetId);
     return getAdventureBuildingLabel(object.subtype);
   }
-  if (object.type === "artifact") return "Artefact";
+  if (object.type === "artifact") return getArtifactMapLabel(object.subtype);
   if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
 
   return null;

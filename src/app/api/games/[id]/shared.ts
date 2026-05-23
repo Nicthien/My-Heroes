@@ -15,6 +15,8 @@ export function sanitizePlayerForViewer<T extends {
       defense: 0,
       spellPower: 0,
       knowledge: 0,
+      luck: 0,
+      artifacts: { inventory: [], equipment: {} },
       armies: [],
     })),
     towns: (player.towns ?? []).map((town) => ({

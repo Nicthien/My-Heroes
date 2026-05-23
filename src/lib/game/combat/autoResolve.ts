@@ -7,6 +7,7 @@ export interface CombatHeroSnapshot {
   attack: number;
   defense: number;
   morale?: number;
+  luck?: number;
   armies: UnitStack[];
 }
 
@@ -25,7 +26,8 @@ export function calculateArmyPower(hero: CombatHeroSnapshot) {
 
   const statsMultiplier = 1 + hero.attack * 0.05 + hero.defense * 0.03;
   const moraleMultiplier = 1 + clampMorale(hero.morale ?? 0) * 0.04;
-  return Math.max(1, Math.round(armyPower * statsMultiplier * moraleMultiplier));
+  const luckMultiplier = 1 + Math.max(-3, Math.min(3, Math.trunc(hero.luck ?? 0))) * 0.035;
+  return Math.max(1, Math.round(armyPower * statsMultiplier * moraleMultiplier * luckMultiplier));
 }
 
 export function autoResolveCombat(

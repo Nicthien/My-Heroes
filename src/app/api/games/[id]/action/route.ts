@@ -20,6 +20,14 @@ import {
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { makeRng } from "@/lib/game/engine/rng";
+import {
+  ARTIFACT_SLOTS,
+  getArtifact,
+  getEffectiveHeroStatsFromValues,
+  normalizeArtifactBag,
+  pickArtifactId,
+  type ArtifactSlot,
+} from "@/lib/game/artifacts";
 import { AdventureBuildingType, BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import {
   CLASS_STARTING_STATS,
@@ -119,6 +127,11 @@ interface MinimalHero {
   mana?: number | null;
   hasSpellBook?: boolean;
   knownSpellIds?: string[] | null;
+  attack?: number;
+  defense?: number;
+  morale?: number;
+  luck?: number;
+  artifacts?: unknown;
   spellPower?: number;
   knowledge?: number;
   experience: number;
@@ -147,7 +160,8 @@ type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank"; destination: Position; targetPosition?: Position }
+  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
+  | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
   | { type: "CAPTURE_TOWN"; destination: Position }
   | { type: "CAPTURE_GATE"; gateId: string; destination: Position }
@@ -243,6 +257,76 @@ export async function POST(
     );
     if (completedTurn && action.type !== "END_TURN") {
       return NextResponse.json({ error: "Vous avez deja termine votre tour" }, { status: 403 });
+    }
+
+    if (action.type === "EQUIP_ARTIFACT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      const result = equipHeroArtifact(hero, String(action.artifactId ?? ""), action.slot);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: true, artifacts: result.artifacts });
+    }
+
+    if (action.type === "UNEQUIP_ARTIFACT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      const result = unequipHeroArtifact(hero, action.slot);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: true, artifacts: result.artifacts });
+    }
+
+    if (action.type === "TRANSFER_ARTIFACT") {
+      const fromHero = gamePlayer.heroes.find((item) => item.id === action.fromHeroId);
+      const toHero = gamePlayer.heroes.find((item) => item.id === action.toHeroId);
+      if (!fromHero || !toHero || fromHero.id === toHero.id) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, fromHero.id) || isHeroInActiveCombat(game.combats, toHero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+      if (!canTransferArtifactsBetweenHeroes(fromHero, toHero, gamePlayer.towns)) {
+        return NextResponse.json({ error: "Les heros doivent etre adjacents ou dans le meme chateau" }, { status: 400 });
+      }
+      const result = transferHeroArtifact(fromHero, toHero, String(action.artifactId ?? ""));
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      const { error: fromError } = await supabase.from("heroes").update({ artifacts: result.fromArtifacts }).eq("id", fromHero.id);
+      if (fromError) return NextResponse.json({ error: fromError.message }, { status: 500 });
+      const { error: toError } = await supabase.from("heroes").update({ artifacts: result.toArtifacts }).eq("id", toHero.id);
+      if (toError) return NextResponse.json({ error: toError.message }, { status: 500 });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "COLLECT_ARTIFACT") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const targetPosition = getActionPosition(action.targetPosition);
+      if (!targetPosition) return NextResponse.json({ error: "Artefact invalide" }, { status: 400 });
+      const object = mapData.tiles[targetPosition.y]?.[targetPosition.x]?.object;
+      if (object?.type !== "artifact") return NextResponse.json({ error: "Artefact introuvable" }, { status: 404 });
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const collected = new Set<string>((mapState.collected as string[]) ?? []);
+      const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[]) ?? []);
+      if (collected.has(object.id)) return NextResponse.json({ error: "Artefact deja collecte" }, { status: 400 });
+      if (Number(object.guardianPower ?? 0) > 0 && !defeatedArtifacts.has(object.id)) {
+        return NextResponse.json({ error: "L'artefact est garde" }, { status: 400 });
+      }
+      const movement = await validateAndApplyArtifactApproach({ supabase, mapData, gamePlayer, hero, path: action.path, target: targetPosition });
+      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
+      const artifactId = pickArtifactId(object.subtype, `${id}:${object.id}`);
+      const artifact = getArtifact(artifactId);
+      if (!artifact) return NextResponse.json({ error: "Artefact inconnu" }, { status: 400 });
+      const artifacts = addArtifactToBag(hero.artifacts, artifactId);
+      const { error } = await supabase.from("heroes").update({ artifacts }).eq("id", hero.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      collected.add(object.id);
+      await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected), defeatedArtifacts: Array.from(defeatedArtifacts) } }).eq("id", id);
+      return NextResponse.json({ success: true, interaction: { type: "ARTIFACT", artifactId, label: artifact.name, destination: { x: hero.x, y: hero.y } } });
     }
 
     if (action.type === "MOVE_HERO") {
@@ -347,6 +431,13 @@ export async function POST(
         }
       } else if (tile?.object?.type === "monster" && !killed.has(tile.object.id)) {
         interaction = { type: "COMBAT", targetId: tile.object.id, targetType: "monster", destination: lastPos };
+      } else if (stopObject?.type === "artifact" && stopTargetPosition) {
+        const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[]) ?? []);
+        if (Number(stopObject.guardianPower ?? 0) > 0 && !defeatedArtifacts.has(stopObject.id)) {
+          interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "artifact", destination: lastPos, targetPosition: stopTargetPosition };
+        } else {
+          interaction = { type: "STOP", message: "Artefact a portee.", destination: lastPos };
+        }
       } else if (tile?.object?.type === "artifact") {
         interaction = { type: "STOP", message: "Artefact atteint.", destination: lastPos };
       } else if (tile?.object?.type === "building" || (stopObject?.type === "building" && stopTargetPosition)) {
@@ -447,7 +538,8 @@ export async function POST(
       if (hero.hasSpellBook === false) return NextResponse.json({ error: "Ce heros n'a pas de livre de sorts" }, { status: 400 });
       if (!heroKnowsSpell(hero, spell.id)) return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
 
-      const mana = getHeroMana(hero);
+      const effectiveStats = getEffectiveHeroStatsFromValues(hero);
+      const mana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
       const cost = getSpellCost(spell);
       const hasDevInfiniteMana = action.devInfiniteManaHeroId === hero.id;
       if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
@@ -676,9 +768,11 @@ export async function POST(
         spell_power: stats.spellPower,
         knowledge: stats.knowledge,
         morale: stats.morale,
+        luck: stats.luck,
         mana: stats.knowledge * 10,
         has_spell_book: true,
         known_spells: null,
+        artifacts: { inventory: [], equipment: {} },
         x: town.x,
         y: town.y,
         movement: dailyMovement,
@@ -695,6 +789,8 @@ export async function POST(
         delete heroInsert.has_spell_book;
         delete heroInsert.known_spells;
         delete heroInsert.morale;
+        delete heroInsert.luck;
+        delete heroInsert.artifacts;
         ({ data: heroRow, error: heroError } = await supabase
           .from("heroes")
           .insert(heroInsert)
@@ -809,14 +905,16 @@ export async function POST(
         }
       }
 
-      const heroArtifactTokens = {
-        ...((mapState.heroArtifactTokens as Record<string, string[]> | undefined) ?? {}),
-      };
+      let nextHeroArtifacts = normalizeArtifactBag(hero.artifacts);
       if (pendingReward.reward.artifactTokens?.length) {
-        heroArtifactTokens[hero.id] = [
-          ...(heroArtifactTokens[hero.id] ?? []),
-          ...pendingReward.reward.artifactTokens,
-        ];
+        const pickedArtifacts = pendingReward.reward.artifactTokens.map((token, index) =>
+          pickArtifactId(token, `${id}:${pendingReward.bankId}:${hero.id}:${index}`)
+        );
+        nextHeroArtifacts = {
+          ...nextHeroArtifacts,
+          inventory: [...nextHeroArtifacts.inventory, ...pickedArtifacts],
+        };
+        await supabase.from("heroes").update({ artifacts: nextHeroArtifacts }).eq("id", hero.id);
       }
       await supabase.from("games").update({
         map_state: {
@@ -830,7 +928,6 @@ export async function POST(
               pendingReward: null,
             },
           },
-          heroArtifactTokens,
         },
       }).eq("id", id);
 
@@ -1796,7 +1893,7 @@ function getDefeatedCreatureBanks(mapState: Record<string, unknown>): Set<string
 
 function isMissingSpellSchemaError(error: { message?: string; details?: string | null; code?: string }) {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("schema cache");
+  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("luck") || text.includes("artifacts") || text.includes("schema cache");
 }
 
 function normalizeCreatureRewardSelection(
@@ -1853,6 +1950,7 @@ function findFirstMoveStop({
     const object = map.tiles[position.y]?.[position.x]?.object;
     if (!object) continue;
     if (object.type === "resource" && collected.has(object.id)) continue;
+    if (object.type === "artifact" && collected.has(object.id)) continue;
     if (object.type === "monster" && killed.has(object.id)) continue;
     if (object.type === "adventure_building" && object.subtype === AdventureBuildingType.CAMPFIRE && visitedAdventureBuildings.has(object.id)) continue;
     if (object.type === "adventure_building" && isCreatureBankType(object.subtype)) {
@@ -1861,6 +1959,7 @@ function findFirstMoveStop({
     }
     if (object.type === "wall") continue;
     if (object.type === "monster") return { pathIndex: i, stopBefore: true, object, targetPosition: position };
+    if (object.type === "artifact") return { pathIndex: i, stopBefore: true, object, targetPosition: position };
     if (object.type === "town") {
       const owner = findTownOwner(players, object, position);
       if (owner?.id === movingPlayerId) continue;
@@ -1910,6 +2009,103 @@ function findResourceBuildingOwner(
       building.id === object.id || (building.x === position.x && building.y === position.y)
     )
   );
+}
+
+function addArtifactToBag(value: unknown, artifactId: string) {
+  const bag = normalizeArtifactBag(value);
+  return { ...bag, inventory: [...bag.inventory, artifactId] };
+}
+
+function equipHeroArtifact(hero: MinimalHero, artifactId: string, requestedSlot: unknown):
+  | { ok: true; artifacts: ReturnType<typeof normalizeArtifactBag> }
+  | { ok: false; error: string } {
+  const artifact = getArtifact(artifactId);
+  if (!artifact) return { ok: false, error: "Artefact inconnu" };
+  const bag = normalizeArtifactBag(hero.artifacts);
+  if (!bag.inventory.includes(artifactId)) return { ok: false, error: "Artefact absent de l'inventaire" };
+  const slot = normalizeArtifactSlot(requestedSlot) ?? artifact.slots.find((candidate) => !bag.equipment[candidate]) ?? artifact.slots[0];
+  if (!slot || !artifact.slots.includes(slot)) return { ok: false, error: "Emplacement invalide" };
+
+  const inventory = bag.inventory.filter((id, index) => id !== artifactId || index !== bag.inventory.indexOf(artifactId));
+  const replaced = bag.equipment[slot];
+  return {
+    ok: true,
+    artifacts: {
+      inventory: replaced ? [...inventory, replaced] : inventory,
+      equipment: { ...bag.equipment, [slot]: artifactId },
+    },
+  };
+}
+
+function unequipHeroArtifact(hero: MinimalHero, rawSlot: unknown):
+  | { ok: true; artifacts: ReturnType<typeof normalizeArtifactBag> }
+  | { ok: false; error: string } {
+  const slot = normalizeArtifactSlot(rawSlot);
+  if (!slot) return { ok: false, error: "Emplacement invalide" };
+  const bag = normalizeArtifactBag(hero.artifacts);
+  const artifactId = bag.equipment[slot];
+  if (!artifactId) return { ok: false, error: "Aucun artefact equipe" };
+  const equipment = { ...bag.equipment };
+  delete equipment[slot];
+  return { ok: true, artifacts: { inventory: [...bag.inventory, artifactId], equipment } };
+}
+
+function transferHeroArtifact(fromHero: MinimalHero, toHero: MinimalHero, artifactId: string):
+  | { ok: true; fromArtifacts: ReturnType<typeof normalizeArtifactBag>; toArtifacts: ReturnType<typeof normalizeArtifactBag> }
+  | { ok: false; error: string } {
+  if (!getArtifact(artifactId)) return { ok: false, error: "Artefact inconnu" };
+  const fromBag = normalizeArtifactBag(fromHero.artifacts);
+  const toBag = normalizeArtifactBag(toHero.artifacts);
+  const inventoryIndex = fromBag.inventory.indexOf(artifactId);
+  let fromArtifacts = fromBag;
+  if (inventoryIndex >= 0) {
+    fromArtifacts = {
+      ...fromBag,
+      inventory: fromBag.inventory.filter((_, index) => index !== inventoryIndex),
+    };
+  } else {
+    const slot = ARTIFACT_SLOTS.find((candidate) => fromBag.equipment[candidate] === artifactId);
+    if (!slot) return { ok: false, error: "Artefact absent du heros source" };
+    const equipment = { ...fromBag.equipment };
+    delete equipment[slot];
+    fromArtifacts = { ...fromBag, equipment };
+  }
+  return { ok: true, fromArtifacts, toArtifacts: { ...toBag, inventory: [...toBag.inventory, artifactId] } };
+}
+
+function normalizeArtifactSlot(value: unknown): ArtifactSlot | null {
+  return typeof value === "string" && ARTIFACT_SLOTS.includes(value as ArtifactSlot) ? value as ArtifactSlot : null;
+}
+
+function canTransferArtifactsBetweenHeroes(fromHero: MinimalHero, toHero: MinimalHero, towns: MinimalTown[]) {
+  const adjacent = Math.max(Math.abs(fromHero.x - toHero.x), Math.abs(fromHero.y - toHero.y)) <= 1;
+  if (adjacent) return true;
+  return towns.some((town) => town.x === fromHero.x && town.y === fromHero.y && town.x === toHero.x && town.y === toHero.y);
+}
+
+async function validateAndApplyArtifactApproach({
+  supabase,
+  mapData,
+  gamePlayer,
+  hero,
+  path,
+  target,
+}: {
+  supabase: ReturnType<typeof createAdminClient>;
+  mapData: GameMap;
+  gamePlayer: MinimalPlayer;
+  hero: MinimalHero;
+  path: unknown;
+  target: Position;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (Math.max(Math.abs(hero.x - target.x), Math.abs(hero.y - target.y)) <= 1) return { ok: true };
+  if (!Array.isArray(path) || path.length < 1) return { ok: false, error: "Le heros doit s'arreter devant l'artefact" };
+  const typedPath = path as Position[];
+  const destination = typedPath[typedPath.length - 1];
+  if (Math.max(Math.abs(destination.x - target.x), Math.abs(destination.y - target.y)) > 1) {
+    return { ok: false, error: "Le chemin doit finir devant l'artefact" };
+  }
+  return validateAndApplyActionPath({ supabase, mapData, gamePlayer, hero, path, destination });
 }
 
 async function validateAndApplyActionPath({

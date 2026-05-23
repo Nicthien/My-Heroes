@@ -1,4 +1,5 @@
 import { MapTile, Position, ResourceBuildingType, TerrainType } from "../types";
+import { ARTIFACT_GUARDIAN_POWER, ARTIFACT_POOLS, type ArtifactClass, pickArtifactId } from "../artifacts";
 import { ZoneGrid, tilesInZone } from "./zones";
 import {
   BUILDING_SPECS,
@@ -565,6 +566,7 @@ export function fillZone(
   const guardianThreat = Math.floor(meta.value * MONSTER_STRENGTH_MULTIPLIER[monsterStrength]);
 
   // Place 1-3 piles de monstres gardiens près des objets les plus précieux
+  placeZoneArtifacts(ctx, zoneId, meta.value);
   placeZoneGuardians(ctx, zoneId, placedBuildings, guardianThreat);
 
   return { zoneId, spentValue: spent, placedBuildings, placedPiles, guardianThreat };
@@ -588,6 +590,45 @@ function tryPlaceBuilding(
     return { x: t.x, y: t.y };
   }
   return null;
+}
+
+function placeZoneArtifacts(ctx: PlacementContext, zoneId: number, zoneValue: number): void {
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const targetCount = meta.type === "treasure"
+    ? zoneValue >= 9000 ? 3 : zoneValue >= 5500 ? 2 : 1
+    : zoneValue >= 7000 && ctx.rng() < 0.35 ? 1 : 0;
+  if (targetCount <= 0) return;
+
+  const classes = artifactClassesForZone(meta.type, zoneValue);
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId))
+    .map((position) => ctx.tiles[position.y][position.x])
+    .filter((tile) =>
+      isTileFree(tile) &&
+      !tile.road &&
+      !isGateFrameTile(ctx, tile.x, tile.y) &&
+      !hasMajorObjectNearby(ctx, tile.x, tile.y, 2)
+    );
+
+  for (let index = 0; index < Math.min(targetCount, candidates.length); index++) {
+    const artifactClass = classes[Math.min(index, classes.length - 1)];
+    const tile = candidates[index];
+    const artifactId = pickArtifactId(artifactClass, `artifact:${zoneId}:${tile.x}:${tile.y}:${index}`);
+    tile.object = {
+      type: "artifact",
+      id: `art-${artifactId}-${tile.x}-${tile.y}`,
+      subtype: artifactId,
+      guardianPower: ARTIFACT_GUARDIAN_POWER[artifactClass],
+    };
+  }
+}
+
+function artifactClassesForZone(type: string, value: number): ArtifactClass[] {
+  if (type === "treasure") {
+    if (value >= 10000) return ["relic", "major", "minor"];
+    if (value >= 6500) return ["major", "minor"];
+    return ["minor", "treasure"];
+  }
+  return ARTIFACT_POOLS.minor.length > 0 ? ["minor"] : ["treasure"];
 }
 
 function tryPlacePile(

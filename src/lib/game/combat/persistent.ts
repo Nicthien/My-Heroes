@@ -32,6 +32,7 @@ export interface CombatParticipantSnapshot {
   attack: number;
   defense: number;
   morale?: number;
+  luck?: number;
   armies: UnitStack[];
 }
 

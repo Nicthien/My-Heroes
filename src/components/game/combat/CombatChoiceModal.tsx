@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
+import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
 import { GameState, Hero, UnitStack, UnitType } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
@@ -272,6 +273,18 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
     return isCreatureBankType(bankType) ? createCreatureBankGuardStacks(bankType, pendingCombat.targetId) : [];
   }
 
+  if (pendingCombat.targetType === "artifact") {
+    const destination = pendingCombat.targetPosition ?? pendingCombat.destination;
+    const tile = destination ? gameState.map.tiles[destination.y]?.[destination.x] : undefined;
+    const guardianPower = Number(tile?.object?.guardianPower ?? 0);
+    return tile && guardianPower > 0
+      ? createNeutralArmyStacksForTile(tile, guardianPower, pendingCombat.targetId).map((stack) => ({
+        ...stack,
+        id: `${pendingCombat.targetId}-guards-preview-${stack.position}`,
+      }))
+      : [];
+  }
+
   const defenderHero = findHero(gameState, pendingCombat.targetId);
   return defenderHero?.armies ?? [];
 }
@@ -297,6 +310,7 @@ function getSourceLabel(targetType: PendingCombat["targetType"]) {
   if (targetType === "town") return "Garnison neutre repérée.";
   if (targetType === "gate") return "Garnison de porte reperee.";
   if (targetType === "creature_bank") return "Gardiens de banque de creatures.";
+  if (targetType === "artifact") return "Gardiens de l'artefact.";
   if (targetType === "monster") return "Armée neutre observée.";
   return "Défense adverse repérée.";
 }

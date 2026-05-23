@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { MINIMUM_ADVENTURE_STEP_COST, getDailyAdventureMovement } from "@/lib/game/engine";
+import { normalizeArtifactBag } from "@/lib/game/artifacts";
 import { type CombatBoardUnit, UnitType } from "@/lib/game/types";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
@@ -81,9 +82,11 @@ export function toHero(row: DbRow) {
     spellPower: row.spell_power,
     knowledge: row.knowledge,
     morale: Number(row.morale ?? 0),
+    luck: Number(row.luck ?? 0),
     mana: row.mana ?? Number(row.knowledge ?? 1) * 10,
     hasSpellBook: row.has_spell_book ?? true,
     knownSpellIds: row.known_spells ?? null,
+    artifacts: normalizeArtifactBag(row.artifacts),
     movement,
     maxMovement,
     x: row.x,

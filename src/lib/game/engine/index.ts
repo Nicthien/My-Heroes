@@ -70,6 +70,7 @@ export function isTileTraversable(tile: MapTile | undefined): boolean {
     tile &&
     tile.isPassable &&
     tile.object?.type !== "wall" &&
+    tile.object?.type !== "artifact" &&
     tile.object?.type !== "town_footprint" &&
     !tile.decor?.blocking
   );

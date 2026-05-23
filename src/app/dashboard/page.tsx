@@ -118,14 +118,6 @@ const FACTION_META: Record<
     tagline: "Poison, marécages et écailles",
     desc: "Gnolls, hommes-lézards, mouches dragons, basilics, gorgones et hydres venimeuses.",
   },
-  conflux: {
-    label: "Conflux",
-    color: "#06b6d4",
-    alignment: "good",
-    emblem: "✦",
-    tagline: "Élémentaires et magie primordiale",
-    desc: "Pixies, élémentaires, oiseaux de feu et phénix rassemblent les quatre plans.",
-  },
 };
 
 const ALIGNMENT_GROUPS: { key: FactionAlignment; label: string; accent: string }[] = [

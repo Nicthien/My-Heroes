@@ -290,6 +290,26 @@ export interface HeroStats {
   spellPower: number;
   knowledge: number;
   morale: number;
+  luck: number;
+}
+
+export type HeroArtifactSlot =
+  | "weapon"
+  | "shield"
+  | "torso"
+  | "helmet"
+  | "necklace"
+  | "feet"
+  | "ringLeft"
+  | "ringRight"
+  | "misc1"
+  | "misc2"
+  | "misc3"
+  | "misc4";
+
+export interface HeroArtifactBag {
+  inventory: string[];
+  equipment: Partial<Record<HeroArtifactSlot, string>>;
 }
 
 export interface UnitStack {
@@ -312,6 +332,7 @@ export interface Hero {
   mana: number;
   hasSpellBook: boolean;
   knownSpellIds?: string[] | null;
+  artifacts: HeroArtifactBag;
   position: Position;
   movement: number;
   maxMovement: number;
@@ -645,6 +666,9 @@ export type GameAction =
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GATE_GARRISON_TO_HERO"; gateId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GATE_GARRISON"; gateId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "EQUIP_ARTIFACT"; heroId: string; artifactId: string; slot?: HeroArtifactSlot }
+  | { type: "UNEQUIP_ARTIFACT"; heroId: string; slot: HeroArtifactSlot }
+  | { type: "TRANSFER_ARTIFACT"; fromHeroId: string; toHeroId: string; artifactId: string }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
   | { type: "CLAIM_CREATURE_BANK_REWARD"; bankId: string; heroId: string; creatures?: Partial<Record<UnitType, number>> }

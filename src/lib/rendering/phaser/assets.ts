@@ -1,5 +1,6 @@
 import { RoadType, TerrainType, UnitType } from "@/lib/game/types";
 import { EXTERNAL_DWELLING_UNIT_TYPES } from "@/lib/game/external-dwellings";
+import { ARTIFACTS } from "@/lib/game/artifacts";
 
 const UNIT_SPRITE_OVERRIDES: Partial<Record<UnitType, string>> = {
   [UnitType.PIKEMAN]: "/assets/sprites/units/pikeman.webp",
@@ -162,6 +163,9 @@ export const MAP_SPRITES = {
     gems: "/assets/sprites/resources/gems.webp",
     sulfur: "/assets/sprites/resources/sulfur.webp",
   } as Record<string, string>,
+  artifacts: Object.fromEntries(
+    ARTIFACTS.map((artifact) => [artifact.id, `/assets/sprites/artifacts/${artifact.id}.webp`]),
+  ) as Record<string, string>,
   buildings: {
     gold_mine: "/assets/sprites/map/gold-mine.webp",
     sawmill: "/assets/sprites/map/sawmill.webp",
@@ -432,6 +436,7 @@ export const MAP_SPRITE_PATHS = Array.from(new Set([
   ...Object.values(MAP_SPRITES.gates),
   ...Object.values(MAP_SPRITES.towns),
   ...Object.values(MAP_SPRITES.resources),
+  ...Object.values(MAP_SPRITES.artifacts),
   ...Object.values(MAP_SPRITES.buildings),
   ...Object.values(MAP_SPRITES.adventureBuildings),
   ...Object.values(MAP_SPRITES.externalDwellings),

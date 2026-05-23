@@ -13,7 +13,7 @@ interface GameStore {
   pendingCombat: {
     attackerHeroId: string;
     targetId: string;
-    targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank";
+    targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact";
     destination?: { x: number; y: number };
     targetPosition?: { x: number; y: number };
     path?: Array<{ x: number; y: number }>;

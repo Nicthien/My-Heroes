@@ -10,6 +10,7 @@ import {
   isCreatureBankType,
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
+import { ARTIFACT_GUARDIAN_POWER, getArtifact, getEffectiveHeroStatsFromValues, isArtifactClass } from "@/lib/game/artifacts";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { BuildingType, Faction, GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
@@ -74,6 +75,10 @@ export async function POST(
       attack: number;
       defense: number;
       morale?: number;
+      spellPower?: number;
+      knowledge?: number;
+      luck?: number;
+      artifacts?: unknown;
       movement: number;
       armies: Parameters<typeof createCombatBoard>[0]["armies"];
       x: number;
@@ -136,7 +141,10 @@ export async function POST(
   const creatureBankDefender = !defender && !buildingDefender && !townDefender && !gateDefender && body.targetType === "creature_bank"
     ? getCreatureBankDefender(mapData, String(body.targetId ?? ""), targetPosition)
     : null;
-  const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender ?? creatureBankDefender;
+  const artifactDefender = !defender && !buildingDefender && !townDefender && !gateDefender && !creatureBankDefender && body.targetType === "artifact"
+    ? getArtifactDefender(mapData, String(body.targetId ?? ""), targetPosition)
+    : null;
+  const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender ?? creatureBankDefender ?? artifactDefender;
   if (!targetDefender) {
     const debug = {
       gameId: id,
@@ -211,27 +219,29 @@ export async function POST(
     y: attacker.y,
     ownerPlayerId: gamePlayer.id,
   });
-  const baseAttackerMorale = Number(attacker.morale ?? 0);
-  const baseDefenderMorale = Number((targetDefender as { morale?: number }).morale ?? 0);
-  const effectiveAttackerMorale = baseAttackerMorale + attackerTownMoraleBonus;
-  const effectiveDefenderMorale = baseDefenderMorale + defenderTownMoraleBonus;
+  const attackerStats = getEffectiveHeroStatsFromValues(attacker);
+  const defenderStats = getEffectiveHeroStatsFromValues(targetDefender);
+  const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus;
+  const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus;
   const combatStart = createCombatBoard(
     {
       id: attacker.id,
       playerId: gamePlayer.id,
       heroId: attacker.id,
-      attack: attacker.attack,
-      defense: attacker.defense,
+      attack: attackerStats.attack,
+      defense: attackerStats.defense,
       morale: effectiveAttackerMorale,
+      luck: attackerStats.luck,
       armies: attacker.armies,
     },
     {
       id: targetDefender.id,
       playerId: targetDefender.playerId,
       heroId: targetDefender.heroId,
-      attack: targetDefender.attack,
-      defense: targetDefender.defense,
+      attack: defenderStats.attack,
+      defense: defenderStats.defense,
       morale: effectiveDefenderMorale,
+      luck: defenderStats.luck,
       armies: targetDefender.armies,
     },
     { environment }
@@ -242,18 +252,20 @@ export async function POST(
         id: attacker.id,
         playerId: gamePlayer.id,
         heroId: attacker.id,
-        attack: attacker.attack,
-        defense: attacker.defense,
+        attack: attackerStats.attack,
+        defense: attackerStats.defense,
         morale: effectiveAttackerMorale,
+        luck: attackerStats.luck,
         armies: attacker.armies,
       },
       {
         id: targetDefender.id,
         playerId: targetDefender.playerId,
         heroId: targetDefender.heroId,
-        attack: targetDefender.attack,
-        defense: targetDefender.defense,
+        attack: defenderStats.attack,
+        defense: defenderStats.defense,
         morale: effectiveDefenderMorale,
+        luck: defenderStats.luck,
         armies: targetDefender.armies,
       },
       { immortalHeroId: devGodModeHeroId }
@@ -327,6 +339,8 @@ export async function POST(
         await captureGate(supabase, id, targetDefender, gamePlayer.id);
       } else if (body.targetType === "creature_bank" && creatureBankDefender && result?.creatureBankReward) {
         await markCreatureBankDefeated(supabase, id, game.mapState as Record<string, unknown>, result.creatureBankReward);
+      } else if (body.targetType === "artifact" && artifactDefender) {
+        await markArtifactDefeated(supabase, id, game.mapState as Record<string, unknown>, artifactDefender.id);
       } else if (targetDefender.heroId && targetDefender.playerId) {
         await supabase.from("armies").delete().eq("hero_id", targetDefender.heroId);
         await supabase.from("heroes").delete().eq("id", targetDefender.heroId);
@@ -371,6 +385,50 @@ function getGateDefender(
     x: gate.x,
     y: gate.y,
   };
+}
+
+function getArtifactDefender(mapData: GameMap, targetId: string, targetPosition?: { x?: unknown; y?: unknown }) {
+  const position = findMapObjectPosition(mapData, "artifact", targetId, targetPosition);
+  if (!position) return null;
+  const tile = mapData.tiles[position.y]?.[position.x];
+  const object = tile?.object;
+  if (object?.type !== "artifact" || !tile) return null;
+  const artifact = getArtifact(object.subtype);
+  const artifactClass = artifact?.class ?? (isArtifactClass(object.subtype) ? object.subtype : "minor");
+  const guardianPower = Number(object.guardianPower ?? ARTIFACT_GUARDIAN_POWER[artifactClass]);
+  if (guardianPower <= 0) return null;
+  return {
+    id: object.id,
+    playerId: null,
+    heroId: null,
+    neutralArmyId: null,
+    attack: 1,
+    defense: 1,
+    armies: createNeutralArmyStacksForTile(tile, guardianPower, object.id).map((stack) => ({
+      ...stack,
+      id: `${object.id}-guard-${stack.position}`,
+      heroId: null,
+    })),
+    x: position.x,
+    y: position.y,
+  };
+}
+
+function findMapObjectPosition(
+  mapData: GameMap,
+  type: string,
+  targetId: string,
+  targetPosition?: { x?: unknown; y?: unknown },
+) {
+  const x = Number(targetPosition?.x);
+  const y = Number(targetPosition?.y);
+  if (Number.isInteger(x) && Number.isInteger(y) && mapData.tiles[y]?.[x]?.object?.type === type) return { x, y };
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === type && tile.object.id === targetId) return { x: tile.x, y: tile.y };
+    }
+  }
+  return null;
 }
 
 function getEffectiveGates(
@@ -462,6 +520,23 @@ async function markCreatureBankDefeated(
           pendingReward,
         },
       },
+    },
+  }).eq("id", gameId);
+}
+
+async function markArtifactDefeated(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  mapStateValue: Record<string, unknown> | undefined,
+  artifactObjectId: string,
+) {
+  const mapState = mapStateValue ?? {};
+  const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[] | undefined) ?? []);
+  defeatedArtifacts.add(artifactObjectId);
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      defeatedArtifacts: Array.from(defeatedArtifacts),
     },
   }).eq("id", gameId);
 }

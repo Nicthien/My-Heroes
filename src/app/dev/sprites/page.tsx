@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { ARTIFACTS, artifactClassLabel } from "@/lib/game/artifacts";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { CREATURE_BANK_DEFINITIONS, CREATURE_BANK_TYPES } from "@/lib/game/creature-banks";
 import {
@@ -10,9 +11,11 @@ import {
   getExternalDwellingLabel,
   getExternalDwellingSprite,
 } from "@/lib/game/external-dwellings";
+import { FACTION_UPGRADED_UNITS, FACTION_TOWN_NAMES, getFactionBuildingRules } from "@/lib/game/economy";
+import { COMMON_TOWN_BUILDING_SPRITES, UNIQUE_TOWN_BUILDING_SPRITES } from "@/lib/game/town-building-sprites";
 import { UNIT_RULES } from "@/lib/game/units";
 import type { UnitRule } from "@/lib/game/units";
-import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
+import { Faction, type CombatBoardUnit, type UnitType } from "@/lib/game/types";
 import { BOAT_SPRITESHEETS, HERO_DIRECTIONS, HERO_SPRITESHEETS, getUnitSpritePath, type DirectionalSpritesheet, type HeroDirection } from "@/lib/rendering/phaser/assets";
 import {
   type UnitModelKind,
@@ -38,6 +41,35 @@ type SelectedSprite = {
   };
 };
 
+const TOWN_BUILDING_COMMON_ASSETS: StaticSpriteAsset[] = Object.entries(COMMON_TOWN_BUILDING_SPRITES).map(([building, path]) => ({
+  path: path ?? "",
+  label: getFactionBuildingRules(Faction.CASTLE).find((rule) => rule.type === building)?.label ?? building,
+  group: "Bâtiments de ville - communs",
+}));
+
+const TOWN_BUILDING_UPGRADED_DWELLING_ASSETS: StaticSpriteAsset[] = Object.entries(FACTION_UPGRADED_UNITS).flatMap(([faction, units]) =>
+  units.map((unitType) => ({
+    path: `/assets/sprites/town-buildings/dwellings/upgraded/${unitType}.webp`,
+    label: `${FACTION_TOWN_NAMES[faction as Faction]} - ${UNIT_RULES[unitType].label}`,
+    group: "Bâtiments de ville - demeures améliorées",
+  })),
+);
+
+const TOWN_BUILDING_UNIQUE_ASSETS: StaticSpriteAsset[] = Object.entries(UNIQUE_TOWN_BUILDING_SPRITES).flatMap(([faction, sprites]) => {
+  const rules = getFactionBuildingRules(faction as Faction).filter((rule) => rule.category === "unique");
+  return Object.entries(sprites ?? {}).map(([building, path]) => ({
+    path: path ?? "",
+    label: `${FACTION_TOWN_NAMES[faction as Faction]} - ${rules.find((rule) => rule.type === building)?.label ?? building}`,
+    group: "Bâtiments de ville - uniques",
+  }));
+});
+
+const ARTIFACT_ASSETS: StaticSpriteAsset[] = ARTIFACTS.map((artifact) => ({
+  path: `/assets/sprites/artifacts/${artifact.id}.webp`,
+  label: artifact.name,
+  group: `Artefacts - ${artifactClassLabel(artifact.class)}`,
+}));
+
 const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/town-castle.webp", label: "Ville château", group: "Factions" },
   { path: "/assets/sprites/map/town-rampart.webp", label: "Ville rempart", group: "Factions" },
@@ -60,6 +92,10 @@ const PUBLIC_STATIC_ASSETS: StaticSpriteAsset[] = [
   { path: "/assets/sprites/map/adventure-lighthouse.webp", label: "Phare", group: "Aventures" },
   { path: "/assets/sprites/map/adventure-stargate.webp", label: "Stargate", group: "Aventures" },
   { path: "/assets/sprites/map/external-dwelling.webp", label: "Demeure externe générique", group: "Demeures externes" },
+  ...TOWN_BUILDING_COMMON_ASSETS,
+  ...TOWN_BUILDING_UPGRADED_DWELLING_ASSETS,
+  ...TOWN_BUILDING_UNIQUE_ASSETS,
+  ...ARTIFACT_ASSETS,
   ...EXTERNAL_DWELLING_UNIT_TYPES.map((unitType) => ({
     path: getExternalDwellingSprite(unitType) ?? "/assets/sprites/map/external-dwelling.webp",
     label: `${getExternalDwellingLabel(unitType)} - ${UNIT_RULES[unitType].label}`,

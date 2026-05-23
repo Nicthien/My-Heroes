@@ -2,6 +2,15 @@
 
 import { useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import {
+  ARTIFACT_SLOTS,
+  ARTIFACTS_BY_ID,
+  getArtifact,
+  getArtifactStatsBonus,
+  getEffectiveHeroStats,
+  normalizeArtifactBag,
+  type ArtifactSlot,
+} from "@/lib/game/artifacts";
 import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } from "@/lib/game/spells";
 import type { Hero, Town } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -25,6 +34,11 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
   const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
   const setSpellRevealHighlight = useGameStore((state) => state.setSpellRevealHighlight);
   const displayHero = devInfiniteMana ? { ...hero, mana: getHeroMaxMana(hero) } : hero;
+  const effectiveStats = getEffectiveHeroStats(hero);
+  const artifactBonus = getArtifactStatsBonus(hero);
+  const eligibleTransferHeroes = gameState?.players
+    .find((player) => player.heroes.some((item) => item.id === hero.id))
+    ?.heroes.filter((candidate) => candidate.id !== hero.id && canTransferArtifacts(hero, candidate, gameState.players.flatMap((player) => player.towns))) ?? [];
 
   async function castAdventureSpell(spell: SpellDefinition, target?: { x: number; y: number }) {
     if (!gameState) throw new Error("Partie indisponible.");
@@ -52,6 +66,22 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
     if (revealedTiles.length > 0 && gameState) {
       setSpellRevealHighlight({ turnNumber: gameState.turnNumber, tiles: revealedTiles, hints: revealHints, label: spell.label });
+    }
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshed) setGameState(refreshed);
+  }
+
+  async function performArtifactAction(body: Record<string, unknown>) {
+    if (!gameState) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setCombatMessage(data.error ?? "Action impossible.");
+      return;
     }
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshed) setGameState(refreshed);
@@ -105,14 +135,22 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
         )}
         <div className={goldDivider} />
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <Stat label="Attaque" value={hero.stats.attack} color="text-red-300" />
-          <Stat label="Defense" value={hero.stats.defense} color="text-blue-300" />
-          <Stat label="Pouvoir" value={hero.stats.spellPower} color="text-violet-300" />
-          <Stat label="Savoir" value={hero.stats.knowledge} color="text-cyan-300" />
-          <Stat label="Moral" value={formatSignedMorale(hero.stats.morale)} color={moraleStatColor(hero.stats.morale)} />
+          <Stat label="Attaque" value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
+          <Stat label="Defense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
+          <Stat label="Pouvoir" value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
+          <Stat label="Savoir" value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
+          <Stat label="Moral" value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />
+          <Stat label="Chance" value={formatStatBonus(effectiveStats.luck, artifactBonus.luck, true)} color={luckStatColor(effectiveStats.luck)} />
           <Stat label="Mana" value={hero.mana} color="text-violet-200" />
         </div>
         <MovementGauge movement={hero.movement} maxMovement={hero.maxMovement} />
+        <ArtifactPanel
+          hero={hero}
+          eligibleTransferHeroes={eligibleTransferHeroes}
+          onEquip={(artifactId, slot) => performArtifactAction({ type: "EQUIP_ARTIFACT", heroId: hero.id, artifactId, slot })}
+          onUnequip={(slot) => performArtifactAction({ type: "UNEQUIP_ARTIFACT", heroId: hero.id, slot })}
+          onTransfer={(artifactId, toHeroId) => performArtifactAction({ type: "TRANSFER_ARTIFACT", fromHeroId: hero.id, toHeroId, artifactId })}
+        />
         {hero.armies.length > 0 && (
           <div>
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armee</div>
@@ -150,11 +188,138 @@ function formatSignedMorale(value: number | undefined) {
   return v > 0 ? `+${v}` : String(v);
 }
 
+function formatStatBonus(value: number, bonus: number, signed = false) {
+  const base = signed ? formatSignedMorale(value) : String(value);
+  return bonus ? `${base} (${bonus > 0 ? "+" : ""}${bonus})` : base;
+}
+
 function moraleStatColor(value: number | undefined) {
   const v = Number.isFinite(value) ? Math.trunc(value as number) : 0;
   if (v > 0) return "text-emerald-300";
   if (v < 0) return "text-rose-300";
   return "text-amber-200/80";
+}
+
+function luckStatColor(value: number | undefined) {
+  const v = Number.isFinite(value) ? Math.trunc(value as number) : 0;
+  if (v > 0) return "text-yellow-300";
+  if (v < 0) return "text-slate-300";
+  return "text-amber-200/80";
+}
+
+function ArtifactPanel({
+  hero,
+  eligibleTransferHeroes,
+  onEquip,
+  onUnequip,
+  onTransfer,
+}: {
+  hero: Hero;
+  eligibleTransferHeroes: Hero[];
+  onEquip: (artifactId: string, slot?: ArtifactSlot) => void;
+  onUnequip: (slot: ArtifactSlot) => void;
+  onTransfer: (artifactId: string, toHeroId: string) => void;
+}) {
+  const bag = normalizeArtifactBag(hero.artifacts);
+  const equippedEntries = ARTIFACT_SLOTS.map((slot) => ({ slot, artifactId: bag.equipment[slot] }));
+  const transferTargetId = eligibleTransferHeroes[0]?.id;
+
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Artefacts</div>
+      <div className="grid grid-cols-3 gap-1">
+        {equippedEntries.map(({ slot, artifactId }) => {
+          const artifact = artifactId ? getArtifact(artifactId) : null;
+          return (
+            <button
+              key={slot}
+              type="button"
+              className="min-h-12 rounded-md border border-amber-700/40 bg-black/45 px-1 py-1 text-left text-[10px] text-amber-100 transition hover:border-amber-300/70"
+              title={artifact ? artifactTooltip(artifact.id) : slotLabel(slot)}
+              onClick={() => artifactId && onUnequip(slot)}
+            >
+              <span className="block truncate text-amber-300/70">{slotLabel(slot)}</span>
+              <span className="block truncate font-black">{artifact?.name ?? "-"}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-1">
+        {bag.inventory.length === 0 && (
+          <div className="rounded-md border border-amber-900/40 bg-black/30 px-2 py-1 text-xs text-amber-200/55">Inventaire vide</div>
+        )}
+        {bag.inventory.map((artifactId, index) => {
+          const artifact = ARTIFACTS_BY_ID[artifactId];
+          if (!artifact) return null;
+          const freeSlot = artifact.slots.find((slot) => !bag.equipment[slot]) ?? artifact.slots[0];
+          return (
+            <div key={`${artifactId}-${index}`} className="flex items-center gap-1 rounded-md border border-amber-700/35 bg-black/45 px-2 py-1 text-xs">
+              <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId)}>{artifact.name}</span>
+              <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
+                Éq.
+              </button>
+              {transferTargetId && (
+                <button type="button" className="rounded border border-sky-500/40 px-2 py-0.5 font-bold text-sky-200" onClick={() => onTransfer(artifactId, transferTargetId)}>
+                  Don
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function slotLabel(slot: ArtifactSlot) {
+  const labels: Record<ArtifactSlot, string> = {
+    weapon: "Arme",
+    shield: "Bouclier",
+    torso: "Torse",
+    helmet: "Tête",
+    necklace: "Cou",
+    feet: "Pieds",
+    ringLeft: "Anneau",
+    ringRight: "Anneau",
+    misc1: "Sac",
+    misc2: "Sac",
+    misc3: "Sac",
+    misc4: "Sac",
+  };
+  return labels[slot];
+}
+
+function artifactTooltip(artifactId: string) {
+  const artifact = getArtifact(artifactId);
+  if (!artifact) return artifactId;
+  const bonus = Object.entries(artifact.bonus)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${bonusLabel(key)} ${Number(value) > 0 ? "+" : ""}${value}`)
+    .join(", ");
+  const unsupported = artifact.unsupportedEffects?.length ? ` | Non actif: ${artifact.unsupportedEffects.join(", ")}` : "";
+  return `${artifact.name} (${artifact.originalName})${bonus ? ` | ${bonus}` : ""}${unsupported}`;
+}
+
+function bonusLabel(key: string) {
+  if (key === "attack") return "Att.";
+  if (key === "defense") return "Déf.";
+  if (key === "spellPower") return "Pouvoir";
+  if (key === "knowledge") return "Savoir";
+  if (key === "morale") return "Moral";
+  if (key === "luck") return "Chance";
+  if (key === "movement") return "Mouv.";
+  return key;
+}
+
+function canTransferArtifacts(hero: Hero, candidate: Hero, towns: Town[]) {
+  const adjacent = Math.max(Math.abs(hero.position.x - candidate.position.x), Math.abs(hero.position.y - candidate.position.y)) <= 1;
+  if (adjacent) return true;
+  return towns.some((town) =>
+    town.position.x === hero.position.x &&
+    town.position.y === hero.position.y &&
+    town.position.x === candidate.position.x &&
+    town.position.y === candidate.position.y
+  );
 }
 
 function normalizeRevealedTiles(value: unknown) {

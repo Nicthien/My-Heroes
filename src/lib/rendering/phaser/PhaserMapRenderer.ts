@@ -1539,6 +1539,14 @@ class PhaserMapScene extends Phaser.Scene {
       sprite.setDepth(isoY + RESOURCE_PICKUP_OFFSET_Y);
       this.mapTileObjectLayer.add(sprite);
       this.mapTileObjectSprites.push(sprite);
+    } else if (object.type === "artifact") {
+      const textureKey = object.subtype ? MAP_SPRITES.artifacts[object.subtype] : undefined;
+      const sprite = this.add.image(isoX, isoY - 2, textureKey ?? MAP_SPRITES.artifacts.centaurs_axe);
+      sprite.setOrigin(0.5, 0.78);
+      sprite.setDisplaySize(38, 38);
+      sprite.setDepth(isoY - 2);
+      this.mapTileObjectLayer.add(sprite);
+      this.mapTileObjectSprites.push(sprite);
     } else if (object.type === "monster") {
       const textureKey = getMonsterSpritePath(object.subtype);
       this.ensureFallbackTexture(textureKey, "unit");

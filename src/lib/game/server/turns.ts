@@ -11,6 +11,7 @@ import {
   type ExternalDwellingStateMap,
 } from "@/lib/game/external-dwellings";
 import { getDailyAdventureMovement } from "@/lib/game/engine";
+import { getEffectiveHeroMovementBonus } from "@/lib/game/artifacts";
 import {
   TAVERN_OFFER_SIZE,
   getRecruitedHeroTemplateIds,
@@ -40,6 +41,7 @@ interface MinimalHero {
   x: number;
   y: number;
   armies: MinimalArmy[];
+  artifacts?: unknown;
 }
 
 interface MinimalTown {
@@ -165,7 +167,7 @@ export async function completePlayerTurn(
     const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
     for (const hero of player.heroes ?? []) {
       const isOnWater = mapData?.tiles?.[hero.y]?.[hero.x]?.terrain === "water";
-      const dailyMovement = getDailyAdventureMovement(hero.armies) + (isOnWater ? lighthouseCount * 500 : 0);
+      const dailyMovement = getDailyAdventureMovement(hero.armies) + (isOnWater ? lighthouseCount * 500 : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
       await supabase.from("heroes").update({
         movement: dailyMovement,
         max_movement: dailyMovement,

@@ -16,6 +16,7 @@ import {
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, GameMap } from "@/lib/game/types";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
+import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 
@@ -131,7 +132,8 @@ export async function POST(
       return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
     }
 
-    const mana = getHeroMana({ mana: caster.hero.mana, knowledge: caster.hero.knowledge });
+    const casterStats = getEffectiveHeroStatsFromValues(caster.hero);
+    const mana = getHeroMana({ mana: caster.hero.mana, knowledge: casterStats.knowledge });
     const cost = getSpellCost(spell);
     const hasDevInfiniteMana = action.devInfiniteManaHeroId === caster.heroId;
     if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
@@ -143,7 +145,7 @@ export async function POST(
         heroId: caster.heroId,
         playerId: caster.playerId,
         side: caster.side,
-        spellPower: Number(caster.hero.spell_power ?? 1),
+        spellPower: casterStats.spellPower,
       },
       action: action as CombatSpellAction,
     });
@@ -198,8 +200,8 @@ export async function POST(
     currentUnitId: combat.current_unit_id,
     playerAction: currentActor?.ownerPlayerId === gamePlayerId ? action : null,
     allowAutomatedAction: Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorIsAi)),
-    attackerStats: { attack: attackerHero.attack, defense: attackerHero.defense },
-    defenderStats: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
+    attackerStats: getEffectiveHeroStatsFromValues(attackerHero),
+    defenderStats: getEffectiveHeroStatsFromValues(defenderHero ?? { attack: 1, defense: 1 }),
     immortalHeroId: devGodModeHeroId,
     moraleContext,
   });
@@ -267,14 +269,14 @@ async function fetchCombatHero(
 ): Promise<{ data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null }> {
   const full = await supabase
     .from("heroes")
-    .select("id,game_player_id,attack,defense,spell_power,knowledge,morale,mana,has_spell_book,known_spells")
+    .select("id,game_player_id,attack,defense,spell_power,knowledge,morale,luck,mana,has_spell_book,known_spells,artifacts")
     .eq("id", heroId)
     .single();
   if (!full.error || !isMissingSpellSchemaError(full.error)) return full as { data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null };
 
   const fallback = await supabase
     .from("heroes")
-    .select("id,game_player_id,attack,defense,spell_power,knowledge")
+    .select("id,game_player_id,attack,defense,spell_power,knowledge,luck,artifacts")
     .eq("id", heroId)
     .single();
   return fallback.error
@@ -341,9 +343,11 @@ type SpellHeroRow = {
   spell_power: number;
   knowledge: number;
   morale?: number | null;
+  luck?: number | null;
   mana?: number | null;
   has_spell_book?: boolean | null;
   known_spells?: string[] | null;
+  artifacts?: unknown;
 };
 
 function executeActionThenNeutralTurns(params: {
@@ -506,12 +510,15 @@ async function persistResolvedCombat(
       if (creatureBankReward) {
         await markCreatureBankDefeated(supabase, combat.game_id, creatureBankReward);
       } else if (!capturedTown) {
-        await supabase
-          .from("resource_buildings")
-          .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
-          .eq("game_id", combat.game_id)
-          .eq("x", combat.x)
-          .eq("y", combat.y);
+        const artifactDefeated = await markArtifactDefeatedAt(supabase, combat.game_id, combat.x, combat.y);
+        if (!artifactDefeated) {
+          await supabase
+            .from("resource_buildings")
+            .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })
+            .eq("game_id", combat.game_id)
+            .eq("x", combat.x)
+            .eq("y", combat.y);
+        }
       }
     }
     if (combat.defender_hero_id && combat.defender_player_id) {
@@ -522,6 +529,32 @@ async function persistResolvedCombat(
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
   }
+}
+
+async function markArtifactDefeatedAt(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  x: number,
+  y: number,
+) {
+  const { data: game } = await supabase
+    .from("games")
+    .select("map_data,map_state")
+    .eq("id", gameId)
+    .maybeSingle();
+  const mapData = game?.map_data as GameMap | undefined;
+  const object = mapData?.tiles?.[y]?.[x]?.object;
+  if (object?.type !== "artifact") return false;
+  const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
+  const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[] | undefined) ?? []);
+  defeatedArtifacts.add(object.id);
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      defeatedArtifacts: Array.from(defeatedArtifacts),
+    },
+  }).eq("id", gameId);
+  return true;
 }
 
 async function captureNeutralTownAt(

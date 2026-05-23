@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
@@ -109,9 +110,11 @@ export default function SidePanel() {
                         : "border-amber-700/60 bg-stone-900/80"
                     }`}
                   >
-                    <img
+                    <Image
                       src={sprite}
                       alt={t.name}
+                      width={40}
+                      height={40}
                       className="h-full w-full object-contain"
                       style={{ imageRendering: "pixelated" }}
                       draggable={false}
@@ -229,4 +232,3 @@ function Row({
     </div>
   );
 }
-

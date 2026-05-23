@@ -692,13 +692,13 @@ class PhaserMapScene extends Phaser.Scene {
 
   private getRoadConnections(tile: MapTile): RoadSide[] {
     const connections: RoadSide[] = [];
-    if (this.hasRoad(tile.x, tile.y - 1)) connections.push("northEast");
-    if (this.hasRoad(tile.x + 1, tile.y)) connections.push("southEast");
-    if (this.hasRoad(tile.x, tile.y + 1)) connections.push("southWest");
-    if (this.hasRoad(tile.x - 1, tile.y)) connections.push("northWest");
+    if (this.hasRoad(tile.x, tile.y - 1)) connections.push("NE");
+    if (this.hasRoad(tile.x + 1, tile.y)) connections.push("SE");
+    if (this.hasRoad(tile.x, tile.y + 1)) connections.push("SW");
+    if (this.hasRoad(tile.x - 1, tile.y)) connections.push("NW");
 
     if (connections.length > 0) return connections;
-    return ["northEast", "southWest"];
+    return ["NE", "SW"];
   }
 
   private hasRoad(x: number, y: number) {
@@ -1758,10 +1758,10 @@ class PhaserMapScene extends Phaser.Scene {
     drawDiamondPath(graphics, isoX, isoY + 6);
     graphics.fillPath();
 
-    if (exposed.northEast) this.drawWallFace(graphics, north, east, baseNorth, baseEast, 0x5f5548, 0.86);
-    if (exposed.southEast) this.drawWallFace(graphics, east, south, baseEast, baseSouth, 0x4f4539, 1);
-    if (exposed.southWest) this.drawWallFace(graphics, south, west, baseSouth, baseWest, 0x3f372f, 1);
-    if (exposed.northWest) this.drawWallFace(graphics, west, north, baseWest, baseNorth, 0x6e6252, 0.75);
+    if (exposed.NE) this.drawWallFace(graphics, north, east, baseNorth, baseEast, 0x5f5548, 0.86);
+    if (exposed.SE) this.drawWallFace(graphics, east, south, baseEast, baseSouth, 0x4f4539, 1);
+    if (exposed.SW) this.drawWallFace(graphics, south, west, baseSouth, baseWest, 0x3f372f, 1);
+    if (exposed.NW) this.drawWallFace(graphics, west, north, baseWest, baseNorth, 0x6e6252, 0.75);
 
     graphics.fillStyle(0x96876f, 1);
     graphics.lineStyle(1.5, 0x2b241d, 0.95);
@@ -1776,10 +1776,10 @@ class PhaserMapScene extends Phaser.Scene {
 
     this.drawWallTopMasonry(graphics, north, east, south, west);
 
-    if (exposed.southEast) this.drawWallBattlements(graphics, east, south);
-    if (exposed.southWest) this.drawWallBattlements(graphics, south, west);
-    if (exposed.northEast) this.drawWallCapstones(graphics, north, east);
-    if (exposed.northWest) this.drawWallCapstones(graphics, west, north);
+    if (exposed.SE) this.drawWallBattlements(graphics, east, south);
+    if (exposed.SW) this.drawWallBattlements(graphics, south, west);
+    if (exposed.NE) this.drawWallCapstones(graphics, north, east);
+    if (exposed.NW) this.drawWallCapstones(graphics, west, north);
   }
 
   private drawWallSegment(
@@ -1905,32 +1905,32 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private getWallOrientation(tile?: MapTile): BrickWallOrientation {
-    if (!tile || !this.map) return "x";
+    if (!tile || !this.map) return "NW_SE";
 
     const axes = [
       {
-        orientation: "x" as const,
+        orientation: "NW_SE" as const,
         count: this.countBrickWallNeighbors(tile, [
           [-1, 0],
           [1, 0],
         ]),
       },
       {
-        orientation: "y" as const,
+        orientation: "NE_SW" as const,
         count: this.countBrickWallNeighbors(tile, [
           [0, -1],
           [0, 1],
         ]),
       },
       {
-        orientation: "diagonalDown" as const,
+        orientation: "N_S" as const,
         count: this.countBrickWallNeighbors(tile, [
           [-1, -1],
           [1, 1],
         ]),
       },
       {
-        orientation: "diagonalUp" as const,
+        orientation: "E_W" as const,
         count: this.countBrickWallNeighbors(tile, [
           [-1, 1],
           [1, -1],
@@ -1938,7 +1938,7 @@ class PhaserMapScene extends Phaser.Scene {
       },
     ].sort((a, b) => b.count - a.count);
 
-    return axes[0].count > 0 ? axes[0].orientation : "x";
+    return axes[0].count > 0 ? axes[0].orientation : "NW_SE";
   }
 
   private countBrickWallNeighbors(tile: MapTile, offsets: [number, number][]) {
@@ -1972,27 +1972,27 @@ class PhaserMapScene extends Phaser.Scene {
 
   private getExposedWallSides(tile?: MapTile) {
     if (!tile || !this.map) {
-      return { northEast: true, southEast: true, southWest: true, northWest: true };
+      return { NE: true, SE: true, SW: true, NW: true };
     }
 
     return {
-      northEast: !this.isBrickWall(tile.x, tile.y - 1),
-      southEast: !this.isBrickWall(tile.x + 1, tile.y),
-      southWest: !this.isBrickWall(tile.x, tile.y + 1),
-      northWest: !this.isBrickWall(tile.x - 1, tile.y),
+      NE: !this.isBrickWall(tile.x, tile.y - 1),
+      SE: !this.isBrickWall(tile.x + 1, tile.y),
+      SW: !this.isBrickWall(tile.x, tile.y + 1),
+      NW: !this.isBrickWall(tile.x - 1, tile.y),
     };
   }
 
   private getExposedNaturalWallSides(tile?: MapTile) {
     if (!tile || !this.map) {
-      return { northEast: true, southEast: true, southWest: true, northWest: true };
+      return { NE: true, SE: true, SW: true, NW: true };
     }
 
     return {
-      northEast: !this.isNaturalWall(tile.x, tile.y - 1),
-      southEast: !this.isNaturalWall(tile.x + 1, tile.y),
-      southWest: !this.isNaturalWall(tile.x, tile.y + 1),
-      northWest: !this.isNaturalWall(tile.x - 1, tile.y),
+      NE: !this.isNaturalWall(tile.x, tile.y - 1),
+      SE: !this.isNaturalWall(tile.x + 1, tile.y),
+      SW: !this.isNaturalWall(tile.x, tile.y + 1),
+      NW: !this.isNaturalWall(tile.x - 1, tile.y),
     };
   }
 
@@ -2205,29 +2205,29 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   private getGateSpritePath(tile?: MapTile) {
-    if (!tile) return MAP_SPRITES.gates.diagonalDown;
+    if (!tile) return MAP_SPRITES.gates.N_S;
     const roadAxis = tile.object?.type === "gate" ? tile.object.roadAxis : undefined;
-    if (roadAxis === "x") return MAP_SPRITES.gates.diagonalUp;
-    if (roadAxis === "y") return MAP_SPRITES.gates.diagonalDown;
+    if (roadAxis === "x") return MAP_SPRITES.gates.E_W;
+    if (roadAxis === "y") return MAP_SPRITES.gates.N_S;
 
     const connections = this.getRoadConnections(tile);
-    const diagonalDownScore = connections.filter((side) => side === "northWest" || side === "southEast").length;
-    const diagonalUpScore = connections.filter((side) => side === "northEast" || side === "southWest").length;
-    if (diagonalDownScore !== diagonalUpScore) {
+    const nwSeScore = connections.filter((side) => side === "NW" || side === "SE").length;
+    const neSwScore = connections.filter((side) => side === "NE" || side === "SW").length;
+    if (nwSeScore !== neSwScore) {
       // The gate wall must cross the road perpendicularly so the road runs
-      // through the portcullis. gate-diagonal-down.webp is authored with its
-      // wall on the screen "\" diagonal, so it serves a "/" road (NE/SW),
-      // and the mirrored gate-diagonal-up.webp serves a "\" road (NW/SE).
-      return diagonalDownScore > diagonalUpScore
-        ? MAP_SPRITES.gates.diagonalUp
-        : MAP_SPRITES.gates.diagonalDown;
+      // through the portcullis. gate-N-S.webp is authored with its wall on
+      // the screen "\" diagonal (N↔S), so it serves a "/" road (NE/SW),
+      // and the mirrored gate-E-W.webp serves a "\" road (NW/SE).
+      return nwSeScore > neSwScore
+        ? MAP_SPRITES.gates.E_W
+        : MAP_SPRITES.gates.N_S;
     }
 
     // No road: align the gate wall with the surrounding brick-wall axis.
     const orientation = this.getWallOrientation(tile);
-    return orientation === "y" || orientation === "diagonalUp"
-      ? MAP_SPRITES.gates.diagonalUp
-      : MAP_SPRITES.gates.diagonalDown;
+    return orientation === "NE_SW" || orientation === "E_W"
+      ? MAP_SPRITES.gates.E_W
+      : MAP_SPRITES.gates.N_S;
   }
 
   private createRenderedHero(object: MapObjectData) {
@@ -2236,7 +2236,7 @@ class PhaserMapScene extends Phaser.Scene {
 
     const iso = cartToIso(object.x, object.y);
     const surfaceY = this.getSurfaceY(object.x, object.y);
-    const direction = this.heroDirections.get(object.id) ?? "se";
+    const direction = this.heroDirections.get(object.id) ?? "SE";
     const renderX = iso.x + (object.renderOffsetX ?? 0);
     const renderY = surfaceY + metrics.offsetY + (object.renderOffsetY ?? 0);
     const sprite = this.addHeroSprite(object, renderX, renderY, metrics.width, metrics.height, direction);

@@ -1,17 +1,18 @@
 import type { Position } from "@/lib/game/types";
+import type { Diagonal4 } from "@/lib/rendering/phaser/directions";
 import { TILE_HEIGHT, TILE_WIDTH } from "@/lib/rendering/phaser/iso";
 
-export type CubeFace = "NE" | "SE" | "SW" | "NW";
+export type CubeFace = Diagonal4;
 
 export type CubeCorners = {
-  northTop: Position;
-  eastTop: Position;
-  southTop: Position;
-  westTop: Position;
-  northBottom: Position;
-  eastBottom: Position;
-  southBottom: Position;
-  westBottom: Position;
+  topN: Position;
+  topE: Position;
+  topS: Position;
+  topW: Position;
+  bottomN: Position;
+  bottomE: Position;
+  bottomS: Position;
+  bottomW: Position;
 };
 
 export type CubeFaceQuad = {
@@ -28,14 +29,14 @@ export function getCubeCorners(
   bottomDepth: number
 ): CubeCorners {
   return {
-    northTop: { x: isoX, y: isoY - TILE_HEIGHT / 2 - topDepth },
-    eastTop: { x: isoX + TILE_WIDTH / 2, y: isoY - topDepth },
-    southTop: { x: isoX, y: isoY + TILE_HEIGHT / 2 - topDepth },
-    westTop: { x: isoX - TILE_WIDTH / 2, y: isoY - topDepth },
-    northBottom: { x: isoX, y: isoY - TILE_HEIGHT / 2 - bottomDepth },
-    eastBottom: { x: isoX + TILE_WIDTH / 2, y: isoY - bottomDepth },
-    southBottom: { x: isoX, y: isoY + TILE_HEIGHT / 2 - bottomDepth },
-    westBottom: { x: isoX - TILE_WIDTH / 2, y: isoY - bottomDepth },
+    topN: { x: isoX, y: isoY - TILE_HEIGHT / 2 - topDepth },
+    topE: { x: isoX + TILE_WIDTH / 2, y: isoY - topDepth },
+    topS: { x: isoX, y: isoY + TILE_HEIGHT / 2 - topDepth },
+    topW: { x: isoX - TILE_WIDTH / 2, y: isoY - topDepth },
+    bottomN: { x: isoX, y: isoY - TILE_HEIGHT / 2 - bottomDepth },
+    bottomE: { x: isoX + TILE_WIDTH / 2, y: isoY - bottomDepth },
+    bottomS: { x: isoX, y: isoY + TILE_HEIGHT / 2 - bottomDepth },
+    bottomW: { x: isoX - TILE_WIDTH / 2, y: isoY - bottomDepth },
   };
 }
 
@@ -43,31 +44,31 @@ export function getCubeFacePoints(face: CubeFace, corners: CubeCorners): CubeFac
   switch (face) {
     case "NE":
       return {
-        topA: corners.northTop,
-        topB: corners.eastTop,
-        bottomA: corners.northBottom,
-        bottomB: corners.eastBottom,
+        topA: corners.topN,
+        topB: corners.topE,
+        bottomA: corners.bottomN,
+        bottomB: corners.bottomE,
       };
     case "SE":
       return {
-        topA: corners.southTop,
-        topB: corners.eastTop,
-        bottomA: corners.southBottom,
-        bottomB: corners.eastBottom,
+        topA: corners.topS,
+        topB: corners.topE,
+        bottomA: corners.bottomS,
+        bottomB: corners.bottomE,
       };
     case "SW":
       return {
-        topA: corners.westTop,
-        topB: corners.southTop,
-        bottomA: corners.westBottom,
-        bottomB: corners.southBottom,
+        topA: corners.topW,
+        topB: corners.topS,
+        bottomA: corners.bottomW,
+        bottomB: corners.bottomS,
       };
     case "NW":
       return {
-        topA: corners.westTop,
-        topB: corners.northTop,
-        bottomA: corners.westBottom,
-        bottomB: corners.northBottom,
+        topA: corners.topW,
+        topB: corners.topN,
+        bottomA: corners.bottomW,
+        bottomB: corners.bottomN,
       };
   }
 }

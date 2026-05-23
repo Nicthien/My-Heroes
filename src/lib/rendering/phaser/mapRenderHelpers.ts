@@ -7,7 +7,7 @@ import { TERRAIN_EFFECT_VIEW_PADDING } from "@/lib/rendering/phaser/mapRenderSet
 import { hashTile } from "@/lib/rendering/phaser/pointMath";
 import type { LavaTileEffect } from "@/lib/rendering/phaser/terrainAnimation";
 
-export type BrickWallOrientation = "x" | "y" | "diagonalDown" | "diagonalUp";
+export type BrickWallOrientation = "NW_SE" | "NE_SW" | "N_S" | "E_W";
 
 export function getBrickRampartPlacement() {
   return {
@@ -28,7 +28,7 @@ export function getBrickWallAxis(orientation: BrickWallOrientation): {
   crenelCount: number;
 } {
   switch (orientation) {
-    case "diagonalDown":
+    case "N_S":
       return {
         along: { x: 0, y: 1 },
         across: { x: 1, y: 0 },
@@ -37,7 +37,7 @@ export function getBrickWallAxis(orientation: BrickWallOrientation): {
         shadowWidth: 38,
         crenelCount: 3,
       };
-    case "diagonalUp":
+    case "E_W":
       return {
         along: { x: 1, y: 0 },
         across: { x: 0, y: 1 },
@@ -46,7 +46,7 @@ export function getBrickWallAxis(orientation: BrickWallOrientation): {
         shadowWidth: 58,
         crenelCount: 3,
       };
-    case "y":
+    case "NE_SW":
       return {
         along: { x: -0.9, y: 0.46 },
         across: { x: 0.46, y: 0.9 },
@@ -55,7 +55,7 @@ export function getBrickWallAxis(orientation: BrickWallOrientation): {
         shadowWidth: 58,
         crenelCount: 3,
       };
-    case "x":
+    case "NW_SE":
     default:
       return {
         along: { x: 0.9, y: 0.46 },
@@ -70,13 +70,13 @@ export function getBrickWallAxis(orientation: BrickWallOrientation): {
 
 export function getBrickWallVectors(orientation: BrickWallOrientation): { dir: Position; normal: Position } {
   switch (orientation) {
-    case "y":
+    case "NE_SW":
       return { dir: { x: -26, y: 13 }, normal: { x: 10, y: 5 } };
-    case "diagonalDown":
+    case "N_S":
       return { dir: { x: 0, y: 25 }, normal: { x: 14, y: 0 } };
-    case "diagonalUp":
+    case "E_W":
       return { dir: { x: 28, y: 0 }, normal: { x: 0, y: 10 } };
-    case "x":
+    case "NW_SE":
     default:
       return { dir: { x: 26, y: 13 }, normal: { x: -10, y: 5 } };
   }

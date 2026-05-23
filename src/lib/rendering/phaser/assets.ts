@@ -1,6 +1,7 @@
 import { RoadType, TerrainType, UnitType } from "@/lib/game/types";
 import { EXTERNAL_DWELLING_UNIT_TYPES } from "@/lib/game/external-dwellings";
 import { ARTIFACTS } from "@/lib/game/artifacts";
+import type { Diagonal4, Direction8 } from "@/lib/rendering/phaser/directions";
 
 const UNIT_SPRITE_OVERRIDES: Partial<Record<UnitType, string>> = {
   [UnitType.PIKEMAN]: "/assets/sprites/units/pikeman.webp",
@@ -140,8 +141,8 @@ export const MAP_SPRITES = {
   town: "/assets/sprites/map/town-castle.webp",
   gate: "/assets/sprites/map/gate.webp",
   gates: {
-    diagonalDown: "/assets/sprites/map/gate-diagonal-down.webp",
-    diagonalUp: "/assets/sprites/map/gate-diagonal-up.webp",
+    N_S: "/assets/sprites/map/gate-N-S.webp",
+    E_W: "/assets/sprites/map/gate-E-W.webp",
   },
   towns: {
     castle: "/assets/sprites/map/town-castle.webp",
@@ -280,7 +281,7 @@ export type TerrainTopTexture = {
   tags: readonly string[];
 };
 
-export function getTerrainSideTexturePath(path: string, side: "left" | "right") {
+export function getTerrainSideTexturePath(path: string, side: Extract<Diagonal4, "SW" | "SE">) {
   return path.replace(/\.webp$/, `-side-${side}.webp`);
 }
 
@@ -365,8 +366,8 @@ export const TERRAIN_TEXTURE_PATHS = Object.values(TERRAIN_TOP_TEXTURES)
   .flat()
   .flatMap((texture) => [
     texture.path,
-    getTerrainSideTexturePath(texture.path, "left"),
-    getTerrainSideTexturePath(texture.path, "right"),
+    getTerrainSideTexturePath(texture.path, "SW"),
+    getTerrainSideTexturePath(texture.path, "SE"),
   ]);
 
 export type DirectionalSpriteState = "idle" | "walk";
@@ -388,7 +389,7 @@ export type HeroSpritesheet = DirectionalSpritesheet & {
   faction: string;
 };
 
-export const HERO_DIRECTIONS = ["s", "sw", "w", "nw", "n", "ne", "e", "se"] as const;
+export const HERO_DIRECTIONS = ["S", "SW", "W", "NW", "N", "NE", "E", "SE"] as const satisfies readonly Direction8[];
 export type HeroDirection = (typeof HERO_DIRECTIONS)[number];
 
 const HERO_SPRITESHEET_FACTIONS = [

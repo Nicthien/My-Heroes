@@ -1,8 +1,10 @@
 import Phaser from "phaser";
 import { TILE_HEIGHT, TILE_WIDTH } from "@/lib/rendering/phaser/iso";
 
+import type { Diagonal4 } from "@/lib/rendering/phaser/directions";
+
 export type FogTileState = 0 | 1 | 2;
-export type FogEdgeSide = "northWest" | "northEast" | "southEast" | "southWest";
+export type FogEdgeSide = Diagonal4;
 export type FogStampKey = "fog-near" | "fog-unexplored" | "fog-explored" | "fog-edge-nw" | "fog-edge-ne" | "fog-edge-se" | "fog-edge-sw";
 
 export type FogChunkBounds = {

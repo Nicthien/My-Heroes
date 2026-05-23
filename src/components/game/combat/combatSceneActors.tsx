@@ -47,9 +47,9 @@ const ATTACKER_LEFT_X = 78;
 const DEFENDER_RIGHT_MARGIN_X = 80;
 
 export function CombatSceneActors({ combat, gameState }: { combat: PersistentCombat; gameState: GameState }) {
-  const attacker = resolveCombatHero(combat.attackerHeroId, "attacker", "se", gameState);
+  const attacker = resolveCombatHero(combat.attackerHeroId, "attacker", "SE", gameState);
   const rightActor =
-    (combat.defenderHeroId ? resolveCombatHero(combat.defenderHeroId, "defender", "sw", gameState) : null) ??
+    (combat.defenderHeroId ? resolveCombatHero(combat.defenderHeroId, "defender", "SW", gameState) : null) ??
     resolveCombatTarget(combat, gameState);
 
   return (

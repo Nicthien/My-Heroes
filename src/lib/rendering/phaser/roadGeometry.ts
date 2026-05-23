@@ -95,10 +95,10 @@ export function getRoadCenterStampSpec(kind: RoadType | "bridge", connections: R
 
 export function getRoadAnchorPoints(x: number, y: number): Record<RoadSide, Position> {
   return {
-    northEast: { x: x + TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
-    southEast: { x: x + TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
-    southWest: { x: x - TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
-    northWest: { x: x - TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
+    NE: { x: x + TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
+    SE: { x: x + TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
+    SW: { x: x - TILE_WIDTH * 0.25, y: y + TILE_HEIGHT * 0.25 },
+    NW: { x: x - TILE_WIDTH * 0.25, y: y - TILE_HEIGHT * 0.25 },
   };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import {
   ARTIFACT_SLOTS,
@@ -22,9 +23,12 @@ import { UnitSprite } from "./UnitSprite";
 import { unitTypeLabel } from "./helpers";
 import { goldDivider, ornateFramePolished } from "./theme";
 
+type HeroTab = "profile" | "army" | "artifacts";
+
 export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town | undefined }) {
   const { data: session } = useSession();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<HeroTab>("profile");
   const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
@@ -39,6 +43,13 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
   const eligibleTransferHeroes = gameState?.players
     .find((player) => player.heroes.some((item) => item.id === hero.id))
     ?.heroes.filter((candidate) => candidate.id !== hero.id && canTransferArtifacts(hero, candidate, gameState.players.flatMap((player) => player.towns))) ?? [];
+  const heroArtifactBag = normalizeArtifactBag(hero.artifacts);
+  const artifactCount = heroArtifactBag.inventory.length + Object.values(heroArtifactBag.equipment).filter(Boolean).length;
+  const heroTabs: { id: HeroTab; label: string; badge?: number }[] = [
+    { id: "profile", label: "Profil" },
+    { id: "army", label: "Armee", badge: hero.armies.length },
+    { id: "artifacts", label: "Artefacts", badge: artifactCount },
+  ];
 
   async function castAdventureSpell(spell: SpellDefinition, target?: { x: number; y: number }) {
     if (!gameState) throw new Error("Partie indisponible.");
@@ -92,7 +103,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
       <CollapsiblePanel
         title={hero.name}
         className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
-        bodyClassName="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-4"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
         right={
           <div className="flex items-center gap-2">
             <SpellBookButton onClick={() => setSpellBookOpen(true)} />
@@ -109,65 +120,81 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           </div>
         }
       >
-        <div className="text-xs uppercase tracking-wider text-amber-200/60">
-          Niveau {hero.level} - XP {hero.experience}
-        </div>
-        {pendingAdventureSpell?.heroId === hero.id && (
-          <button
-            type="button"
-            onClick={() => {
-              setPendingAdventureSpell(null);
-              setCombatMessage(null);
-            }}
-            className="w-full rounded-md border border-violet-400/50 bg-violet-950/65 px-3 py-2 text-left text-sm font-black text-violet-100 transition hover:border-violet-200"
-          >
-            Cible: {pendingAdventureSpell.label}
-          </button>
-        )}
-        {townAtHero && (
-          <button
-            type="button"
-            className="w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
-            onClick={() => useGameStore.getState().selectTown(townAtHero.id)}
-          >
-            Au chateau : <span className="font-black">{townAtHero.name}</span>
-          </button>
-        )}
-        <div className={goldDivider} />
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <Stat label="Attaque" value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
-          <Stat label="Defense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
-          <Stat label="Pouvoir" value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
-          <Stat label="Savoir" value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
-          <Stat label="Moral" value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />
-          <Stat label="Chance" value={formatStatBonus(effectiveStats.luck, artifactBonus.luck, true)} color={luckStatColor(effectiveStats.luck)} />
-          <Stat label="Mana" value={hero.mana} color="text-violet-200" />
-        </div>
-        <MovementGauge movement={hero.movement} maxMovement={hero.maxMovement} />
-        <ArtifactPanel
-          hero={hero}
-          eligibleTransferHeroes={eligibleTransferHeroes}
-          onEquip={(artifactId, slot) => performArtifactAction({ type: "EQUIP_ARTIFACT", heroId: hero.id, artifactId, slot })}
-          onUnequip={(slot) => performArtifactAction({ type: "UNEQUIP_ARTIFACT", heroId: hero.id, slot })}
-          onTransfer={(artifactId, toHeroId) => performArtifactAction({ type: "TRANSFER_ARTIFACT", fromHeroId: hero.id, toHeroId, artifactId })}
-        />
-        {hero.armies.length > 0 && (
-          <div>
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armee</div>
-            <div className="grid grid-cols-2 gap-1">
-              {hero.armies.map((unit) => (
-                <div
-                  key={unit.id}
-                  className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-black/50 px-2 py-1 text-sm"
-                >
-                  <UnitSprite unitType={unit.unitType} size="xs" />
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-amber-200/70">{unitTypeLabel(unit.unitType)}</span>
-                  <span className="font-black text-amber-100">{unit.count}</span>
-                </div>
-              ))}
-            </div>
+        <div className="border-b border-amber-700/30 px-4 py-3">
+          <div className="text-xs uppercase tracking-wider text-amber-200/60">
+            Niveau {hero.level} - XP {hero.experience}
           </div>
-        )}
+          {pendingAdventureSpell?.heroId === hero.id && (
+            <button
+              type="button"
+              onClick={() => {
+                setPendingAdventureSpell(null);
+                setCombatMessage(null);
+              }}
+              className="mt-2 w-full rounded-md border border-violet-400/50 bg-violet-950/65 px-3 py-2 text-left text-sm font-black text-violet-100 transition hover:border-violet-200"
+            >
+              Cible: {pendingAdventureSpell.label}
+            </button>
+          )}
+          {townAtHero && (
+            <button
+              type="button"
+              className="mt-2 w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
+              onClick={() => useGameStore.getState().selectTown(townAtHero.id)}
+            >
+              Au chateau : <span className="font-black">{townAtHero.name}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
+          {heroTabs.map((tab) => (
+            <HeroTabButton
+              key={tab.id}
+              active={activeTab === tab.id}
+              badge={tab.badge}
+              icon={<HeroTabIcon tab={tab.id} />}
+              label={tab.label}
+              onClick={() => setActiveTab(tab.id)}
+            />
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          {activeTab === "profile" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <Stat label="Attaque" value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
+                <Stat label="Defense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
+                <Stat label="Pouvoir" value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
+                <Stat label="Savoir" value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
+                <Stat label="Moral" value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />
+                <Stat label="Chance" value={formatStatBonus(effectiveStats.luck, artifactBonus.luck, true)} color={luckStatColor(effectiveStats.luck)} />
+                <Stat label="Mana" value={hero.mana} color="text-violet-200" />
+              </div>
+              <div className={goldDivider} />
+              <div className="rounded-md border border-amber-800/35 bg-black/35 px-3 py-2 text-xs text-amber-200/70">
+                Position : <span className="font-black text-amber-100">{hero.position.x}, {hero.position.y}</span>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "army" && <HeroArmyPanel hero={hero} />}
+
+          {activeTab === "artifacts" && (
+            <ArtifactPanel
+              hero={hero}
+              eligibleTransferHeroes={eligibleTransferHeroes}
+              onEquip={(artifactId, slot) => performArtifactAction({ type: "EQUIP_ARTIFACT", heroId: hero.id, artifactId, slot })}
+              onUnequip={(slot) => performArtifactAction({ type: "UNEQUIP_ARTIFACT", heroId: hero.id, slot })}
+              onTransfer={(artifactId, toHeroId) => performArtifactAction({ type: "TRANSFER_ARTIFACT", fromHeroId: hero.id, toHeroId, artifactId })}
+            />
+          )}
+        </div>
+
+        <div className="shrink-0 border-t border-amber-700/30 bg-stone-950/65 p-3">
+          <MovementGauge movement={hero.movement} maxMovement={hero.maxMovement} />
+        </div>
       </CollapsiblePanel>
       {spellBookOpen && (
         <SpellBookModal
@@ -205,6 +232,101 @@ function luckStatColor(value: number | undefined) {
   if (v > 0) return "text-yellow-300";
   if (v < 0) return "text-slate-300";
   return "text-amber-200/80";
+}
+
+function HeroTabButton({
+  active,
+  badge,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  badge?: number;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={`group relative flex h-9 w-12 shrink-0 items-center justify-center rounded-md border px-2 outline-none transition focus-visible:ring-2 focus-visible:ring-amber-200/70 ${
+        active
+          ? "border-amber-300/80 bg-gradient-to-b from-amber-700/45 to-amber-950/70 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.22)]"
+          : "border-amber-800/50 bg-black/35 text-amber-300/75 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.2)] hover:border-amber-500/60 hover:bg-amber-950/35 hover:text-amber-100"
+      }`}
+    >
+      <span className="grid h-5 w-5 place-items-center" aria-hidden="true">
+        {icon}
+      </span>
+      {typeof badge === "number" && badge > 0 && (
+        <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border border-amber-500/60 bg-amber-950 px-1 text-[10px] font-black leading-none text-amber-100">
+          {badge}
+        </span>
+      )}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-amber-600/60 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function HeroTabIcon({ tab }: { tab: HeroTab }) {
+  const common = "h-5 w-5";
+  switch (tab) {
+    case "profile":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="7" r="4" />
+          <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
+        </svg>
+      );
+    case "army":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+          <path d="M9 12l2 2 4-5" />
+        </svg>
+      );
+    case "artifacts":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3h12l2 6-8 12L4 9l2-6Z" />
+          <path d="M4 9h16" />
+          <path d="M10 3 8 9l4 12 4-12-2-6" />
+        </svg>
+      );
+  }
+}
+
+function HeroArmyPanel({ hero }: { hero: Hero }) {
+  if (hero.armies.length === 0) {
+    return (
+      <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
+        Armee vide
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armee</div>
+      <div className="grid grid-cols-2 gap-1">
+        {hero.armies.map((unit) => (
+          <div
+            key={unit.id}
+            className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-black/50 px-2 py-1 text-sm"
+          >
+            <UnitSprite unitType={unit.unitType} size="xs" />
+            <span className="min-w-0 flex-1 truncate text-[11px] text-amber-200/70">{unitTypeLabel(unit.unitType)}</span>
+            <span className="font-black text-amber-100">{unit.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ArtifactPanel({

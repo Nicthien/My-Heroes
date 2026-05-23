@@ -1,6 +1,7 @@
 import type { RoadType } from "@/lib/game/types";
+import type { Diagonal4 } from "@/lib/rendering/phaser/directions";
 
-export type RoadSide = "northEast" | "southEast" | "southWest" | "northWest";
+export type RoadSide = Diagonal4;
 
 export type RoadRenderStyle = {
   edge: number;
@@ -73,22 +74,22 @@ export const ROAD_RENDER_STYLES: Record<RoadType | "bridge", RoadRenderStyle> = 
 };
 
 export const ROAD_STAMP_MASK_BY_SIDE: Record<RoadSide, 5 | 10> = {
-  northEast: 5,
-  southEast: 10,
-  southWest: 5,
-  northWest: 10,
+  NE: 5,
+  SE: 10,
+  SW: 5,
+  NW: 10,
 };
 
 export const ROAD_TEXTURE_BITS: Record<RoadSide, number> = {
-  northEast: 1,
-  southEast: 2,
-  southWest: 4,
-  northWest: 8,
+  NE: 1,
+  SE: 2,
+  SW: 4,
+  NW: 8,
 };
 
 export const ROAD_SIDE_SEEDS: Record<RoadSide, number> = {
-  northEast: 11,
-  southEast: 29,
-  southWest: 47,
-  northWest: 71,
+  NE: 11,
+  SE: 29,
+  SW: 47,
+  NW: 71,
 };

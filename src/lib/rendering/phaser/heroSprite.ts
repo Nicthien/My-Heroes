@@ -20,14 +20,14 @@ export function getHeroDirection(from: Position, to: Position, fallback: HeroDir
   const dy = Math.sign(to.y - from.y);
 
   if (dx === 0 && dy === 0) return fallback;
-  if (dx === 0 && dy > 0) return "sw";
-  if (dx === 0 && dy < 0) return "ne";
-  if (dx > 0 && dy === 0) return "se";
-  if (dx < 0 && dy === 0) return "nw";
-  if (dx > 0 && dy > 0) return "s";
-  if (dx < 0 && dy < 0) return "n";
-  if (dx > 0 && dy < 0) return "e";
-  return "w";
+  if (dx === 0 && dy > 0) return "SW";
+  if (dx === 0 && dy < 0) return "NE";
+  if (dx > 0 && dy === 0) return "SE";
+  if (dx < 0 && dy === 0) return "NW";
+  if (dx > 0 && dy > 0) return "S";
+  if (dx < 0 && dy < 0) return "N";
+  if (dx > 0 && dy < 0) return "E";
+  return "W";
 }
 
 export function getDirectionalAnimationKey(sheet: DirectionalSpritesheet, direction: HeroDirection, state: DirectionalSpriteState) {

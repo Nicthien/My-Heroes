@@ -36,16 +36,16 @@ export function generateFogStampTextures(scene: Phaser.Scene) {
           drawFogTileVisual(graphics, centerX, centerY, true, variant);
           break;
         case "fog-edge-nw":
-          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "northWest");
+          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "NW");
           break;
         case "fog-edge-ne":
-          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "northEast");
+          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "NE");
           break;
         case "fog-edge-se":
-          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "southEast");
+          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "SE");
           break;
         case "fog-edge-sw":
-          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "southWest");
+          drawFogFrontierEdgeVisual(graphics, centerX, centerY, "SW");
           break;
       }
       graphics.generateTexture(textureKey, FOG_STAMP_WIDTH, FOG_STAMP_HEIGHT);
@@ -326,13 +326,13 @@ function getDiamondPoints(x: number, y: number) {
 
 function getFogEdge(points: ReturnType<typeof getDiamondPoints>, side: FogEdgeSide) {
   switch (side) {
-    case "northWest":
+    case "NW":
       return { a: points.north, b: points.west };
-    case "northEast":
+    case "NE":
       return { a: points.north, b: points.east };
-    case "southEast":
+    case "SE":
       return { a: points.east, b: points.south };
-    case "southWest":
+    case "SW":
       return { a: points.south, b: points.west };
   }
 }

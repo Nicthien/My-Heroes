@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { buildTurnQueue, executeManualCombatAction } from "../src/lib/game/combat/persistent";
+import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
+import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
 import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
 import {
   applyDamageToStack,
@@ -7,8 +8,9 @@ import {
   getAttackDefenseMultiplier,
   rollCombatDamage,
 } from "../src/lib/game/combat/rules";
+import { getTownWeeklyGrowth } from "../src/lib/game/economy";
 import { SPELLS_BY_ID, calculateSpellDamage, getHeroMaxMana } from "../src/lib/game/spells";
-import { CombatBoardUnit, UnitType } from "../src/lib/game/types";
+import { BuildingType, CombatBoardUnit, Faction, UnitType } from "../src/lib/game/types";
 
 function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "side" | "q" | "r">): CombatBoardUnit {
   const count = params.count ?? 10;
@@ -381,6 +383,55 @@ function testCombatSpellImmunityAndMitigation() {
   if (mitigated.ok) assert.equal(mitigated.units.find((item) => item.id === "golem")?.health, 338);
 }
 
+function testAutoResolveIsNotEasierAtEqualPower() {
+  const attacker = {
+    id: "attacker",
+    attack: 1,
+    defense: 1,
+    armies: [{ id: "a", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+  };
+  const defender = {
+    id: "defender",
+    attack: 1,
+    defense: 1,
+    armies: [{ id: "d", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+  };
+  const result = autoResolveCombat(attacker, defender);
+  assert.equal(result.winnerHeroId, "defender");
+  assert.ok(result.winnerLossRatio >= 0.6);
+}
+
+function testCombatBoardNormalizesStackStats() {
+  const board = createCombatBoard(
+    {
+      id: "attacker",
+      playerId: "p1",
+      attack: 0,
+      defense: 0,
+      armies: [{ id: "a", unitType: UnitType.PIKEMAN, count: 20, health: 4000, maxHealth: 200, position: 0 }],
+    },
+    {
+      id: "defender",
+      playerId: null,
+      attack: 0,
+      defense: 0,
+      armies: [{ id: "d", unitType: UnitType.PIKEMAN, count: 20, health: 4000, maxHealth: 200, position: 0 }],
+    },
+  );
+  for (const unit of board.boardState.units) {
+    assert.equal(unit.maxHealth, 10);
+    assert.equal(unit.health, 200);
+    assert.equal(unit.minDamage, 1);
+    assert.equal(unit.maxDamage, 3);
+  }
+}
+
+function testUpgradedDwellingsKeepBaseGrowth() {
+  const growth = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
+  assert.ok((growth[UnitType.CENTAUR] ?? 0) > 0);
+  assert.ok((growth[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
+}
+
 testInitiativeOrder();
 testWaitAndDefendTiming();
 testDamageFormulaCapsAndPartials();
@@ -393,5 +444,8 @@ testMoveDoesNotAttack();
 testSpellDamageAndMana();
 testCombatSpellOncePerRoundAndDamage();
 testCombatSpellImmunityAndMitigation();
+testAutoResolveIsNotEasierAtEqualPower();
+testCombatBoardNormalizesStackStats();
+testUpgradedDwellingsKeepBaseGrowth();
 
 console.log("Combat core validation passed.");

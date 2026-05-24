@@ -31,6 +31,7 @@ import {
 import {
   addUnitsToLocalStackList,
   getMaxRecruitCount,
+  getUpgradeCost,
   multiplyCost,
   removeUnitsFromLocalStackList,
 } from "./recruitHelpers";
@@ -80,9 +81,11 @@ function HUDContent() {
     tab: "summary",
   });
   const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
+  const [hideBuiltBuildings, setHideBuiltBuildings] = useState(true);
   const [hideMissingRecruitRequirements, setHideMissingRecruitRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
   const [recruitDialog, setRecruitDialog] = useState<{ townId: string; unitType: UnitType; count: number } | null>(null);
+  const [upgradeDialog, setUpgradeDialog] = useState<{ townId: string; heroId?: string; unitType: UnitType; count: number } | null>(null);
   const [transferDialog, setTransferDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   const nullableGameState = useGameStore((state) => state.gameState);
@@ -280,7 +283,13 @@ function HUDContent() {
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "RECRUIT_HERO", townId: selectedTown.id, templateId }),
+      body: JSON.stringify({
+        type: "RECRUIT_HERO",
+        townId: selectedTown.id,
+        ...(templateId.startsWith("hero:")
+          ? { heroId: templateId.slice("hero:".length) }
+          : { templateId }),
+      }),
     });
     if (!response.ok) {
       setCombatMessage(await getApiErrorMessage(response, "Recrutement de héros impossible."));
@@ -437,6 +446,92 @@ function HUDContent() {
                 }
               : town
           ),
+        };
+      }),
+    });
+  };
+
+  const handleUpgradeTroops = async (unitType: UnitType, count = 1, sourceHeroId?: string) => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
+
+    const baseEntry = selectedTownRecruitEntries.find((entry) => entry.rule.type === unitType && !entry.upgraded);
+    const upgradedEntry = baseEntry
+      ? selectedTownRecruitEntries.find((entry) => entry.tier === baseEntry.tier && entry.upgraded)
+      : undefined;
+    if (!baseEntry || !upgradedEntry || !selectedTown.buildings.includes(upgradedEntry.dwelling)) return;
+
+    const sourceHero = sourceHeroId ? heroesAtSelectedTown.find((hero) => hero.id === sourceHeroId) : undefined;
+    const source = sourceHero
+      ? sourceHero.armies.find((unit) => unit.unitType === unitType)
+      : selectedTown.garrison.find((unit) => unit.unitType === unitType);
+    const upgradeCost = getUpgradeCost(baseEntry.rule.cost, upgradedEntry.rule.cost);
+    const upgradeCount = Math.min(
+      Math.max(1, Math.floor(count)),
+      getMaxRecruitCount(myPlayer.resources, upgradeCost, source?.count ?? 0)
+    );
+    if (upgradeCount <= 0) {
+      setCombatMessage("Ressources ou troupes insuffisantes.");
+      return;
+    }
+
+    const totalCost = multiplyCost(upgradeCost, upgradeCount);
+    if (!canAfford(myPlayer.resources, totalCost)) return;
+
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "UPGRADE_TROOPS",
+        townId: selectedTown.id,
+        heroId: sourceHeroId,
+        unitType,
+        count: upgradeCount,
+      }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Amelioration impossible."));
+      return;
+    }
+
+    const nextResources = subtractCost(myPlayer.resources, totalCost);
+    setUpgradeDialog(null);
+
+    setGameState({
+      ...gameState,
+      players: gameState.players.map((player) => {
+        if (player.id !== myPlayer.id) return player;
+        return {
+          ...player,
+          resources: nextResources,
+          towns: sourceHeroId ? player.towns : player.towns.map((town) =>
+            town.id === selectedTown.id
+              ? {
+                  ...town,
+                  garrison: addUnitsToLocalStackList(
+                    removeUnitsFromLocalStackList(town.garrison, unitType, upgradeCount, baseEntry.rule.health),
+                    upgradedEntry.rule.type,
+                    upgradeCount,
+                    upgradedEntry.rule.health
+                  ),
+                }
+              : town
+          ),
+          heroes: sourceHeroId
+            ? player.heroes.map((hero) =>
+                hero.id === sourceHeroId
+                  ? {
+                      ...hero,
+                      armies: addUnitsToLocalStackList(
+                        removeUnitsFromLocalStackList(hero.armies, unitType, upgradeCount, baseEntry.rule.health),
+                        upgradedEntry.rule.type,
+                        upgradeCount,
+                        upgradedEntry.rule.health
+                      ),
+                    }
+                  : hero
+              )
+            : player.heroes,
         };
       }),
     });
@@ -658,16 +753,35 @@ function HUDContent() {
   const displayedTownTab = townTabs.some((tab) => tab.id === activeTownTab)
     ? activeTownTab
     : "summary";
-  const displayedBuildRules = selectedTown && hideMissingBuildRequirements
-    ? selectedTownBuildingRules.filter((rule) =>
-        !rule.requires?.some((requirement) => !hasTownBuilding(selectedTown.buildings, requirement))
-      )
+  const displayedBuildRules = selectedTown
+    ? selectedTownBuildingRules.filter((rule) => {
+        if (hideMissingBuildRequirements && rule.requires?.some((requirement) => !hasTownBuilding(selectedTown.buildings, requirement))) {
+          return false;
+        }
+        if (hideBuiltBuildings && selectedTown.buildings.includes(rule.type)) {
+          return false;
+        }
+        return true;
+      })
     : selectedTownBuildingRules;
   const displayedRecruitEntries = selectedTown && hideMissingRecruitRequirements
     ? selectedTownRecruitEntries.filter(({ dwelling }) =>
         selectedTown.buildings.includes(dwelling)
       )
     : selectedTownRecruitEntries;
+  const getUpgradeOption = (unitType: UnitType, available: number) => {
+    if (!selectedTown || !myPlayer) return null;
+    const baseEntry = selectedTownRecruitEntries.find((entry) => entry.rule.type === unitType && !entry.upgraded);
+    const upgradedEntry = baseEntry
+      ? selectedTownRecruitEntries.find((entry) => entry.tier === baseEntry.tier && entry.upgraded)
+      : undefined;
+    if (!baseEntry || !upgradedEntry || !selectedTown.buildings.includes(upgradedEntry.dwelling)) return null;
+    const upgradeCost = getUpgradeCost(baseEntry.rule.cost, upgradedEntry.rule.cost);
+    return {
+      label: upgradedEntry.rule.label,
+      max: getMaxRecruitCount(myPlayer.resources, upgradeCost, available),
+    };
+  };
   const activeRecruitEntry = selectedTown && displayedTownTab === "recruit" && recruitDialog?.townId === selectedTown.id
     ? selectedTownRecruitEntries.find(({ rule }) => rule.type === recruitDialog.unitType)
     : undefined;
@@ -678,6 +792,27 @@ function HUDContent() {
     ? getMaxRecruitCount(myPlayer.resources, activeRecruitEntry.rule.cost, activeRecruitAvailable)
     : 0;
   const activeRecruitCount = Math.min(Math.max(1, recruitDialog?.count ?? 1), Math.max(1, activeRecruitMax));
+  const activeUpgradeBaseEntry = selectedTown && upgradeDialog?.townId === selectedTown.id
+    ? selectedTownRecruitEntries.find((entry) => entry.rule.type === upgradeDialog.unitType && !entry.upgraded)
+    : undefined;
+  const activeUpgradeEntry = activeUpgradeBaseEntry
+    ? selectedTownRecruitEntries.find((entry) => entry.tier === activeUpgradeBaseEntry.tier && entry.upgraded)
+    : undefined;
+  const activeUpgradeHero = upgradeDialog?.heroId
+    ? heroesAtSelectedTown.find((hero) => hero.id === upgradeDialog.heroId)
+    : undefined;
+  const activeUpgradeSource = activeUpgradeBaseEntry
+    ? activeUpgradeHero
+      ? activeUpgradeHero.armies.find((unit) => unit.unitType === activeUpgradeBaseEntry.rule.type)
+      : selectedTown?.garrison.find((unit) => unit.unitType === activeUpgradeBaseEntry.rule.type)
+    : undefined;
+  const activeUpgradeCost = activeUpgradeBaseEntry && activeUpgradeEntry
+    ? getUpgradeCost(activeUpgradeBaseEntry.rule.cost, activeUpgradeEntry.rule.cost)
+    : {};
+  const activeUpgradeMax = myPlayer && activeUpgradeSource
+    ? getMaxRecruitCount(myPlayer.resources, activeUpgradeCost, activeUpgradeSource.count)
+    : 0;
+  const activeUpgradeCount = Math.min(Math.max(1, upgradeDialog?.count ?? 1), Math.max(1, activeUpgradeMax));
   const activeTransferStack = selectedTown && displayedTownTab === "garrison" && transferDialog?.townId === selectedTown.id
     ? selectedTown.garrison.find((unit) => unit.unitType === transferDialog.unitType)
     : undefined;
@@ -863,6 +998,9 @@ function HUDContent() {
                 setTransferDialog={setTransferDialog}
                 returnDialog={returnDialog}
                 setReturnDialog={setReturnDialog}
+                upgradeDialog={upgradeDialog}
+                setUpgradeDialog={setUpgradeDialog}
+                getUpgradeOption={getUpgradeOption}
               />
             )}
 
@@ -873,6 +1011,8 @@ function HUDContent() {
                 displayedBuildRules={displayedBuildRules}
                 hideMissingBuildRequirements={hideMissingBuildRequirements}
                 setHideMissingBuildRequirements={setHideMissingBuildRequirements}
+                hideBuiltBuildings={hideBuiltBuildings}
+                setHideBuiltBuildings={setHideBuiltBuildings}
                 gameState={gameState}
                 myPlayer={myPlayer}
                 hasPlayerCapitol={hasPlayerCapitol}
@@ -992,6 +1132,19 @@ function HUDContent() {
           onClose={() => setRecruitDialog(null)}
           footer={<>Total : {formatCost(multiplyCost(activeRecruitEntry.rule.cost, activeRecruitCount))}</>}
           submitLabel="Recruter"
+        />
+      )}
+
+      {selectedTown && activeUpgradeBaseEntry && activeUpgradeEntry && upgradeDialog?.townId === selectedTown.id && activeUpgradeMax > 0 && (
+        <CountDialog
+          tone="sky"
+          max={activeUpgradeMax}
+          count={activeUpgradeCount}
+          onCountChange={(next) => setUpgradeDialog({ townId: selectedTown.id, heroId: upgradeDialog?.heroId, unitType: activeUpgradeBaseEntry.rule.type, count: next })}
+          onSubmit={() => void handleUpgradeTroops(activeUpgradeBaseEntry.rule.type, activeUpgradeCount, upgradeDialog?.heroId)}
+          onClose={() => setUpgradeDialog(null)}
+          footer={<>Vers : {activeUpgradeEntry.rule.label} | Total : {formatCost(multiplyCost(activeUpgradeCost, activeUpgradeCount)) || "gratuit"}</>}
+          submitLabel="Ameliorer"
         />
       )}
 

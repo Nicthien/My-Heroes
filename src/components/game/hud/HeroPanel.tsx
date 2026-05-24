@@ -13,7 +13,7 @@ import {
   type ArtifactSlot,
 } from "@/lib/game/artifacts";
 import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } from "@/lib/game/spells";
-import { SKILL_DEFINITIONS, type SkillId } from "@/lib/game/skills";
+import { SKILL_DEFINITIONS, type SkillId, type SkillLevel } from "@/lib/game/skills";
 import type { Hero, Town } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -51,6 +51,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     { id: "army", label: "Armee", badge: hero.armies.length },
     { id: "artifacts", label: "Artefacts", badge: artifactCount },
   ];
+  const skillEntries = getHeroSkillEntries(hero);
 
   async function castAdventureSpell(spell: SpellDefinition, target?: { x: number; y: number }) {
     if (!gameState) throw new Error("Partie indisponible.");
@@ -126,11 +127,11 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           <div className="text-xs uppercase tracking-wider text-amber-200/60">
             Niveau {hero.level} - XP {hero.experience}
           </div>
-          {hero.skills && Object.keys(hero.skills).length > 0 && (
+          {skillEntries.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {Object.entries(hero.skills).map(([id, level]) => (
+              {skillEntries.map(({ id, label, levelLabel }) => (
                 <span key={id} className="rounded-full border border-amber-600/50 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
-                  {id.replace(/_/g, " ")} · {level}
+                  {label} - {levelLabel}
                 </span>
               ))}
             </div>
@@ -216,6 +217,8 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
                 <Stat label="Mana" value={hero.mana} color="text-violet-200" />
               </div>
               <div className={goldDivider} />
+              <HeroSkillsPanel hero={hero} />
+              <div className={goldDivider} />
               <div className="rounded-md border border-amber-800/35 bg-black/35 px-3 py-2 text-xs text-amber-200/70">
                 Position : <span className="font-black text-amber-100">{hero.position.x}, {hero.position.y}</span>
               </div>
@@ -275,6 +278,66 @@ function luckStatColor(value: number | undefined) {
   if (v > 0) return "text-yellow-300";
   if (v < 0) return "text-slate-300";
   return "text-amber-200/80";
+}
+
+function HeroSkillsPanel({ hero }: { hero: Hero }) {
+  const skills = getHeroSkillEntries(hero);
+  if (skills.length === 0) {
+    return (
+      <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
+        Aucune compétence
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Compétences</div>
+      <div className="space-y-1">
+        {skills.map(({ id, label, description, levelLabel }) => (
+          <div key={id} className="rounded-md border border-amber-700/35 bg-black/45 px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-xs font-black text-amber-100">{label}</span>
+              <span className="shrink-0 rounded border border-amber-600/45 bg-amber-950/50 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-200">
+                {levelLabel}
+              </span>
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-amber-200/65">{description}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getHeroSkillEntries(hero: Hero) {
+  return Object.entries(hero.skills ?? {})
+    .filter((entry): entry is [SkillId, SkillLevel] => isSkillId(entry[0]) && isSkillLevel(entry[1]))
+    .map(([id, level]) => {
+      const definition = SKILL_DEFINITIONS.find((skill) => skill.id === id);
+      return {
+        id,
+        label: definition?.label ?? id.replace(/_/g, " "),
+        description: definition?.description ?? "",
+        level,
+        levelLabel: skillLevelLabel(level),
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function isSkillId(value: string): value is SkillId {
+  return SKILL_DEFINITIONS.some((skill) => skill.id === value);
+}
+
+function isSkillLevel(value: unknown): value is SkillLevel {
+  return value === "basic" || value === "advanced" || value === "expert";
+}
+
+function skillLevelLabel(level: SkillLevel) {
+  if (level === "basic") return "Base";
+  if (level === "advanced") return "Avancé";
+  return "Expert";
 }
 
 function HeroTabButton({

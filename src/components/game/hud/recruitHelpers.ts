@@ -40,6 +40,16 @@ export function getMaxRecruitCount(resources: Resources, cost: ResourceCost, ava
   return Math.max(0, Math.min(available, resourceLimit));
 }
 
+export function getUpgradeCost(baseCost: ResourceCost, upgradedCost: ResourceCost): ResourceCost {
+  const resources: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
+  return Object.fromEntries(
+    resources.map((resource) => [
+      resource,
+      Math.max(0, (upgradedCost[resource] ?? 0) - (baseCost[resource] ?? 0)),
+    ])
+  ) as ResourceCost;
+}
+
 export function multiplyCost(cost: ResourceCost, count: number): ResourceCost {
   return Object.fromEntries(
     Object.entries(cost).map(([resource, amount]) => [resource, (amount ?? 0) * count])

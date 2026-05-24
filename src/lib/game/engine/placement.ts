@@ -76,7 +76,7 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
 
   // Buildings rares mais existants, piles fréquentes
   const choices: { value: ObjectSpec; weight: number }[] = [
-    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 0.6 })),
+    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 0.9 })),
     ...piles,
   ];
   return weightedPick(rng, choices);
@@ -106,9 +106,10 @@ function hasMajorObjectNearby(
 
 function buildingTargetForZone(type: string, budget: number): number {
   if (budget < 1500) return 0;
-  if (budget >= 7000) return 5;
-  if (type === "treasure") return 4;
-  if (budget >= 3000) return 3;
+  if (budget >= 9000) return 7;
+  if (budget >= 7000) return 6;
+  if (type === "treasure") return 5;
+  if (budget >= 3000) return 4;
   return 2;
 }
 
@@ -659,7 +660,7 @@ function placeZoneGuardians(
     const candidates = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
       .filter((p) => isTileFree(ctx.tiles[p.y][p.x]));
     if (candidates.length === 0) return;
-    const n = Math.min(3, candidates.length);
+    const n = Math.min(5, candidates.length);
     const picks = shuffle(ctx.rng, candidates).slice(0, n);
     const per = Math.floor(totalThreat / n);
     for (const p of picks) {
@@ -682,7 +683,7 @@ function placeZoneGuardians(
     }
   }
 
-  const patrolCount = Math.min(3, Math.max(1, Math.floor(totalThreat / 2200)));
+  const patrolCount = Math.min(5, Math.max(2, Math.floor(totalThreat / 1600)));
   const candidates = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
     .filter((p) => isTileFree(ctx.tiles[p.y][p.x]));
   for (const p of shuffle(ctx.rng, candidates).slice(0, patrolCount)) {

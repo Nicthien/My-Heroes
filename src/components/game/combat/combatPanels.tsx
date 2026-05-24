@@ -7,7 +7,7 @@ import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { getCreature } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
 import { goldText } from "@/components/game/hud/theme";
-import { type DamagePreview, formatRange } from "./combatLayout";
+import { type DamagePreview, formatRange, getEffectiveCombatUnitStats } from "./combatLayout";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
 
 export function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview; actor?: CombatBoardUnit; target?: CombatBoardUnit }) {
@@ -267,9 +267,10 @@ function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
 }
 
 
-export function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
+export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit; combat: PersistentCombat; gameState: GameState }) {
   const rule = getUnitRule(unit.unitType);
   const creature = getCreature(unit.unitType);
+  const effectiveStats = getEffectiveCombatUnitStats(unit, combat, gameState);
   const states = [
     unit.defended ? "Defend" : null,
     unit.waited ? "Attend" : null,
@@ -287,8 +288,8 @@ export function UnitDetails({ unit }: { unit: CombatBoardUnit }) {
           {unit.side === "attacker" ? "Attaquant" : "Defenseur"}
         </div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-300">
-          <span>Att. {rule.attack}</span>
-          <span>Def. {rule.defense}</span>
+          <span title={`Base ${rule.attack} + heros ${effectiveStats.heroAttack}`}>Att. {effectiveStats.attack}</span>
+          <span title={`Base ${rule.defense} + heros ${effectiveStats.heroDefense}`}>Def. {effectiveStats.defense}</span>
           <span>Vit. {unit.speed}</span>
           <span>Deg. {unit.minDamage}-{unit.maxDamage}</span>
           <span>PV/u {unit.maxHealth}</span>

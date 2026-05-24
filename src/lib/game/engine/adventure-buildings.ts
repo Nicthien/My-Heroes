@@ -21,6 +21,13 @@ type StargatePair = {
   b: MapTile;
 };
 
+const WATER_ADVENTURE_TYPES = [
+  AdventureBuildingType.MERMAID,
+  AdventureBuildingType.BUOY,
+  AdventureBuildingType.FLOTSAM,
+  AdventureBuildingType.SEA_CHEST,
+] as const;
+
 export function placeAdventureBuildings(ctx: PlacementContext): void {
   const stargateCandidates: MapTile[] = [];
 
@@ -42,13 +49,15 @@ export function placeAdventureBuildings(ctx: PlacementContext): void {
   placeStargatePairs(ctx, stargateCandidates);
   placeCreatureBanks(ctx);
   placeExternalDwellings(ctx);
+  placeWaterAdventureObjects(ctx);
+  placeWaterMonsterPatrols(ctx);
 }
 
 function adventureTargetForZone(type: string, value: number): number {
   if (value < 1800) return 0;
-  if (type === "treasure") return value >= 6000 ? 3 : 2;
-  if (type === "junction") return 1;
-  return value >= 4500 ? 2 : 1;
+  if (type === "treasure") return value >= 6000 ? 5 : 3;
+  if (type === "junction") return value >= 3600 ? 2 : 1;
+  return value >= 4500 ? 3 : 2;
 }
 
 function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count: number): AdventureBuildingType[] {
@@ -266,9 +275,9 @@ function findExternalDwellingTile(ctx: PlacementContext, zoneId: number): MapTil
 
 function creatureBankTargetForZone(type: string, value: number): number {
   if (value < 2200) return 0;
-  if (type === "treasure") return value >= 8000 ? 3 : 2;
+  if (type === "treasure") return value >= 8000 ? 4 : 3;
   if (type === "junction") return value >= 3200 ? 2 : 1;
-  return value >= 4200 ? 1 : 0;
+  return value >= 4200 ? 2 : 1;
 }
 
 function pickCreatureBanksForZone(ctx: PlacementContext, zoneId: number, count: number): CreatureBankType[] {
@@ -324,7 +333,10 @@ function isValidExternalDwellingTile(ctx: PlacementContext, tile: MapTile, roadB
 }
 
 function isValidAdventureTile(ctx: PlacementContext, tile: MapTile, type: AdventureBuildingType, roadBuffer: number): boolean {
-  if (!tile.isPassable || tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) return false;
+  const waterAdventure = isWaterAdventureBuilding(type);
+  if (!tile.isPassable || tile.terrain === TerrainType.LAVA) return false;
+  if (tile.terrain === TerrainType.WATER && !waterAdventure) return false;
+  if (tile.terrain !== TerrainType.WATER && waterAdventure && !hasWaterNearby(ctx, tile.x, tile.y, 2)) return false;
   if (tile.object || tile.decor || tile.road) return false;
   if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
   if (hasMajorObjectNearby(ctx, tile.x, tile.y, 2)) return false;
@@ -405,7 +417,7 @@ function getAdventureBuildingPreferredTerrain(type: AdventureBuildingType): Terr
     case AdventureBuildingType.BUOY:
     case AdventureBuildingType.FLOTSAM:
     case AdventureBuildingType.SEA_CHEST:
-      return [TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS];
+      return [TerrainType.WATER, TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS];
     default:
       return [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SNOW];
   }
@@ -441,10 +453,11 @@ function getAdventureBuildingRarity(type: AdventureBuildingType): number {
 }
 
 function isCoastalAdventureBuilding(type: AdventureBuildingType): boolean {
-  return type === AdventureBuildingType.MERMAID ||
-    type === AdventureBuildingType.BUOY ||
-    type === AdventureBuildingType.FLOTSAM ||
-    type === AdventureBuildingType.SEA_CHEST;
+  return isWaterAdventureBuilding(type);
+}
+
+function isWaterAdventureBuilding(type: AdventureBuildingType): boolean {
+  return (WATER_ADVENTURE_TYPES as readonly AdventureBuildingType[]).includes(type);
 }
 
 function isRareAdventureBuilding(type: AdventureBuildingType): boolean {
@@ -482,4 +495,108 @@ function hasMajorObjectNearby(ctx: PlacementContext, x: number, y: number, radiu
     }
   }
   return false;
+}
+
+function placeWaterAdventureObjects(ctx: PlacementContext): void {
+  for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
+    const meta = ctx.zoneGrid.meta[zoneId];
+    const targetCount = waterAdventureTargetForZone(ctx, zoneId);
+    if (targetCount <= 0) continue;
+
+    const waterTypes = pickWaterAdventureTypes(ctx, targetCount);
+    for (const type of waterTypes) {
+      const tile = findWaterAdventureTile(ctx, zoneId, type);
+      if (!tile) continue;
+      placeAdventureBuilding(tile, type);
+    }
+
+    const bankCount = waterCreatureBankTargetForZone(meta.type, meta.value, targetCount);
+    const bankPicks = pickWaterCreatureBanks(ctx, bankCount);
+    for (const type of bankPicks) {
+      const tile = findCreatureBankTile(ctx, zoneId, type);
+      if (!tile) continue;
+      const id = `creature-bank-${type}-${tile.x}-${tile.y}`;
+      placeAdventureBuilding(tile, type, id, undefined, getCreatureBankGuardPower(type, id));
+    }
+  }
+}
+
+function waterAdventureTargetForZone(ctx: PlacementContext, zoneId: number): number {
+  const waterTiles = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
+    .filter((position) => isFreeWaterTile(ctx.tiles[position.y][position.x]));
+  if (waterTiles.length < 6) return 0;
+
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const byWater = waterTiles.length >= 56 ? 3 : waterTiles.length >= 22 ? 2 : 1;
+  return meta.type === "treasure" ? Math.min(4, byWater + 1) : byWater;
+}
+
+function pickWaterAdventureTypes(ctx: PlacementContext, count: number): AdventureBuildingType[] {
+  return shuffle(ctx.rng, [...WATER_ADVENTURE_TYPES])
+    .sort((left, right) => getAdventureBuildingRarity(right) - getAdventureBuildingRarity(left))
+    .slice(0, count);
+}
+
+function findWaterAdventureTile(
+  ctx: PlacementContext,
+  zoneId: number,
+  type: AdventureBuildingType,
+): MapTile | null {
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
+  for (const pos of candidates) {
+    const tile = ctx.tiles[pos.y][pos.x];
+    if (!isValidAdventureTile(ctx, tile, type, 0)) continue;
+    if (tile.terrain !== TerrainType.WATER) continue;
+    return tile;
+  }
+  return null;
+}
+
+function waterCreatureBankTargetForZone(type: string, value: number, waterAdventureCount: number): number {
+  if (waterAdventureCount <= 0 || value < 2600) return 0;
+  if (type === "treasure") return value >= 8000 ? 2 : 1;
+  if (type === "junction") return value >= 4200 ? 1 : 0;
+  return value >= 5600 ? 1 : 0;
+}
+
+function pickWaterCreatureBanks(ctx: PlacementContext, count: number): CreatureBankType[] {
+  if (count <= 0) return [];
+  return shuffle(ctx.rng, CREATURE_BANK_TYPES)
+    .filter((type) => CREATURE_BANK_DEFINITIONS[type].aquatic)
+    .map((type) => ({
+      type,
+      score: CREATURE_BANK_DEFINITIONS[type].rarity * (0.65 + ctx.rng() * 0.7),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, count)
+    .map((entry) => entry.type);
+}
+
+function placeWaterMonsterPatrols(ctx: PlacementContext): void {
+  for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
+    const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId))
+      .map((position) => ctx.tiles[position.y][position.x])
+      .filter((tile) =>
+        isFreeWaterTile(tile) &&
+        !hasMajorObjectNearby(ctx, tile.x, tile.y, 2) &&
+        !hasRoadNearby(ctx, tile.x, tile.y, 1)
+      );
+    if (candidates.length < 8) continue;
+
+    const meta = ctx.zoneGrid.meta[zoneId];
+    const patrolCount = Math.min(meta.type === "treasure" ? 3 : 2, Math.floor(candidates.length / 18) + 1);
+    const basePower = Math.max(220, Math.floor(meta.value * (meta.type === "treasure" ? 0.18 : 0.12)));
+    for (const tile of candidates.slice(0, patrolCount)) {
+      tile.object = {
+        type: "monster",
+        id: `sea-mon-patrol-${zoneId}-${tile.x}-${tile.y}`,
+        subtype: "sea_patrol",
+        guardianPower: basePower,
+      };
+    }
+  }
+}
+
+function isFreeWaterTile(tile: MapTile): boolean {
+  return tile.isPassable && !tile.worldEdge && tile.terrain === TerrainType.WATER && !tile.object && !tile.decor && !tile.road;
 }

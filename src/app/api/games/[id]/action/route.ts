@@ -6,6 +6,7 @@ import {
   canAfford,
   getFactionBuildingRule,
   getFactionBuildingRules,
+  getGrowthForBuiltTownBuilding,
   subtractCost,
   tierForUnit,
 } from "@/lib/game/economy";
@@ -236,6 +237,19 @@ export async function POST(
       };
       await updatePlayerResources(supabase, gamePlayer.id, resources);
       return NextResponse.json({ success: true, resources });
+    }
+
+    if (action.type === "DEV_GRANT_HERO_XP") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const amount = 500;
+      const experience = hero.experience + amount;
+      await applyHeroExperienceGain(supabase, id, hero.id, experience);
+      return NextResponse.json({ success: true, heroId: hero.id, experience, amount });
     }
 
     if (action.type === "DEV_TELEPORT_HERO") {
@@ -896,6 +910,10 @@ export async function POST(
         level: getTownCenterLevel(nextBuildings),
         last_built_turn: game.turnNumber,
       };
+      const immediateGrowth = getGrowthForBuiltTownBuilding(townFaction, building);
+      if (Object.keys(immediateGrowth).length > 0) {
+        townUpdate.available_recruits = addRecruitGrowth(town.availableRecruits ?? {}, immediateGrowth);
+      }
       if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
         const townFaction = ((town.townType ?? gamePlayer.faction ?? "castle") as Faction);
         townUpdate.tavern_offer = pickTavernOffer(townFaction, getRecruitedHeroTemplateIds(gamePlayer.heroes ?? []));
@@ -966,6 +984,39 @@ export async function POST(
       }
 
       const offer = (town.tavernOffer ?? []) as TavernOffer[];
+      const returningHeroId = typeof action.heroId === "string" ? action.heroId : null;
+      if (returningHeroId) {
+        const returningHero = ((gamePlayer as { tavernHeroes?: Array<{ heroId?: string }> }).tavernHeroes ?? [])
+          .find((hero) => hero.heroId === returningHeroId);
+        if (!returningHero) return NextResponse.json({ error: "Heros indisponible" }, { status: 400 });
+        if (gamePlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
+          return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} heros par joueur` }, { status: 400 });
+        }
+        const resources = playerResources(gamePlayer);
+        if (resources.gold < HERO_RECRUIT_COST_GOLD) {
+          return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+        }
+        const { data: armies } = await supabase
+          .from("armies")
+          .select("unit_type")
+          .eq("hero_id", returningHeroId);
+        const dailyMovement = getDailyAdventureMovement(
+          (armies ?? []).map((army) => ({ unitType: army.unit_type as UnitType }))
+        );
+
+        await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
+        await supabase.from("heroes").update({
+          status: "ACTIVE",
+          x: town.x,
+          y: town.y,
+          movement: dailyMovement,
+          max_movement: dailyMovement,
+          is_moving: false,
+        }).eq("id", returningHeroId).eq("game_player_id", gamePlayer.id);
+
+        return NextResponse.json({ success: true });
+      }
+
       const picked = offer.find((entry) => entry.templateId === action.templateId);
       if (!picked) return NextResponse.json({ error: "Héros indisponible" }, { status: 400 });
 
@@ -1068,6 +1119,66 @@ export async function POST(
         available_recruits: { ...(town.availableRecruits ?? {}), [unitType]: available - count },
         garrison: nextGarrison,
       }).eq("id", town.id);
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "UPGRADE_TROOPS") {
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const baseRule = UNIT_RULES[unitType];
+      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
+      if (!baseRule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
+
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      const upgradeBuilding = getFactionBuildingRules(townFaction).find((rule) => rule.replacesUnit === unitType);
+      const upgradedUnitType = upgradeBuilding?.unlocksUnit;
+      const upgradedRule = upgradedUnitType ? UNIT_RULES[upgradedUnitType] : undefined;
+      if (!upgradeBuilding || !upgradedUnitType || !upgradedRule) {
+        return NextResponse.json({ error: "Cette unite ne peut pas etre amelioree ici" }, { status: 400 });
+      }
+      if (!(town.buildings ?? []).includes(upgradeBuilding.type)) {
+        return NextResponse.json({ error: "Batiment ameliore requis" }, { status: 400 });
+      }
+
+      const sourceHeroId = typeof action.heroId === "string" ? action.heroId : null;
+      const sourceHero = sourceHeroId ? gamePlayer.heroes.find((hero) => hero.id === sourceHeroId) : null;
+      if (sourceHeroId) {
+        if (!sourceHero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+        if (sourceHero.x !== town.x || sourceHero.y !== town.y) {
+          return NextResponse.json({ error: "Le heros doit etre au chateau" }, { status: 400 });
+        }
+        if (isHeroInActiveCombat(game.combats, sourceHero.id)) {
+          return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+        }
+      }
+
+      const garrison = town.garrison ?? [];
+      const source = sourceHero
+        ? sourceHero.armies.find((unit) => unit.unitType === unitType)
+        : garrison.find((unit) => unit.unitType === unitType);
+      if (!source || source.count < count) {
+        return NextResponse.json({ error: "Troupes insuffisantes" }, { status: 400 });
+      }
+
+      const upgradeCost = getUnitUpgradeCost(baseRule.cost, upgradedRule.cost);
+      const totalCost = Object.fromEntries(Object.entries(upgradeCost).map(([key, value]) => [key, (value ?? 0) * count]));
+      const resources = playerResources(gamePlayer);
+      if (!canAfford(resources, totalCost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+
+      await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
+      if (sourceHero) {
+        await removeUnitsFromHeroArmy(supabase, source, count, baseRule.health);
+        await addUnitsToHeroArmy(supabase, sourceHero, upgradedUnitType, count, upgradedRule.health);
+      } else {
+        const nextGarrison = addUnitsToStackList(
+          removeUnitsFromStackList(garrison, unitType, count, baseRule.health),
+          upgradedUnitType,
+          count,
+          upgradedRule.health
+        );
+        await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
+      }
 
       return NextResponse.json({ success: true });
     }
@@ -1517,6 +1628,29 @@ function getAffordableCount(resources: Resources, cost: Partial<Resources>, avai
     limit = Math.min(limit, Math.floor(owned / unitCost));
   }
   return Math.max(0, limit);
+}
+
+function getUnitUpgradeCost(baseCost: Partial<Resources>, upgradedCost: Partial<Resources>) {
+  const resources: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
+  return Object.fromEntries(
+    resources.map((resource) => [
+      resource,
+      Math.max(0, (upgradedCost[resource] ?? 0) - (baseCost[resource] ?? 0)),
+    ])
+  ) as Partial<Resources>;
+}
+
+function addRecruitGrowth(
+  availableRecruits: Record<string, number>,
+  growth: Partial<Record<UnitType, number>>,
+) {
+  const next = { ...availableRecruits };
+  for (const [unitType, amount] of Object.entries(growth)) {
+    const count = Math.floor(Number(amount ?? 0));
+    if (count <= 0) continue;
+    next[unitType] = Math.max(0, Math.floor(Number(next[unitType] ?? 0))) + count;
+  }
+  return next;
 }
 
 function addUnitsToStackList(stacks: MinimalArmy[], unitType: UnitType, count: number, maxHealth: number) {

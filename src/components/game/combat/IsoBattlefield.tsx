@@ -61,9 +61,198 @@ const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
 
 const SIEGE_SPRITES = {
   tower: "/assets/sprites/siege/tower-castle.webp",
-  wall: "/assets/sprites/siege/wall-slice-castle.webp",
-  gate: "/assets/sprites/siege/gate-slice-castle.webp",
 } as const;
+
+// ============================================================
+// 1 segment de mur par hex - VUE DE PROFIL (mur vertical fin, créneaux à GAUCHE)
+// Le mur court le long de la colonne q=9, vu de côté par les attaquants venant de la gauche.
+// viewBox 40×80 : strip étroit, vertical
+// ============================================================
+function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel?: boolean; isTop?: boolean; isBottom?: boolean }) {
+  void showCrenel;
+  return (
+    <svg viewBox="0 0 40 80" preserveAspectRatio="none" className="h-full w-full">
+      <defs>
+        <linearGradient id="ws-front" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#e5dec9" />
+          <stop offset="50%" stopColor="#b8af96" />
+          <stop offset="100%" stopColor="#7c7464" />
+        </linearGradient>
+        <linearGradient id="ws-shadow" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="rgba(0,0,0,0.4)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        </linearGradient>
+      </defs>
+
+      {/* Créneaux qui dépassent vers la gauche (en profil) */}
+      {[0, 1, 2, 3].map((i) => {
+        const y = 4 + i * 20;
+        return (
+          <polygon
+            key={`crenel-${i}`}
+            points={`14,${y} 22,${y - 2} 22,${y + 6} 14,${y + 8}`}
+            fill="url(#ws-front)"
+            stroke="#3a3428"
+            strokeWidth="0.6"
+          />
+        );
+      })}
+
+      {/* Corps principal du mur : bande verticale fine */}
+      <rect x="18" y="0" width="14" height="80" fill="url(#ws-front)" stroke="#3a3428" strokeWidth="0.8" />
+
+      {/* Lignes horizontales de briques (rangées) */}
+      {Array.from({ length: 8 }).map((_, i) => {
+        const y = 6 + i * 9;
+        return (
+          <line
+            key={`brick-h-${i}`}
+            x1="18"
+            y1={y}
+            x2="32"
+            y2={y}
+            stroke="#5a5040"
+            strokeWidth="0.5"
+            opacity="0.7"
+          />
+        );
+      })}
+
+      {/* Joints verticaux en quinconce */}
+      {Array.from({ length: 8 }).map((_, i) => {
+        const y1 = 6 + i * 9;
+        const y2 = y1 + 9;
+        const xJoint = i % 2 === 0 ? 25 : 21;
+        return (
+          <line
+            key={`brick-v-${i}`}
+            x1={xJoint}
+            y1={y1}
+            x2={xJoint}
+            y2={y2}
+            stroke="#5a5040"
+            strokeWidth="0.5"
+            opacity="0.7"
+          />
+        );
+      })}
+
+      {/* Joint vertical secondaire en quinconce */}
+      {Array.from({ length: 8 }).map((_, i) => {
+        const y1 = 6 + i * 9;
+        const y2 = y1 + 9;
+        const xJoint = i % 2 === 0 ? 29 : 28;
+        return (
+          <line
+            key={`brick-v2-${i}`}
+            x1={xJoint}
+            y1={y1}
+            x2={xJoint}
+            y2={y2}
+            stroke="#5a5040"
+            strokeWidth="0.5"
+            opacity="0.5"
+          />
+        );
+      })}
+
+      {/* Ombre sur le côté gauche (mur faisant face aux attaquants à gauche) */}
+      <rect x="18" y="0" width="4" height="80" fill="url(#ws-shadow)" opacity="0.5" />
+
+      {/* Bande sombre à droite (profondeur) */}
+      <rect x="30" y="0" width="2" height="80" fill="rgba(0,0,0,0.35)" />
+
+      {/* Base au sol sur le dernier segment */}
+      {isBottom && (
+        <>
+          <rect x="14" y="76" width="20" height="4" fill="#3a3428" />
+          <ellipse cx="24" cy="80" rx="16" ry="2" fill="rgba(0,0,0,0.4)" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+// ============================================================
+// Porte VUE DE PROFIL - même format que le mur (viewBox 40×80)
+// Battant bois bombé sur la gauche (vu de côté), 2 piliers de pierre en haut/bas
+// ============================================================
+function IsoGateSvg() {
+  return (
+    <svg viewBox="0 0 40 80" preserveAspectRatio="none" className="h-full w-full">
+      <defs>
+        <linearGradient id="gt2-stone" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#e5dec9" />
+          <stop offset="50%" stopColor="#b8af96" />
+          <stop offset="100%" stopColor="#7c7464" />
+        </linearGradient>
+        <linearGradient id="gt2-wood" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#9a6332" />
+          <stop offset="55%" stopColor="#6c4520" />
+          <stop offset="100%" stopColor="#3a2410" />
+        </linearGradient>
+      </defs>
+
+      {/* Pilier de pierre haut (continuité du mur) */}
+      <rect x="18" y="0" width="14" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
+      {[0, 1].map((i) => (
+        <line key={`top-brick-${i}`} x1="18" y1={4 + i * 5} x2="32" y2={4 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
+      ))}
+      {/* Créneau au-dessus du pilier haut */}
+      <polygon points="14,2 22,0 22,8 14,10" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
+
+      {/* Pilier de pierre bas */}
+      <rect x="18" y="66" width="14" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
+      {[0, 1].map((i) => (
+        <line key={`bot-brick-${i}`} x1="18" y1={70 + i * 5} x2="32" y2={70 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
+      ))}
+      {/* Créneau au-dessus du pilier bas */}
+      <polygon points="14,68 22,66 22,74 14,76" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
+
+      {/* Cavité ombrée entre les 2 piliers (passage) */}
+      <rect x="18" y="14" width="14" height="52" fill="#1a0e07" />
+
+      {/* Battant en bois (visible dans le passage, légèrement bombé vers la gauche) */}
+      <polygon points="20,14 30,16 30,64 20,66" fill="url(#gt2-wood)" stroke="#1a0e07" strokeWidth="0.5" />
+
+      {/* Planches horizontales (vues de profil) */}
+      {[0, 1, 2, 3, 4, 5].map((i) => {
+        const y = 18 + i * 8;
+        return (
+          <line
+            key={`plank-${i}`}
+            x1="20"
+            y1={y}
+            x2="30"
+            y2={y + 0.5}
+            stroke="#2a1810"
+            strokeWidth="0.5"
+          />
+        );
+      })}
+
+      {/* Bandes de fer verticales (perpendiculaires aux planches sur la silhouette) */}
+      {[23, 27].map((x) => (
+        <rect key={`band-${x}`} x={x} y="14" width="1.5" height="52" fill="#2a2018" />
+      ))}
+
+      {/* Clous sur les bandes */}
+      {[22, 30, 38, 46, 54, 62].flatMap((y) =>
+        [23.75, 27.75].map((cx) => (
+          <circle key={`stud-${y}-${cx}`} cx={cx} cy={y} r="0.7" fill="#0e0a06" />
+        ))
+      )}
+
+      {/* Anneau de porte (silhouette latérale) */}
+      <circle cx="22" cy="40" r="1.5" fill="none" stroke="#3a2918" strokeWidth="1" />
+
+      {/* Ombre sur le côté gauche */}
+      <rect x="18" y="0" width="3" height="80" fill="rgba(0,0,0,0.35)" />
+      {/* Ombre verticale à droite */}
+      <rect x="30" y="0" width="2" height="80" fill="rgba(0,0,0,0.4)" />
+    </svg>
+  );
+}
 
 function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
   if (action !== "move") return COMBAT_CURSORS[action];
@@ -553,37 +742,29 @@ export function IsoBattlefield({
     );
   });
   // Mur iso : sprite couvrant r=1 à r=7, compact et aligné avec tours/porte
-  const SIEGE_COL_X_OFFSET = 18;
-  const SIEGE_COL_WIDTH = 56;
+  // Mur étroit vu de profil : strip vertical de ~40px de large, placé à droite du hex
+  const WALL_STRIP_WIDTH = 40;
+  const WALL_STRIP_X_OFFSET = (TILE_WIDTH - WALL_STRIP_WIDTH) / 2 + 18;
   const wallMarkers = fortifications
-    ? (() => {
-        const top = getIsoPosition(9, 1);
-        const bottom = getIsoPosition(9, 7);
-        const wallHeight = bottom.y - top.y + TILE_HEIGHT + 12;
+    ? [1, 2, 3, 5, 6, 7].map((r) => {
+        const { x, y } = getIsoPosition(9, r);
         return (
           <span
-            key="wall-slice"
+            key={`wall-${r}`}
             className="pointer-events-none absolute block"
             style={{
-              left: top.x + SIEGE_COL_X_OFFSET,
-              top: top.y - 6,
-              width: SIEGE_COL_WIDTH,
-              height: wallHeight,
-              zIndex: 8850,
+              left: x + WALL_STRIP_X_OFFSET,
+              top: y,
+              width: WALL_STRIP_WIDTH,
+              height: TILE_HEIGHT,
+              zIndex: 8800 + r,
             }}
+            aria-hidden="true"
           >
-            <Image
-              src={SIEGE_SPRITES.wall}
-              alt=""
-              fill
-              unoptimized
-              sizes={`${SIEGE_COL_WIDTH}px`}
-              className="object-fill drop-shadow-[4px_6px_5px_rgba(0,0,0,0.5)]"
-              aria-hidden="true"
-            />
+            <IsoWallSegmentSvg isBottom={r === 7} />
           </span>
         );
-      })()
+      })
     : null;
   const gateMarker = fortifications && !fortifications.gateOpen ? (() => {
     const { x, y } = getIsoPosition(9, 4);
@@ -593,40 +774,30 @@ export function IsoBattlefield({
         key="gate-marker"
         className="pointer-events-none absolute block"
         style={{
-          left: x + SIEGE_COL_X_OFFSET - 4,
-          top: y - 18,
-          width: SIEGE_COL_WIDTH + 8,
-          height: TILE_HEIGHT + 36,
-          zIndex: 8950,
+          left: x + WALL_STRIP_X_OFFSET,
+          top: y,
+          width: WALL_STRIP_WIDTH,
+          height: TILE_HEIGHT,
+          zIndex: 8850 + 4,
         }}
+        aria-hidden="true"
       >
-        <Image
-          src={SIEGE_SPRITES.gate}
-          alt=""
-          fill
-          unoptimized
-          sizes={`${SIEGE_COL_WIDTH + 8}px`}
-          className="object-fill drop-shadow-[4px_6px_5px_rgba(0,0,0,0.55)]"
-          aria-hidden="true"
-        />
-        <div className="absolute -bottom-2 left-1/2 h-1 w-10 -translate-x-1/2 overflow-hidden rounded-full bg-stone-900 ring-1 ring-amber-800/40">
+        <IsoGateSvg />
+        <div className="absolute -bottom-1 left-1/2 h-1 w-10 -translate-x-1/2 overflow-hidden rounded-full bg-stone-900 ring-1 ring-amber-800/40">
           <div className="h-full bg-emerald-500" style={{ width: `${pct * 100}%` }} />
         </div>
       </span>
     );
   })() : null;
-  // Tours : aux coins (haut/bas, alignées avec le mur) + une centrale derrière si 3 tours
+  // Tours : occupent leur hex (q=9 r=0/r=8) + donjon central derrière si 3 tours
   const towerMarkers = fortifications && fortifications.towerCount > 0
     ? (() => {
-        const TOWER_WIDTH = 70;
-        const TOWER_HEIGHT = 110;
-        const positions: Array<{ q: number; r: number; key: string; xOff: number; yOff: number; w: number; h: number }> = [
-          { q: 9, r: 0, key: "top", xOff: SIEGE_COL_X_OFFSET - 8, yOff: -42, w: TOWER_WIDTH, h: TOWER_HEIGHT },
-          { q: 9, r: 8, key: "bottom", xOff: SIEGE_COL_X_OFFSET - 8, yOff: -32, w: TOWER_WIDTH, h: TOWER_HEIGHT },
+        const positions: Array<{ q: number; r: number; key: string }> = [
+          { q: 9, r: 0, key: "top" },
+          { q: 9, r: 8, key: "bottom" },
         ];
         if (fortifications.towerCount >= 3) {
-          // Tour-donjon derrière la porte (visible par-dessus le mur)
-          positions.push({ q: 10, r: 4, key: "keep", xOff: -8, yOff: -68, w: TOWER_WIDTH + 12, h: TOWER_HEIGHT + 26 });
+          positions.push({ q: 10, r: 4, key: "keep" });
         }
         return positions.map((pos) => {
           const { x, y } = getIsoPosition(pos.q, pos.r);
@@ -635,10 +806,10 @@ export function IsoBattlefield({
               key={`tower-${pos.key}`}
               className="pointer-events-none absolute block"
               style={{
-                left: x + pos.xOff,
-                top: y + pos.yOff,
-                width: pos.w,
-                height: pos.h,
+                left: x - 6,
+                top: y - 64,
+                width: TILE_WIDTH + 12,
+                height: TILE_HEIGHT + 96,
                 zIndex: 9000 + pos.r,
               }}
             >
@@ -647,11 +818,11 @@ export function IsoBattlefield({
                 alt=""
                 fill
                 unoptimized
-                sizes={`${pos.w}px`}
+                sizes={`${TILE_WIDTH + 12}px`}
                 className="object-contain drop-shadow-[3px_5px_4px_rgba(0,0,0,0.6)]"
                 aria-hidden="true"
               />
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full border border-amber-500/40 bg-stone-950/85 px-2 py-0.5 text-[9px] font-bold text-amber-200 whitespace-nowrap">
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full border border-amber-500/40 bg-stone-950/85 px-2 py-0.5 text-[9px] font-bold text-amber-200 whitespace-nowrap">
                 {fortifications.towerDamage}dmg
               </div>
             </span>

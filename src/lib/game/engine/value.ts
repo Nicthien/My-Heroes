@@ -49,7 +49,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 3000,
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS, TerrainType.DIRT],
     clusterResource: "gold",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -57,7 +57,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 1500,
     preferredTerrain: [TerrainType.FOREST, TerrainType.GRASS],
     clusterResource: "wood",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -65,7 +65,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 1500,
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS, TerrainType.DIRT],
     clusterResource: "ore",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -73,7 +73,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 2000,
     preferredTerrain: [TerrainType.SNOW, TerrainType.MOUNTAIN, TerrainType.GRASS],
     clusterResource: "mercury",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -81,7 +81,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 2000,
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.GRASS],
     clusterResource: "crystals",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -89,7 +89,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 2000,
     preferredTerrain: [TerrainType.SNOW, TerrainType.GRASS, TerrainType.MOUNTAIN],
     clusterResource: "gems",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
   {
     kind: "building",
@@ -97,7 +97,7 @@ export const BUILDING_SPECS: BuildingSpec[] = [
     value: 2000,
     preferredTerrain: [TerrainType.SAND, TerrainType.GRASS, TerrainType.LAVA],
     clusterResource: "sulfur",
-    clusterCount: [1, 2],
+    clusterCount: [2, 3],
   },
 ];
 

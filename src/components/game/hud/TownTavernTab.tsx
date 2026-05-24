@@ -20,13 +20,15 @@ export function TownTavernTab({
   onRecruitHero: (templateId: string) => void;
 }) {
   const offer = selectedTown.tavernOffer ?? [];
+  const returningHeroes = myPlayer?.tavernHeroes ?? [];
+  const visibleOffer = [...returningHeroes, ...offer];
 
   return (
     <div className="space-y-2">
-      {offer.length === 0 ? (
+      {visibleOffer.length === 0 ? (
         <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucun héros disponible pour le moment.</div>
       ) : (
-        offer.map((hero) => {
+        visibleOffer.map((hero) => {
           const atMax = myPlayer ? myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER : true;
           const tooPoor = !myPlayer || myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD;
           const disabled = !canAct || !isMyTown || isPending || atMax || tooPoor;
@@ -37,6 +39,7 @@ export function TownTavernTab({
                   <div className="text-sm font-bold text-amber-100">{hero.name}</div>
                   <div className="text-xs text-amber-200/60">{hero.class} · {factionLabel(hero.faction as Faction)}</div>
                   <div className="text-xs text-amber-300/80">Spécialité : {hero.specialty}</div>
+                  {hero.returning && <div className="text-xs text-emerald-300">Héros de retour · niveau {hero.level ?? 1} · armée {hero.armyCount ?? 0}</div>}
                   <div className="mt-1 text-xs text-amber-300">{HERO_RECRUIT_COST_GOLD} or</div>
                   {atMax && <div className="mt-1 text-xs text-red-300">Maximum {MAX_HEROES_PER_PLAYER} héros</div>}
                 </div>
@@ -47,7 +50,7 @@ export function TownTavernTab({
                       : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
                   }`}
                   disabled={disabled}
-                  onClick={() => onRecruitHero(hero.templateId)}
+                  onClick={() => onRecruitHero(hero.heroId ? `hero:${hero.heroId}` : hero.templateId)}
                 >
                   Engager
                 </button>

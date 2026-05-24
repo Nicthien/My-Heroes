@@ -353,10 +353,14 @@ export interface Hero {
 
 export interface TavernHeroOffer {
   templateId: string;
+  heroId?: string;
   name: string;
   class: HeroClass;
   faction: Faction;
   specialty: string;
+  level?: number;
+  returning?: boolean;
+  armyCount?: number;
 }
 
 export interface Town {
@@ -587,6 +591,14 @@ export interface CombatBoardUnit extends UnitStack {
   moraleBonus?: boolean;
 }
 
+export type HeroSkillLevel = "basic" | "advanced" | "expert";
+
+export interface CombatSideStatsSnapshot {
+  attack: number;
+  defense: number;
+  skills?: Partial<Record<string, HeroSkillLevel>>;
+}
+
 export type CombatTerrainType = "rock" | "water";
 
 export interface CombatTerrainFeature {
@@ -651,7 +663,11 @@ export interface PersistentCombat {
     terrain?: CombatTerrainFeature[];
     environment?: CombatEnvironment;
     spellCastsByRound?: Record<string, string[]>;
-    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
+    sideStats?: {
+      attacker: CombatSideStatsSnapshot;
+      defender: CombatSideStatsSnapshot;
+    };
   };
   turnQueue: string[];
   actionLog: string[];
@@ -708,6 +724,7 @@ export interface Player {
   color: string;
   resources: Resources;
   heroes: Hero[];
+  tavernHeroes?: TavernHeroOffer[];
   towns: Town[];
   resourceBuildings: ResourceBuilding[];
   isAlive: boolean;
@@ -727,6 +744,7 @@ export type GameAction =
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
+  | { type: "UPGRADE_TROOPS"; townId: string; unitType: UnitType; count: number; heroId?: string }
   | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GATE_GARRISON_TO_HERO"; gateId: string; heroId: string; unitType: UnitType; count: number }

@@ -6,7 +6,7 @@ import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/mo
 import { calculateCombatDamageRange, hasAdjacentEnemy, type CombatSideStats } from "@/lib/game/combat/rules";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { getUnitRule } from "@/lib/game/units";
-import type { CombatBoardUnit, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
+import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { toCombat, type SupabaseAdmin } from "@/lib/supabase/game-db";
 
 type CombatAction = { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string };
@@ -36,6 +36,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       terrain?: CombatTerrainFeature[];
       environment?: { terrain?: import("@/lib/game/types").TerrainType };
       moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+      sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
       tacticsPhase?: { side: "attacker" | "defender" };
     };
     // Phase de tactique IA : avance les unités de mêlée puis termine
@@ -91,8 +92,8 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     if (defenderError) throw defenderError;
 
     const sideStats = {
-      attacker: { attack: attackerHero?.attack ?? 1, defense: attackerHero?.defense ?? 1 },
-      defender: { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
+      attacker: boardState.sideStats?.attacker ?? { attack: attackerHero?.attack ?? 1, defense: attackerHero?.defense ?? 1 },
+      defender: boardState.sideStats?.defender ?? { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
     };
     const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? [], sideStats);
     const execution = executeManualCombatAction({
@@ -256,8 +257,13 @@ async function persistResolvedCombat(
     const count = next?.count ?? 0;
     const health = next?.health ?? 0;
 
-    await supabase.from("armies").update({ count, health }).eq("id", unit.id);
-    await supabase.from("neutral_army_stacks").update({ count, health }).eq("id", unit.id);
+    if (count <= 0) {
+      await supabase.from("armies").delete().eq("id", unit.id);
+      await supabase.from("neutral_army_stacks").delete().eq("id", unit.id);
+    } else {
+      await supabase.from("armies").update({ count, health }).eq("id", unit.id);
+      await supabase.from("neutral_army_stacks").update({ count, health }).eq("id", unit.id);
+    }
   }
 
   if (winnerSide === "attacker") {

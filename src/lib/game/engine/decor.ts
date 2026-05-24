@@ -10,44 +10,44 @@ interface BiomeDecor {
 
 const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   [TerrainType.GRASS]: {
-    density: 0.24,
+    density: 0.34,
     blockingRatio: 0.06,
     scenicKinds: ["flower", "bush", "grass-tuft", "tree-oak", "rock-small"],
     obstacleKinds: ["grove-oak", "boulder-cluster"],
   },
   [TerrainType.FOREST]: {
-    density: 0.62,
-    blockingRatio: 0.24,
+    density: 0.72,
+    blockingRatio: 0.2,
     scenicKinds: ["tree-pine", "tree-oak", "bush", "flower", "grass-tuft"],
     obstacleKinds: ["grove-pine", "grove-oak"],
   },
   [TerrainType.DIRT]: {
-    density: 0.18,
+    density: 0.28,
     blockingRatio: 0.06,
     scenicKinds: ["bush", "rock-small", "grass-tuft", "flower"],
     obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SAND]: {
-    density: 0.12,
+    density: 0.2,
     blockingRatio: 0.04,
     scenicKinds: ["rock-small", "grass-tuft"],
     obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SNOW]: {
-    density: 0.34,
-    blockingRatio: 0.15,
+    density: 0.44,
+    blockingRatio: 0.13,
     scenicKinds: ["tree-pine", "rock-small", "tree-dead", "grass-tuft"],
     obstacleKinds: ["grove-pine", "boulder-cluster"],
   },
   [TerrainType.MOUNTAIN]: {
-    density: 0.46,
-    blockingRatio: 0.16,
+    density: 0.54,
+    blockingRatio: 0.14,
     scenicKinds: ["rock-small", "tree-dead", "grass-tuft"],
     obstacleKinds: ["boulder-cluster"],
   },
   [TerrainType.SWAMP]: {
-    density: 0.3,
-    blockingRatio: 0.18,
+    density: 0.42,
+    blockingRatio: 0.16,
     scenicKinds: ["tree-dead", "bush", "grass-tuft", "rock-small"],
     obstacleKinds: ["grove-dead", "boulder-cluster"],
   },
@@ -93,7 +93,7 @@ export function placeDecor(
       if (!conf) continue;
       if (rng() > conf.density) continue;
 
-      const blocking = rng() < conf.blockingRatio;
+      const blocking = rng() < conf.blockingRatio && !hasRoadOrObjectNearby(tiles, width, height, x, y, 1);
       const palette = blocking ? conf.obstacleKinds : conf.scenicKinds;
       if (palette.length === 0) continue;
       const kind = pick(rng, palette);
@@ -106,6 +106,26 @@ export function placeDecor(
       }
     }
   }
+}
+
+function hasRoadOrObjectNearby(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  radius: number,
+): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const tile = tiles[ny][nx];
+      if (tile.road || tile.object) return true;
+    }
+  }
+  return false;
 }
 
 function placeObjectScenery(

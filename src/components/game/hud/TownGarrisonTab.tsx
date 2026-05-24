@@ -2,10 +2,11 @@
 
 import type { Hero, Town, UnitType } from "@/lib/game/types";
 import { unitTypeLabel } from "./helpers";
-import { TransferToHeroIcon, TransferToTownIcon } from "./icons";
+import { TransferToHeroIcon, TransferToTownIcon, UpgradeUnitsIcon } from "./icons";
 import { UnitSprite } from "./UnitSprite";
 
 type TransferDialog = { townId: string; heroId: string; unitType: UnitType; count: number };
+type UpgradeDialog = { townId: string; heroId?: string; unitType: UnitType; count: number };
 
 export function TownGarrisonTab({
   selectedTown,
@@ -19,6 +20,9 @@ export function TownGarrisonTab({
   setTransferDialog,
   returnDialog,
   setReturnDialog,
+  upgradeDialog,
+  setUpgradeDialog,
+  getUpgradeOption,
 }: {
   selectedTown: Town;
   isMyTown: boolean;
@@ -31,6 +35,9 @@ export function TownGarrisonTab({
   setTransferDialog: (next: TransferDialog | null) => void;
   returnDialog: TransferDialog | null;
   setReturnDialog: (next: TransferDialog | null) => void;
+  upgradeDialog: UpgradeDialog | null;
+  setUpgradeDialog: (next: UpgradeDialog | null) => void;
+  getUpgradeOption: (unitType: UnitType, available: number) => { label: string; max: number } | null;
 }) {
   return (
     <div className="space-y-2">
@@ -72,6 +79,13 @@ export function TownGarrisonTab({
           )}
           {selectedTown.garrison.map((unit) => {
             const disabled = !canAct || !isMyTown || !garrisonTargetHero || isPending;
+            const upgradeOption = getUpgradeOption(unit.unitType, unit.count);
+            const upgradeDisabled = !canAct || !isMyTown || isPending || !upgradeOption || upgradeOption.max <= 0;
+            const activeUpgradeDialog = upgradeDialog?.townId === selectedTown.id &&
+              !upgradeDialog.heroId &&
+              upgradeDialog.unitType === unit.unitType
+                ? upgradeDialog
+                : null;
             const activeTransferDialog = transferDialog?.townId === selectedTown.id &&
               transferDialog.heroId === garrisonTargetHero?.id &&
               transferDialog.unitType === unit.unitType
@@ -87,28 +101,46 @@ export function TownGarrisonTab({
                       <div className="text-xs text-amber-200/60">En garnison : {unit.count}</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
-                      disabled
-                        ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
-                        : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
-                    }`}
-                    disabled={disabled}
-                    onClick={() => {
-                      setReturnDialog(null);
-                      setTransferDialog(activeTransferDialog || !garrisonTargetHero
-                        ? null
-                        : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
-                    }}
-                    aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
-                    title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
-                  >
-                    <TransferToHeroIcon className="h-5 w-5" />
-                    <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-sky-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-sky-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                      Envoyer
-                    </span>
-                  </button>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      className={`group relative grid h-10 w-10 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
+                        upgradeDisabled
+                          ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                          : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
+                      }`}
+                      disabled={upgradeDisabled}
+                      onClick={() => {
+                        setTransferDialog(null);
+                        setReturnDialog(null);
+                        setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
+                      }}
+                      aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
+                      title={upgradeOption ? `Ameliorer en ${upgradeOption.label}` : "Batiment ameliore requis"}
+                    >
+                      <UpgradeUnitsIcon className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`group relative grid h-10 w-10 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
+                        disabled
+                          ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                          : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
+                      }`}
+                      disabled={disabled}
+                      onClick={() => {
+                        setReturnDialog(null);
+                        setUpgradeDialog(null);
+                        setTransferDialog(activeTransferDialog || !garrisonTargetHero
+                          ? null
+                          : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
+                      }}
+                      aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                      title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                    >
+                      <TransferToHeroIcon className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -126,6 +158,13 @@ export function TownGarrisonTab({
             <div className="space-y-2">
               {garrisonTargetHero.armies.map((unit) => {
                 const disabled = !canAct || !isMyTown || isPending;
+                const upgradeOption = getUpgradeOption(unit.unitType, unit.count);
+                const upgradeDisabled = !canAct || !isMyTown || isPending || !upgradeOption || upgradeOption.max <= 0;
+                const activeUpgradeDialog = upgradeDialog?.townId === selectedTown.id &&
+                  upgradeDialog.heroId === garrisonTargetHero.id &&
+                  upgradeDialog.unitType === unit.unitType
+                    ? upgradeDialog
+                    : null;
                 const activeReturnDialog = returnDialog?.townId === selectedTown.id &&
                   returnDialog.heroId === garrisonTargetHero.id &&
                   returnDialog.unitType === unit.unitType
@@ -141,28 +180,46 @@ export function TownGarrisonTab({
                           <div className="text-xs text-amber-200/60">Avec le héros : {unit.count}</div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-amber-200/80 ${
-                          disabled
-                            ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
-                            : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
-                        }`}
-                        disabled={disabled}
-                        onClick={() => {
-                          setTransferDialog(null);
-                          setReturnDialog(activeReturnDialog
-                            ? null
-                            : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
-                        }}
-                        aria-label="Déposer dans la garnison"
-                        title="Déposer dans la garnison"
-                      >
-                        <TransferToTownIcon className="h-5 w-5" />
-                        <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-amber-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                          Déposer
-                        </span>
-                      </button>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          className={`group relative grid h-10 w-10 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-sky-200/80 ${
+                            upgradeDisabled
+                              ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                              : "border-sky-400/60 bg-gradient-to-b from-sky-600 to-sky-800 text-sky-50 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.3)] hover:from-sky-500 hover:to-sky-700"
+                          }`}
+                          disabled={upgradeDisabled}
+                          onClick={() => {
+                            setTransferDialog(null);
+                            setReturnDialog(null);
+                            setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
+                          }}
+                          aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
+                          title={upgradeOption ? `Ameliorer en ${upgradeOption.label}` : "Batiment ameliore requis"}
+                        >
+                          <UpgradeUnitsIcon className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          className={`group relative grid h-10 w-10 place-items-center rounded-md border outline-none transition focus-visible:ring-2 focus-visible:ring-amber-200/80 ${
+                            disabled
+                              ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                              : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
+                          }`}
+                          disabled={disabled}
+                          onClick={() => {
+                            setTransferDialog(null);
+                            setUpgradeDialog(null);
+                            setReturnDialog(activeReturnDialog
+                              ? null
+                              : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
+                          }}
+                          aria-label="Déposer dans la garnison"
+                          title="Déposer dans la garnison"
+                        >
+                          <TransferToTownIcon className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

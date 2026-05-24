@@ -173,6 +173,26 @@ export function useDevPanel(gameId: string | undefined) {
     setCombatMessage("+1000 pour chaque ressource.");
   };
 
+  const grantHeroExperience = async () => {
+    if (!gameId || !selectedHeroId) {
+      setCombatMessage("Sélectionnez un héros avant d'ajouter de l'XP.");
+      return;
+    }
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "DEV_GRANT_HERO_XP", heroId: selectedHeroId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setCombatMessage(data.error ?? "Impossible d'ajouter l'XP.");
+      return;
+    }
+    const refreshedState = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+    setCombatMessage("+500 XP pour le héros sélectionné.");
+  };
+
   const toggleTeleport = () => {
     if (!selectedHeroId) {
       setCombatMessage("Sélectionnez un héros avant d'armer la téléportation.");
@@ -377,6 +397,14 @@ export function useDevPanel(gameId: string | undefined) {
                       disabled={!gameId}
                     >
                       Donner +1000 ressources
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
+                      onClick={() => void grantHeroExperience()}
+                      disabled={!gameId || !selectedHeroId}
+                    >
+                      Donner +500 XP au héros
                     </button>
                     <button
                       type="button"

@@ -39,11 +39,17 @@ export async function applyHeroExperienceGain(
   const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
   const pending = ((mapState.pendingSkillChoices as PendingSkillChoicesMap | undefined) ?? {});
   const heroPending = [...(pending[heroId] ?? [])];
+  const bannedNewSkills = new Set<SkillId>(
+    heroPending.flatMap((entry) => entry.options).filter((id) => !skills[id])
+  );
 
   for (let level = oldLevel + 1; level <= newLevel; level++) {
-    const options = generateSkillChoices(skills, `${gameId}:${heroId}:level:${level}`);
+    const options = generateSkillChoices(skills, `${gameId}:${heroId}:level:${level}`, bannedNewSkills);
     if (options.length === 0) continue;
     heroPending.push({ level, options });
+    for (const id of options) {
+      if (!skills[id]) bannedNewSkills.add(id);
+    }
   }
 
   await supabase.from("games").update({

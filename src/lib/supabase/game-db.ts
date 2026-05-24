@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { MINIMUM_ADVENTURE_STEP_COST, getDailyAdventureMovement } from "@/lib/game/engine";
 import { normalizeArtifactBag } from "@/lib/game/artifacts";
+import { HERO_ROSTER } from "@/lib/game/heroes";
 import { type CombatBoardUnit, UnitType } from "@/lib/game/types";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
@@ -38,6 +39,9 @@ export function toGame(row: DbRow) {
 
 export function toPlayer(row: DbRow) {
   const profile = row.profiles as DbRow | null | undefined;
+  const heroRows = rows(row.heroes);
+  const activeHeroRows = heroRows.filter((hero) => String(hero.status ?? "ACTIVE") !== "TAVERN");
+  const tavernHeroRows = heroRows.filter((hero) => String(hero.status ?? "ACTIVE") === "TAVERN");
   return {
     id: row.id,
     gameId: row.game_id,
@@ -59,9 +63,30 @@ export function toPlayer(row: DbRow) {
     isAlive: row.is_alive,
     turnOrder: row.turn_order,
     exploredTiles: row.explored_tiles ?? [],
-    heroes: rows(row.heroes).map(toHero),
+    heroes: activeHeroRows.map(toHero),
+    tavernHeroes: tavernHeroRows.map(toTavernHero),
     towns: rows(row.towns).map(toTown),
     resourceBuildings: rows(row.resource_buildings).map(toResourceBuilding),
+  };
+}
+
+function toTavernHero(row: DbRow) {
+  const armies = rows(row.armies).map(toArmy);
+  const template = HERO_ROSTER.find((hero) =>
+    hero.name === row.name &&
+    hero.class === row.hero_class &&
+    hero.specialty === row.specialty
+  );
+  return {
+    templateId: `returning:${row.id}`,
+    heroId: row.id,
+    name: row.name,
+    class: row.hero_class ?? "knight",
+    faction: template?.faction ?? "castle",
+    specialty: row.specialty ?? "",
+    level: row.level ?? 1,
+    returning: true,
+    armyCount: armies.reduce((total, army) => total + Number(army.count ?? 0), 0),
   };
 }
 

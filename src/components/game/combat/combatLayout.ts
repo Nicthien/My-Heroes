@@ -2,6 +2,7 @@ import { CombatBoardUnit, CombatTerrainFeature, GameState, PersistentCombat } fr
 import { calculateCombatDamageRange, hasAdjacentEnemy } from "@/lib/game/combat/rules";
 import { COMBAT_COLS, COMBAT_ROWS, findMeleeApproach, getHexDistance } from "@/lib/game/combat/movement";
 import { getUnitRule } from "@/lib/game/units";
+import { getEffectiveHeroStats } from "@/lib/game/artifacts";
 
 // Board geometry
 export const TILE_WIDTH = 92;
@@ -99,11 +100,27 @@ export function clearTimeouts(timeoutRef: { current: number[] }) {
 }
 
 export function getCombatSideStats(side: "attacker" | "defender", combat: PersistentCombat, gameState: GameState) {
+  const snapshot = combat.boardState.sideStats?.[side];
+  if (snapshot) return snapshot;
+
   const heroId = side === "attacker" ? combat.attackerHeroId : combat.defenderHeroId;
   const hero = gameState.players.flatMap((player) => player.heroes).find((item) => item.id === heroId);
+  if (!hero) return combat.boardState.sideStats?.[side] ?? { attack: 0, defense: 0, skills: {} };
+  const stats = getEffectiveHeroStats(hero);
   return {
-    attack: hero?.stats.attack ?? 0,
-    defense: hero?.stats.defense ?? 0,
+    attack: stats.attack,
+    defense: stats.defense,
+    skills: hero.skills ?? {},
+  };
+}
+
+export function getEffectiveCombatUnitStats(unit: CombatBoardUnit, combat: PersistentCombat, gameState: GameState) {
+  const sideStats = getCombatSideStats(unit.side, combat, gameState);
+  return {
+    attack: getUnitRule(unit.unitType).attack + sideStats.attack,
+    defense: getUnitRule(unit.unitType).defense + sideStats.defense,
+    heroAttack: sideStats.attack,
+    heroDefense: sideStats.defense,
   };
 }
 

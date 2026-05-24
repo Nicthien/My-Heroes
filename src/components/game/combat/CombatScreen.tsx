@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { PersistentCombat } from "@/lib/game/types";
+import { computeSurrenderGoldCost } from "@/lib/game/combat/surrender";
 import { getHeroMaxMana, spellRequiresCombatTarget, type SpellDefinition } from "@/lib/game/spells";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { getCombatSpellRoundKey } from "@/lib/game/combat/spells";
@@ -25,6 +26,16 @@ import {
 } from "./combatLayout";
 
 import { IsoBattlefield } from "./IsoBattlefield";
+
+function computeSurrenderCostForSide(
+  combat: PersistentCombat,
+  playerId: string,
+  skills: Partial<Record<string, "basic" | "advanced" | "expert">>
+) {
+  const side = combat.attackerPlayerId === playerId ? "attacker" : combat.defenderPlayerId === playerId ? "defender" : null;
+  if (!side) return 0;
+  return computeSurrenderGoldCost(combat.boardState.units, side, skills);
+}
 
 export default function CombatScreen() {
   const { data: session } = useSession();
@@ -358,6 +369,11 @@ export default function CombatScreen() {
     combatHero && activeCombat.boardState.spellCastsByRound?.[getCombatSpellRoundKey(activeCombat.round)]?.includes(combatHero.id)
   );
   const canCastHeroSpell = canSubmitAction && !combatHeroHasCastSpell;
+  const canRetreat = canSubmitAction && !(activeCombat.round <= 1 && combatHeroHasCastSpell);
+  const canSurrender = canSubmitAction && Boolean(activeCombat.defenderHeroId && activeCombat.defenderPlayerId);
+  const surrenderCost = combatHero && myPlayer
+    ? computeSurrenderCostForSide(activeCombat, myPlayer.id, combatHero.skills ?? {})
+    : 0;
   const spellBookHero = combatHero && devInfiniteMana ? { ...combatHero, mana: getHeroMaxMana(combatHero) } : combatHero;
   const castCombatSpell = async (spell: SpellDefinition, targetUnitId?: string) => {
     if (!combatHero) throw new Error("Heros indisponible.");
@@ -447,7 +463,7 @@ export default function CombatScreen() {
           <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
             <div className="text-sm text-stone-200">
               {(inspectedUnit ?? currentUnit) ? (
-                <UnitDetails unit={(inspectedUnit ?? currentUnit)!} />
+                <UnitDetails unit={(inspectedUnit ?? currentUnit)!} combat={activeCombat} gameState={gameState} />
               ) : (
                 <div className="py-4 text-center text-stone-400">Aucune</div>
               )}
@@ -501,6 +517,25 @@ export default function CombatScreen() {
                 Defendre
               </button>
             </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={!canRetreat}
+                onClick={() => submitAction({ type: "RETREAT_COMBAT" })}
+                className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-900 to-red-950 px-3 py-2 font-bold text-red-100 shadow-[0_0_0_1px_rgba(252,165,165,0.18)_inset] transition hover:from-red-800 hover:to-red-900 disabled:opacity-40"
+              >
+                Fuir
+              </button>
+              <button
+                type="button"
+                disabled={!canSurrender || (myPlayer?.resources.gold ?? 0) < surrenderCost}
+                onClick={() => submitAction({ type: "SURRENDER_COMBAT" })}
+                className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
+              >
+                Se rendre
+              </button>
+            </div>
+            {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">Rancon : {surrenderCost} or</div>}
             {Boolean((activeCombat.boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects?.escapeTunnel) && myPlayer && activeCombat.defenderPlayerId === myPlayer.id && (
               <button
                 type="button"
@@ -513,8 +548,8 @@ export default function CombatScreen() {
             )}
           </CombatFloatingPanel>
 
-          <CombatFloatingPanel title="Journal" className={`flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex-1 px-3 pb-3 pt-2">
-            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 text-sm text-stone-300">
+          <CombatFloatingPanel title="Journal" className={`min-h-0 flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex flex-1 flex-col overflow-hidden px-3 pb-3 pt-2">
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 text-sm text-stone-300">
               {activeCombat.actionLog.slice(-20).map((line, index) => (
                 <div key={index} className="border-b border-amber-900/20 pb-1 last:border-b-0">{line}</div>
               ))}

@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
+import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 import {
@@ -31,6 +31,7 @@ export interface CombatParticipantSnapshot {
   participantId?: string | null;
   attack: number;
   defense: number;
+  skills?: CombatSideStatsSnapshot["skills"];
   morale?: number;
   luck?: number;
   armies: UnitStack[];
@@ -51,10 +52,26 @@ export function createCombatBoard(
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
   return {
-    boardState: { units, initialUnits, terrain },
+    boardState: {
+      units,
+      initialUnits,
+      terrain,
+      sideStats: {
+        attacker: snapshotSideStats(attacker),
+        defender: snapshotSideStats(defender),
+      },
+    },
     turnQueue,
     currentUnitId: turnQueue[0] ?? null,
     currentPlayerId: units.find((unit) => unit.id === turnQueue[0])?.ownerPlayerId ?? null,
+  };
+}
+
+function snapshotSideStats(participant: CombatParticipantSnapshot): CombatSideStatsSnapshot {
+  return {
+    attack: Number(participant.attack ?? 0),
+    defense: Number(participant.defense ?? 0),
+    skills: participant.skills ?? {},
   };
 }
 
@@ -86,8 +103,14 @@ function addUnits(
   armies.filter((army) => army.count > 0).forEach((army, index) => {
     const rule = getUnitRule(army.unitType);
     const r = findFreeRow(units, q, preferredRows[index % preferredRows.length], terrain);
+    const count = Math.max(0, Number(army.count ?? 0));
+    const maxHealth = rule.health;
+    const health = Math.max(0, Math.min(Number(army.health ?? count * maxHealth), count * maxHealth));
     units.push({
       ...army,
+      count,
+      health,
+      maxHealth,
       side,
       ownerPlayerId,
       heroId,
@@ -502,6 +525,8 @@ export function heroToParticipant(hero: Hero, playerId: string): CombatParticipa
     attack: hero.stats.attack,
     defense: hero.stats.defense,
     morale: hero.stats.morale,
+    luck: hero.stats.luck,
+    skills: hero.skills,
     armies: hero.armies,
   };
 }

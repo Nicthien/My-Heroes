@@ -24,6 +24,8 @@ import {
   normalizeMapMovement,
 } from "@/lib/game/engine";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
+import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
+import { getUnitRule } from "@/lib/game/units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
@@ -249,6 +251,7 @@ export async function POST(
       heroId: attacker.id,
       attack: attackerStats.attack,
       defense: attackerStats.defense,
+      skills: (attacker as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveAttackerMorale,
       luck: attackerStats.luck,
       armies: attackerArmiesWithMachines,
@@ -259,6 +262,7 @@ export async function POST(
       heroId: targetDefender.heroId,
       attack: defenderStats.attack,
       defense: defenderStats.defense,
+      skills: (targetDefender as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveDefenderMorale,
       luck: defenderStats.luck,
       armies: targetDefender.armies,
@@ -370,6 +374,12 @@ export async function POST(
 
   if (autoResult && result) {
     const attackerWon = autoResult.winnerId === attacker.id;
+    const winnerArmies = attackerWon
+      ? applyAutoLosses(attacker.armies, result.attackerLosses)
+      : applyAutoLosses(targetDefender.armies, result.defenderLosses);
+    await persistAutoWinnerArmies(supabase, attackerWon ? "armies" : getDefenderArmyTable(body.targetType, targetDefender), winnerArmies);
+    await grantAutoCombatExperience(supabase, id, attackerWon ? attacker.id : targetDefender.heroId, result.experienceGained);
+
     if (attackerWon) {
       if (targetDefender.neutralArmyId) {
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
@@ -405,6 +415,62 @@ export async function POST(
   }
 
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+}
+
+function applyAutoLosses(armies: UnitStack[], losses: Array<{ unitType: UnitType; lost: number }>) {
+  const remainingLosses = losses.map((loss) => ({ ...loss }));
+  return armies.map((army) => {
+    const loss = remainingLosses.find((item) => item.unitType === army.unitType && item.lost > 0);
+    if (!loss) return army;
+
+    const lost = Math.min(army.count, loss.lost);
+    loss.lost -= lost;
+    const nextCount = Math.max(0, army.count - lost);
+    const maxHealth = getUnitRule(army.unitType).health;
+    return {
+      ...army,
+      count: nextCount,
+      health: nextCount * maxHealth,
+      maxHealth,
+    };
+  });
+}
+
+function getDefenderArmyTable(
+  targetType: string,
+  defender: { heroId?: string | null; neutralArmyId?: string | null },
+): "armies" | "neutral_army_stacks" | "gate_stacks" | null {
+  if (defender.heroId) return "armies";
+  if (defender.neutralArmyId) return "neutral_army_stacks";
+  if (targetType === "gate") return "gate_stacks";
+  return null;
+}
+
+async function persistAutoWinnerArmies(
+  supabase: ReturnType<typeof createAdminClient>,
+  table: "armies" | "neutral_army_stacks" | "gate_stacks" | null,
+  armies: UnitStack[],
+) {
+  if (!table) return;
+  for (const army of armies) {
+    if (army.count <= 0) {
+      await supabase.from(table).delete().eq("id", army.id);
+    } else {
+      await supabase.from(table).update({ count: army.count, health: army.health }).eq("id", army.id);
+    }
+  }
+}
+
+async function grantAutoCombatExperience(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  heroId: string | null | undefined,
+  experienceGained: number,
+) {
+  if (!heroId || experienceGained <= 0) return;
+  const { data: hero } = await supabase.from("heroes").select("experience").eq("id", heroId).maybeSingle();
+  if (!hero) return;
+  await applyHeroExperienceGain(supabase, gameId, heroId, Number(hero.experience ?? 0) + experienceGained);
 }
 
 function skillLevelValue(skills: Record<string, string> | undefined, id: string): number {
@@ -902,7 +968,20 @@ function getDefender({
   players: Array<{
     id: string;
     resourceBuildings: Array<{ id: string; x: number; y: number; guardianPower: number }>;
-    heroes: Array<{ id: string; attack: number; defense: number; morale?: number; armies: UnitStack[]; x: number; y: number }>;
+    heroes: Array<{
+      id: string;
+      attack: number;
+      defense: number;
+      morale?: number;
+      luck?: number;
+      spellPower?: number;
+      knowledge?: number;
+      artifacts?: unknown;
+      skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
+      armies: UnitStack[];
+      x: number;
+      y: number;
+    }>;
   }>;
   neutralArmies: Array<{ id: string; x: number; y: number; status: string; stacks: UnitStack[] }>;
 }) {
@@ -919,6 +998,11 @@ function getDefender({
         attack: hero.attack,
         defense: hero.defense,
         morale: Number(hero.morale ?? 0),
+        luck: Number(hero.luck ?? 0),
+        spellPower: Number(hero.spellPower ?? 0),
+        knowledge: Number(hero.knowledge ?? 0),
+        artifacts: hero.artifacts,
+        skills: hero.skills ?? {},
         armies: hero.armies,
         x: hero.x,
         y: hero.y,

@@ -169,3 +169,47 @@ export function RecruitUnitsIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function UpgradeUnitsIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v13" />
+      <path d="m7 8 5-5 5 5" />
+      <path d="M5 21h14" />
+      <path d="M8 17h8" />
+    </svg>
+  );
+}
+
+export function BuildIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 21h18" />
+      <path d="M5 21V8l7-5 7 5v13" />
+      <path d="M9 21v-6h6v6" />
+      <path d="M12 8v4" />
+      <path d="M10 10h4" />
+    </svg>
+  );
+}
+
+export function BuiltIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+export function MissingResourcesIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="8.8" fill="#f59e0b" stroke="#451a03" strokeWidth="1.8" />
+      <path d="M7.5 5.5a8.8 8.8 0 0 1 10.6 1.4" fill="none" stroke="#fde68a" strokeWidth="1.6" strokeLinecap="round" opacity="0.9" />
+      <path d="M6.9 17.6a8.8 8.8 0 0 0 10.8.6" fill="none" stroke="#92400e" strokeWidth="1.6" strokeLinecap="round" opacity="0.72" />
+      <ellipse cx="12" cy="12" rx="4.1" ry="5.7" fill="none" stroke="#78350f" strokeOpacity="0.8" strokeWidth="1.45" />
+      <path d="M5.6 18.4 18.4 5.6" fill="none" stroke="#450a0a" strokeWidth="4.4" strokeLinecap="round" />
+      <path d="M5.6 18.4 18.4 5.6" fill="none" stroke="#ef4444" strokeWidth="2.9" strokeLinecap="round" />
+    </svg>
+  );
+}

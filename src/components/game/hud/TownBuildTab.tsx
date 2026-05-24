@@ -7,6 +7,7 @@ import { type TownBuildingRule } from "@/lib/game/town-buildings";
 import { hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
 import { getTownBuildingSprite } from "@/lib/game/town-building-sprites";
 import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
+import { BuildIcon, BuiltIcon, MissingResourcesIcon } from "./icons";
 import { buildingTypeLabel } from "./helpers";
 
 export function TownBuildTab({
@@ -15,6 +16,8 @@ export function TownBuildTab({
   displayedBuildRules,
   hideMissingBuildRequirements,
   setHideMissingBuildRequirements,
+  hideBuiltBuildings,
+  setHideBuiltBuildings,
   gameState,
   myPlayer,
   hasPlayerCapitol,
@@ -29,6 +32,8 @@ export function TownBuildTab({
   displayedBuildRules: TownBuildingRule[];
   hideMissingBuildRequirements: boolean;
   setHideMissingBuildRequirements: (next: boolean) => void;
+  hideBuiltBuildings: boolean;
+  setHideBuiltBuildings: (next: boolean) => void;
   gameState: GameState;
   myPlayer: Player | undefined;
   hasPlayerCapitol: boolean;
@@ -61,6 +66,15 @@ export function TownBuildTab({
         />
         <span>Masquer les prérequis manquants</span>
       </label>
+      <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 accent-amber-500"
+          checked={hideBuiltBuildings}
+          onChange={(event) => setHideBuiltBuildings(event.currentTarget.checked)}
+        />
+        <span>Masquer les bâtiments construits</span>
+      </label>
       {displayedBuildRules.map((rule) => {
         if (isShipyardBuilding(selectedTownFaction, rule.type) && !isCoastal) return null;
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
@@ -69,17 +83,23 @@ export function TownBuildTab({
           rule.type === BuildingType.CAPITOL &&
           hasPlayerCapitol &&
           !selectedTown.buildings.includes(BuildingType.CAPITOL);
+        const lacksResources = Boolean(!alreadyBuilt && myPlayer && !canAfford(myPlayer.resources, rule.cost));
         const disabled =
           alreadyBuilt ||
           selectedTown.lastBuiltTurn === gameState.turnNumber ||
           Boolean(missingRequirement) ||
           blockedByCapitolLimit ||
           !myPlayer ||
-          !canAfford(myPlayer.resources, rule.cost) ||
+          lacksResources ||
           !canAct ||
           !isMyTown ||
           isPending;
         const buildingSprite = getTownBuildingSprite(rule, selectedTownFaction);
+        const buildActionLabel = alreadyBuilt
+          ? "Construit"
+          : lacksResources
+            ? "Ressources insuffisantes"
+            : "Construire";
 
         return (
           <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
@@ -112,32 +132,26 @@ export function TownBuildTab({
               </div>
               <button
                 type="button"
-                aria-label={alreadyBuilt ? "Construit" : "Construire"}
+                aria-label={buildActionLabel}
                 className={`group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border transition focus-visible:ring-2 focus-visible:ring-amber-200/70 ${
-                  disabled
+                  lacksResources
+                    ? "cursor-not-allowed border-red-800/70 bg-red-950/45 text-red-200"
+                    : disabled
                     ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
                     : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] hover:from-amber-500 hover:to-amber-700"
                 }`}
                 disabled={disabled}
                 onClick={() => onBuild(rule.type)}
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  {alreadyBuilt ? (
-                    <>
-                      <path d="M20 6 9 17l-5-5" />
-                    </>
-                  ) : (
-                    <>
-                      <path d="M3 21h18" />
-                      <path d="M5 21V8l7-5 7 5v13" />
-                      <path d="M9 21v-6h6v6" />
-                      <path d="M12 8v4" />
-                      <path d="M10 10h4" />
-                    </>
-                  )}
-                </svg>
+                {alreadyBuilt ? (
+                  <BuiltIcon className="h-5 w-5" />
+                ) : lacksResources ? (
+                  <MissingResourcesIcon className="h-6 w-6" />
+                ) : (
+                  <BuildIcon className="h-5 w-5" />
+                )}
                 <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 whitespace-nowrap rounded-md border border-amber-600/60 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100 opacity-0 shadow-lg shadow-black/50 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                  {alreadyBuilt ? "Construit" : "Construire"}
+                  {buildActionLabel}
                 </span>
               </button>
             </div>

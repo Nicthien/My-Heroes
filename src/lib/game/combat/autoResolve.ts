@@ -36,18 +36,18 @@ export function autoResolveCombat(
 ): AutoCombatResult {
   const attackerPower = calculateArmyPower(attacker);
   const defenderPower = calculateArmyPower(defender);
-  const attackerWins = attackerPower >= defenderPower;
+  const attackerWins = attackerPower > defenderPower * 1.12;
   const winnerPower = attackerWins ? attackerPower : defenderPower;
   const loserPower = attackerWins ? defenderPower : attackerPower;
 
-  const pressure = Math.min(0.85, loserPower / Math.max(winnerPower, 1));
+  const pressure = Math.min(0.95, loserPower / Math.max(winnerPower, 1));
 
   return {
     winnerHeroId: attackerWins ? attacker.id : defender.id,
     loserHeroId: attackerWins ? defender.id : attacker.id,
     attackerPower,
     defenderPower,
-    winnerLossRatio: Math.max(0.05, pressure * 0.45),
+    winnerLossRatio: Math.max(0.08, pressure * 0.7),
   };
 }
 

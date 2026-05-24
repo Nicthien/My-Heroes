@@ -301,27 +301,19 @@ export function getGrowthForBuiltTownBuilding(faction: Faction, building: Buildi
 }
 
 export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingType | string>): Partial<Record<UnitType, number>> {
-  const builtSet = new Set(buildings);
   const rules = getFactionBuildingRules(faction);
-  const upgradedReplaced = new Set<UnitType>();
-  for (const rule of rules) {
-    if (rule.category === "dwelling_upgrade" && rule.replacesUnit && builtSet.has(rule.type)) {
-      upgradedReplaced.add(rule.replacesUnit);
-    }
-  }
   const growth: Partial<Record<UnitType, number>> = {};
   let hasGrail = false;
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
     if (!rule) continue;
     if (rule.grail) hasGrail = true;
-    if (rule.unlocksUnit && !upgradedReplaced.has(rule.unlocksUnit)) {
+    if (rule.unlocksUnit) {
       const unitRule = UNIT_RULES[rule.unlocksUnit];
       if (unitRule) growth[rule.unlocksUnit] = (growth[rule.unlocksUnit] ?? 0) + unitRule.growth;
     }
     for (const [unitType, amount] of Object.entries(rule.growthBonus ?? {})) {
       const key = unitType as UnitType;
-      if (upgradedReplaced.has(key)) continue;
       growth[key] = (growth[key] ?? 0) + (amount ?? 0);
     }
   }

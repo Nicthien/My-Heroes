@@ -29,6 +29,7 @@ interface ApiPlayer {
   turnOrder: number;
   exploredTiles: string[];
   heroes: ApiHero[];
+  tavernHeroes?: TavernHeroOffer[];
   towns: ApiTown[];
   resourceBuildings?: ApiResourceBuilding[];
 }
@@ -231,6 +232,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
         position: army.position,
       })),
     })),
+    tavernHeroes: player.tavernHeroes ?? [],
     towns: player.towns.map((town): Town => ({
       id: town.id,
       name: town.name,

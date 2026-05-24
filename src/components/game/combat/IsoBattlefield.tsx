@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CombatBoardUnit, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
@@ -58,6 +59,12 @@ const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
   rangedHampered: GAME_CURSORS.combat.shotBad,
 };
 
+const SIEGE_SPRITES = {
+  tower: "/assets/sprites/siege/tower-castle.webp",
+  wall: "/assets/sprites/siege/wall-slice-castle.webp",
+  gate: "/assets/sprites/siege/gate-slice-castle.webp",
+} as const;
+
 function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
   if (action !== "move") return COMBAT_CURSORS[action];
   const abilities = currentUnit ? getUnitRule(currentUnit.unitType).abilities ?? [] : [];
@@ -102,6 +109,9 @@ export function IsoBattlefield({
     | { kind: "ranged"; fromQ: number; fromR: number; targetQ: number; targetR: number; key: number }
     | null
   >(null);
+  const [tacticsSelectedUnitId, setTacticsSelectedUnitId] = useState<string | null>(null);
+  const tacticsPhase = (combat.boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+  const isTacticsActive = Boolean(tacticsPhase);
   const viewportRef = useRef<HTMLDivElement>(null);
   const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const previousCombatIdRef = useRef<string | null>(null);
@@ -348,6 +358,7 @@ export function IsoBattlefield({
     rightDragRef.current.active = false;
   };
 
+  const fortifications = (combat.boardState as { fortifications?: { towerCount: number; towerDamage: number; gateOpen?: boolean; gateCurrentHp?: number; gateHp?: number } }).fortifications;
   const cells = [];
   for (let r = 0; r < COMBAT_ROWS; r++) {
     for (let q = 0; q < COMBAT_COLS; q++) {
@@ -408,6 +419,30 @@ export function IsoBattlefield({
           aria-disabled={!canClick}
           tabIndex={canClick ? 0 : -1}
           onClick={() => {
+            // First Aid Tent : clic sur allié adjacent pour soigner
+            if (currentUnit?.unitType === "first_aid_tent" && unit && unit.side === currentUnit.side && unit.id !== currentUnit.id) {
+              const dist = Math.max(Math.abs(unit.q - currentUnit.q), Math.abs(unit.r - currentUnit.r));
+              if (dist <= 1 && canClick) {
+                onAction({ type: "HEAL", targetUnitId: unit.id });
+                return;
+              }
+            }
+            if (isTacticsActive && tacticsPhase) {
+              if (unit && unit.side === tacticsPhase.side) {
+                setTacticsSelectedUnitId(unit.id);
+                return;
+              }
+              if (!unit && !feature && tacticsSelectedUnitId) {
+                const inZone = tacticsPhase.side === "attacker"
+                  ? q < (tacticsPhase.maxColumn ?? 0)
+                  : q > (tacticsPhase.minColumn ?? 0);
+                if (inZone) {
+                  onAction({ type: "TACTICS_MOVE", unitId: tacticsSelectedUnitId, q, r });
+                  setTacticsSelectedUnitId(null);
+                }
+              }
+              return;
+            }
             if (!canClick) return;
             if (pendingSpellTarget) {
               if (unit && enemyUnit) onSpellTarget?.(unit.id);
@@ -448,7 +483,7 @@ export function IsoBattlefield({
             q={q}
             r={r}
           />
-          {feature && <TerrainModel feature={feature} />}
+          {feature && !(fortifications && feature.type === "rock" && feature.q === 9) && <TerrainModel feature={feature} />}
         </button>
       );
     }
@@ -493,6 +528,137 @@ export function IsoBattlefield({
       </span>
     );
   });
+
+  // Sièges : overlay tours + projectiles (fortifications déclarées plus haut)
+  const lastTowerShots = (combat.boardState as { lastTowerShots?: Array<{ towerIndex: number; targetQ: number; targetR: number }> }).lastTowerShots ?? [];
+  const towerProjectiles = lastTowerShots.map((shot, i) => {
+    const rowMap = [1, 4, 7];
+    const towerR = rowMap[shot.towerIndex] ?? 4;
+    const from = getIsoPosition(11, towerR);
+    const to = getIsoPosition(shot.targetQ, shot.targetR);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    return (
+      <span
+        key={`tower-shot-${i}-${combat.round}`}
+        className="combat-projectile"
+        style={{
+          left: from.x + TILE_WIDTH / 2 - 7,
+          top: from.y + UNIT_HEIGHT - 8,
+          zIndex: Math.max(towerR, shot.targetR) * 100 + 70,
+          ["--proj-dx" as string]: `${dx}px`,
+          ["--proj-dy" as string]: `${dy}px`,
+        } as React.CSSProperties}
+      />
+    );
+  });
+  // Mur iso : sprite couvrant r=1 à r=7, compact et aligné avec tours/porte
+  const SIEGE_COL_X_OFFSET = 18;
+  const SIEGE_COL_WIDTH = 56;
+  const wallMarkers = fortifications
+    ? (() => {
+        const top = getIsoPosition(9, 1);
+        const bottom = getIsoPosition(9, 7);
+        const wallHeight = bottom.y - top.y + TILE_HEIGHT + 12;
+        return (
+          <span
+            key="wall-slice"
+            className="pointer-events-none absolute block"
+            style={{
+              left: top.x + SIEGE_COL_X_OFFSET,
+              top: top.y - 6,
+              width: SIEGE_COL_WIDTH,
+              height: wallHeight,
+              zIndex: 8850,
+            }}
+          >
+            <Image
+              src={SIEGE_SPRITES.wall}
+              alt=""
+              fill
+              unoptimized
+              sizes={`${SIEGE_COL_WIDTH}px`}
+              className="object-fill drop-shadow-[4px_6px_5px_rgba(0,0,0,0.5)]"
+              aria-hidden="true"
+            />
+          </span>
+        );
+      })()
+    : null;
+  const gateMarker = fortifications && !fortifications.gateOpen ? (() => {
+    const { x, y } = getIsoPosition(9, 4);
+    const pct = Math.max(0, Math.min(1, (fortifications.gateCurrentHp ?? 0) / (fortifications.gateHp || 1)));
+    return (
+      <span
+        key="gate-marker"
+        className="pointer-events-none absolute block"
+        style={{
+          left: x + SIEGE_COL_X_OFFSET - 4,
+          top: y - 18,
+          width: SIEGE_COL_WIDTH + 8,
+          height: TILE_HEIGHT + 36,
+          zIndex: 8950,
+        }}
+      >
+        <Image
+          src={SIEGE_SPRITES.gate}
+          alt=""
+          fill
+          unoptimized
+          sizes={`${SIEGE_COL_WIDTH + 8}px`}
+          className="object-fill drop-shadow-[4px_6px_5px_rgba(0,0,0,0.55)]"
+          aria-hidden="true"
+        />
+        <div className="absolute -bottom-2 left-1/2 h-1 w-10 -translate-x-1/2 overflow-hidden rounded-full bg-stone-900 ring-1 ring-amber-800/40">
+          <div className="h-full bg-emerald-500" style={{ width: `${pct * 100}%` }} />
+        </div>
+      </span>
+    );
+  })() : null;
+  // Tours : aux coins (haut/bas, alignées avec le mur) + une centrale derrière si 3 tours
+  const towerMarkers = fortifications && fortifications.towerCount > 0
+    ? (() => {
+        const TOWER_WIDTH = 70;
+        const TOWER_HEIGHT = 110;
+        const positions: Array<{ q: number; r: number; key: string; xOff: number; yOff: number; w: number; h: number }> = [
+          { q: 9, r: 0, key: "top", xOff: SIEGE_COL_X_OFFSET - 8, yOff: -42, w: TOWER_WIDTH, h: TOWER_HEIGHT },
+          { q: 9, r: 8, key: "bottom", xOff: SIEGE_COL_X_OFFSET - 8, yOff: -32, w: TOWER_WIDTH, h: TOWER_HEIGHT },
+        ];
+        if (fortifications.towerCount >= 3) {
+          // Tour-donjon derrière la porte (visible par-dessus le mur)
+          positions.push({ q: 10, r: 4, key: "keep", xOff: -8, yOff: -68, w: TOWER_WIDTH + 12, h: TOWER_HEIGHT + 26 });
+        }
+        return positions.map((pos) => {
+          const { x, y } = getIsoPosition(pos.q, pos.r);
+          return (
+            <span
+              key={`tower-${pos.key}`}
+              className="pointer-events-none absolute block"
+              style={{
+                left: x + pos.xOff,
+                top: y + pos.yOff,
+                width: pos.w,
+                height: pos.h,
+                zIndex: 9000 + pos.r,
+              }}
+            >
+              <Image
+                src={SIEGE_SPRITES.tower}
+                alt=""
+                fill
+                unoptimized
+                sizes={`${pos.w}px`}
+                className="object-contain drop-shadow-[3px_5px_4px_rgba(0,0,0,0.6)]"
+                aria-hidden="true"
+              />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full border border-amber-500/40 bg-stone-950/85 px-2 py-0.5 text-[9px] font-bold text-amber-200 whitespace-nowrap">
+                {fortifications.towerDamage}dmg
+              </div>
+            </span>
+          );
+        });
+      })()
+    : null;
 
   const unitBadges = visualUnits.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
@@ -570,6 +736,10 @@ export function IsoBattlefield({
       >
         <CombatSceneActors combat={combat} gameState={gameState} />
         {cells}
+        {wallMarkers}
+        {gateMarker}
+        {towerMarkers}
+        {towerProjectiles}
         {unitModels}
         {unitBadges}
         {attackEffect && (() => {

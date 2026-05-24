@@ -15,6 +15,8 @@ import {
   findPath,
   findPathToAdjacent,
   computeReachableTiles,
+  computeEnemyDarknessTiles,
+  computeExtraHeroScoutingTiles,
   computeExtraTownVisionTiles,
   computeVisibleTiles,
   getAdventurePathCost,
@@ -312,6 +314,19 @@ export default function GameMapComponent() {
         visibleTiles = computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5);
         for (const key of computeExtraTownVisionTiles(gameState.map, currentPlayer.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })), 9)) {
           visibleTiles.add(key);
+        }
+        for (const key of computeExtraHeroScoutingTiles(gameState.map, currentPlayer.heroes.map((h) => ({ position: h.position, skills: h.skills })), 5)) {
+          visibleTiles.add(key);
+        }
+        const enemyTowns = gameState.players
+          .filter((p) => p.id !== currentPlayer.id)
+          .flatMap((p) => p.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })));
+        const darkness = computeEnemyDarknessTiles(gameState.map, enemyTowns, 8);
+        if (darkness.size > 0) {
+          const heroCloseSet = computeVisibleTiles(gameState.map, currentPlayer.heroes.map((h) => h.position), 3);
+          for (const key of darkness) {
+            if (!heroCloseSet.has(key)) visibleTiles.delete(key);
+          }
         }
         exploredTiles = new Set<string>(currentPlayer.exploredTiles);
         for (const key of visibleTiles) {
@@ -1367,6 +1382,7 @@ export default function GameMapComponent() {
           .then(async (response) => {
             if (!response.ok) {
               const message = await getApiErrorMessage(response);
+              console.warn("[CAPTURE_TOWN]", response.status, message);
               const normalizedMessage = message
                 .normalize("NFD")
                 .replace(/[\u0300-\u036f]/g, "")

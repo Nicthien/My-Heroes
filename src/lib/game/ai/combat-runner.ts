@@ -36,7 +36,39 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       terrain?: CombatTerrainFeature[];
       environment?: { terrain?: import("@/lib/game/types").TerrainType };
       moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+      tacticsPhase?: { side: "attacker" | "defender" };
     };
+    // Phase de tactique IA : avance les unités de mêlée puis termine
+    if (boardState.tacticsPhase) {
+      const tacticsPhase = boardState.tacticsPhase as { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number };
+      const tacticsPlayerId = tacticsPhase.side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
+      if (!tacticsPlayerId || aiPlayerIds.has(tacticsPlayerId)) {
+        const aiTacticsLog: string[] = ["IA : phase de tactique en cours…"];
+        const units = (boardState.units ?? []).map((u) => ({ ...u }));
+        const myUnits = units.filter((u) => u.side === tacticsPhase.side && u.count > 0 && !u.ranged && !["catapult", "first_aid_tent", "ammo_cart"].includes(u.unitType));
+        const occupied = new Set(units.map((u) => `${u.q},${u.r}`));
+        for (const unit of myUnits) {
+          const targetQ = tacticsPhase.side === "attacker"
+            ? Math.min((tacticsPhase.maxColumn ?? unit.q) - 1, unit.q + 2)
+            : Math.max((tacticsPhase.minColumn ?? unit.q) + 1, unit.q - 2);
+          if (targetQ === unit.q) continue;
+          const oldKey = `${unit.q},${unit.r}`;
+          const targetKey = `${targetQ},${unit.r}`;
+          if (occupied.has(targetKey)) continue;
+          occupied.delete(oldKey);
+          occupied.add(targetKey);
+          unit.q = targetQ;
+          aiTacticsLog.push(`IA déplace ${unit.unitType} en (${targetQ},${unit.r}).`);
+        }
+        const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
+        void _drop;
+        await supabase.from("combats").update({
+          board_state: { ...restBoard, units },
+          action_log: [...(combat.action_log ?? []), ...aiTacticsLog, "IA : phase de tactique terminée."],
+        }).eq("id", combatId);
+        continue;
+      }
+    }
     const actor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
     if (!actor) return toCombat(combat);
     if (actor.ownerPlayerId === null) return toCombat(combat);

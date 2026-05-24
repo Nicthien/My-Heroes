@@ -338,8 +338,8 @@ function dwellingForTier(tier: number): BuildingType {
   return DWELLING_TIERS[index];
 }
 
-export const UNIT_RULES = Object.fromEntries(
-  CREATURES.map((creature) => [
+export const UNIT_RULES = Object.fromEntries([
+  ...CREATURES.map((creature) => [
     creature.type,
     {
       type: creature.type,
@@ -350,7 +350,11 @@ export const UNIT_RULES = Object.fromEntries(
       growth: creature.growth,
     },
   ]),
-) as Record<UnitType, UnitRule>;
+  [UnitType.BALLISTA, { type: UnitType.BALLISTA, label: "Baliste", cost: { gold: 2500 }, health: 250, dwelling: BuildingType.DWELLING_1, growth: 0 }],
+  [UnitType.FIRST_AID_TENT, { type: UnitType.FIRST_AID_TENT, label: "Tente de premiers secours", cost: { gold: 750 }, health: 75, dwelling: BuildingType.DWELLING_1, growth: 0 }],
+  [UnitType.AMMO_CART, { type: UnitType.AMMO_CART, label: "Chariot de munitions", cost: { gold: 1000 }, health: 100, dwelling: BuildingType.DWELLING_1, growth: 0 }],
+  [UnitType.CATAPULT, { type: UnitType.CATAPULT, label: "Catapulte", cost: { gold: 0 }, health: 500, dwelling: BuildingType.DWELLING_1, growth: 0 }],
+]) as Record<UnitType, UnitRule>;
 
 export function canAfford(resources: Resources, cost: ResourceCost) {
   return Object.entries(cost).every(([resource, amount]) => {

@@ -1,0 +1,178 @@
+export type SkillLevel = "basic" | "advanced" | "expert";
+export const SKILL_LEVEL_VALUES: Record<SkillLevel, number> = { basic: 1, advanced: 2, expert: 3 };
+
+export type SkillId =
+  | "necromancy"
+  | "wisdom"
+  | "fire_magic"
+  | "water_magic"
+  | "earth_magic"
+  | "air_magic"
+  | "tactics"
+  | "logistics"
+  | "leadership"
+  | "luck"
+  | "scouting"
+  | "pathfinding"
+  | "archery"
+  | "offense"
+  | "armorer"
+  | "ballistics"
+  | "artillery"
+  | "sorcery"
+  | "mysticism"
+  | "intelligence"
+  | "eagle_eye"
+  | "learning"
+  | "scholar"
+  | "first_aid"
+  | "navigation"
+  | "estates"
+  | "resistance"
+  | "diplomacy";
+
+export interface SkillDefinition {
+  id: SkillId;
+  label: string;
+  description: string;
+}
+
+export const SKILL_DEFINITIONS: SkillDefinition[] = [
+  { id: "necromancy", label: "Nécromancie", description: "Ressuscite une fraction des ennemis tués comme squelettes." },
+  { id: "wisdom", label: "Sagesse", description: "Permet d'apprendre les sorts de plus haut niveau." },
+  { id: "fire_magic", label: "Magie du feu", description: "Améliore les sorts de l'école du feu." },
+  { id: "water_magic", label: "Magie de l'eau", description: "Améliore les sorts de l'école de l'eau." },
+  { id: "earth_magic", label: "Magie de la terre", description: "Améliore les sorts de l'école de la terre." },
+  { id: "air_magic", label: "Magie de l'air", description: "Améliore les sorts de l'école de l'air." },
+  { id: "tactics", label: "Tactique", description: "Permet de repositionner les unités avant le combat." },
+  { id: "logistics", label: "Logistique", description: "+10% / +20% / +30% de mouvement quotidien." },
+  { id: "leadership", label: "Commandement", description: "+1 / +2 / +3 au moral en combat." },
+  { id: "luck", label: "Chance", description: "+1 / +2 / +3 à la chance en combat." },
+  { id: "scouting", label: "Reconnaissance", description: "+1 / +2 / +3 portée de vision." },
+  { id: "pathfinding", label: "Orientation", description: "Réduit le malus de mouvement sur terrain rude." },
+  { id: "archery", label: "Tir à l'arc", description: "+10% / +25% / +50% de dégâts pour les unités à distance." },
+  { id: "offense", label: "Attaque", description: "+10% / +20% / +30% de dégâts pour les unités au corps à corps." },
+  { id: "armorer", label: "Armurerie", description: "−5% / −10% / −15% de dégâts subis." },
+  { id: "ballistics", label: "Balistique", description: "Améliore la précision de la catapulte." },
+  { id: "artillery", label: "Artillerie", description: "Permet de contrôler la baliste et augmente ses dégâts." },
+  { id: "sorcery", label: "Magie", description: "+5% / +10% / +15% de dégâts des sorts." },
+  { id: "mysticism", label: "Mysticisme", description: "+1 / +2 / +3 mana régénéré par jour." },
+  { id: "intelligence", label: "Intelligence", description: "+25% / +50% / +100% de mana maximum." },
+  { id: "eagle_eye", label: "Œil d'aigle", description: "Apprend les sorts adverses lancés en combat." },
+  { id: "learning", label: "Apprentissage", description: "+5% / +10% / +15% d'expérience gagnée." },
+  { id: "scholar", label: "Érudit", description: "Permet d'échanger des sorts entre héros adjacents." },
+  { id: "first_aid", label: "Premiers secours", description: "Améliore la tente de soins." },
+  { id: "navigation", label: "Navigation", description: "+50% / +100% / +150% de mouvement en mer." },
+  { id: "estates", label: "Domaines", description: "+125 / +250 / +500 or par jour." },
+  { id: "resistance", label: "Résistance", description: "5% / 10% / 20% de chance d'ignorer les sorts." },
+  { id: "diplomacy", label: "Diplomatie", description: "Permet aux armées neutres de se joindre ou s'enfuir." },
+];
+
+export type HeroSkills = Partial<Record<SkillId, SkillLevel>>;
+
+export function getSkillLevel(skills: HeroSkills | null | undefined, id: SkillId): SkillLevel | null {
+  return skills?.[id] ?? null;
+}
+
+export function getSkillLevelValue(skills: HeroSkills | null | undefined, id: SkillId): number {
+  const lvl = getSkillLevel(skills, id);
+  return lvl ? SKILL_LEVEL_VALUES[lvl] : 0;
+}
+
+export function setSkillLevel(skills: HeroSkills | null | undefined, id: SkillId, level: SkillLevel): HeroSkills {
+  return { ...(skills ?? {}), [id]: level };
+}
+
+export function upgradeSkill(skills: HeroSkills | null | undefined, id: SkillId): HeroSkills {
+  const current = getSkillLevel(skills, id);
+  if (current === "expert") return skills ?? {};
+  const next: SkillLevel = current === "advanced" ? "expert" : current === "basic" ? "advanced" : "basic";
+  return setSkillLevel(skills, id, next);
+}
+
+export function countSkills(skills: HeroSkills | null | undefined): number {
+  return Object.keys(skills ?? {}).length;
+}
+
+export const MAX_HERO_SKILLS = 8;
+
+// H3 XP thresholds (cumulative XP required to reach level N).
+// level 1 → 0, level 2 → 1000, level 3 → 2000, ... up to 30.
+export const HERO_LEVEL_XP_THRESHOLDS: number[] = (() => {
+  const arr: number[] = [0, 1000];
+  for (let n = 3; n <= 50; n++) {
+    const previous = arr[n - 2];
+    const delta = Math.max(1000, Math.floor(previous / 3));
+    arr.push(previous + delta);
+  }
+  return arr;
+})();
+
+export function computeHeroLevel(experience: number): number {
+  const xp = Math.max(0, Math.floor(experience));
+  let level = 1;
+  for (let i = 1; i < HERO_LEVEL_XP_THRESHOLDS.length; i++) {
+    if (xp >= HERO_LEVEL_XP_THRESHOLDS[i]) level = i + 1;
+    else break;
+  }
+  return level;
+}
+
+// On level-up, choose 2 skill candidates: prefer 1 to upgrade existing + 1 new, else fallback random.
+export function generateSkillChoices(
+  currentSkills: HeroSkills,
+  seed: string,
+  bannedFromNew?: Set<SkillId>,
+): SkillId[] {
+  const upgradable = (Object.keys(currentSkills) as SkillId[]).filter((s) => currentSkills[s] !== "expert");
+  const known = new Set(Object.keys(currentSkills) as SkillId[]);
+  const slotsLeft = Object.keys(currentSkills).length < MAX_HERO_SKILLS;
+  const banned = bannedFromNew ?? new Set<SkillId>();
+  const newCandidates = SKILL_DEFINITIONS
+    .map((s) => s.id)
+    .filter((id) => !known.has(id) && !banned.has(id));
+
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  const rng = (() => { let s = Math.abs(hash) | 1; return () => { s = (s * 1664525 + 1013904223) | 0; return ((s >>> 0) / 0xffffffff); }; })();
+  const pickFrom = <T>(arr: T[]): T | null => arr.length === 0 ? null : arr[Math.floor(rng() * arr.length)];
+
+  const choices: SkillId[] = [];
+  if (upgradable.length > 0) {
+    const upgrade = pickFrom(upgradable);
+    if (upgrade) choices.push(upgrade);
+  }
+  if (slotsLeft) {
+    const fresh = pickFrom(newCandidates.filter((id) => !choices.includes(id)));
+    if (fresh) choices.push(fresh);
+  }
+  while (choices.length < 2) {
+    const pool = [...upgradable, ...(slotsLeft ? newCandidates : [])].filter((id) => !choices.includes(id));
+    const extra = pickFrom(pool);
+    if (!extra) break;
+    choices.push(extra);
+  }
+  return choices;
+}
+
+export function getNecromancyPercent(skills: HeroSkills | null | undefined, amplificationBonus = 0): number {
+  const base = getSkillLevelValue(skills, "necromancy") * 10; // 10/20/30
+  return Math.min(50, base + amplificationBonus);
+}
+
+export function getLogisticsPercent(skills: HeroSkills | null | undefined): number {
+  return getSkillLevelValue(skills, "logistics") * 10;
+}
+
+export function getNavigationPercent(skills: HeroSkills | null | undefined): number {
+  return getSkillLevelValue(skills, "navigation") * 50;
+}
+
+export function getEstatesGold(skills: HeroSkills | null | undefined): number {
+  const lvl = getSkillLevelValue(skills, "estates");
+  return lvl === 1 ? 125 : lvl === 2 ? 250 : lvl === 3 ? 500 : 0;
+}
+
+export function getScoutingBonus(skills: HeroSkills | null | undefined): number {
+  return getSkillLevelValue(skills, "scouting");
+}

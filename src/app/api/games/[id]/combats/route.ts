@@ -3,6 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
+import { COMBAT_COLS } from "@/lib/game/combat/movement";
 import {
   createCreatureBankGuardStacks,
   createCreatureBankPendingReward,
@@ -221,8 +222,26 @@ export async function POST(
   });
   const attackerStats = getEffectiveHeroStatsFromValues(attacker);
   const defenderStats = getEffectiveHeroStatsFromValues(targetDefender);
-  const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus;
-  const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus;
+  const attackerArmiesWithMachines = injectWarMachines(
+    attacker.armies,
+    (attacker as unknown as { warMachines?: { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } }).warMachines,
+    body.targetType === "town",
+  );
+  const siegeEffects = body.targetType === "town"
+    ? getSiegeDefenseEffects(players, { x: targetDefender.x, y: targetDefender.y, ownerPlayerId: targetDefender.playerId })
+    : { fearMoraleMalus: 0, sulfurDamagePerUnit: 0, escapeTunnel: false };
+  const siegeFortifications = body.targetType === "town"
+    ? getSiegeFortifications(players, {
+        x: targetDefender.x,
+        y: targetDefender.y,
+        ownerPlayerId: targetDefender.playerId,
+        townDefender: (targetDefender as unknown as { townLevel?: number | null; townBuildings?: string[] | null }),
+      })
+    : { towerCount: 0, towerDamage: 0, wallHp: 0, gateHp: 0 };
+  const attackerLeadership = skillLevelValue((attacker as unknown as { skills?: Record<string, string> }).skills, "leadership");
+  const defenderLeadership = skillLevelValue((targetDefender as unknown as { skills?: Record<string, string> }).skills, "leadership");
+  const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus + attackerLeadership - siegeEffects.fearMoraleMalus;
+  const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus + defenderLeadership;
   const combatStart = createCombatBoard(
     {
       id: attacker.id,
@@ -232,7 +251,7 @@ export async function POST(
       defense: attackerStats.defense,
       morale: effectiveAttackerMorale,
       luck: attackerStats.luck,
-      armies: attacker.armies,
+      armies: attackerArmiesWithMachines,
     },
     {
       id: targetDefender.id,
@@ -244,7 +263,13 @@ export async function POST(
       luck: defenderStats.luck,
       armies: targetDefender.armies,
     },
-    { environment }
+    {
+      environment,
+      tacticsAdvance: {
+        attacker: tacticsAdvanceFor((attacker as unknown as { skills?: Record<string, string> }).skills),
+        defender: tacticsAdvanceFor((targetDefender as unknown as { skills?: Record<string, string> }).skills),
+      },
+    }
   );
   const autoResult = body.mode === "AUTO"
     ? resolveAutomaticCombat(
@@ -303,14 +328,35 @@ export async function POST(
       gate_id: body.targetType === "gate" ? targetDefender.id : null,
       x: targetDefender.x,
       y: targetDefender.y,
-      board_state: {
-        ...combatStart.boardState,
-        environment,
-        moraleContext: {
-          attackerHeroMorale: effectiveAttackerMorale,
-          defenderHeroMorale: effectiveDefenderMorale,
-        },
-      },
+      board_state: (() => {
+        const atk = tacticsAdvanceFor((attacker as unknown as { skills?: Record<string, string> }).skills);
+        const def = tacticsAdvanceFor((targetDefender as unknown as { skills?: Record<string, string> }).skills);
+        const tacticsAdv = atk - def;
+        const tacticsPhase = tacticsAdv > 0
+          ? { side: "attacker" as const, maxColumn: 1 + atk }
+          : tacticsAdv < 0
+          ? { side: "defender" as const, minColumn: COMBAT_COLS - 2 - def }
+          : null;
+        return {
+          ...combatStart.boardState,
+          environment,
+          moraleContext: {
+            attackerHeroMorale: effectiveAttackerMorale,
+            defenderHeroMorale: effectiveDefenderMorale,
+            attackerHeroLuck: (attackerStats.luck ?? 0) + skillLevelValue((attacker as unknown as { skills?: Record<string, string> }).skills, "luck"),
+            defenderHeroLuck: (defenderStats.luck ?? 0) + skillLevelValue((targetDefender as unknown as { skills?: Record<string, string> }).skills, "luck"),
+          },
+          siegeEffects: siegeEffects.escapeTunnel || siegeEffects.sulfurDamagePerUnit > 0 ? siegeEffects : undefined,
+          fortifications: siegeFortifications.towerCount > 0
+            ? { ...siegeFortifications, gateOpen: false, gateCurrentHp: siegeFortifications.gateHp }
+            : undefined,
+          tacticsPhase: tacticsPhase ?? undefined,
+          terrain: siegeFortifications.towerCount > 0
+            ? [...(combatStart.boardState.terrain ?? []), ...buildWallTerrain(), { type: "rock", q: 9, r: 4 }]
+            : combatStart.boardState.terrain,
+          units: applyTowerVolley(applySulfurDamage(combatStart.boardState.units, siegeEffects.sulfurDamagePerUnit), siegeFortifications),
+        };
+      })(),
       current_player_id: result ? null : combatStart.currentPlayerId,
       current_unit_id: result ? null : combatStart.currentUnitId,
       turn_queue: combatStart.turnQueue,
@@ -359,6 +405,124 @@ export async function POST(
   }
 
   return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+}
+
+function skillLevelValue(skills: Record<string, string> | undefined, id: string): number {
+  const v = skills?.[id];
+  return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
+}
+
+function tacticsAdvanceFor(skills: Record<string, string> | undefined): number {
+  const lvl = skills?.tactics;
+  return lvl === "expert" ? 3 : lvl === "advanced" ? 2 : lvl === "basic" ? 1 : 0;
+}
+
+function getSiegeDefenseEffects(
+  players: Array<{ id: string; towns?: Array<{ x: number; y: number; townType?: string; faction?: string; buildings?: string[] }> }>,
+  params: { x: number; y: number; ownerPlayerId: string | null },
+): { fearMoraleMalus: number; sulfurDamagePerUnit: number; escapeTunnel: boolean } {
+  const defaults = { fearMoraleMalus: 0, sulfurDamagePerUnit: 0, escapeTunnel: false };
+  if (!params.ownerPlayerId) return defaults;
+  const owner = players.find((p) => p.id === params.ownerPlayerId);
+  const town = owner?.towns?.find((t) => t.x === params.x && t.y === params.y);
+  if (!town) return defaults;
+  const faction = town.townType ?? town.faction;
+  const buildings = town.buildings ?? [];
+  return {
+    fearMoraleMalus: faction === "fortress" && buildings.includes("unique_3") ? 1 : 0,
+    sulfurDamagePerUnit: faction === "inferno" && buildings.includes("unique_3") ? 2 : 0,
+    escapeTunnel: faction === "stronghold" && buildings.includes("unique_1"),
+  };
+}
+
+function getSiegeFortifications(
+  players: Array<{ id: string; towns?: Array<{ x: number; y: number; level?: number; buildings?: string[] }> }>,
+  params: {
+    x: number;
+    y: number;
+    ownerPlayerId: string | null;
+    townDefender?: { townLevel?: number | null; townBuildings?: string[] | null } | null;
+  },
+): { towerCount: number; towerDamage: number; wallHp: number; gateHp: number } {
+  const defaults = { towerCount: 0, towerDamage: 0, wallHp: 0, gateHp: 0 };
+  let level = 1;
+  if (params.ownerPlayerId) {
+    const owner = players.find((p) => p.id === params.ownerPlayerId);
+    const town = owner?.towns?.find((t) => t.x === params.x && t.y === params.y);
+    if (town) level = town.level ?? 1;
+  } else if (params.townDefender?.townLevel) {
+    level = params.townDefender.townLevel ?? 1;
+  } else {
+    // Ville neutre/inconnue : forfait niveau 2 pour que les sièges aient toujours des fortifications minimales.
+    level = 2;
+  }
+  if (level < 2) return defaults;
+  return {
+    towerCount: level >= 4 ? 3 : 2,
+    towerDamage: level * 10,
+    wallHp: 100 * level,
+    gateHp: 80 * level,
+  };
+}
+
+function buildWallTerrain(): Array<{ type: "rock"; q: number; r: number }> {
+  const WALL_COLUMN = 9;
+  const GATE_ROW = 4;
+  return [0, 1, 2, 3, 5, 6, 7, 8].map((r) => ({ type: "rock" as const, q: WALL_COLUMN, r }));
+  // GATE_ROW reste ouvert : porte praticable. La case du gate sera bloquée tant que la porte n'est pas détruite (TODO catapulte).
+  // (variable destinée à future intégration de la mécanique de gate)
+  void GATE_ROW;
+}
+
+function applyTowerVolley<T extends { side?: string; health?: number; count?: number; maxHealth?: number }>(units: T[], fort: { towerCount: number; towerDamage: number }): T[] {
+  if (fort.towerCount <= 0 || fort.towerDamage <= 0) return units;
+  const attackerIndexes = units.map((u, i) => (u.side === "attacker" && (u.count ?? 0) > 0 ? i : -1)).filter((i) => i >= 0);
+  if (attackerIndexes.length === 0) return units;
+  const next = units.map((u) => ({ ...u }));
+  for (let shot = 0; shot < fort.towerCount; shot++) {
+    const target = next[attackerIndexes[shot % attackerIndexes.length]];
+    if (!target) continue;
+    const dmg = fort.towerDamage;
+    const nextHealth = Math.max(0, (target.health ?? 0) - dmg);
+    const maxHealth = target.maxHealth ?? 1;
+    const nextCount = nextHealth > 0 ? Math.ceil(nextHealth / maxHealth) : 0;
+    target.health = nextHealth;
+    target.count = nextCount;
+  }
+  return next;
+}
+
+function applySulfurDamage<T extends { side?: string; health?: number; count?: number; maxHealth?: number }>(units: T[], damagePerUnit: number): T[] {
+  if (damagePerUnit <= 0) return units;
+  return units.map((unit) => {
+    if (unit.side !== "attacker") return unit;
+    const totalDmg = damagePerUnit * (unit.count ?? 0);
+    const nextHealth = Math.max(0, (unit.health ?? 0) - totalDmg);
+    const maxHealth = unit.maxHealth ?? 1;
+    const nextCount = nextHealth > 0 ? Math.ceil(nextHealth / maxHealth) : 0;
+    return { ...unit, health: nextHealth, count: nextCount };
+  });
+}
+
+function injectWarMachines(
+  armies: UnitStack[],
+  warMachines: { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } | undefined,
+  isSiege: boolean,
+): UnitStack[] {
+  const extra: UnitStack[] = [];
+  if (warMachines?.ballista) {
+    extra.push({ id: `warmachine-ballista`, unitType: UnitType.BALLISTA, count: 1, health: 250, maxHealth: 250, position: armies.length });
+  }
+  if (warMachines?.firstAid) {
+    extra.push({ id: `warmachine-first-aid`, unitType: UnitType.FIRST_AID_TENT, count: 1, health: 75, maxHealth: 75, position: armies.length + extra.length });
+  }
+  if (warMachines?.ammoCart) {
+    extra.push({ id: `warmachine-ammo`, unitType: UnitType.AMMO_CART, count: 1, health: 100, maxHealth: 100, position: armies.length + extra.length });
+  }
+  if (isSiege) {
+    extra.push({ id: `warmachine-catapult`, unitType: UnitType.CATAPULT, count: 1, health: 500, maxHealth: 500, position: armies.length + extra.length });
+  }
+  return extra.length > 0 ? [...armies, ...extra] : armies;
 }
 
 function getGateDefender(
@@ -617,7 +781,7 @@ async function getTownDefender(
 ) {
   let { data: town, error } = await supabase
     .from("towns")
-    .select("id,x,y,neutral_garrison")
+    .select("id,x,y,neutral_garrison,level,buildings,town_type")
     .eq("game_id", gameId)
     .eq("id", targetId)
     .eq("is_neutral", true)
@@ -628,7 +792,7 @@ async function getTownDefender(
   if (!town && Number.isFinite(x) && Number.isFinite(y)) {
     const fallback = await supabase
       .from("towns")
-      .select("id,x,y,neutral_garrison")
+      .select("id,x,y,neutral_garrison,level,buildings,town_type")
       .eq("game_id", gameId)
       .eq("x", x)
       .eq("y", y)
@@ -651,6 +815,9 @@ async function getTownDefender(
     armies: garrison,
     x: town.x,
     y: town.y,
+    townLevel: town.level,
+    townBuildings: town.buildings ?? [],
+    townType: town.town_type,
   };
 }
 

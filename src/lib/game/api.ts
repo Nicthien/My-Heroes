@@ -56,6 +56,8 @@ interface ApiHero {
   hasSpellBook?: boolean;
   knownSpellIds?: string[] | null;
   artifacts?: unknown;
+  skills?: unknown;
+  warMachines?: unknown;
   x: number;
   y: number;
   movement: number;
@@ -214,6 +216,9 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
       hasSpellBook: hero.hasSpellBook ?? true,
       knownSpellIds: hero.knownSpellIds ?? null,
       artifacts: normalizeArtifactBag(hero.artifacts),
+      skills: (hero.skills as Partial<Record<string, "basic" | "advanced" | "expert">> | undefined) ?? {},
+      warMachines: (hero.warMachines as { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } | undefined) ?? {},
+      pendingSkillChoices: (((mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {})[hero.id]) ?? [],
       position: { x: hero.x, y: hero.y },
       movement: hero.movement,
       maxMovement: hero.maxMovement,

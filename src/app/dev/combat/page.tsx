@@ -197,6 +197,14 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
   const currentUnitId = phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;
   const currentPlayerId = combatUnits.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
 
+  const isSiege = scenario === "town";
+  const siegeTerrain = isSiege
+    ? [0, 1, 2, 3, 4, 5, 6, 7, 8].map((r) => ({ type: "rock" as const, q: 9, r }))
+    : [];
+  const siegeFortifications = isSiege
+    ? { towerCount: 3, towerDamage: 30, wallHp: 300, gateHp: 240, gateCurrentHp: 240, gateOpen: false }
+    : undefined;
+
   const combat: PersistentCombat = {
     id: "dev-combat",
     gameId: gameState.id,
@@ -219,7 +227,9 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
         { type: "rock", q: 7, r: 6 },
         { type: "water", q: 5, r: 5 },
         { type: "water", q: 6, r: 5 },
+        ...siegeTerrain,
       ],
+      ...(siegeFortifications ? { fortifications: siegeFortifications } : {}),
     },
     turnQueue: phaseTurnQueue,
     actionLog: ["Combat lance."],

@@ -9,6 +9,7 @@ export type ManualCombatActionType = "ATTACK" | "SHOOT";
 export interface CombatSideStats {
   attack: number;
   defense: number;
+  skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
 }
 
 export interface CombatAttackProfile {
@@ -134,8 +135,9 @@ export function calculateCombatDamageRange(params: {
   }
 
   const multiplier = getAttackDefenseMultiplier(attacker, defender, params.attackerStats, params.defenderStats);
-  const minDamage = Math.max(1, Math.floor(attacker.count * attacker.minDamage * multiplier * profile.damagePenalty));
-  const maxDamage = Math.max(1, Math.floor(attacker.count * attacker.maxDamage * multiplier * profile.damagePenalty));
+  const skillMultiplier = getSkillDamageMultiplier(attacker, params.attackerStats, params.defenderStats, profile);
+  const minDamage = Math.max(1, Math.floor(attacker.count * attacker.minDamage * multiplier * profile.damagePenalty * skillMultiplier));
+  const maxDamage = Math.max(1, Math.floor(attacker.count * attacker.maxDamage * multiplier * profile.damagePenalty * skillMultiplier));
 
   return {
     minDamage,
@@ -169,7 +171,8 @@ export function rollCombatDamage(params: {
 
   const baseDamagePerUnit = randomInt(attacker.minDamage, attacker.maxDamage, params.random);
   const multiplier = getAttackDefenseMultiplier(attacker, defender, params.attackerStats, params.defenderStats);
-  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty));
+  const skillMultiplier = getSkillDamageMultiplier(attacker, params.attackerStats, params.defenderStats, profile);
+  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty * skillMultiplier));
   return {
     damage,
     baseDamagePerUnit,
@@ -200,6 +203,39 @@ export function getAttackDefenseMultiplier(
   if (diff > 0) return Math.min(5, 1 + 0.05 * diff);
   if (diff < 0) return Math.max(0.3, 1 - 0.025 * Math.abs(diff));
   return 1;
+}
+
+function skillLevelValue(skills: CombatSideStats["skills"], id: string): number {
+  const lvl = skills?.[id];
+  return lvl === "expert" ? 3 : lvl === "advanced" ? 2 : lvl === "basic" ? 1 : 0;
+}
+
+export function getSkillDamageMultiplier(
+  attacker: CombatBoardUnit,
+  attackerStats: CombatSideStats,
+  defenderStats: CombatSideStats,
+  profile: CombatAttackProfile,
+): number {
+  let attackerBoost = 1;
+  if (profile.isShot) {
+    const archery = skillLevelValue(attackerStats.skills, "archery");
+    if (archery === 1) attackerBoost *= 1.10;
+    else if (archery === 2) attackerBoost *= 1.25;
+    else if (archery === 3) attackerBoost *= 1.50;
+  } else if (profile.isMelee) {
+    const offense = skillLevelValue(attackerStats.skills, "offense");
+    if (offense === 1) attackerBoost *= 1.10;
+    else if (offense === 2) attackerBoost *= 1.20;
+    else if (offense === 3) attackerBoost *= 1.30;
+  }
+  let defenderReduction = 1;
+  if (!attacker.unitType.toString().includes("ballista")) {
+    const armorer = skillLevelValue(defenderStats.skills, "armorer");
+    if (armorer === 1) defenderReduction *= 0.95;
+    else if (armorer === 2) defenderReduction *= 0.90;
+    else if (armorer === 3) defenderReduction *= 0.85;
+  }
+  return attackerBoost * defenderReduction;
 }
 
 export function getLossesForDamage(defender: CombatBoardUnit, damage: number) {

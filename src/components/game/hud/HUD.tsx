@@ -16,6 +16,8 @@ import { TownMarketTab } from "./TownMarketTab";
 import { TownArtifactsTab } from "./TownArtifactsTab";
 import { TownMercenaryTab } from "./TownMercenaryTab";
 import { TownCastleGateTab } from "./TownCastleGateTab";
+import { TownMageUniversityTab } from "./TownMageUniversityTab";
+import { TownBallistaTab } from "./TownBallistaTab";
 import {
   TownTabButton,
   TownTabIcon,
@@ -333,6 +335,36 @@ function HUDContent() {
     if (refreshedState) setGameState(refreshedState);
   };
 
+  const handleLearnMagicSchool = async (townId: string, heroId: string, school: "fire_magic" | "water_magic" | "earth_magic" | "air_magic") => {
+    if (!canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "LEARN_MAGIC_SCHOOL", townId, heroId, school }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Apprentissage impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
+  const handleBuyMachine = async (townId: string, heroId: string, machine: "ballista" | "firstAid" | "ammoCart") => {
+    if (!canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "BUY_WAR_MACHINE", townId, heroId, machine }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Achat impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
   const handleCastleGateTransfer = async (fromTownId: string, toTownId: string, unitType: UnitType, count: number) => {
     if (!canAct || !isMyTown) return;
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
@@ -588,6 +620,12 @@ function HUDContent() {
   const hasCastleGate =
     selectedTownFactionForTabs === Faction.INFERNO &&
     Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_1));
+  const hasMageUniversity =
+    selectedTownFactionForTabs === Faction.CONFLUX &&
+    Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_1));
+  const hasBallistaYard =
+    selectedTownFactionForTabs === Faction.STRONGHOLD &&
+    Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_3));
 
   const townTabs: { id: TownTab; label: string; badge?: number }[] = [
     { id: "summary", label: "Résumé" },
@@ -608,6 +646,12 @@ function HUDContent() {
       : []),
     ...(hasCastleGate
       ? [{ id: "gate" as const, label: "Porte du château" }]
+      : []),
+    ...(hasMageUniversity
+      ? [{ id: "university" as const, label: "Université de magie" }]
+      : []),
+    ...(hasBallistaYard
+      ? [{ id: "ballista" as const, label: "Cour des balistes" }]
       : []),
   ];
   const activeTownTab = townTabState.townId === selectedTownId ? townTabState.tab : "summary";
@@ -908,6 +952,30 @@ function HUDContent() {
                 isPending={isPending}
                 isMyTown={isMyTown}
                 onTransferGate={handleCastleGateTransfer}
+              />
+            )}
+
+            {displayedTownTab === "university" && (
+              <TownMageUniversityTab
+                selectedTown={selectedTown}
+                myPlayer={myPlayer}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                heroesAtSelectedTown={heroesAtSelectedTown}
+                onLearnSchool={handleLearnMagicSchool}
+              />
+            )}
+
+            {displayedTownTab === "ballista" && (
+              <TownBallistaTab
+                selectedTown={selectedTown}
+                myPlayer={myPlayer}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                heroesAtSelectedTown={heroesAtSelectedTown}
+                onBuyMachine={handleBuyMachine}
               />
             )}
           </div>

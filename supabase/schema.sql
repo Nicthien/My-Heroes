@@ -76,6 +76,8 @@ create table public.heroes (
   has_spell_book boolean not null default true,
   known_spells jsonb default null,
   artifacts jsonb not null default '{"inventory":[],"equipment":{}}'::jsonb,
+  skills jsonb not null default '{}'::jsonb,
+  war_machines jsonb not null default '{}'::jsonb,
   movement numeric not null default 1500,
   max_movement numeric not null default 1500,
   x integer not null,

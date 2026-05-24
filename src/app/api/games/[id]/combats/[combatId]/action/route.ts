@@ -14,9 +14,13 @@ import {
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, GameMap } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSummary, CombatTerrainFeature, GameMap, UnitType } from "@/lib/game/types";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
 import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
+import { computeRaisedSkeletons } from "@/lib/game/combat/necromancy";
+import { UNIT_RULES } from "@/lib/game/economy";
+import type { HeroSkills } from "@/lib/game/skills";
+import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 
@@ -146,8 +150,12 @@ export async function POST(
         playerId: caster.playerId,
         side: caster.side,
         spellPower: casterStats.spellPower,
+        skills: (caster.hero.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>,
       },
       action: action as CombatSpellAction,
+      enemySkills: caster.side === "attacker"
+        ? ((defenderHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>)
+        : ((attackerHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>),
     });
     if (!spellExecution.ok) return NextResponse.json({ error: spellExecution.error }, { status: 400 });
 
@@ -175,10 +183,80 @@ export async function POST(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!hasDevInfiniteMana) await supabase.from("heroes").update({ mana: mana - cost }).eq("id", caster.heroId);
+    // Eagle Eye : héros opposé apprend le sort observé selon son niveau de skill.
+    await applyEagleEye(supabase, combat, caster.heroId, spell);
     if (result) {
       await persistResolvedCombat(supabase, combat, initialUnits, spellExecution.units, spellExecution.result);
       await evaluateGameLifecycle(supabase, id);
     }
+    const mapped = toCombat(data);
+    return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
+  }
+
+  if (action.type === "TACTICS_MOVE" || action.type === "TACTICS_END") {
+    const tacticsPhase = (boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+    if (!tacticsPhase) return NextResponse.json({ error: "Pas de phase de tactique en cours" }, { status: 400 });
+    const expectedPlayerId = tacticsPhase.side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
+    if (gamePlayerId !== expectedPlayerId) return NextResponse.json({ error: "Pas votre phase de tactique" }, { status: 403 });
+
+    if (action.type === "TACTICS_END") {
+      const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
+      void _drop;
+      const { data, error } = await supabase
+        .from("combats")
+        .update({ board_state: restBoard, action_log: [...(combat.action_log ?? []), "Phase de tactique terminée."] })
+        .eq("id", combatId)
+        .select("*, combat_participants(*)")
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ combat: toCombat(data), result: null });
+    }
+
+    const targetQ = Number(action.q);
+    const targetR = Number(action.r);
+    const unit = (boardState.units ?? []).find((u: CombatBoardUnit) => u.id === action.unitId && u.side === tacticsPhase.side);
+    if (!unit) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
+    if (!Number.isFinite(targetQ) || !Number.isFinite(targetR)) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
+    if (tacticsPhase.side === "attacker" && targetQ >= (tacticsPhase.maxColumn ?? 0)) {
+      return NextResponse.json({ error: "Hors zone de tactique" }, { status: 400 });
+    }
+    if (tacticsPhase.side === "defender" && targetQ <= (tacticsPhase.minColumn ?? 0)) {
+      return NextResponse.json({ error: "Hors zone de tactique" }, { status: 400 });
+    }
+    if ((boardState.units ?? []).some((u: CombatBoardUnit) => u.q === targetQ && u.r === targetR)) {
+      return NextResponse.json({ error: "Case occupée" }, { status: 400 });
+    }
+    const nextUnits = (boardState.units ?? []).map((u: CombatBoardUnit) => u.id === unit.id ? { ...u, q: targetQ, r: targetR } : u);
+    const { data, error } = await supabase
+      .from("combats")
+      .update({ board_state: { ...boardState, units: nextUnits } })
+      .eq("id", combatId)
+      .select("*, combat_participants(*)")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ combat: toCombat(data), result: null });
+  }
+
+  if (action.type === "FLEE_COMBAT") {
+    const siegeEffects = (boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects;
+    if (!siegeEffects?.escapeTunnel) return NextResponse.json({ error: "Aucun Tunnel d'évasion" }, { status: 400 });
+    if (gamePlayerId !== combat.defender_player_id) return NextResponse.json({ error: "Seul le défenseur peut fuir" }, { status: 403 });
+    const result = {
+      winnerId: "defender" as const,
+      winnerPlayerId: combat.defender_player_id,
+      attackerLosses: [],
+      defenderLosses: [],
+      experienceGained: 0,
+      log: ["Le défenseur emprunte le Tunnel d'évasion."],
+    };
+    const { data, error } = await supabase
+      .from("combats")
+      .update({ board_state: boardState, action_log: [...(combat.action_log ?? []), "Tunnel d'évasion utilisé."], result, status: "RESOLVED" })
+      .eq("id", combatId)
+      .select("*, combat_participants(*)")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await evaluateGameLifecycle(supabase, id);
     const mapped = toCombat(data);
     return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
   }
@@ -200,26 +278,62 @@ export async function POST(
     currentUnitId: combat.current_unit_id,
     playerAction: currentActor?.ownerPlayerId === gamePlayerId ? action : null,
     allowAutomatedAction: Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorIsAi)),
-    attackerStats: getEffectiveHeroStatsFromValues(attackerHero),
-    defenderStats: getEffectiveHeroStatsFromValues(defenderHero ?? { attack: 1, defense: 1 }),
+    attackerStats: { ...getEffectiveHeroStatsFromValues(attackerHero), skills: (attackerHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">> },
+    defenderStats: { ...getEffectiveHeroStatsFromValues(defenderHero ?? { attack: 1, defense: 1 }), skills: ((defenderHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>) },
     immortalHeroId: devGodModeHeroId,
     moraleContext,
   });
 
+  // Tirs des tours au début de chaque round (siège)
+  const fortifications = (boardState as { fortifications?: { towerCount: number; towerDamage: number } }).fortifications;
+  let unitsAfterTowers = execution.units;
+  const towerLog: string[] = [];
+  let lastTowerShots: Array<{ towerIndex: number; targetQ: number; targetR: number }> = [];
+  if (fortifications && fortifications.towerCount > 0 && execution.round > (combat.round ?? 1)) {
+    const result = applyTowerVolleyInRound(unitsAfterTowers, fortifications.towerCount, fortifications.towerDamage);
+    unitsAfterTowers = result.units;
+    lastTowerShots = result.shots;
+    if (result.killed > 0) towerLog.push(`Volée des tours : ${result.killed} unité(s) attaquante(s) éliminée(s).`);
+    else towerLog.push(`Tours de défense tirent (${fortifications.towerCount} salves).`);
+  }
+  // Catapulte : si elle a agi ce tour, cible la porte d'abord, puis les murs
+  let nextTerrain = boardState.terrain ?? [];
+  let nextFortifications = (boardState as { fortifications?: { gateCurrentHp?: number; gateOpen?: boolean; towerCount: number; towerDamage: number; gateHp: number; wallHp: number } }).fortifications;
+  if (execution.log.some((line) => line.includes("Catapulte"))) {
+    const CATAPULT_HIT = 80;
+    if (nextFortifications && !nextFortifications.gateOpen && (nextFortifications.gateCurrentHp ?? 0) > 0) {
+      const remainingHp = Math.max(0, (nextFortifications.gateCurrentHp ?? 0) - CATAPULT_HIT);
+      if (remainingHp <= 0) {
+        nextTerrain = nextTerrain.filter((t: CombatTerrainFeature) => !(t.q === 9 && t.r === 4));
+        nextFortifications = { ...nextFortifications, gateCurrentHp: 0, gateOpen: true };
+        towerLog.push(`Porte fracassée par la catapulte !`);
+      } else {
+        nextFortifications = { ...nextFortifications, gateCurrentHp: remainingHp };
+        towerLog.push(`Porte endommagée par la catapulte (${remainingHp} PV restants).`);
+      }
+    } else {
+      const walls = nextTerrain.filter((t: CombatTerrainFeature) => t.type === "rock" && t.q === 9);
+      if (walls.length > 0) {
+        const removed = walls[Math.floor(Math.random() * walls.length)];
+        nextTerrain = nextTerrain.filter((t: CombatTerrainFeature) => !(t.q === removed.q && t.r === removed.r));
+        towerLog.push(`Mur détruit en (${removed.q},${removed.r}).`);
+      }
+    }
+  }
   const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
   let result = execution.result
-    ? buildManualCombatResult(execution.result, initialUnits, execution.units, combat)
+    ? buildManualCombatResult(execution.result, initialUnits, unitsAfterTowers, combat)
     : null;
   if (result && execution.result === "attacker") {
     const pendingReward = await findCreatureBankRewardForCombat(supabase, combat);
     if (pendingReward) result = { ...result, creatureBankReward: pendingReward };
   }
-  const actionLog = [...(combat.action_log ?? []), ...execution.log];
+  const actionLog = [...(combat.action_log ?? []), ...execution.log, ...towerLog];
 
   const { data, error } = await supabase
     .from("combats")
     .update({
-      board_state: { ...boardState, units: execution.units },
+      board_state: { ...boardState, units: unitsAfterTowers, terrain: nextTerrain, fortifications: nextFortifications, lastTowerShots: lastTowerShots.length > 0 ? lastTowerShots : undefined },
       turn_queue: execution.turnQueue,
       current_unit_id: execution.currentUnitId,
       current_player_id: result ? null : execution.currentPlayerId,
@@ -269,10 +383,20 @@ async function fetchCombatHero(
 ): Promise<{ data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null }> {
   const full = await supabase
     .from("heroes")
-    .select("id,game_player_id,attack,defense,spell_power,knowledge,morale,luck,mana,has_spell_book,known_spells,artifacts")
+    .select("id,game_player_id,attack,defense,spell_power,knowledge,morale,luck,mana,has_spell_book,known_spells,artifacts,skills")
     .eq("id", heroId)
     .single();
-  if (!full.error || !isMissingSpellSchemaError(full.error)) return full as { data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null };
+  if (!full.error) return full as { data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null };
+  if (isMissingSkillsSchemaError(full.error)) {
+    const withoutSkills = await supabase
+      .from("heroes")
+      .select("id,game_player_id,attack,defense,spell_power,knowledge,morale,luck,mana,has_spell_book,known_spells,artifacts")
+      .eq("id", heroId)
+      .single();
+    if (!withoutSkills.error) return { data: { ...withoutSkills.data, skills: {} } as SpellHeroRow, error: null };
+    if (!isMissingSpellSchemaError(withoutSkills.error)) return withoutSkills as { data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null };
+  }
+  if (!isMissingSpellSchemaError(full.error)) return full as { data: SpellHeroRow | null; error: { message: string; details?: string | null; code?: string } | null };
 
   const fallback = await supabase
     .from("heroes")
@@ -287,6 +411,7 @@ async function fetchCombatHero(
         mana: Number(fallback.data.knowledge ?? 1) * 10,
         has_spell_book: true,
         known_spells: null,
+        skills: {},
       },
       error: null,
     };
@@ -295,6 +420,11 @@ async function fetchCombatHero(
 function isMissingSpellSchemaError(error: { message?: string; details?: string | null; code?: string }) {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
   return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("schema cache");
+}
+
+function isMissingSkillsSchemaError(error: { message?: string; details?: string | null; code?: string }) {
+  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return text.includes("skills") || text.includes("war_machines");
 }
 
 function findCombatSpellCaster(params: {
@@ -348,6 +478,7 @@ type SpellHeroRow = {
   has_spell_book?: boolean | null;
   known_spells?: string[] | null;
   artifacts?: unknown;
+  skills?: Partial<Record<string, "basic" | "advanced" | "expert">> | null;
 };
 
 function executeActionThenNeutralTurns(params: {
@@ -356,10 +487,10 @@ function executeActionThenNeutralTurns(params: {
   turnQueue: string[];
   round: number;
   currentUnitId: string | null;
-  playerAction: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string } | null;
+  playerAction: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string } | null;
   allowAutomatedAction: boolean;
-  attackerStats: { attack: number; defense: number };
-  defenderStats: { attack: number; defense: number };
+  attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
+  defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
   moraleContext?: Parameters<typeof executeManualCombatAction>[0]["moraleContext"];
 }) {
@@ -525,9 +656,153 @@ async function persistResolvedCombat(
       await supabase.from("armies").delete().eq("hero_id", combat.defender_hero_id);
       await supabase.from("heroes").delete().eq("id", combat.defender_hero_id);
     }
+    await applyNecromancyPostCombat(supabase, combat.attacker_hero_id, combat.attacker_player_id, "attacker", before, after);
+    await applyCombatXp(supabase, combat.game_id, combat.attacker_hero_id, before, after);
   } else if (winnerSide === "defender") {
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
+    if (combat.defender_hero_id && combat.defender_player_id) {
+      await applyNecromancyPostCombat(supabase, combat.defender_hero_id, combat.defender_player_id, "defender", before, after);
+      await applyCombatXp(supabase, combat.game_id, combat.defender_hero_id, before, after);
+    }
+  }
+}
+
+async function applyEagleEye(
+  supabase: ReturnType<typeof createAdminClient>,
+  combat: { attacker_hero_id: string; defender_hero_id: string | null },
+  casterHeroId: string,
+  spell: { id: string; level?: number },
+) {
+  const observerHeroId = casterHeroId === combat.attacker_hero_id ? combat.defender_hero_id : combat.attacker_hero_id;
+  if (!observerHeroId) return;
+  const { data: hero } = await supabase
+    .from("heroes")
+    .select("skills,known_spells,has_spell_book")
+    .eq("id", observerHeroId)
+    .maybeSingle();
+  if (!hero || hero.has_spell_book === false) return;
+  const lvl = ((hero.skills ?? {}) as Record<string, string>).eagle_eye;
+  if (!lvl) return;
+  const maxSpellLevel = lvl === "expert" ? 4 : lvl === "advanced" ? 3 : 2;
+  const spellLevel = spell.level ?? 1;
+  if (spellLevel > maxSpellLevel) return;
+  const chance = lvl === "expert" ? 0.7 : lvl === "advanced" ? 0.5 : 0.4;
+  if (Math.random() > chance) return;
+  const known = new Set((hero.known_spells ?? []) as string[]);
+  if (known.has(spell.id)) return;
+  known.add(spell.id);
+  await supabase.from("heroes").update({ has_spell_book: true, known_spells: Array.from(known) }).eq("id", observerHeroId);
+}
+
+function applyTowerVolleyInRound(units: CombatBoardUnit[], towerCount: number, towerDamage: number): { units: CombatBoardUnit[]; killed: number; shots: Array<{ towerIndex: number; targetQ: number; targetR: number }> } {
+  if (towerCount <= 0 || towerDamage <= 0) return { units, killed: 0, shots: [] };
+  const attackers = units.map((u, i) => (u.side === "attacker" && u.count > 0 ? i : -1)).filter((i) => i >= 0);
+  if (attackers.length === 0) return { units, killed: 0, shots: [] };
+  const next = units.map((u) => ({ ...u }));
+  let killed = 0;
+  const shots: Array<{ towerIndex: number; targetQ: number; targetR: number }> = [];
+  for (let shot = 0; shot < towerCount; shot++) {
+    const target = next[attackers[shot % attackers.length]];
+    if (!target || target.count <= 0) continue;
+    const nextHealth = Math.max(0, (target.health ?? 0) - towerDamage);
+    const maxHealth = target.maxHealth ?? 1;
+    const nextCount = nextHealth > 0 ? Math.ceil(nextHealth / maxHealth) : 0;
+    killed += Math.max(0, target.count - nextCount);
+    target.health = nextHealth;
+    target.count = nextCount;
+    shots.push({ towerIndex: shot, targetQ: target.q, targetR: target.r });
+  }
+  return { units: next, killed, shots };
+}
+
+async function applyCombatXp(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  winnerHeroId: string,
+  before: CombatBoardUnit[],
+  after: CombatBoardUnit[],
+) {
+  // XP basée sur HP totaux d'ennemis détruits (approx H3 : ~XP = HP des unités tuées).
+  const afterById = new Map(after.map((u) => [u.id, u]));
+  let totalXp = 0;
+  for (const unit of before) {
+    if (unit.heroId === winnerHeroId) continue;
+    const next = afterById.get(unit.id);
+    const killed = Math.max(0, unit.count - (next?.count ?? 0));
+    if (killed <= 0) continue;
+    const hp = UNIT_RULES[unit.unitType]?.health ?? 5;
+    totalXp += killed * hp;
+  }
+  if (totalXp <= 0) totalXp = 100;
+  const { data: heroRow } = await supabase.from("heroes").select("experience").eq("id", winnerHeroId).maybeSingle();
+  if (!heroRow) return;
+  await applyHeroExperienceGain(supabase, gameId, winnerHeroId, Number(heroRow.experience ?? 0) + totalXp);
+}
+
+async function applyNecromancyPostCombat(
+  supabase: ReturnType<typeof createAdminClient>,
+  winnerHeroId: string,
+  winnerPlayerId: string,
+  winnerSide: "attacker" | "defender",
+  before: CombatBoardUnit[],
+  after: CombatBoardUnit[],
+) {
+  const { data: hero } = await supabase.from("heroes").select("id,skills").eq("id", winnerHeroId).maybeSingle();
+  if (!hero) return;
+  const skills = (hero.skills ?? {}) as HeroSkills;
+  if (!skills.necromancy) return;
+
+  const { data: towns } = await supabase
+    .from("towns")
+    .select("town_type,buildings")
+    .eq("game_player_id", winnerPlayerId);
+  const playerTowns = (towns ?? []).map((t) => ({
+    townType: (t as { town_type?: string | null }).town_type ?? null,
+    buildings: (t as { buildings?: string[] | null }).buildings ?? [],
+  }));
+
+  const enemySide = winnerSide === "attacker" ? "defender" : "attacker";
+  const afterById = new Map(after.map((u) => [u.id, u]));
+  const killsByType: Partial<Record<UnitType, number>> = {};
+  for (const unit of before) {
+    if (unit.side !== enemySide) continue;
+    const remaining = afterById.get(unit.id)?.count ?? 0;
+    const killed = Math.max(0, unit.count - remaining);
+    if (killed > 0) {
+      killsByType[unit.unitType] = (killsByType[unit.unitType] ?? 0) + killed;
+    }
+  }
+
+  const raised = computeRaisedSkeletons(killsByType, skills, playerTowns);
+  if (!raised) return;
+
+  const rule = UNIT_RULES[raised.unitType];
+  if (!rule) return;
+  const { data: existing } = await supabase
+    .from("armies")
+    .select("id,count,health")
+    .eq("hero_id", winnerHeroId)
+    .eq("unit_type", raised.unitType)
+    .maybeSingle();
+  if (existing) {
+    await supabase.from("armies").update({
+      count: Number(existing.count) + raised.count,
+      health: Number(existing.health) + rule.health * raised.count,
+    }).eq("id", existing.id);
+  } else {
+    const { data: armies } = await supabase.from("armies").select("position").eq("hero_id", winnerHeroId);
+    const position = armies?.length ?? 0;
+    if (position < 7) {
+      await supabase.from("armies").insert({
+        hero_id: winnerHeroId,
+        unit_type: raised.unitType,
+        count: raised.count,
+        health: rule.health * raised.count,
+        max_health: rule.health,
+        position,
+      });
+    }
   }
 }
 

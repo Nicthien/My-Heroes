@@ -39,12 +39,14 @@ export interface CombatParticipantSnapshot {
 export function createCombatBoard(
   attacker: CombatParticipantSnapshot,
   defender: CombatParticipantSnapshot,
-  options: { environment?: CombatEnvironment } = {}
+  options: { environment?: CombatEnvironment; tacticsAdvance?: { attacker?: number; defender?: number } } = {}
 ) {
   const units: CombatBoardUnit[] = [];
   const terrain = createCombatTerrain();
-  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1, 1, undefined, terrain);
-  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2, 1, undefined, terrain);
+  const attackerAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.attacker ?? 0));
+  const defenderAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.defender ?? 0));
+  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1 + attackerAdvance, 1, undefined, terrain);
+  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2 - defenderAdvance, 1, undefined, terrain);
   assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
@@ -159,9 +161,9 @@ export function executeManualCombatAction(params: {
   turnQueue: string[];
   round: number;
   currentUnitId: string | null;
-  action: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string };
-  attackerStats: { attack: number; defense: number };
-  defenderStats: { attack: number; defense: number };
+  action: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string };
+  attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
+  defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
   moraleContext?: MoraleContext;
 }) {
@@ -172,6 +174,56 @@ export function executeManualCombatAction(params: {
   const units = params.units.map((unit) => normalizeCombatUnit({ ...unit }));
   const actor = units.find((unit) => unit.id === params.currentUnitId);
   if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
+
+  // Machines de guerre : comportement automatique
+  if (actor.unitType === "catapult") {
+    log.push(`Catapulte frappe le mur.`);
+    const livingUnits = units.filter((unit) => unit.count > 0);
+    const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
+    return {
+      units: next.units,
+      turnQueue: next.turnQueue,
+      currentUnitId: next.currentUnitId,
+      currentPlayerId: next.units.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
+      round: next.round,
+      log,
+      result: null,
+    };
+  }
+  if (actor.unitType === "first_aid_tent" || actor.unitType === "ammo_cart") {
+    if (actor.unitType === "first_aid_tent") {
+      // Cible explicite si le joueur a passé targetUnitId, sinon allié le plus blessé adjacent
+      const explicit = params.action.targetUnitId
+        ? units.find((u) => u.id === params.action.targetUnitId && u.side === actor.side && u.count > 0 && getHexDistance(actor, u) <= 1)
+        : null;
+      const wounded = explicit ?? units
+        .filter((u) => u.id !== actor.id && u.side === actor.side && u.count > 0 && u.health < u.count * u.maxHealth && getHexDistance(actor, u) <= 1)
+        .sort((a, b) => (b.count * b.maxHealth - b.health) - (a.count * a.maxHealth - a.health))[0];
+      if (wounded) {
+        const heroSkills = getStats(actor.side, params).skills ?? {};
+        const lvl = heroSkills.first_aid === "expert" ? 3 : heroSkills.first_aid === "advanced" ? 2 : heroSkills.first_aid === "basic" ? 1 : 0;
+        const healAmount = 50 + lvl * 50;
+        const maxHealth = wounded.count * wounded.maxHealth;
+        wounded.health = Math.min(maxHealth, wounded.health + healAmount);
+        log.push(`Tente de premiers secours soigne ${getUnitRule(wounded.unitType).label} (+${healAmount} PV).`);
+      } else {
+        log.push(`Tente de premiers secours : aucun allié blessé adjacent.`);
+      }
+    } else {
+      log.push(`Chariot de munitions : actif (tirs alliés illimités).`);
+    }
+    const livingUnits = units.filter((unit) => unit.count > 0);
+    const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
+    return {
+      units: next.units,
+      turnQueue: next.turnQueue,
+      currentUnitId: next.currentUnitId,
+      currentPlayerId: next.units.find((unit) => unit.id === next.currentUnitId)?.ownerPlayerId ?? null,
+      round: next.round,
+      log,
+      result: null,
+    };
+  }
 
   const actorMoraleAppliedBefore = actor.moraleApplied;
   const actorMoraleBonusBefore = actor.moraleBonus;
@@ -239,7 +291,8 @@ export function executeManualCombatAction(params: {
         actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
       });
       if (roll.profile.canStrike) {
-        if (actionType === "SHOOT") actor.shots = Math.max(0, actor.shots - 1);
+        const allyAmmoCart = units.some((u) => u.side === actor.side && u.unitType === "ammo_cart" && u.count > 0);
+        if (actionType === "SHOOT" && !allyAmmoCart) actor.shots = Math.max(0, actor.shots - 1);
         applyRolledDamage(actor, target, roll, log, false, params.immortalHeroId);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
@@ -326,7 +379,7 @@ function applyDamage(attacker: CombatBoardUnit, defender: CombatBoardUnit, stats
   log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb}: ${lost} perte(s) ennemie(s).`);
 }
 
-function getStats(side: CombatSide, params: { attackerStats: { attack: number; defense: number }; defenderStats: { attack: number; defense: number } }) {
+function getStats(side: CombatSide, params: { attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }; defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> } }) {
   return side === "attacker" ? params.attackerStats : params.defenderStats;
 }
 

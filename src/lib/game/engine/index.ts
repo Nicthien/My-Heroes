@@ -882,6 +882,21 @@ export function getPlayerVisionCenters(player: { heroes: { position: Position }[
   ];
 }
 
+export function computeExtraHeroScoutingTiles(
+  map: GameMap,
+  heroes: Array<{ position: Position; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }>,
+  baseRadius: number,
+): Set<string> {
+  const extra = new Set<string>();
+  for (const hero of heroes) {
+    const lvl = hero.skills?.scouting;
+    const bonus = lvl === "expert" ? 3 : lvl === "advanced" ? 2 : lvl === "basic" ? 1 : 0;
+    if (bonus <= 0) continue;
+    for (const key of computeVisibleTiles(map, [hero.position], baseRadius + bonus)) extra.add(key);
+  }
+  return extra;
+}
+
 export function computeExtraTownVisionTiles(
   map: GameMap,
   towns: Array<{ position: Position; townType?: string; faction?: string; buildings?: string[] }>,
@@ -897,6 +912,22 @@ export function computeExtraTownVisionTiles(
     }
   }
   return extra;
+}
+
+export function computeEnemyDarknessTiles(
+  map: GameMap,
+  enemyTowns: Array<{ position: Position; townType?: string; faction?: string; buildings?: string[] }>,
+  radius: number,
+): Set<string> {
+  const dark = new Set<string>();
+  for (const town of enemyTowns) {
+    const buildings = town.buildings ?? [];
+    const faction = town.townType ?? town.faction;
+    if (faction === "necropolis" && buildings.includes("unique_1")) {
+      for (const key of computeVisibleTiles(map, [town.position], radius)) dark.add(key);
+    }
+  }
+  return dark;
 }
 
 export function processAction(state: GameState, action: GameAction): GameState {

@@ -638,10 +638,66 @@ const OBSTACLE_GROUP: SpriteEntry[] = Object.keys(OBSTACLE_DETAILS).map(buildObs
 
 const RESOURCE_GROUP: SpriteEntry[] = (Object.keys(RESOURCE_LABELS) as (keyof Resources)[]).map(buildResourceEntry);
 
+const WAR_MACHINE_GROUP: SpriteEntry[] = [
+  {
+    kind: "generic",
+    path: "/assets/sprites/units/ballista.webp",
+    label: "Baliste",
+    detail: "Machine de guerre",
+    width: 480,
+    height: 480,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/units/first_aid_tent.webp",
+    label: "Tente de premiers secours",
+    detail: "Machine de guerre",
+    width: 480,
+    height: 480,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/units/ammo_cart.webp",
+    label: "Chariot de munitions",
+    detail: "Machine de guerre",
+    width: 480,
+    height: 480,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/units/catapult.webp",
+    label: "Catapulte",
+    detail: "Machine de guerre",
+    width: 480,
+    height: 480,
+  },
+];
+
+const SIEGE_FORTIFICATION_GROUP: SpriteEntry[] = [
+  {
+    kind: "generic",
+    path: "/assets/sprites/siege/tower-castle.webp",
+    label: "Tour",
+    detail: "Fortification de siege",
+    width: 560,
+    height: 560,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/siege/gate-castle.webp",
+    label: "Porte",
+    detail: "Fortification de siege",
+    width: 560,
+    height: 560,
+  },
+];
+
 const WEBP_GROUPS: WebpGroup[] = [
   { label: "Factions", entries: FACTION_TOWNS_GROUP },
   { label: "Bâtiments de ressources", entries: RESOURCE_BUILDING_GROUP },
   { label: "Aventures", entries: ADVENTURE_BUILDING_GROUP },
+  { label: "Machines de guerre", entries: WAR_MACHINE_GROUP },
+  { label: "Fortifications de siege", entries: SIEGE_FORTIFICATION_GROUP },
   { label: "Demeures externes", entries: EXTERNAL_DWELLING_GROUP },
   { label: "Bâtiments de ville - communs", entries: TOWN_BUILDING_COMMON_GROUP },
   { label: "Bâtiments de ville - demeures améliorées", entries: TOWN_BUILDING_UPGRADED_DWELLING_GROUP },
@@ -658,7 +714,7 @@ const UNIT_COUNT = UNIT_ENTRIES.length;
 const SPRITESHEET_COUNT = SHEET_ENTRIES.length;
 const WEBP_COUNT = WEBP_FLAT.length;
 
-type GalleryTab = "units" | "spritesheets" | "webp";
+type GalleryTab = "units" | "spritesheets" | "webp" | "svg";
 
 function findFlatIndex(entries: SpriteEntry[], target: SpriteEntry): number {
   const byPath = entries.findIndex((entry) => entry.path === target.path && entry.label === target.label);
@@ -1416,13 +1472,116 @@ function SpritesheetsTab({ onSelect }: { onSelect: (selection: Selection) => voi
   );
 }
 
+type SvgItem = { id: string; label: string; description: string; render: ReactNode };
+
+function TownTabMarketSvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l1.5-4h15L21 9" />
+      <path d="M4 9v11h16V9" />
+      <path d="M8 13h8" />
+    </svg>
+  );
+}
+function TownTabArtifactsSvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 16.8 6.5 19.5l1-6.2L3 8.9 9 8z" />
+    </svg>
+  );
+}
+function TownTabMercenarySvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
+    </svg>
+  );
+}
+function TownTabGateSvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 22V6l8-3 8 3v16" />
+      <path d="M9 22v-9h6v9" />
+    </svg>
+  );
+}
+function TownTabUniversitySvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 10L12 3 2 10l10 7z" />
+      <path d="M6 12v5c3 2 9 2 12 0v-5" />
+    </svg>
+  );
+}
+function TownTabBallistaSvg() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 21l18-18" />
+      <path d="M14 4h6v6" />
+      <path d="M5 15a4 4 0 1 0 4 4" />
+    </svg>
+  );
+}
+
+const SVG_GROUPS: Array<{ label: string; items: SvgItem[] }> = [
+  {
+    label: "Onglets ville (HUD)",
+    items: [
+      { id: "town-market", label: "Marché", description: "Échange ressources (taux H3 selon nb marchés)", render: <TownTabMarketSvg /> },
+      { id: "town-artifacts", label: "Marchands d'artefacts", description: "Achat artefacts (Tour/Donjon/Conflux)", render: <TownTabArtifactsSvg /> },
+      { id: "town-mercenary", label: "Francs-tireurs", description: "Vendre créatures de garnison (Bastion)", render: <TownTabMercenarySvg /> },
+      { id: "town-gate", label: "Porte du château", description: "Transfert garnison entre villes Hadès", render: <TownTabGateSvg /> },
+      { id: "town-university", label: "Université de magie", description: "Apprendre écoles élémentaires (Conflux)", render: <TownTabUniversitySvg /> },
+      { id: "town-ballista", label: "Cour des balistes", description: "Achat machines de guerre (Bastion)", render: <TownTabBallistaSvg /> },
+    ],
+  },
+];
+
+const SVG_COUNT = SVG_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
+
+function SvgCard({ item }: { item: SvgItem }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset]">
+      <div className="grid h-[120px] w-[120px] place-items-center rounded bg-[linear-gradient(45deg,#1f1f1f_25%,transparent_25%),linear-gradient(-45deg,#1f1f1f_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f1f1f_75%),linear-gradient(-45deg,transparent_75%,#1f1f1f_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0]">
+        <div className="h-20 w-20 text-amber-200">{item.render}</div>
+      </div>
+      <div className="text-center">
+        <div className="text-sm font-bold text-amber-100">{item.label}</div>
+        <div className="text-[10px] text-amber-200/60">{item.description}</div>
+        <code className="mt-1 inline-block text-[10px] text-stone-500">{item.id}</code>
+      </div>
+    </div>
+  );
+}
+
+function SvgTab() {
+  return (
+    <section>
+      {SVG_GROUPS.map((group) => (
+        <CollapsibleGroup key={group.label} count={group.items.length} defaultOpen title={group.label}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {group.items.map((item) => (
+              <SvgCard key={item.id} item={item} />
+            ))}
+          </div>
+        </CollapsibleGroup>
+      ))}
+    </section>
+  );
+}
+
 function WebpTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
   return (
     <section>
       {WEBP_GROUPS.map((group, index) => {
         if (group.entries.length === 0) return null;
+        const defaultOpen =
+          index < 2 ||
+          group.label === "Machines de guerre" ||
+          group.label === "Fortifications de siege";
         return (
-          <CollapsibleGroup key={group.label} count={group.entries.length} defaultOpen={index < 2} title={group.label}>
+          <CollapsibleGroup key={group.label} count={group.entries.length} defaultOpen={defaultOpen} title={group.label}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
               {group.entries.map((entry) => {
                 const flatIndex = findFlatIndex(WEBP_FLAT, entry);
@@ -1466,7 +1625,8 @@ export default function SpritesGalleryPage() {
           <nav aria-label="Types de ressources" className="flex flex-wrap gap-2">
             <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités" onClick={() => setActiveTab("units")} />
             <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
-            <TabButton active={activeTab === "webp"} count={WEBP_COUNT} label="WebP carte" onClick={() => setActiveTab("webp")} />
+            <TabButton active={activeTab === "webp"} count={WEBP_COUNT} label="Images WebP" onClick={() => setActiveTab("webp")} />
+            <TabButton active={activeTab === "svg"} count={SVG_COUNT} label="Icônes SVG" onClick={() => setActiveTab("svg")} />
           </nav>
         </div>
       </header>
@@ -1475,6 +1635,7 @@ export default function SpritesGalleryPage() {
         {activeTab === "units" ? <UnitsTab onSelect={setSelection} /> : null}
         {activeTab === "spritesheets" ? <SpritesheetsTab onSelect={setSelection} /> : null}
         {activeTab === "webp" ? <WebpTab onSelect={setSelection} /> : null}
+        {activeTab === "svg" ? <SvgTab /> : null}
       </main>
       {selection && selectedEntry ? (
         <SpriteLightbox

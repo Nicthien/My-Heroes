@@ -10,6 +10,7 @@ export interface CombatSpellCaster {
   playerId: string;
   side: CombatSide;
   spellPower: number;
+  skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
 }
 
 export interface CombatSpellAction {
@@ -49,6 +50,8 @@ export function executeCombatSpell(params: {
   units: CombatBoardUnit[];
   caster: CombatSpellCaster;
   action: CombatSpellAction;
+  enemySkills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
+  random?: () => number;
 }) {
   const spell = getSpell(params.action.spellId);
   if (!spell || spell.context !== "combat" || !spell.implemented || !spell.damage) {
@@ -59,11 +62,31 @@ export function executeCombatSpell(params: {
   const targets = getSpellTargets(spell, params.action, units, params.caster.side);
   if (!targets.ok) return targets;
 
-  const baseDamage = calculateSpellDamage(spell, params.caster.spellPower, 0);
+  const skillLvl = (id: string) => {
+    const v = params.caster.skills?.[id];
+    return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
+  };
+  const sorceryBonus = skillLvl("sorcery") * 0.05;
+  const schoolKeyMap: Record<string, string> = { fire: "fire_magic", water: "water_magic", earth: "earth_magic", air: "air_magic" };
+  const schoolKey = spell.school ? schoolKeyMap[spell.school] : undefined;
+  const schoolBonus = schoolKey ? skillLvl(schoolKey) * 0.10 : 0;
+  const spellMultiplier = 1 + sorceryBonus + schoolBonus;
+  const baseDamage = Math.floor(calculateSpellDamage(spell, params.caster.spellPower, 0) * spellMultiplier);
   const log: string[] = [];
   const affected: string[] = [];
 
+  const rng = params.random ?? Math.random;
+  const enemyResistanceLvl = (() => {
+    const v = params.enemySkills?.resistance;
+    return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
+  })();
+  const resistanceChance = enemyResistanceLvl === 1 ? 0.05 : enemyResistanceLvl === 2 ? 0.10 : enemyResistanceLvl === 3 ? 0.20 : 0;
+
   targets.units.forEach((target, index) => {
+    if (target.side !== params.caster.side && resistanceChance > 0 && rng() < resistanceChance) {
+      log.push(`${getUnitRule(target.unitType).label} resiste a ${spell.label} (Resistance).`);
+      return;
+    }
     const multiplier = spell.id === "chain_lightning" ? Math.pow(0.5, index) : 1;
     const rawDamage = Math.floor(baseDamage * multiplier);
     const resolution = resolveSpellDamage(spell, target, rawDamage);

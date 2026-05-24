@@ -16,8 +16,15 @@ export interface UnitRule {
   abilities?: string[];
 }
 
-export const UNIT_RULES = Object.fromEntries(
-  CREATURES.map((creature) => [
+const WAR_MACHINE_RULES: Array<[UnitType, UnitRule]> = [
+  [UnitType.BALLISTA, { type: UnitType.BALLISTA, label: "Baliste", health: 250, speed: 0, attack: 10, defense: 10, minDamage: 2, maxDamage: 3, power: 2500, ranged: true, shots: 99, abilities: ["war_machine"] }],
+  [UnitType.FIRST_AID_TENT, { type: UnitType.FIRST_AID_TENT, label: "Tente de premiers secours", health: 75, speed: 0, attack: 0, defense: 5, minDamage: 0, maxDamage: 0, power: 750, abilities: ["war_machine", "heal"] }],
+  [UnitType.AMMO_CART, { type: UnitType.AMMO_CART, label: "Chariot de munitions", health: 100, speed: 0, attack: 0, defense: 5, minDamage: 0, maxDamage: 0, power: 1000, abilities: ["war_machine"] }],
+  [UnitType.CATAPULT, { type: UnitType.CATAPULT, label: "Catapulte", health: 500, speed: 0, attack: 10, defense: 5, minDamage: 30, maxDamage: 50, power: 0, ranged: true, shots: 99, abilities: ["war_machine", "siege"] }],
+];
+
+export const UNIT_RULES = Object.fromEntries([
+  ...CREATURES.map((creature) => [
     creature.type,
     {
       type: creature.type,
@@ -34,7 +41,8 @@ export const UNIT_RULES = Object.fromEntries(
       abilities: creature.abilities.length > 0 ? creature.abilities : undefined,
     },
   ]),
-) as Record<UnitType, UnitRule>;
+  ...WAR_MACHINE_RULES,
+]) as Record<UnitType, UnitRule>;
 
 export function getUnitRule(unitType: UnitType | string): UnitRule {
   return UNIT_RULES[unitType as UnitType] ?? UNIT_RULES[UnitType.PIKEMAN];

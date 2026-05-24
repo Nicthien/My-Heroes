@@ -930,3 +930,4 @@ function UndeadSvg({ palette, g, visual }: { palette: ReturnType<typeof getUnitP
     </g>
   );
 }
+

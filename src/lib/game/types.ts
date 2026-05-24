@@ -26,6 +26,10 @@ export enum BuildingType {
   BARRACKS = "barracks",
   SHIPYARD = "shipyard",
   MAGE_GUILD = "mage_guild",
+  MAGE_GUILD_2 = "mage_guild_2",
+  MAGE_GUILD_3 = "mage_guild_3",
+  MAGE_GUILD_4 = "mage_guild_4",
+  MAGE_GUILD_5 = "mage_guild_5",
   RESOURCE_SILO = "resource_silo",
   DWELLING_1 = "dwelling_1",
   DWELLING_2 = "dwelling_2",
@@ -273,6 +277,10 @@ export enum UnitType {
   RUST_DRAGON = "rust_dragon",
   CRYSTAL_DRAGON = "crystal_dragon",
   AZURE_DRAGON = "azure_dragon",
+  BALLISTA = "ballista",
+  FIRST_AID_TENT = "first_aid_tent",
+  AMMO_CART = "ammo_cart",
+  CATAPULT = "catapult",
 }
 
 export interface Resources {
@@ -334,6 +342,9 @@ export interface Hero {
   hasSpellBook: boolean;
   knownSpellIds?: string[] | null;
   artifacts: HeroArtifactBag;
+  skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
+  warMachines?: { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean };
+  pendingSkillChoices?: Array<{ level: number; options: string[] }>;
   position: Position;
   movement: number;
   maxMovement: number;

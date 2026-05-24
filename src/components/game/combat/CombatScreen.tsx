@@ -454,6 +454,34 @@ export default function CombatScreen() {
             </div>
           </CombatFloatingPanel>
 
+          {Boolean((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase) && myPlayer && (
+            (((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase?.side === "attacker" && activeCombat.attackerPlayerId === myPlayer.id) ||
+             ((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase?.side === "defender" && activeCombat.defenderPlayerId === myPlayer.id))
+          ) && (
+            <CombatFloatingPanel title="Phase de tactique" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
+              <div className="text-xs text-amber-200/80 mb-2">Repositionnez vos unités, puis terminez la phase.</div>
+              <button
+                type="button"
+                onClick={() => submitAction({ type: "TACTICS_END" })}
+                className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-700 to-amber-900 px-3 py-2 font-bold text-amber-50 hover:from-amber-600 hover:to-amber-800"
+              >
+                Terminer la phase de tactique
+              </button>
+            </CombatFloatingPanel>
+          )}
+
+          {combatHero && (combatHero.skills && Object.keys(combatHero.skills).length > 0) && (
+            <CombatFloatingPanel title="Compétences" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(combatHero.skills).map(([id, level]) => (
+                  <span key={id} className="rounded-full border border-amber-600/50 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+                    {id.replace(/_/g, " ")} · {level}
+                  </span>
+                ))}
+              </div>
+            </CombatFloatingPanel>
+          )}
+
           <CombatFloatingPanel title="Actions" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -473,6 +501,16 @@ export default function CombatScreen() {
                 Defendre
               </button>
             </div>
+            {Boolean((activeCombat.boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects?.escapeTunnel) && myPlayer && activeCombat.defenderPlayerId === myPlayer.id && (
+              <button
+                type="button"
+                disabled={!canSubmitAction}
+                onClick={() => submitAction({ type: "FLEE_COMBAT" })}
+                className="mt-2 w-full rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
+              >
+                Fuir par le Tunnel d&apos;évasion
+              </button>
+            )}
           </CombatFloatingPanel>
 
           <CombatFloatingPanel title="Journal" className={`flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex-1 px-3 pb-3 pt-2">

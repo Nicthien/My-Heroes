@@ -13,6 +13,7 @@ import {
 } from "@/lib/game/external-dwellings";
 import { BOAT_DAILY_MOVEMENT, getDailyAdventureMovement } from "@/lib/game/engine";
 import { getEffectiveHeroMovementBonus } from "@/lib/game/artifacts";
+import { getEstatesGold, getLogisticsPercent, getNavigationPercent, type HeroSkills } from "@/lib/game/skills";
 import {
   TAVERN_OFFER_SIZE,
   getRecruitedHeroTemplateIds,
@@ -31,7 +32,11 @@ interface MinimalTurn {
 }
 
 interface MinimalArmy {
+  id?: string;
   unitType: UnitType;
+  count?: number;
+  health?: number;
+  maxHealth?: number;
 }
 
 interface MinimalHero {
@@ -43,6 +48,7 @@ interface MinimalHero {
   y: number;
   armies: MinimalArmy[];
   artifacts?: unknown;
+  skills?: HeroSkills | null;
 }
 
 interface MinimalTown {
@@ -161,6 +167,10 @@ export async function completePlayerTurn(
       goldIncome += Math.floor(player.gold * (totalGoldInterestPercent / 100));
     }
 
+    for (const hero of player.heroes ?? []) {
+      goldIncome += getEstatesGold(hero.skills);
+    }
+
     await updatePlayerResources(supabase, player.id, {
       gold: player.gold + goldIncome,
       wood: player.wood + woodIncome,
@@ -183,11 +193,32 @@ export async function completePlayerTurn(
     }
     for (const hero of player.heroes ?? []) {
       const isOnWater = embarkedHeroIds.has(hero.id);
-      const dailyMovement = (isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies)) + (isOnWater ? lighthouseCount * 500 + townLighthouseBonus : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
+      const base = isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies);
+      const seaTownBonus = isOnWater ? lighthouseCount * 500 + townLighthouseBonus : 0;
+      const artifactBonus = getEffectiveHeroMovementBonus(hero, isOnWater);
+      const logisticsPct = getLogisticsPercent(hero.skills);
+      const navigationPct = isOnWater ? getNavigationPercent(hero.skills) : 0;
+      const skillBonus = Math.floor(base * (logisticsPct + navigationPct) / 100);
+      const dailyMovement = base + seaTownBonus + artifactBonus + skillBonus;
       await supabase.from("heroes").update({
         movement: dailyMovement,
         max_movement: dailyMovement,
       }).eq("id", hero.id);
+
+      // First Aid skill : régénération d'armée chaque jour
+      const firstAidLvl = ((hero.skills?.first_aid ?? null) as string | null);
+      const firstAidPct = firstAidLvl === "expert" ? 15 : firstAidLvl === "advanced" ? 10 : firstAidLvl === "basic" ? 5 : 0;
+      if (firstAidPct > 0) {
+        for (const army of hero.armies ?? []) {
+          const fullHealth = (army.count ?? 0) * (army.maxHealth ?? 0);
+          if (fullHealth <= 0) continue;
+          const currentHealth = army.health ?? 0;
+          if (currentHealth >= fullHealth) continue;
+          const heal = Math.floor(fullHealth * firstAidPct / 100);
+          const nextHealth = Math.min(fullHealth, currentHealth + heal);
+          await supabase.from("armies").update({ health: nextHealth }).eq("id", army.id);
+        }
+      }
     }
 
     if (shouldApplyWeeklyGrowth) {
@@ -208,6 +239,30 @@ export async function completePlayerTurn(
             const rng = makeRng(`${gameId}:${town.id}:week:${nextTurnNumber}`);
             const resource = RARE_RESOURCES[Math.floor(rng() * RARE_RESOURCES.length)];
             bonusRare[resource] = (bonusRare[resource] ?? 0) + rule.weeklyRandomRareResource;
+          }
+        }
+        // Portail d'invocation (Donjon UNIQUE_4) : tire 50% des unités des demeures externes du joueur vers les recrues de cette ville.
+        if (townFaction === Faction.DUNGEON && buildings.includes(BuildingType.UNIQUE_4)) {
+          const externalDwellings = ((mapState.externalDwellings as Record<string, { ownerId?: string | null; unitType?: string; available?: number }> | undefined) ?? {});
+          const pulledByType: Record<string, number> = {};
+          const updates: Record<string, { ownerId?: string | null; unitType?: string; available?: number }> = {};
+          for (const [id, state] of Object.entries(externalDwellings)) {
+            if (state.ownerId !== player.id || !state.unitType || (state.available ?? 0) <= 0) continue;
+            const transferred = Math.floor((state.available ?? 0) * 0.5);
+            if (transferred <= 0) continue;
+            pulledByType[state.unitType] = (pulledByType[state.unitType] ?? 0) + transferred;
+            updates[id] = { ...state, available: (state.available ?? 0) - transferred };
+          }
+          for (const [unitType, amount] of Object.entries(pulledByType)) {
+            recruits[unitType] = (recruits[unitType] ?? 0) + amount;
+          }
+          if (Object.keys(updates).length > 0) {
+            const nextMapState = {
+              ...mapState,
+              externalDwellings: { ...externalDwellings, ...updates },
+            };
+            await supabase.from("games").update({ map_state: nextMapState }).eq("id", gameId);
+            (mapState as Record<string, unknown>).externalDwellings = nextMapState.externalDwellings;
           }
         }
         const townUpdate: Record<string, unknown> = { available_recruits: recruits };

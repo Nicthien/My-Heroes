@@ -13,6 +13,7 @@ import {
   type ArtifactSlot,
 } from "@/lib/game/artifacts";
 import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } from "@/lib/game/spells";
+import { SKILL_DEFINITIONS, type SkillId } from "@/lib/game/skills";
 import type { Hero, Town } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -125,6 +126,47 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           <div className="text-xs uppercase tracking-wider text-amber-200/60">
             Niveau {hero.level} - XP {hero.experience}
           </div>
+          {hero.skills && Object.keys(hero.skills).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {Object.entries(hero.skills).map(([id, level]) => (
+                <span key={id} className="rounded-full border border-amber-600/50 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+                  {id.replace(/_/g, " ")} · {level}
+                </span>
+              ))}
+            </div>
+          )}
+          {(hero.warMachines?.ballista || hero.warMachines?.firstAid || hero.warMachines?.ammoCart) && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {hero.warMachines.ballista && (
+                <span className="inline-flex rounded-full border border-orange-600/50 bg-orange-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-200">Baliste</span>
+              )}
+              {hero.warMachines.firstAid && (
+                <span className="inline-flex rounded-full border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">Tente</span>
+              )}
+              {hero.warMachines.ammoCart && (
+                <span className="inline-flex rounded-full border border-sky-600/50 bg-sky-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">Munitions</span>
+              )}
+            </div>
+          )}
+          {(hero.pendingSkillChoices?.length ?? 0) > 0 && (
+            <PendingSkillChoiceBlock
+              hero={hero}
+              onPicked={async (level, skillId) => {
+                if (!gameState) return;
+                const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ type: "LEARN_SKILL", heroId: hero.id, level, skillId }),
+                });
+                if (!response.ok) {
+                  setCombatMessage((await response.json())?.error ?? "Choix de compétence impossible.");
+                  return;
+                }
+                const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+                if (refreshed) setGameState(refreshed);
+              }}
+            />
+          )}
           {pendingAdventureSpell?.heroId === hero.id && (
             <button
               type="button"
@@ -465,4 +507,40 @@ function normalizeRevealHints(value: unknown) {
     if (!["resource", "building", "artifact", "hero", "town"].includes(kind)) return [];
     return [{ x, y, kind: kind as "resource" | "building" | "artifact" | "hero" | "town", subtype: typeof subtype === "string" ? subtype : undefined }];
   });
+}
+
+function PendingSkillChoiceBlock({
+  hero,
+  onPicked,
+}: {
+  hero: Hero;
+  onPicked: (level: number, skillId: SkillId) => Promise<void>;
+}) {
+  const next = hero.pendingSkillChoices?.[0];
+  if (!next) return null;
+  const labelFor = (id: string) => SKILL_DEFINITIONS.find((s) => s.id === id)?.label ?? id;
+  const descriptionFor = (id: string) => SKILL_DEFINITIONS.find((s) => s.id === id)?.description ?? "";
+  const currentLevel = (id: string) => (hero.skills?.[id] as string | undefined);
+  return (
+    <div className="mt-3 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/60 to-stone-950/80 p-3 shadow-inner shadow-black/40">
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-200">Montée de niveau {next.level} : choisis une compétence</div>
+      <div className="mt-2 space-y-2">
+        {next.options.map((id) => {
+          const known = currentLevel(id);
+          const nextLevel = known === "advanced" ? "expert" : known === "basic" ? "advanced" : "basic";
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => void onPicked(next.level, id as SkillId)}
+              className="w-full rounded-md border border-amber-700/60 bg-stone-950/70 px-3 py-2 text-left text-amber-100 transition hover:border-amber-300 hover:bg-amber-950/60"
+            >
+              <div className="text-sm font-bold">{labelFor(id)} → <span className="text-amber-300">{nextLevel}</span></div>
+              <div className="text-[11px] text-amber-200/70">{descriptionFor(id)}</div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

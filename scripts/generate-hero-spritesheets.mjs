@@ -14,8 +14,10 @@ const SOURCE_ROWS = 8;
 const SOURCE_CROP_PADDING_X = 48;
 const SOURCE_CROP_PADDING_Y = 36;
 
-const FRAME_WIDTH = 80;
-const FRAME_HEIGHT = 80;
+const FRAME_WIDTH = 52;
+const FRAME_HEIGHT = 52;
+const HERO_CONTENT_MAX_WIDTH = 36;
+const HERO_CONTENT_MAX_HEIGHT = 39;
 const WIDTH = FRAME_WIDTH * SOURCE_COLUMNS;
 const HEIGHT = FRAME_HEIGHT * SOURCE_ROWS;
 
@@ -306,9 +308,9 @@ async function normalizeCellToFrame(cell) {
       width: boundsWidth,
       height: boundsHeight,
     })
-    .resize(FRAME_WIDTH, FRAME_HEIGHT, {
+    .resize(HERO_CONTENT_MAX_WIDTH, HERO_CONTENT_MAX_HEIGHT, {
       fit: "inside",
-      kernel: sharp.kernel.nearest,
+      kernel: sharp.kernel.lanczos3,
       withoutEnlargement: false,
     })
     .png()
@@ -318,7 +320,7 @@ async function normalizeCellToFrame(cell) {
   const left = Math.round((FRAME_WIDTH - (metadata.width ?? FRAME_WIDTH)) / 2);
   const top = FRAME_HEIGHT - (metadata.height ?? FRAME_HEIGHT);
 
-  return sharp({
+  const framed = await sharp({
     create: {
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
@@ -328,6 +330,14 @@ async function normalizeCellToFrame(cell) {
   })
     .composite([{ input: cropped, left, top }])
     .png()
+    .toBuffer();
+
+  return simplifyFramePalette(framed);
+}
+
+async function simplifyFramePalette(frame) {
+  return sharp(frame)
+    .png({ palette: true, colours: 48, dither: 0 })
     .toBuffer();
 }
 

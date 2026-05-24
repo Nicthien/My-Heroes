@@ -42,6 +42,7 @@ import {
 } from "@/lib/game/heroes";
 import {
   canMoveAdventureStep,
+  computeExtraHeroScoutingTiles,
   computeExtraTownVisionTiles,
   computeVisibleTiles,
   getAdventurePathCost,
@@ -62,6 +63,7 @@ import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/t
 import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
 import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
+import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -402,7 +404,7 @@ export async function POST(
       }
       const stopPathIndex = firstStop?.stopBefore ? Math.max(0, firstStop.pathIndex - 1) : firstStop?.pathIndex;
       const movePath = typeof stopPathIndex === "number" ? action.path.slice(0, stopPathIndex + 1) : action.path;
-      const usedMovement = getPathMovementCost(mapData, movePath);
+      const usedMovement = getPathMovementCost(mapData, movePath, (hero as unknown as { skills?: Record<string, string> }).skills);
       const lastPos = movePath[movePath.length - 1];
       const { error: heroUpdateError } = await supabase.from("heroes").update({
         x: lastPos.x,
@@ -438,10 +440,16 @@ export async function POST(
         gamePlayer.towns.map((t) => ({ position: { x: t.x, y: t.y }, townType: t.townType, buildings: t.buildings })),
         9
       );
+      const heroScouting = computeExtraHeroScoutingTiles(
+        mapData,
+        movedHeroes.map((h) => ({ position: { x: h.x, y: h.y }, skills: ((h as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills) })),
+        5
+      );
       const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
       for (const key of currentlyVisible) explored.add(key);
       for (const key of newlyVisible) explored.add(key);
       for (const key of watchTowerVision) explored.add(key);
+      for (const key of heroScouting) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
       const tile = mapData.tiles?.[lastPos.y]?.[lastPos.x];
@@ -465,7 +473,25 @@ export async function POST(
           interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos, targetPosition: stopTargetPosition };
         }
       } else if (stopObject?.type === "monster" && stopTargetPosition && !killed.has(stopObject.id)) {
-        interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
+        const diplomacy = await tryDiplomacyOnMonster({
+          supabase,
+          gameId: id,
+          gamePlayerId: gamePlayer.id,
+          heroId: hero.id,
+          monsterId: stopObject.id,
+          neutralArmies: (game.neutralArmies ?? []) as Array<{ id: string; status: string; stacks?: Array<{ unitType: UnitType; count: number }> }>,
+          killedSet: killed,
+          mapState,
+        });
+        if (diplomacy?.outcome === "flee") {
+          await supabase.from("games").update({ map_state: { ...mapState, killed: Array.from(killed) } }).eq("id", id);
+          interaction = { type: "STOP", message: `Diplomatie : l'armée neutre s'enfuit.`, destination: lastPos };
+        } else if (diplomacy?.outcome === "join") {
+          await supabase.from("games").update({ map_state: { ...mapState, killed: Array.from(killed) } }).eq("id", id);
+          interaction = { type: "STOP", message: `Diplomatie : l'armée se joint à vous (${diplomacy.joinedCount} unités).`, destination: lastPos };
+        } else {
+          interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
+        }
       } else if (stopObject?.type === "gate" && stopTargetPosition) {
         const gate = findGate(effectiveGates, stopObject.id, stopTargetPosition);
         if (gate && gate.gamePlayerId !== gamePlayer.id && (gate.garrison?.length ?? 0) > 0) {
@@ -556,10 +582,7 @@ export async function POST(
                 neutral_garrison: [],
               })
               .eq("id", neutralTown.id);
-            await supabase
-              .from("heroes")
-              .update({ experience: hero.experience + 250 })
-              .eq("id", hero.id);
+            await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 250);
             await evaluateGameLifecycle(supabase, id);
             interaction = { type: "CAPTURE_TOWN", destination: lastPos };
           }
@@ -722,7 +745,7 @@ export async function POST(
       if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
 
       await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
-      await supabase.from("heroes").update({ experience: hero.experience + 150 }).eq("id", hero.id);
+      await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 150);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_BUILDING", buildingType: building.buildingType } });
     }
 
@@ -810,7 +833,7 @@ export async function POST(
         .from("towns")
         .update(townOwnershipUpdate)
         .eq("id", town.id);
-      await supabase.from("heroes").update({ experience: hero.experience + 250 }).eq("id", hero.id);
+      await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 250);
       await evaluateGameLifecycle(supabase, id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }
@@ -892,11 +915,22 @@ export async function POST(
       let mapStatePatched = false;
       const mapStateNext: Record<string, unknown> = { ...mapStateForBuild };
 
-      if (building === BuildingType.MAGE_GUILD) {
+      const mageGuildLevelMap: Partial<Record<BuildingType, number>> = {
+        [BuildingType.MAGE_GUILD]: 1,
+        [BuildingType.MAGE_GUILD_2]: 2,
+        [BuildingType.MAGE_GUILD_3]: 3,
+        [BuildingType.MAGE_GUILD_4]: 4,
+        [BuildingType.MAGE_GUILD_5]: 5,
+      };
+      const mgLevel = mageGuildLevelMap[building];
+      if (mgLevel) {
+        const slotsPerLevel: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
         const hasLibrary = townFaction === Faction.TOWER && (town.buildings ?? []).includes(BuildingType.UNIQUE_2);
-        const librarySpells = rollMageGuildSpells(`${id}:${town.id}:mageguild`, 3 + (hasLibrary ? 1 : 0));
+        const count = slotsPerLevel[mgLevel] + (hasLibrary ? 1 : 0);
+        const newSpells = rollMageGuildSpellsForLevel(`${id}:${town.id}:mageguild:${mgLevel}`, count, mgLevel);
         const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
-        mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: librarySpells };
+        const existing = townSpellLibraries[town.id] ?? [];
+        mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: [...existing, ...newSpells.filter((s) => !existing.includes(s))] };
         mapStatePatched = true;
       } else if (townFaction === Faction.TOWER && building === BuildingType.UNIQUE_2) {
         const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
@@ -1074,7 +1108,7 @@ export async function POST(
         await updatePlayerResources(supabase, gamePlayer.id, nextResources);
       }
       if (pendingReward.reward.experience) {
-        await supabase.from("heroes").update({ experience: hero.experience + pendingReward.reward.experience }).eq("id", hero.id);
+        await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + pendingReward.reward.experience);
       }
 
       let nextPosition = hero.armies.length;
@@ -1331,6 +1365,88 @@ export async function POST(
         map_state: { ...mapState, townArtifactOffers: { ...townArtifactOffers, [town.id]: nextOffer } },
       }).eq("id", id);
       return NextResponse.json({ success: true, artifact: artifact.name, price });
+    }
+
+    if (action.type === "LEARN_SKILL") {
+      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      const level = Number(action.level ?? 0);
+      const choice = String(action.skillId ?? "");
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const pendingMap = (mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
+      const pending = pendingMap[hero.id] ?? [];
+      const idx = pending.findIndex((entry) => entry.level === level);
+      if (idx < 0) return NextResponse.json({ error: "Aucun choix de compétence en attente pour ce niveau" }, { status: 400 });
+      const entry = pending[idx];
+      if (!entry.options.includes(choice)) return NextResponse.json({ error: "Choix invalide" }, { status: 400 });
+      const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
+      const currentSkills = ((heroRow?.skills ?? {}) as Record<string, "basic" | "advanced" | "expert">);
+      const current = currentSkills[choice];
+      const next: "basic" | "advanced" | "expert" =
+        current === "expert" ? "expert" : current === "advanced" ? "expert" : current === "basic" ? "advanced" : "basic";
+      const nextSkills = { ...currentSkills, [choice]: next };
+      await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      const remaining = pending.filter((_, i) => i !== idx);
+      const nextPending = { ...pendingMap };
+      if (remaining.length > 0) nextPending[hero.id] = remaining;
+      else delete nextPending[hero.id];
+      await supabase.from("games").update({ map_state: { ...mapState, pendingSkillChoices: nextPending } }).eq("id", id);
+      return NextResponse.json({ success: true, skill: choice, level: next });
+    }
+
+    if (action.type === "BUY_WAR_MACHINE") {
+      const town = gamePlayer.towns.find((t) => t.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (hero.x !== town.x || hero.y !== town.y) {
+        return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
+      }
+      const machine = String(action.machine ?? "ballista") as "ballista" | "firstAid" | "ammoCart";
+      const spec: Record<typeof machine, { cost: number; key: string; building: BuildingType | null; faction: Faction | null }> = {
+        ballista: { cost: 2500, key: "ballista", building: BuildingType.UNIQUE_3, faction: Faction.STRONGHOLD },
+        firstAid: { cost: 750, key: "firstAid", building: null, faction: null },
+        ammoCart: { cost: 1000, key: "ammoCart", building: null, faction: null },
+      };
+      const { cost, key, building, faction } = spec[machine];
+      if (building && faction && (townFaction !== faction || !(town.buildings ?? []).includes(building))) {
+        return NextResponse.json({ error: "Bâtiment requis manquant" }, { status: 400 });
+      }
+      if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
+      const { data: heroRow } = await supabase.from("heroes").select("war_machines").eq("id", hero.id).maybeSingle();
+      const wm = ((heroRow?.war_machines ?? {}) as Record<string, boolean>);
+      if (wm[key]) return NextResponse.json({ error: "Ce héros possède déjà cette machine" }, { status: 400 });
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
+      await supabase.from("heroes").update({ war_machines: { ...wm, [key]: true } }).eq("id", hero.id);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action.type === "LEARN_MAGIC_SCHOOL") {
+      const town = gamePlayer.towns.find((t) => t.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      if (townFaction !== Faction.CONFLUX || !(town.buildings ?? []).includes(BuildingType.UNIQUE_1)) {
+        return NextResponse.json({ error: "Cette ville n'a pas d'Université de magie" }, { status: 400 });
+      }
+      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (hero.x !== town.x || hero.y !== town.y) {
+        return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
+      }
+      const school = String(action.school ?? "");
+      const validSchools = ["fire_magic", "water_magic", "earth_magic", "air_magic"];
+      if (!validSchools.includes(school)) return NextResponse.json({ error: "École inconnue" }, { status: 400 });
+      const cost = 2000;
+      if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
+      const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
+      const currentSkills = ((heroRow?.skills ?? {}) as Record<string, "basic" | "advanced" | "expert">);
+      if (currentSkills[school]) return NextResponse.json({ error: "Ce héros connaît déjà cette école" }, { status: 400 });
+      if (Object.keys(currentSkills).length >= 8) return NextResponse.json({ error: "Maximum 8 compétences" }, { status: 400 });
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
+      const nextSkills = { ...currentSkills, [school]: "basic" as const };
+      await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      return NextResponse.json({ success: true, school });
     }
 
     if (action.type === "CASTLE_GATE_TRANSFER") {
@@ -1985,7 +2101,7 @@ async function handleAdventureBuildingVisit({
   }
 
   if (buildingType === AdventureBuildingType.LEARNING_STONE) {
-    await supabase.from("heroes").update({ experience: hero.experience + LEARNING_STONE_EXPERIENCE }).eq("id", hero.id);
+    await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + LEARNING_STONE_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
     return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Pierre de savoir visitee : +1000 XP." };
   }
@@ -2206,10 +2322,8 @@ async function handleAdventureBuildingVisit({
   if (buildingType === AdventureBuildingType.WARRIOR_TOMB) {
     visitedAdventureBuildings.add(object.id);
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + WARRIOR_TOMB_GOLD_REWARD });
-    await supabase.from("heroes").update({
-      experience: hero.experience + WARRIOR_TOMB_EXPERIENCE_REWARD,
-      morale: Number(hero.morale ?? 0) - 1,
-    }).eq("id", hero.id);
+    await supabase.from("heroes").update({ morale: Number(hero.morale ?? 0) - 1 }).eq("id", hero.id);
+    await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + WARRIOR_TOMB_EXPERIENCE_REWARD);
     await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
     return {
       type: "ADVENTURE_BUILDING",
@@ -2249,7 +2363,7 @@ async function handleAdventureBuildingVisit({
       return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 2000 Or pour recevoir l'enseignement de l'arbre." };
     }
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - TREE_OF_KNOWLEDGE_COST_GOLD });
-    await supabase.from("heroes").update({ experience: hero.experience + TREE_OF_KNOWLEDGE_EXPERIENCE }).eq("id", hero.id);
+    await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + TREE_OF_KNOWLEDGE_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
     return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Arbre de connaissance : +2000 XP contre 2000 Or." };
   }
@@ -2258,10 +2372,8 @@ async function handleAdventureBuildingVisit({
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
     const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
     const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
-    await supabase.from("heroes").update({
-      experience: hero.experience + SEER_HUT_EXPERIENCE,
-      mana: Math.min(maxMana, currentMana + 10),
-    }).eq("id", hero.id);
+    await supabase.from("heroes").update({ mana: Math.min(maxMana, currentMana + 10) }).eq("id", hero.id);
+    await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + SEER_HUT_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
     return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Hutte d'erudit visitee : +1000 XP, +10 mana." };
   }
@@ -2505,6 +2617,21 @@ function rollMageGuildSpells(seed: string, count: number): string[] {
   return picked;
 }
 
+function rollMageGuildSpellsForLevel(seed: string, count: number, spellLevel: number): string[] {
+  const rng = makeRng(seed);
+  const pool = SPELLS.filter((s) => s.implemented && (s.level ?? 1) === spellLevel).map((s) => s.id);
+  // Si pas assez de sorts de ce niveau, fallback vers niveaux adjacents
+  const fallback = SPELLS.filter((s) => s.implemented).map((s) => s.id);
+  const source = pool.length >= count ? pool : [...pool, ...fallback.filter((s) => !pool.includes(s))];
+  const picked: string[] = [];
+  const remaining = [...source];
+  for (let i = 0; i < count && remaining.length > 0; i++) {
+    const idx = Math.floor(rng() * remaining.length);
+    picked.push(remaining.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
 function rollTownArtifactOffer(seed: string, count: number): string[] {
   const rng = makeRng(seed);
   const tokens = ["random_treasure", "random_minor", "random_minor", "random_major"];
@@ -2520,6 +2647,65 @@ function getArtifactMerchantBuilding(faction: Faction): BuildingType | null {
   if (faction === Faction.TOWER) return BuildingType.UNIQUE_4;
   if (faction === Faction.DUNGEON) return BuildingType.UNIQUE_3;
   if (faction === Faction.CONFLUX) return BuildingType.UNIQUE_3;
+  return null;
+}
+
+async function tryDiplomacyOnMonster(params: {
+  supabase: SupabaseAdminClient;
+  gameId: string;
+  gamePlayerId: string;
+  heroId: string;
+  monsterId: string;
+  neutralArmies: Array<{ id: string; status: string; stacks?: Array<{ unitType: UnitType; count: number }> }>;
+  killedSet: Set<string>;
+  mapState: Record<string, unknown>;
+}): Promise<{ outcome: "flee" | "join"; joinedCount?: number } | null> {
+  const { data: heroRow } = await params.supabase.from("heroes").select("skills").eq("id", params.heroId).maybeSingle();
+  const lvl = (() => {
+    const v = (heroRow?.skills as Record<string, string> | null)?.diplomacy;
+    return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
+  })();
+  if (lvl <= 0) return null;
+  const army = params.neutralArmies.find((a) => a.id === params.monsterId);
+  if (!army || army.status !== "ACTIVE") return null;
+
+  const fleeChance = lvl === 1 ? 0.10 : lvl === 2 ? 0.30 : 0.60;
+  const joinChance = lvl === 1 ? 0.05 : lvl === 2 ? 0.15 : 0.40;
+  const roll = Math.random();
+
+  if (roll < joinChance && army.stacks && army.stacks.length > 0) {
+    // Join : ajoute le 1er stack au héros si place dispo
+    const { data: heroArmies } = await params.supabase.from("armies").select("id,position,unit_type,count,health").eq("hero_id", params.heroId);
+    const existingStacks = (heroArmies ?? []) as Array<{ id: string; position: number; unit_type: string; count: number; health: number }>;
+    if (existingStacks.length >= 7) return null;
+    const stack = army.stacks[0];
+    const rule = UNIT_RULES[stack.unitType];
+    if (!rule) return null;
+    const existing = existingStacks.find((e) => e.unit_type === stack.unitType);
+    if (existing) {
+      await params.supabase.from("armies").update({
+        count: existing.count + stack.count,
+        health: existing.health + rule.health * stack.count,
+      }).eq("id", existing.id);
+    } else {
+      await params.supabase.from("armies").insert({
+        hero_id: params.heroId,
+        unit_type: stack.unitType,
+        count: stack.count,
+        health: rule.health * stack.count,
+        max_health: rule.health,
+        position: existingStacks.length,
+      });
+    }
+    await params.supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
+    params.killedSet.add(params.monsterId);
+    return { outcome: "join", joinedCount: stack.count };
+  }
+  if (roll < joinChance + fleeChance) {
+    await params.supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
+    params.killedSet.add(params.monsterId);
+    return { outcome: "flee" };
+  }
   return null;
 }
 
@@ -2597,13 +2783,24 @@ async function applyOwnTownVisitBonuses({
     }
   }
 
-  // Apprentissage de sorts depuis la guilde des mages
+  // Apprentissage de sorts depuis la guilde des mages (limité par Wisdom)
   if (buildings.includes(BuildingType.MAGE_GUILD) && hero.hasSpellBook !== false) {
     const townSpellLibraries = (mapState.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
     const library = townSpellLibraries[town.id] ?? [];
     if (library.length > 0) {
+      const wisdomLvl = (() => {
+        const skills = (hero as unknown as { skills?: Record<string, string> }).skills;
+        const v = skills?.wisdom;
+        return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
+      })();
+      const maxSpellLevel = 2 + wisdomLvl; // 2 / 3 / 4 / 5
       const known = new Set(hero.knownSpellIds ?? []);
-      const newlyLearned = library.filter((s) => !known.has(s));
+      const newlyLearned = library
+        .filter((s) => !known.has(s))
+        .filter((spellId) => {
+          const spell = SPELLS.find((sp) => sp.id === spellId);
+          return spell ? (spell.level ?? 1) <= maxSpellLevel : false;
+        });
       if (newlyLearned.length > 0) {
         heroPatch.has_spell_book = true;
         heroPatch.known_spells = [...(hero.knownSpellIds ?? []), ...newlyLearned];
@@ -3293,8 +3490,26 @@ async function validateAndApplyActionPath({
   return { ok: true };
 }
 
-function getPathMovementCost(map: GameMap, path: Position[]) {
-  return getAdventurePathCost(map, path);
+function getPathMovementCost(map: GameMap, path: Position[], skills?: Record<string, string>) {
+  const base = getAdventurePathCost(map, path);
+  if (!skills) return base;
+  const lvl = skills.pathfinding === "expert" ? 3 : skills.pathfinding === "advanced" ? 2 : skills.pathfinding === "basic" ? 1 : 0;
+  if (lvl <= 0) return base;
+  // Pathfinding réduit le coût sur terrain rude (forêt, sable, neige, marais, montagne)
+  // Approximation : −10% / −20% / −30% sur le total des cases hors herbe/route
+  const reduction = lvl === 1 ? 0.10 : lvl === 2 ? 0.20 : 0.30;
+  let roughPortion = 0;
+  for (let i = 1; i < path.length; i++) {
+    const t = map.tiles?.[path[i].y]?.[path[i].x];
+    if (!t) continue;
+    const terrain = t.terrain;
+    if (terrain === "forest" || terrain === "sand" || terrain === "snow" || terrain === "swamp" || terrain === "mountain") {
+      roughPortion += 1;
+    }
+  }
+  if (path.length <= 1) return base;
+  const roughRatio = roughPortion / (path.length - 1);
+  return Math.max(0, Math.floor(base * (1 - reduction * roughRatio)));
 }
 
 function validateMovePath(

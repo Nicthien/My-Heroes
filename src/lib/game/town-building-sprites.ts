@@ -9,6 +9,10 @@ export const COMMON_TOWN_BUILDING_SPRITES: Partial<Record<BuildingType, string>>
   [BuildingType.TAVERN]: "/assets/sprites/town-buildings/tavern.webp",
   [BuildingType.MARKET]: "/assets/sprites/town-buildings/market.webp",
   [BuildingType.MAGE_GUILD]: "/assets/sprites/town-buildings/mage_guild.webp",
+  [BuildingType.MAGE_GUILD_2]: "/assets/sprites/town-buildings/mage_guild.webp",
+  [BuildingType.MAGE_GUILD_3]: "/assets/sprites/town-buildings/mage_guild.webp",
+  [BuildingType.MAGE_GUILD_4]: "/assets/sprites/town-buildings/mage_guild.webp",
+  [BuildingType.MAGE_GUILD_5]: "/assets/sprites/town-buildings/mage_guild.webp",
   [BuildingType.RESOURCE_SILO]: "/assets/sprites/town-buildings/resource_silo.webp",
 };
 

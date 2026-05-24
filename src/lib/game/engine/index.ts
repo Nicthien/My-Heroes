@@ -882,6 +882,23 @@ export function getPlayerVisionCenters(player: { heroes: { position: Position }[
   ];
 }
 
+export function computeExtraTownVisionTiles(
+  map: GameMap,
+  towns: Array<{ position: Position; townType?: string; faction?: string; buildings?: string[] }>,
+  bonusRadius: number,
+): Set<string> {
+  const extra = new Set<string>();
+  for (const town of towns) {
+    const buildings = town.buildings ?? [];
+    // Tour de guet est UNIQUE_1 de la faction TOWER
+    const faction = town.townType ?? town.faction;
+    if (faction === "tower" && buildings.includes("unique_1")) {
+      for (const key of computeVisibleTiles(map, [town.position], bonusRadius)) extra.add(key);
+    }
+  }
+  return extra;
+}
+
 export function processAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "END_TURN": {

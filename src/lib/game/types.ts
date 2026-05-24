@@ -362,6 +362,8 @@ export interface Town {
   lastBuiltTurn?: number | null;
   isNeutral?: boolean;
   neutralGarrison?: UnitStack[];
+  spellLibrary?: string[];
+  artifactOffer?: string[];
 }
 
 export interface GameCalendar {

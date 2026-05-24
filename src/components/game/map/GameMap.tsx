@@ -15,6 +15,7 @@ import {
   findPath,
   findPathToAdjacent,
   computeReachableTiles,
+  computeExtraTownVisionTiles,
   computeVisibleTiles,
   getAdventurePathCost,
   getAdventureStepCost,
@@ -309,6 +310,9 @@ export default function GameMapComponent() {
         exploredTiles = allTiles;
       } else if (currentPlayer) {
         visibleTiles = computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5);
+        for (const key of computeExtraTownVisionTiles(gameState.map, currentPlayer.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })), 9)) {
+          visibleTiles.add(key);
+        }
         exploredTiles = new Set<string>(currentPlayer.exploredTiles);
         for (const key of visibleTiles) {
           exploredTiles.add(key);

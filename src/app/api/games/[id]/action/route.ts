@@ -5,6 +5,7 @@ import {
   UNIT_RULES,
   canAfford,
   getFactionBuildingRule,
+  getFactionBuildingRules,
   subtractCost,
   tierForUnit,
 } from "@/lib/game/economy";
@@ -41,6 +42,7 @@ import {
 } from "@/lib/game/heroes";
 import {
   canMoveAdventureStep,
+  computeExtraTownVisionTiles,
   computeVisibleTiles,
   getAdventurePathCost,
   getAdventureStepCost,
@@ -58,6 +60,7 @@ import { getUnitRule } from "@/lib/game/units";
 import { SPELLS, getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
+import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -430,9 +433,15 @@ export async function POST(
         }),
         5
       );
+      const watchTowerVision = computeExtraTownVisionTiles(
+        mapData,
+        gamePlayer.towns.map((t) => ({ position: { x: t.x, y: t.y }, townType: t.townType, buildings: t.buildings })),
+        9
+      );
       const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
       for (const key of currentlyVisible) explored.add(key);
       for (const key of newlyVisible) explored.add(key);
+      for (const key of watchTowerVision) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
       const tile = mapData.tiles?.[lastPos.y]?.[lastPos.x];
@@ -555,6 +564,19 @@ export async function POST(
             interaction = { type: "CAPTURE_TOWN", destination: lastPos };
           }
         }
+      }
+
+      const ownTown = gamePlayer.towns.find((t) => t.x === lastPos.x && t.y === lastPos.y);
+      if (ownTown) {
+        await applyOwnTownVisitBonuses({
+          supabase,
+          gameId: id,
+          mapState: (game.mapState as Record<string, unknown>) ?? {},
+          hero: { ...hero, x: lastPos.x, y: lastPos.y, movement: hero.movement - usedMovement },
+          town: ownTown,
+          playerFaction: (gamePlayer.faction ?? Faction.CASTLE) as Faction,
+          turnNumber: Number(game.turnNumber ?? 1),
+        });
       }
 
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
@@ -863,6 +885,39 @@ export async function POST(
       if (townErr) {
         console.error("towns.update failed:", townErr, { townId: town.id, update: townUpdate });
         return NextResponse.json({ error: `Erreur construction: ${townErr.message}` }, { status: 500 });
+      }
+
+      // Side-effects à la construction de certains bâtiments uniques
+      const mapStateForBuild = (game.mapState as Record<string, unknown>) ?? {};
+      let mapStatePatched = false;
+      const mapStateNext: Record<string, unknown> = { ...mapStateForBuild };
+
+      if (building === BuildingType.MAGE_GUILD) {
+        const hasLibrary = townFaction === Faction.TOWER && (town.buildings ?? []).includes(BuildingType.UNIQUE_2);
+        const librarySpells = rollMageGuildSpells(`${id}:${town.id}:mageguild`, 3 + (hasLibrary ? 1 : 0));
+        const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
+        mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: librarySpells };
+        mapStatePatched = true;
+      } else if (townFaction === Faction.TOWER && building === BuildingType.UNIQUE_2) {
+        const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
+        const existing = townSpellLibraries[town.id];
+        if (existing) {
+          const extra = rollMageGuildSpells(`${id}:${town.id}:library`, 1).filter((s) => !existing.includes(s));
+          mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: [...existing, ...extra] };
+          mapStatePatched = true;
+        }
+      }
+
+      const artifactMerchantBuilding = getArtifactMerchantBuilding(townFaction);
+      if (artifactMerchantBuilding && building === artifactMerchantBuilding) {
+        const artifactOffer = rollTownArtifactOffer(`${id}:${town.id}:artmerchant`, 4);
+        const townArtifactOffers = (mapStateForBuild.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
+        mapStateNext.townArtifactOffers = { ...townArtifactOffers, [town.id]: artifactOffer };
+        mapStatePatched = true;
+      }
+
+      if (mapStatePatched) {
+        await supabase.from("games").update({ map_state: mapStateNext }).eq("id", id);
       }
       return NextResponse.json({ success: true });
     }
@@ -1199,6 +1254,109 @@ export async function POST(
 
       await captureGate(supabase, id, gate, gamePlayer.id);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_GATE", gateId: gate.id } });
+    }
+
+    if (action.type === "EXCHANGE_RESOURCES") {
+      const town = gamePlayer.towns.find((t) => t.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const buildings = (town.buildings ?? []) as string[];
+      if (!buildings.includes(BuildingType.MARKET)) {
+        return NextResponse.json({ error: "Construisez d'abord le Marché" }, { status: 400 });
+      }
+      const from = String(action.from ?? "") as keyof Resources;
+      const to = String(action.to ?? "") as keyof Resources;
+      const fromAmount = Math.max(0, Math.floor(Number(action.amount ?? 0)));
+      if (from === to || fromAmount <= 0) return NextResponse.json({ error: "Échange invalide" }, { status: 400 });
+      const resources = playerResources(gamePlayer);
+      if ((resources[from] ?? 0) < fromAmount) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+      const marketplaceCount = getMarketplaceCount({ towns: gamePlayer.towns });
+      const toAmount = computeExchangeAmount(from, to, fromAmount, marketplaceCount);
+      if (toAmount <= 0) return NextResponse.json({ error: "Conversion non supportée" }, { status: 400 });
+      const next = { ...resources, [from]: (resources[from] ?? 0) - fromAmount, [to]: (resources[to] ?? 0) + toAmount };
+      await updatePlayerResources(supabase, gamePlayer.id, next);
+      return NextResponse.json({ success: true, gained: { resource: to, amount: toAmount } });
+    }
+
+    if (action.type === "SELL_CREATURES") {
+      const town = gamePlayer.towns.find((t) => t.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const buildings = (town.buildings ?? []) as string[];
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      if (townFaction !== Faction.STRONGHOLD || !buildings.includes(BuildingType.UNIQUE_2)) {
+        return NextResponse.json({ error: "Cette ville n'a pas de Guilde des francs-tireurs" }, { status: 400 });
+      }
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const rule = UNIT_RULES[unitType];
+      if (!rule) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
+      const garrison = town.garrison ?? [];
+      const source = garrison.find((u) => u.unitType === unitType);
+      if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
+      const unitGoldValue = Math.max(10, Math.floor((rule.cost.gold ?? 100) * 0.5));
+      const totalGold = unitGoldValue * count;
+      const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
+      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + totalGold });
+      return NextResponse.json({ success: true, gold: totalGold });
+    }
+
+    if (action.type === "BUY_TOWN_ARTIFACT") {
+      const town = gamePlayer.towns.find((t) => t.id === action.townId);
+      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      const buildings = (town.buildings ?? []) as string[];
+      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      const artifactBuilding = getArtifactMerchantBuilding(townFaction);
+      if (!artifactBuilding || !buildings.includes(artifactBuilding)) {
+        return NextResponse.json({ error: "Cette ville n'a pas de Marchands d'artefacts" }, { status: 400 });
+      }
+      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (hero.x !== town.x || hero.y !== town.y) {
+        return NextResponse.json({ error: "Le héros doit être au château pour acheter" }, { status: 400 });
+      }
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const townArtifactOffers = (mapState.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
+      const offer = townArtifactOffers[town.id] ?? [];
+      const artifactId = String(action.artifactId ?? "");
+      if (!offer.includes(artifactId)) return NextResponse.json({ error: "Artefact indisponible" }, { status: 400 });
+      const artifact = getArtifact(artifactId);
+      if (!artifact) return NextResponse.json({ error: "Artefact inconnu" }, { status: 400 });
+      const price = artifact.cost ?? 5000;
+      if (gamePlayer.gold < price) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - price });
+      const nextArtifacts = addArtifactToBag(hero.artifacts, artifactId);
+      await supabase.from("heroes").update({ artifacts: nextArtifacts }).eq("id", hero.id);
+      const nextOffer = offer.filter((id) => id !== artifactId);
+      await supabase.from("games").update({
+        map_state: { ...mapState, townArtifactOffers: { ...townArtifactOffers, [town.id]: nextOffer } },
+      }).eq("id", id);
+      return NextResponse.json({ success: true, artifact: artifact.name, price });
+    }
+
+    if (action.type === "CASTLE_GATE_TRANSFER") {
+      const fromTown = gamePlayer.towns.find((t) => t.id === action.fromTownId);
+      const toTown = gamePlayer.towns.find((t) => t.id === action.toTownId);
+      if (!fromTown || !toTown || fromTown.id === toTown.id) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
+      const fromFaction = ((fromTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      const toFaction = ((toTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
+      if (fromFaction !== Faction.INFERNO || toFaction !== Faction.INFERNO) {
+        return NextResponse.json({ error: "La Porte du château ne relie que les villes Hadès" }, { status: 400 });
+      }
+      if (!(fromTown.buildings ?? []).includes(BuildingType.UNIQUE_1) || !(toTown.buildings ?? []).includes(BuildingType.UNIQUE_1)) {
+        return NextResponse.json({ error: "Les deux villes doivent posséder la Porte du château" }, { status: 400 });
+      }
+      const unitType = action.unitType as UnitType;
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      const rule = UNIT_RULES[unitType];
+      if (!rule) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
+      const fromGarrison = fromTown.garrison ?? [];
+      const source = fromGarrison.find((u) => u.unitType === unitType);
+      if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
+      const nextFromGarrison = removeUnitsFromStackList(fromGarrison, unitType, count, rule.health);
+      const nextToGarrison = addUnitsToStackList(toTown.garrison ?? [], unitType, count, rule.health);
+      await supabase.from("towns").update({ garrison: nextFromGarrison }).eq("id", fromTown.id);
+      await supabase.from("towns").update({ garrison: nextToGarrison }).eq("id", toTown.id);
+      return NextResponse.json({ success: true });
     }
 
     if (action.type === "END_TURN") {
@@ -2333,6 +2491,147 @@ function getMysticalGardenWeekKey(turnNumber: number) {
 
 function getAdventureWeekKey(turnNumber: number) {
   return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
+}
+
+function rollMageGuildSpells(seed: string, count: number): string[] {
+  const rng = makeRng(seed);
+  const pool = SPELLS.filter((s) => s.context === "combat" && s.implemented).map((s) => s.id);
+  const picked: string[] = [];
+  const remaining = [...pool];
+  for (let i = 0; i < count && remaining.length > 0; i++) {
+    const idx = Math.floor(rng() * remaining.length);
+    picked.push(remaining.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
+function rollTownArtifactOffer(seed: string, count: number): string[] {
+  const rng = makeRng(seed);
+  const tokens = ["random_treasure", "random_minor", "random_minor", "random_major"];
+  const picked: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const token = tokens[i % tokens.length];
+    picked.push(pickArtifactId(token, `${seed}:${i}:${rng()}`));
+  }
+  return picked;
+}
+
+function getArtifactMerchantBuilding(faction: Faction): BuildingType | null {
+  if (faction === Faction.TOWER) return BuildingType.UNIQUE_4;
+  if (faction === Faction.DUNGEON) return BuildingType.UNIQUE_3;
+  if (faction === Faction.CONFLUX) return BuildingType.UNIQUE_3;
+  return null;
+}
+
+async function applyOwnTownVisitBonuses({
+  supabase,
+  gameId,
+  mapState,
+  hero,
+  town,
+  playerFaction,
+  turnNumber,
+}: {
+  supabase: SupabaseAdminClient;
+  gameId: string;
+  mapState: Record<string, unknown>;
+  hero: MinimalHero;
+  town: MinimalTown;
+  playerFaction: Faction;
+  turnNumber: number;
+}) {
+  const buildings = (town.buildings ?? []) as string[];
+  if (buildings.length === 0) return;
+  const townFaction = ((town.townType ?? playerFaction) as Faction);
+  const rules = getFactionBuildingRules(townFaction);
+
+  const heroTownVisits = (mapState.heroTownVisits as Record<string, string[]> | undefined) ?? {};
+  const weeklyHeroTownVisits = (mapState.weeklyHeroTownVisits as Record<string, string> | undefined) ?? {};
+  const visitedKey = (b: string) => `${town.id}:${b}`;
+  const heroVisited = new Set<string>(heroTownVisits[hero.id] ?? []);
+  const weekKey = getAdventureWeekKey(turnNumber);
+
+  const heroPatch: Record<string, unknown> = {};
+  let attack = Number(hero.attack ?? 0);
+  let defense = Number(hero.defense ?? 0);
+  let spellPower = Number(hero.spellPower ?? 0);
+  let knowledge = Number(hero.knowledge ?? 0);
+  let luck = Number(hero.luck ?? 0);
+  let movement = Number(hero.movement ?? 0);
+  let mana = hero.mana ?? null;
+  let manaTouched = false;
+  let mutated = false;
+  const nextHeroVisited = new Set(heroVisited);
+  const nextWeeklyVisits = { ...weeklyHeroTownVisits };
+
+  for (const building of buildings) {
+    const rule = rules.find((r) => r.type === building);
+    if (!rule) continue;
+
+    if (rule.permanentVisitBonus && !heroVisited.has(visitedKey(building))) {
+      const bonus = rule.permanentVisitBonus;
+      if (bonus.attack) attack += bonus.attack;
+      if (bonus.defense) defense += bonus.defense;
+      if (bonus.spellPower) spellPower += bonus.spellPower;
+      if (bonus.knowledge) knowledge += bonus.knowledge;
+      nextHeroVisited.add(visitedKey(building));
+      mutated = true;
+    }
+
+    if (rule.weeklyVisitBonus) {
+      const visitKey = `${hero.id}:${town.id}:${building}`;
+      if (nextWeeklyVisits[visitKey] !== weekKey) {
+        const bonus = rule.weeklyVisitBonus;
+        if (bonus.movement) movement += bonus.movement;
+        if (bonus.luck) luck += bonus.luck;
+        if (bonus.fullMana || bonus.doubleMana) {
+          const effective = getEffectiveHeroStatsFromValues(hero);
+          const maxMana = getHeroMana({ mana: null, knowledge: effective.knowledge });
+          const currentMana = getHeroMana({ mana: hero.mana ?? null, knowledge: effective.knowledge });
+          mana = bonus.doubleMana ? Math.min(maxMana * 2, currentMana * 2) : maxMana;
+          manaTouched = true;
+        }
+        nextWeeklyVisits[visitKey] = weekKey;
+        mutated = true;
+      }
+    }
+  }
+
+  // Apprentissage de sorts depuis la guilde des mages
+  if (buildings.includes(BuildingType.MAGE_GUILD) && hero.hasSpellBook !== false) {
+    const townSpellLibraries = (mapState.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
+    const library = townSpellLibraries[town.id] ?? [];
+    if (library.length > 0) {
+      const known = new Set(hero.knownSpellIds ?? []);
+      const newlyLearned = library.filter((s) => !known.has(s));
+      if (newlyLearned.length > 0) {
+        heroPatch.has_spell_book = true;
+        heroPatch.known_spells = [...(hero.knownSpellIds ?? []), ...newlyLearned];
+        mutated = true;
+      }
+    }
+  }
+
+  if (!mutated) return;
+
+  if (attack !== Number(hero.attack ?? 0)) heroPatch.attack = attack;
+  if (defense !== Number(hero.defense ?? 0)) heroPatch.defense = defense;
+  if (spellPower !== Number(hero.spellPower ?? 0)) heroPatch.spell_power = spellPower;
+  if (knowledge !== Number(hero.knowledge ?? 0)) heroPatch.knowledge = knowledge;
+  if (luck !== Number(hero.luck ?? 0)) heroPatch.luck = luck;
+  if (movement !== Number(hero.movement ?? 0)) heroPatch.movement = movement;
+  if (manaTouched) heroPatch.mana = mana;
+
+  if (Object.keys(heroPatch).length > 0) {
+    await supabase.from("heroes").update(heroPatch).eq("id", hero.id);
+  }
+  await supabase.from("games").update({
+    map_state: {
+      ...mapState,
+      heroTownVisits: { ...heroTownVisits, [hero.id]: Array.from(nextHeroVisited) },
+      weeklyHeroTownVisits: nextWeeklyVisits,
+    },
+  }).eq("id", gameId);
 }
 
 function findStargateDestination(map: GameMap, targetId: string | undefined): Position | null {

@@ -51,6 +51,17 @@ export const ADVENTURE_BUILDING_OFFSET_Y = 8;
 
 export const DEFAULT_SPRITE_ORIGIN: SpriteOrigin = { originX: MAP_OBJECT_ORIGIN_X, originY: MAP_OBJECT_ORIGIN_Y };
 export const HERO_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.988 };
+export const HERO_SPRITE_ORIGINS: Record<string, SpriteOrigin> = {
+  castle: { originX: 0.5, originY: 0.962 },
+  rampart: { originX: 0.5, originY: 0.93 },
+  tower: { originX: 0.5, originY: 0.966 },
+  inferno: { originX: 0.5, originY: 0.98 },
+  necropolis: { originX: 0.5, originY: 0.962 },
+  dungeon: { originX: 0.5, originY: 0.964 },
+  stronghold: { originX: 0.5, originY: 0.91 },
+  fortress: { originX: 0.5, originY: 0.948 },
+  conflux: { originX: 0.5, originY: 0.958 },
+};
 export const BOAT_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.925 };
 export const MONSTER_SPRITE_ORIGIN: SpriteOrigin = { originX: 0.507, originY: 0.865 };
 export const RESOURCE_BUILDING_ORIGIN: SpriteOrigin = { originX: 0.5, originY: 0.988 };
@@ -187,7 +198,9 @@ export function getOriginForMapTileObject(object: MapObject): SpriteOrigin {
 
 export function getOriginForObject(object: MapObjectData): SpriteOrigin {
   if (object.type === "boat") return BOAT_SPRITE_ORIGIN;
-  if (object.type === "hero") return object.onWater ? BOAT_SPRITE_ORIGIN : HERO_SPRITE_ORIGIN;
+  if (object.type === "hero") return object.onWater
+    ? BOAT_SPRITE_ORIGIN
+    : HERO_SPRITE_ORIGINS[object.faction] ?? HERO_SPRITE_ORIGIN;
   if (object.type === "town") return TOWN_ORIGINS[object.faction] ?? DEFAULT_SPRITE_ORIGIN;
   if (object.type === "building") return RESOURCE_BUILDING_ORIGIN;
   if (object.type === "gate") return { originX: GATE_ORIGIN_X, originY: GATE_ORIGIN_Y };

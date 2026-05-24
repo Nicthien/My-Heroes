@@ -175,6 +175,9 @@ function getCompletedTurnPlayerIds(data: Record<string, unknown>, turnNumber: nu
 
 function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
   const completedTurnPlayerIds = getCompletedTurnPlayerIds(data, turnNumber);
+  const mapState = (data.mapState as Record<string, unknown> | undefined) ?? {};
+  const townSpellLibraries = (mapState.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
+  const townArtifactOffers = (mapState.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
 
   return ((data.players as ApiPlayer[] | undefined) ?? []).map((player): Player => ({
     id: player.id,
@@ -244,6 +247,8 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
       availableRecruits: (town.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
       tavernOffer: town.tavernOffer ?? [],
       lastBuiltTurn: town.lastBuiltTurn ?? null,
+      spellLibrary: townSpellLibraries[town.id] ?? [],
+      artifactOffer: townArtifactOffers[town.id] ?? [],
     })),
     resourceBuildings: (player.resourceBuildings ?? []).map((building): ResourceBuilding => ({
       id: building.id,

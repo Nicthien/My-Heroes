@@ -12,6 +12,10 @@ import { TownBuildTab } from "./TownBuildTab";
 import { TownRecruitTab } from "./TownRecruitTab";
 import { TownTavernTab } from "./TownTavernTab";
 import { TownGarrisonTab } from "./TownGarrisonTab";
+import { TownMarketTab } from "./TownMarketTab";
+import { TownArtifactsTab } from "./TownArtifactsTab";
+import { TownMercenaryTab } from "./TownMercenaryTab";
+import { TownCastleGateTab } from "./TownCastleGateTab";
 import {
   TownTabButton,
   TownTabIcon,
@@ -284,6 +288,66 @@ function HUDContent() {
     if (refreshedState) setGameState(refreshedState);
   };
 
+  const handleExchange = async (townId: string, from: keyof import("@/lib/game/types").Resources, to: keyof import("@/lib/game/types").Resources, amount: number) => {
+    if (!myPlayer || !canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "EXCHANGE_RESOURCES", townId, from, to, amount }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Échange impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
+  const handleBuyArtifact = async (townId: string, heroId: string, artifactId: string) => {
+    if (!canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "BUY_TOWN_ARTIFACT", townId, heroId, artifactId }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Achat d'artefact impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
+  const handleSellCreatures = async (townId: string, unitType: UnitType, count: number) => {
+    if (!canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "SELL_CREATURES", townId, unitType, count }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Vente impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
+  const handleCastleGateTransfer = async (fromTownId: string, toTownId: string, unitType: UnitType, count: number) => {
+    if (!canAct || !isMyTown) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "CASTLE_GATE_TRANSFER", fromTownId, toTownId, unitType, count }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      return;
+    }
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+  };
+
   const handleRecruit = async (unitType: UnitType, count = 1) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
@@ -506,6 +570,25 @@ function HUDContent() {
         return hasDwelling && available > 0 && Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost));
       }).length
     : 0;
+  const selectedTownFactionForTabs = selectedTown
+    ? ((selectedTown.townType ?? selectedTown.faction ?? Faction.CASTLE) as Faction)
+    : Faction.CASTLE;
+  const artifactMerchantBuildingForFaction =
+    selectedTownFactionForTabs === Faction.TOWER
+      ? BuildingType.UNIQUE_4
+      : selectedTownFactionForTabs === Faction.DUNGEON || selectedTownFactionForTabs === Faction.CONFLUX
+      ? BuildingType.UNIQUE_3
+      : null;
+  const hasArtifactMerchant = Boolean(
+    artifactMerchantBuildingForFaction && selectedTown?.buildings.includes(artifactMerchantBuildingForFaction)
+  );
+  const hasMercenaryGuild =
+    selectedTownFactionForTabs === Faction.STRONGHOLD &&
+    Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_2));
+  const hasCastleGate =
+    selectedTownFactionForTabs === Faction.INFERNO &&
+    Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_1));
+
   const townTabs: { id: TownTab; label: string; badge?: number }[] = [
     { id: "summary", label: "Résumé" },
     { id: "build", label: "Construire", badge: buildableBuildings },
@@ -513,6 +596,18 @@ function HUDContent() {
     { id: "garrison", label: "Garnison", badge: selectedTown?.garrison.length },
     ...(selectedTown?.buildings.includes(BuildingType.TAVERN)
       ? [{ id: "tavern" as const, label: "Taverne", badge: selectedTown.tavernOffer?.length ?? 0 }]
+      : []),
+    ...(selectedTown?.buildings.includes(BuildingType.MARKET)
+      ? [{ id: "market" as const, label: "Marché" }]
+      : []),
+    ...(hasArtifactMerchant
+      ? [{ id: "artifacts" as const, label: "Artefacts", badge: selectedTown?.artifactOffer?.length ?? 0 }]
+      : []),
+    ...(hasMercenaryGuild
+      ? [{ id: "mercenary" as const, label: "Francs-tireurs" }]
+      : []),
+    ...(hasCastleGate
+      ? [{ id: "gate" as const, label: "Porte du château" }]
       : []),
   ];
   const activeTownTab = townTabState.townId === selectedTownId ? townTabState.tab : "summary";
@@ -769,6 +864,50 @@ function HUDContent() {
                 isPending={isPending}
                 isMyTown={isMyTown}
                 onRecruitHero={handleRecruitHero}
+              />
+            )}
+
+            {displayedTownTab === "market" && (
+              <TownMarketTab
+                selectedTown={selectedTown}
+                myPlayer={myPlayer}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                onExchange={handleExchange}
+              />
+            )}
+
+            {displayedTownTab === "artifacts" && (
+              <TownArtifactsTab
+                selectedTown={selectedTown}
+                myPlayer={myPlayer}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                heroesAtSelectedTown={heroesAtSelectedTown}
+                onBuyArtifact={handleBuyArtifact}
+              />
+            )}
+
+            {displayedTownTab === "mercenary" && (
+              <TownMercenaryTab
+                selectedTown={selectedTown}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                onSellCreatures={handleSellCreatures}
+              />
+            )}
+
+            {displayedTownTab === "gate" && (
+              <TownCastleGateTab
+                selectedTown={selectedTown}
+                myPlayer={myPlayer}
+                canAct={canAct}
+                isPending={isPending}
+                isMyTown={isMyTown}
+                onTransferGate={handleCastleGateTransfer}
               />
             )}
           </div>

@@ -20,6 +20,13 @@ export interface TownBuildingRule {
   replacesUnit?: UnitType;
   dailyProduction?: ResourceCost;
   growthBonus?: Partial<Record<UnitType, number>>;
+  grail?: boolean;
+  goldInterestPercent?: number;
+  weeklyRandomRareResource?: number;
+  permanentVisitBonus?: { attack?: number; defense?: number; spellPower?: number; knowledge?: number };
+  weeklyVisitBonus?: { movement?: number; luck?: number; fullMana?: boolean; doubleMana?: boolean };
+  townVisionBonus?: number;
+  boatMovementBonus?: number;
 }
 
 interface DwellingName {
@@ -34,6 +41,13 @@ interface UniqueBuildingTemplate {
   requires?: BuildingType[];
   dailyProduction?: ResourceCost;
   growthBonus?: Partial<Record<UnitType, number>>;
+  grail?: boolean;
+  goldInterestPercent?: number;
+  weeklyRandomRareResource?: number;
+  permanentVisitBonus?: { attack?: number; defense?: number; spellPower?: number; knowledge?: number };
+  weeklyVisitBonus?: { movement?: number; luck?: number; fullMana?: boolean; doubleMana?: boolean };
+  townVisionBonus?: number;
+  boatMovementBonus?: number;
 }
 
 export const BASE_DWELLING_TYPES: BuildingType[] = [
@@ -193,70 +207,70 @@ const UNIQUE_BUILDINGS: Record<Faction, UniqueBuildingTemplate[]> = {
   [Faction.CASTLE]: [
     { label: "Confrérie de l'épée", description: "+2 au moral des défenseurs de la ville.", cost: { gold: 500, wood: 5 } },
     { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
-    { label: "Phare", description: "Améliore les déplacements alliés en mer.", cost: { gold: 2000, wood: 10 } },
-    { label: "Écuries", description: "Améliore le déplacement du héros en visite pour la semaine.", cost: { gold: 2000, wood: 10 } },
+    { label: "Phare", description: "+500 mouvement naval par phare possédé.", cost: { gold: 2000, wood: 10 }, boatMovementBonus: 500 },
+    { label: "Écuries", description: "+400 mouvement au héros en visite pour la semaine.", cost: { gold: 2000, wood: 10 }, weeklyVisitBonus: { movement: 400 } },
     { label: "Bastion des griffons", description: "+3 à la croissance hebdomadaire des griffons.", cost: { gold: 1000 }, growthBonus: { [UnitType.GRIFFIN]: 3, [UnitType.ROYAL_GRIFFIN]: 3 } },
-    { label: "Colosse", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Colosse", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.RAMPART]: [
-    { label: "Étang mystique", description: "Produit une petite ressource rare aléatoire chaque semaine.", cost: { gold: 2000, mercury: 2, crystals: 2, gems: 2, sulfur: 2 } },
-    { label: "Fontaine de fortune", description: "Améliore la chance du héros en visite.", cost: { gold: 1500 } },
-    { label: "Trésorerie", description: "Ajoute des intérêts à la réserve d'or du royaume.", cost: { gold: 5000, wood: 10, ore: 10 } },
+    { label: "Étang mystique", description: "Produit une petite ressource rare aléatoire chaque semaine.", cost: { gold: 2000, mercury: 2, crystals: 2, gems: 2, sulfur: 2 }, weeklyRandomRareResource: 1 },
+    { label: "Fontaine de fortune", description: "+1 Chance au héros en visite pour la semaine.", cost: { gold: 1500 }, weeklyVisitBonus: { luck: 1 } },
+    { label: "Trésorerie", description: "Ajoute des intérêts à la réserve d'or du royaume.", cost: { gold: 5000, wood: 10, ore: 10 }, goldInterestPercent: 10 },
     { label: "Guilde des mineurs", description: "+1 à la croissance hebdomadaire des nains.", cost: { gold: 1000 }, growthBonus: { [UnitType.DWARF]: 1, [UnitType.BATTLE_DWARF]: 1 } },
     { label: "Jeunes dendroïdes", description: "+2 à la croissance hebdomadaire des dendroïdes.", cost: { gold: 2000 }, growthBonus: { [UnitType.DENDROID]: 2, [UnitType.DENDROID_SOLDIER]: 2 } },
-    { label: "Gardien des esprits", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Gardien des esprits", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.TOWER]: [
-    { label: "Tour de guet", description: "Augmente la portée de reconnaissance de la ville.", cost: { gold: 1000, wood: 5 } },
+    { label: "Tour de guet", description: "+4 portée de reconnaissance de la ville.", cost: { gold: 1000, wood: 5 }, townVisionBonus: 4 },
     { label: "Bibliothèque", description: "Ajoute des sorts à la guilde des mages.", cost: { gold: 1500, wood: 5, ore: 5 } },
-    { label: "Mur de connaissance", description: "+1 en connaissance au héros en visite.", cost: { gold: 1000 } },
+    { label: "Mur de connaissance", description: "+1 Connaissance définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { knowledge: 1 } },
     { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
     { label: "Ailes du sculpteur", description: "+4 à la croissance hebdomadaire des gargouilles.", cost: { gold: 1000 }, growthBonus: { [UnitType.GARGOYLE]: 4, [UnitType.OBSIDIAN_GARGOYLE]: 4 } },
-    { label: "Vaisseau céleste", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Vaisseau céleste", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.INFERNO]: [
     { label: "Porte du château", description: "Relie les villes Hadès pour transférer des créatures.", cost: { gold: 10000, wood: 5, ore: 5 } },
-    { label: "Ordre du feu", description: "+1 en puissance magique au héros en visite.", cost: { gold: 1000 } },
+    { label: "Ordre du feu", description: "+1 Puissance magique définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { spellPower: 1 } },
     { label: "Nuages de soufre", description: "Ajoute des dégâts de feu aux défenses de la ville.", cost: { gold: 2000, sulfur: 5 } },
     { label: "Bassin de naissance", description: "+8 à la croissance hebdomadaire des diablotins.", cost: { gold: 1000 }, growthBonus: { [UnitType.IMP]: 8, [UnitType.FAMILIAR]: 8 } },
     { label: "Cages", description: "+2 à la croissance hebdomadaire des démons.", cost: { gold: 1000 }, growthBonus: { [UnitType.DEMON]: 2, [UnitType.HORNED_DEMON]: 2 } },
-    { label: "Divinité du feu", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Divinité du feu", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.NECROPOLIS]: [
     { label: "Voile des ténèbres", description: "Réduit la reconnaissance ennemie autour de la ville.", cost: { gold: 1000, wood: 5 } },
     { label: "Amplificateur de nécromancie", description: "Améliore la nécromancie des héros alliés.", cost: { gold: 1000, ore: 5 } },
     { label: "Transformateur de squelettes", description: "Transforme les créatures vivantes en squelettes.", cost: { gold: 1000, mercury: 5 } },
     { label: "Tombes ouvertes", description: "+6 à la croissance hebdomadaire des squelettes.", cost: { gold: 1000 }, growthBonus: { [UnitType.SKELETON]: 6, [UnitType.SKELETON_WARRIOR]: 6 } },
-    { label: "Prison des âmes", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Prison des âmes", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.DUNGEON]: [
-    { label: "Vortex de mana", description: "Double les points de magie du prochain héros en visite.", cost: { gold: 1000, ore: 5 } },
-    { label: "Académie des érudits de guerre", description: "+1 en attaque et +1 en défense au héros en visite.", cost: { gold: 1000 } },
+    { label: "Vortex de mana", description: "Double les points de magie du héros en visite (1×/semaine).", cost: { gold: 1000, ore: 5 }, weeklyVisitBonus: { doubleMana: true } },
+    { label: "Académie des érudits de guerre", description: "+1 Attaque et +1 Défense définitifs au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { attack: 1, defense: 1 } },
     { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
     { label: "Portail d'invocation", description: "Invoque des créatures supplémentaires depuis les demeures extérieures.", cost: { gold: 2500, wood: 5, ore: 5 } },
     { label: "Anneaux de champignons", description: "+7 à la croissance hebdomadaire des troglodytes.", cost: { gold: 1000 }, growthBonus: { [UnitType.TROGLODYTE]: 7, [UnitType.INFERNAL_TROGLODYTE]: 7 } },
-    { label: "Gardien de la terre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Gardien de la terre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.STRONGHOLD]: [
     { label: "Tunnel d'évasion", description: "Permet aux défenseurs de fuir les combats de ville.", cost: { gold: 500, ore: 5 } },
     { label: "Guilde des francs-tireurs", description: "Permet de vendre des créatures contre des ressources.", cost: { gold: 1000, wood: 5 } },
     { label: "Cour des balistes", description: "Permet d'acheter une baliste.", cost: { gold: 1000, wood: 5 } },
-    { label: "Hall du Valhalla", description: "+1 en attaque au héros en visite.", cost: { gold: 1000 } },
+    { label: "Hall du Valhalla", description: "+1 Attaque définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { attack: 1 } },
     { label: "Réfectoire", description: "+8 à la croissance hebdomadaire des gobelins.", cost: { gold: 1000 }, growthBonus: { [UnitType.GOBLIN]: 8, [UnitType.HOBGOBLIN]: 8 } },
-    { label: "Monument des seigneurs de guerre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Monument des seigneurs de guerre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.FORTRESS]: [
-    { label: "Cage des seigneurs de guerre", description: "+1 en défense au héros en visite.", cost: { gold: 1000, wood: 5 } },
+    { label: "Cage des seigneurs de guerre", description: "+1 Défense définitif au héros en visite (une fois).", cost: { gold: 1000, wood: 5 }, permanentVisitBonus: { defense: 1 } },
     { label: "Quartiers du capitaine", description: "+6 à la croissance hebdomadaire des gnolls.", cost: { gold: 1000 }, growthBonus: { [UnitType.GNOLL]: 6, [UnitType.GNOLL_MARAUDER]: 6 } },
     { label: "Glyphes de peur", description: "Affaiblit les assaillants pendant un siège.", cost: { gold: 1000, mercury: 5 } },
-    { label: "Obélisque de sang", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 } },
+    { label: "Obélisque de sang", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.CONFLUX]: [
     { label: "Université de magie", description: "Permet au héros en visite d'apprendre les écoles de magie élémentaire.", cost: { gold: 5000, wood: 10 } },
     { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
     { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
     { label: "Jardin de vie", description: "+10 à la croissance hebdomadaire des pixies.", cost: { gold: 1000 }, growthBonus: { [UnitType.PIXIE]: 10, [UnitType.SPRITE]: 10 } },
-    { label: "Aurore boréale", description: "Bâtiment du Graal : +5000 or/jour, +50% de croissance et tous les sorts.", cost: { gold: 10000 } },
+    { label: "Aurore boréale", description: "Bâtiment du Graal : +5000 or/jour, +50% de croissance et tous les sorts.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
 };
 
@@ -362,6 +376,13 @@ export function getTownBuildingRules(
     requires: template.requires,
     dailyProduction: template.dailyProduction,
     growthBonus: template.growthBonus,
+    grail: template.grail,
+    goldInterestPercent: template.goldInterestPercent,
+    weeklyRandomRareResource: template.weeklyRandomRareResource,
+    permanentVisitBonus: template.permanentVisitBonus,
+    weeklyVisitBonus: template.weeklyVisitBonus,
+    townVisionBonus: template.townVisionBonus,
+    boatMovementBonus: template.boatMovementBonus,
   }));
 
   return [...common, ...baseDwellingRules, ...upgradedDwellingRules, ...uniqueRules];

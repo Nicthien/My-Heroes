@@ -2249,6 +2249,7 @@ class PhaserMapScene extends Phaser.Scene {
       baseScaleX: sprite.scaleX,
       baseScaleY: sprite.scaleY,
       phase: hashTile(object.x, object.y) * Math.PI * 2,
+      faction: object.faction,
       mode: object.type === "boat" || object.onWater ? "boat" : object.inTown ? "idle" : "mounted",
     } satisfies HeroSpriteAnimation;
     const banner = this.addHeroStandard(
@@ -2282,6 +2283,7 @@ class PhaserMapScene extends Phaser.Scene {
     if (!metrics) return;
 
     renderedHero.object = object;
+    renderedHero.animation.faction = object.faction;
     renderedHero.animation.mode = object.type === "boat" || object.onWater ? "boat" : object.inTown ? "idle" : "mounted";
 
     const origin = getOriginForObject(object);

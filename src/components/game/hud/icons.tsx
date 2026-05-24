@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-export type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern";
+export type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern" | "market" | "artifacts" | "mercenary" | "gate";
 
 export function TownTabButton({
   active,
@@ -88,6 +88,34 @@ export function TownTabIcon({ tab }: { tab: TownTab }) {
           <path d="M8 22h8" />
           <path d="M12 11v11" />
           <path d="M7 3h10l-1 8a4 4 0 0 1-8 0L7 3Z" />
+        </svg>
+      );
+    case "market":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9l1.5-4h15L21 9" />
+          <path d="M4 9v11h16V9" />
+          <path d="M8 13h8" />
+        </svg>
+      );
+    case "artifacts":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 16.8 6.5 19.5l1-6.2L3 8.9 9 8z" />
+        </svg>
+      );
+    case "mercenary":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
+        </svg>
+      );
+    case "gate":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 22V6l8-3 8 3v16" />
+          <path d="M9 22v-9h6v9" />
         </svg>
       );
   }

@@ -1,9 +1,10 @@
 import {
   RESOURCE_BUILDING_RULES,
   getFactionBuildingRule,
-  getGrowthForBuiltTownBuilding,
+  getTownWeeklyGrowth,
   UNIT_RULES,
 } from "@/lib/game/economy";
+import { makeRng } from "@/lib/game/engine/rng";
 import {
   createExternalDwellingState,
   isExternalDwellingType,
@@ -139,6 +140,7 @@ export async function completePlayerTurn(
       }
     }
 
+    let totalGoldInterestPercent = 0;
     for (const town of player.towns ?? []) {
       const buildings = (town.buildings ?? []) as string[];
       const townFaction = ((town.townType ?? player.faction ?? Faction.CASTLE) as Faction);
@@ -152,7 +154,11 @@ export async function completePlayerTurn(
         crystalsIncome += rule?.dailyProduction?.crystals ?? 0;
         gemsIncome += rule?.dailyProduction?.gems ?? 0;
         sulfurIncome += rule?.dailyProduction?.sulfur ?? 0;
+        if (rule?.goldInterestPercent) totalGoldInterestPercent += rule.goldInterestPercent;
       }
+    }
+    if (totalGoldInterestPercent > 0) {
+      goldIncome += Math.floor(player.gold * (totalGoldInterestPercent / 100));
     }
 
     await updatePlayerResources(supabase, player.id, {
@@ -166,9 +172,18 @@ export async function completePlayerTurn(
     });
 
     const lighthouseCount = new Set(signaledLighthouses[player.id] ?? []).size;
+    let townLighthouseBonus = 0;
+    for (const town of player.towns ?? []) {
+      const buildings = (town.buildings ?? []) as string[];
+      const townFaction = ((town.townType ?? player.faction ?? Faction.CASTLE) as Faction);
+      for (const building of buildings) {
+        const rule = getFactionBuildingRule(townFaction, building);
+        if (rule?.boatMovementBonus) townLighthouseBonus += rule.boatMovementBonus;
+      }
+    }
     for (const hero of player.heroes ?? []) {
       const isOnWater = embarkedHeroIds.has(hero.id);
-      const dailyMovement = (isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies)) + (isOnWater ? lighthouseCount * 500 : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
+      const dailyMovement = (isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies)) + (isOnWater ? lighthouseCount * 500 + townLighthouseBonus : 0) + getEffectiveHeroMovementBonus(hero, isOnWater);
       await supabase.from("heroes").update({
         movement: dailyMovement,
         max_movement: dailyMovement,
@@ -177,14 +192,22 @@ export async function completePlayerTurn(
 
     if (shouldApplyWeeklyGrowth) {
       const reservedHeroTemplateIds = new Set(getRecruitedHeroTemplateIds(player.heroes ?? []));
+      const RARE_RESOURCES: Array<keyof Resources> = ["mercury", "crystals", "gems", "sulfur"];
+      const bonusRare: Partial<Resources> = {};
       for (const town of player.towns ?? []) {
         const buildings = (town.buildings ?? []) as string[];
         const recruits: Record<string, number> = { ...(town.availableRecruits ?? {}) };
         const townFaction = ((town.townType ?? player.faction ?? Faction.CASTLE) as Faction);
+        const growth = getTownWeeklyGrowth(townFaction, buildings);
+        for (const [unitType, amount] of Object.entries(growth)) {
+          recruits[unitType] = (recruits[unitType] ?? 0) + (amount ?? 0);
+        }
         for (const building of buildings) {
-          const growth = getGrowthForBuiltTownBuilding(townFaction, building);
-          for (const [unitType, amount] of Object.entries(growth)) {
-            recruits[unitType] = (recruits[unitType] ?? 0) + (amount ?? 0);
+          const rule = getFactionBuildingRule(townFaction, building);
+          if (rule?.weeklyRandomRareResource) {
+            const rng = makeRng(`${gameId}:${town.id}:week:${nextTurnNumber}`);
+            const resource = RARE_RESOURCES[Math.floor(rng() * RARE_RESOURCES.length)];
+            bonusRare[resource] = (bonusRare[resource] ?? 0) + rule.weeklyRandomRareResource;
           }
         }
         const townUpdate: Record<string, unknown> = { available_recruits: recruits };
@@ -194,6 +217,21 @@ export async function completePlayerTurn(
           townUpdate.tavern_offer = offer;
         }
         await supabase.from("towns").update(townUpdate).eq("id", town.id);
+      }
+      if (Object.values(bonusRare).some((v) => (v ?? 0) > 0)) {
+        const { data: refreshed } = await supabase
+          .from("game_players")
+          .select("gold,wood,ore,mercury,crystals,gems,sulfur")
+          .eq("id", player.id)
+          .single();
+        if (refreshed) {
+          await updatePlayerResources(supabase, player.id, {
+            mercury: (refreshed.mercury ?? 0) + (bonusRare.mercury ?? 0),
+            crystals: (refreshed.crystals ?? 0) + (bonusRare.crystals ?? 0),
+            gems: (refreshed.gems ?? 0) + (bonusRare.gems ?? 0),
+            sulfur: (refreshed.sulfur ?? 0) + (bonusRare.sulfur ?? 0),
+          });
+        }
       }
     }
   }

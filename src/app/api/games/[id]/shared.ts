@@ -1,3 +1,30 @@
+export function computeTurnProgressRatio(
+  player: {
+    heroes?: Array<Record<string, unknown>>;
+    towns?: Array<Record<string, unknown>>;
+  },
+  turnNumber: number,
+): number {
+  const heroes = (player.heroes ?? []).map((hero) => ({
+    movement: Number(hero.movement ?? 0),
+    maxMovement: Number(hero.maxMovement ?? 0),
+  }));
+  const movableHeroes = heroes.filter((hero) => hero.maxMovement > 0);
+  const heroTotal = movableHeroes.length;
+  const heroRemaining = movableHeroes.reduce(
+    (total, hero) => total + Math.max(0, Math.min(1, hero.movement / hero.maxMovement)),
+    0,
+  );
+  const towns = player.towns ?? [];
+  const townTotal = towns.length;
+  const townRemaining = towns.filter(
+    (town) => (town as { lastBuiltTurn?: number | null }).lastBuiltTurn !== turnNumber,
+  ).length;
+  const baseTotal = heroTotal + townTotal;
+  if (baseTotal === 0) return 0;
+  return Math.max(0, Math.min(1, (heroRemaining + townRemaining) / baseTotal));
+}
+
 export function sanitizePlayerForViewer<T extends {
   id: string;
   heroes?: Array<Record<string, unknown>>;

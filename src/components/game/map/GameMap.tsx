@@ -5,7 +5,7 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { getMapObjectHoverDescription } from "@/lib/rendering/phaser/mapObjectLayout";
 import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
-import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getAdventureBuildingExhaustion, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
@@ -302,7 +302,7 @@ export default function GameMapComponent() {
         lastFogVisibleRef.current = null;
         lastFogExploredRef.current = null;
       }
-      renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap));
+      renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap, selectedHeroId));
       reportMapLoading(95, "Calcul de la visibilite...");
 
       let visibleTiles: Set<string>;
@@ -379,7 +379,7 @@ export default function GameMapComponent() {
         }, 150);
       }
     });
-  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion, devRevealMap]);
+  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion, devRevealMap, selectedHeroId]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;
@@ -2856,8 +2856,20 @@ function areTileKeySetsEqual(left: Set<string> | null, right: Set<string>) {
 function buildObjects(
   gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
   currentPlayer: { id: string; isAlive?: boolean; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined,
-  revealMap = false
+  revealMap = false,
+  selectedHeroId?: string | null,
 ): MapObjectData[] {
+  const adventureVisits = gameState.adventureVisits;
+  const exhaustionCtx = currentPlayer && adventureVisits ? {
+    playerId: currentPlayer.id,
+    selectedHeroId: selectedHeroId ?? null,
+    turnNumber: gameState.turnNumber ?? 1,
+    visitedAdventureBuildings: new Set(adventureVisits.visitedAdventureBuildings ?? []),
+    playerAdventureVisits: adventureVisits.playerAdventureVisits ?? {},
+    heroAdventureVisits: adventureVisits.heroAdventureVisits ?? {},
+    weeklyAdventureVisits: adventureVisits.weeklyAdventureVisits ?? {},
+    mysticalGardenVisits: adventureVisits.mysticalGardenVisits ?? {},
+  } : null;
   const objects: MapObjectData[] = [];
   const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
   const visiblePositions = new Set<string>();
@@ -3038,6 +3050,16 @@ function buildObjects(
         const key = `${x},${y}`;
         if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
 
+        const exhaustion = exhaustionCtx ? getAdventureBuildingExhaustion({
+          ...exhaustionCtx,
+          buildingId: tile.object.id,
+          subtype: tile.object.subtype,
+        }) : { exhausted: false };
+        const baseDescription = getMapObjectHoverDescription(tile.object) ?? undefined;
+        const description = exhaustion.exhausted
+          ? (baseDescription ? `${baseDescription}\n${exhaustion.reason}` : exhaustion.reason)
+          : baseDescription;
+
         objects.push({
           type: "adventure_building",
           id: tile.object.id,
@@ -3049,10 +3071,11 @@ function buildObjects(
           name: isExternalDwellingType(tile.object.subtype)
             ? getExternalDwellingLabel(tile.object.targetId)
             : tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
-          description: getMapObjectHoverDescription(tile.object) ?? undefined,
+          description,
           buildingType: tile.object.subtype,
           dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,
           guardianPower: tile.object.guardianPower ?? 0,
+          visited: exhaustion.exhausted,
         });
       }
     }

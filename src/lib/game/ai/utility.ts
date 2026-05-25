@@ -198,7 +198,12 @@ function getObjectObjective(
       const heroAtStart = context.player.heroes.find((hero) => hero.x === path[0]?.x && hero.y === path[0]?.y);
       if (heroAtStart && (context.heroAdventureVisits[heroAtStart.id] ?? []).includes(object.id)) return null;
       const currentWeek = getAdventureWeekKey(Number(context.game.turnNumber ?? 1));
-      if (heroAtStart && isWeeklyHeroBuilding(object.subtype) && context.weeklyAdventureVisits[`${object.id}:${heroAtStart.id}`] === currentWeek) return null;
+      const currentDay = `day-${Number(context.game.turnNumber ?? 1)}`;
+      if (heroAtStart && isWeeklyHeroBuilding(object.subtype)) {
+        const visitKey = `${object.id}:${heroAtStart.id}`;
+        const cooldown = object.subtype === "magic_well" ? currentDay : currentWeek;
+        if (context.weeklyAdventureVisits[visitKey] === cooldown) return null;
+      }
       if (isWeeklyPlayerBuilding(object.subtype) && context.weeklyAdventureVisits[`${object.id}:${context.player.id}`] === currentWeek) return null;
     }
     const rule = getAdventureBuildingRule(object.subtype);

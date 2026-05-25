@@ -9,6 +9,7 @@ import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { generateMap } from "@/lib/game/engine";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
 import { GameMap, TerrainType } from "@/lib/game/types";
+import { createClient } from "@/lib/supabase/browser";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   CornerOrnaments,
@@ -160,6 +161,7 @@ export default function DashboardPage() {
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const [dashboardMessage, setDashboardMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [selectedFaction, setSelectedFaction] = useState<string>("castle");
   const [gameName, setGameName] = useState("");
@@ -187,6 +189,24 @@ export default function DashboardPage() {
   const previewStats = useMemo(() => summarizeMap(previewMap), [previewMap]);
   const generateRandomSeed = () => {
     setSeed(randomSeedValue());
+  };
+
+  const signOut = async () => {
+    setSigningOut(true);
+    setDashboardMessage(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("signOut failed", error);
+      setDashboardMessage({ kind: "error", text: "Impossible de se déconnecter." });
+      setSigningOut(false);
+      return;
+    }
+
+    useGameStore.getState().resetGame();
+    router.replace("/auth/login");
   };
 
   const fetchWithAuth = useCallback(async (input: RequestInfo, init?: RequestInit) => {
@@ -387,6 +407,18 @@ export default function DashboardPage() {
               className="rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
             >
               Rejoindre
+            </button>
+            <button
+              type="button"
+              onClick={() => signOut().catch((error) => {
+                console.error(error);
+                setDashboardMessage({ kind: "error", text: "Impossible de se déconnecter." });
+                setSigningOut(false);
+              })}
+              disabled={signingOut}
+              className="rounded-lg border border-amber-700/50 bg-stone-950/80 px-6 py-3 font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {signingOut ? "Déconnexion..." : "Déconnexion"}
             </button>
           </div>
         </div>

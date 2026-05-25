@@ -788,6 +788,7 @@ export interface Player {
   turnOrder: number;
   exploredTiles: string[];
   hasEndedTurn: boolean;
+  turnProgressRatio?: number;
 }
 
 export type GameAction =
@@ -840,4 +841,5 @@ export interface GameState {
   neutralArmies?: NeutralArmy[];
   gates?: Gate[];
   boats?: Boat[];
+  adventureVisits?: AdventureBuildingState;
 }

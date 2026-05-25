@@ -2,6 +2,7 @@ import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject, Boat,
+  AdventureBuildingState,
 } from "./types";
 import { normalizeArtifactBag } from "./artifacts";
 import { isCreatureBankType } from "./creature-banks";
@@ -32,6 +33,7 @@ interface ApiPlayer {
   tavernHeroes?: TavernHeroOffer[];
   towns: ApiTown[];
   resourceBuildings?: ApiResourceBuilding[];
+  turnProgressRatio?: number;
 }
 
 interface ApiTurn {
@@ -268,6 +270,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
     turnOrder: player.turnOrder,
     exploredTiles: player.exploredTiles ?? [],
     hasEndedTurn: completedTurnPlayerIds.has(player.id),
+    turnProgressRatio: player.turnProgressRatio,
   }));
 }
 
@@ -581,6 +584,8 @@ export function mapApiToGameState(
     Boolean(options.revealMap)
   );
 
+  const adventureVisits = extractAdventureVisitState(data.mapState);
+
   return {
     id: mapId,
     status: data.status as GameState["status"],
@@ -595,6 +600,7 @@ export function mapApiToGameState(
     gates,
     boats,
     activeCombats,
+    adventureVisits,
   };
 }
 
@@ -637,6 +643,19 @@ export function mergeGameDynamicState(
     gates,
     boats,
     activeCombats,
+    adventureVisits: extractAdventureVisitState(data.mapState),
+  };
+}
+
+function extractAdventureVisitState(rawMapState: unknown): AdventureBuildingState {
+  const mapState = (rawMapState as Record<string, unknown> | undefined) ?? {};
+  return {
+    visitedAdventureBuildings: (mapState.visitedAdventureBuildings as string[] | undefined) ?? [],
+    playerAdventureVisits: (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    heroAdventureVisits: (mapState.heroAdventureVisits as Record<string, string[]> | undefined) ?? {},
+    signaledLighthouses: (mapState.signaledLighthouses as Record<string, string[]> | undefined) ?? {},
+    mysticalGardenVisits: (mapState.mysticalGardenVisits as Record<string, string> | undefined) ?? {},
+    weeklyAdventureVisits: (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {},
   };
 }
 

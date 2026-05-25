@@ -24,7 +24,7 @@ import { UnitSprite } from "./UnitSprite";
 import { unitTypeLabel } from "./helpers";
 import { goldDivider, ornateFramePolished } from "./theme";
 
-type HeroTab = "profile" | "army" | "artifacts";
+type HeroTab = "profile" | "army" | "artifacts" | "skills";
 
 export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town | undefined }) {
   const { data: session } = useSession();
@@ -46,12 +46,13 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     ?.heroes.filter((candidate) => candidate.id !== hero.id && canTransferArtifacts(hero, candidate, gameState.players.flatMap((player) => player.towns))) ?? [];
   const heroArtifactBag = normalizeArtifactBag(hero.artifacts);
   const artifactCount = heroArtifactBag.inventory.length + Object.values(heroArtifactBag.equipment).filter(Boolean).length;
+  const skillEntries = getHeroSkillEntries(hero);
   const heroTabs: { id: HeroTab; label: string; badge?: number }[] = [
     { id: "profile", label: "Profil" },
+    { id: "skills", label: "Compétences", badge: skillEntries.length },
     { id: "army", label: "Armee", badge: hero.armies.length },
     { id: "artifacts", label: "Artefacts", badge: artifactCount },
   ];
-  const skillEntries = getHeroSkillEntries(hero);
 
   async function castAdventureSpell(spell: SpellDefinition, target?: { x: number; y: number }) {
     if (!gameState) throw new Error("Partie indisponible.");
@@ -127,15 +128,6 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           <div className="text-xs uppercase tracking-wider text-amber-200/60">
             Niveau {hero.level} - XP {hero.experience}
           </div>
-          {skillEntries.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {skillEntries.map(({ id, label, levelLabel }) => (
-                <span key={id} className="rounded-full border border-amber-600/50 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
-                  {label} - {levelLabel}
-                </span>
-              ))}
-            </div>
-          )}
           {(hero.warMachines?.ballista || hero.warMachines?.firstAid || hero.warMachines?.ammoCart) && (
             <div className="mt-2 flex flex-wrap gap-1">
               {hero.warMachines.ballista && (
@@ -217,13 +209,13 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
                 <Stat label="Mana" value={hero.mana} color="text-violet-200" />
               </div>
               <div className={goldDivider} />
-              <HeroSkillsPanel hero={hero} />
-              <div className={goldDivider} />
               <div className="rounded-md border border-amber-800/35 bg-black/35 px-3 py-2 text-xs text-amber-200/70">
                 Position : <span className="font-black text-amber-100">{hero.position.x}, {hero.position.y}</span>
               </div>
             </div>
           )}
+
+          {activeTab === "skills" && <HeroSkillsPanel hero={hero} />}
 
           {activeTab === "army" && <HeroArmyPanel hero={hero} />}
 
@@ -318,7 +310,7 @@ function getHeroSkillEntries(hero: Hero) {
       return {
         id,
         label: definition?.label ?? id.replace(/_/g, " "),
-        description: definition?.description ?? "",
+        description: definition?.description(level) ?? "",
         level,
         levelLabel: skillLevelLabel(level),
       };
@@ -387,6 +379,12 @@ function HeroTabIcon({ tab }: { tab: HeroTab }) {
         <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="7" r="4" />
           <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
+        </svg>
+      );
+    case "skills":
+      return (
+        <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2l2.39 4.84L20 7.6l-3.8 3.7.9 5.24L12 14.77 6.9 16.54l.9-5.24L4 7.6l5.61-.76L12 2z" />
         </svg>
       );
     case "army":
@@ -582,8 +580,9 @@ function PendingSkillChoiceBlock({
   const next = hero.pendingSkillChoices?.[0];
   if (!next) return null;
   const labelFor = (id: string) => SKILL_DEFINITIONS.find((s) => s.id === id)?.label ?? id;
-  const descriptionFor = (id: string) => SKILL_DEFINITIONS.find((s) => s.id === id)?.description ?? "";
-  const currentLevel = (id: string) => (hero.skills?.[id] as string | undefined);
+  const descriptionFor = (id: string, level: SkillLevel) =>
+    SKILL_DEFINITIONS.find((s) => s.id === id)?.description(level) ?? "";
+  const currentLevel = (id: string) => (hero.skills?.[id] as SkillLevel | undefined);
   return (
     <div className="mt-3 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/60 to-stone-950/80 p-3 shadow-inner shadow-black/40">
       <div className="text-xs font-bold uppercase tracking-wider text-amber-200">Montée de niveau {next.level} : choisis une compétence</div>
@@ -599,7 +598,7 @@ function PendingSkillChoiceBlock({
               className="w-full rounded-md border border-amber-700/60 bg-stone-950/70 px-3 py-2 text-left text-amber-100 transition hover:border-amber-300 hover:bg-amber-950/60"
             >
               <div className="text-sm font-bold">{labelFor(id)} → <span className="text-amber-300">{nextLevel}</span></div>
-              <div className="text-[11px] text-amber-200/70">{descriptionFor(id)}</div>
+              <div className="text-[11px] text-amber-200/70">{descriptionFor(id, nextLevel)}</div>
             </button>
           );
         })}

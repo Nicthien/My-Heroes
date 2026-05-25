@@ -32,12 +32,9 @@ export const MAP_OBJECT_ORIGIN_Y = 1;
 export const MAP_OBJECT_FOOT_OFFSET_Y = TILE_FOOT_OFFSET_Y;
 export const RESOURCE_PICKUP_OFFSET_Y = -4;
 export const MONSTER_OFFSET_Y = 6;
-// Gate artwork is 298x248 (aspect 1.202); keep that ratio. Width is chosen so
-// the structure spans ~3 tiles across the road (towers on the side tiles).
-// 3-tile footprint along the wall diagonal: outer corners of tiles -1..+1
-// span 128 game-px horizontally (TILE_WIDTH 64; per-tile step 32; ±64 outer).
-export const GATE_DISPLAY_WIDTH = 128;
-export const GATE_DISPLAY_HEIGHT = Math.round(GATE_DISPLAY_WIDTH / 1.202);
+// Gate artwork is authored as a compact single-tile isometric gatehouse.
+export const GATE_DISPLAY_WIDTH = 64;
+export const GATE_DISPLAY_HEIGHT = 64;
 // Sprite point pinned to the road tile centre. The gate's foundation sits on
 // the road tile, with the portcullis arch hovering above (you pass under it).
 export const GATE_ORIGIN_X = 0.5;

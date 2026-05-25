@@ -34,38 +34,44 @@ export type SkillId =
 export interface SkillDefinition {
   id: SkillId;
   label: string;
-  description: string;
+  description: (level: SkillLevel) => string;
 }
 
+const pickTier = (level: SkillLevel, basic: string, advanced: string, expert: string) =>
+  level === "basic" ? basic : level === "advanced" ? advanced : expert;
+const tiered = (basic: string, advanced: string, expert: string, suffix: string) =>
+  (level: SkillLevel) => `${pickTier(level, basic, advanced, expert)} ${suffix}`;
+const flat = (text: string) => () => text;
+
 export const SKILL_DEFINITIONS: SkillDefinition[] = [
-  { id: "necromancy", label: "Nécromancie", description: "Ressuscite une fraction des ennemis tués comme squelettes." },
-  { id: "wisdom", label: "Sagesse", description: "Permet d'apprendre les sorts de plus haut niveau." },
-  { id: "fire_magic", label: "Magie du feu", description: "Améliore les sorts de l'école du feu." },
-  { id: "water_magic", label: "Magie de l'eau", description: "Améliore les sorts de l'école de l'eau." },
-  { id: "earth_magic", label: "Magie de la terre", description: "Améliore les sorts de l'école de la terre." },
-  { id: "air_magic", label: "Magie de l'air", description: "Améliore les sorts de l'école de l'air." },
-  { id: "tactics", label: "Tactique", description: "Permet de repositionner les unités avant le combat." },
-  { id: "logistics", label: "Logistique", description: "+10% / +20% / +30% de mouvement quotidien." },
-  { id: "leadership", label: "Commandement", description: "+1 / +2 / +3 au moral en combat." },
-  { id: "luck", label: "Chance", description: "+1 / +2 / +3 à la chance en combat." },
-  { id: "scouting", label: "Reconnaissance", description: "+1 / +2 / +3 portée de vision." },
-  { id: "pathfinding", label: "Orientation", description: "Réduit le malus de mouvement sur terrain rude." },
-  { id: "archery", label: "Tir à l'arc", description: "+10% / +25% / +50% de dégâts pour les unités à distance." },
-  { id: "offense", label: "Attaque", description: "+10% / +20% / +30% de dégâts pour les unités au corps à corps." },
-  { id: "armorer", label: "Armurerie", description: "−5% / −10% / −15% de dégâts subis." },
-  { id: "ballistics", label: "Balistique", description: "Améliore la précision de la catapulte." },
-  { id: "artillery", label: "Artillerie", description: "Permet de contrôler la baliste et augmente ses dégâts." },
-  { id: "sorcery", label: "Magie", description: "+5% / +10% / +15% de dégâts des sorts." },
-  { id: "mysticism", label: "Mysticisme", description: "+1 / +2 / +3 mana régénéré par jour." },
-  { id: "intelligence", label: "Intelligence", description: "+25% / +50% / +100% de mana maximum." },
-  { id: "eagle_eye", label: "Œil d'aigle", description: "Apprend les sorts adverses lancés en combat." },
-  { id: "learning", label: "Apprentissage", description: "+5% / +10% / +15% d'expérience gagnée." },
-  { id: "scholar", label: "Érudit", description: "Permet d'échanger des sorts entre héros adjacents." },
-  { id: "first_aid", label: "Premiers secours", description: "Améliore la tente de soins." },
-  { id: "navigation", label: "Navigation", description: "+50% / +100% / +150% de mouvement en mer." },
-  { id: "estates", label: "Domaines", description: "+125 / +250 / +500 or par jour." },
-  { id: "resistance", label: "Résistance", description: "5% / 10% / 20% de chance d'ignorer les sorts." },
-  { id: "diplomacy", label: "Diplomatie", description: "Permet aux armées neutres de se joindre ou s'enfuir." },
+  { id: "necromancy", label: "Nécromancie", description: flat("Ressuscite une fraction des ennemis tués comme squelettes.") },
+  { id: "wisdom", label: "Sagesse", description: flat("Permet d'apprendre les sorts de plus haut niveau.") },
+  { id: "fire_magic", label: "Magie du feu", description: flat("Améliore les sorts de l'école du feu.") },
+  { id: "water_magic", label: "Magie de l'eau", description: flat("Améliore les sorts de l'école de l'eau.") },
+  { id: "earth_magic", label: "Magie de la terre", description: flat("Améliore les sorts de l'école de la terre.") },
+  { id: "air_magic", label: "Magie de l'air", description: flat("Améliore les sorts de l'école de l'air.") },
+  { id: "tactics", label: "Tactique", description: flat("Permet de repositionner les unités avant le combat.") },
+  { id: "logistics", label: "Logistique", description: tiered("+10%", "+20%", "+30%", "de mouvement quotidien.") },
+  { id: "leadership", label: "Commandement", description: tiered("+1", "+2", "+3", "au moral en combat.") },
+  { id: "luck", label: "Chance", description: tiered("+1", "+2", "+3", "à la chance en combat.") },
+  { id: "scouting", label: "Reconnaissance", description: tiered("+1", "+2", "+3", "portée de vision.") },
+  { id: "pathfinding", label: "Orientation", description: flat("Réduit le malus de mouvement sur terrain rude.") },
+  { id: "archery", label: "Tir à l'arc", description: tiered("+10%", "+25%", "+50%", "de dégâts pour les unités à distance.") },
+  { id: "offense", label: "Attaque", description: tiered("+10%", "+20%", "+30%", "de dégâts pour les unités au corps à corps.") },
+  { id: "armorer", label: "Armurerie", description: tiered("−5%", "−10%", "−15%", "de dégâts subis.") },
+  { id: "ballistics", label: "Balistique", description: flat("Améliore la précision de la catapulte.") },
+  { id: "artillery", label: "Artillerie", description: flat("Permet de contrôler la baliste et augmente ses dégâts.") },
+  { id: "sorcery", label: "Magie", description: tiered("+5%", "+10%", "+15%", "de dégâts des sorts.") },
+  { id: "mysticism", label: "Mysticisme", description: tiered("+1", "+2", "+3", "mana régénéré par jour.") },
+  { id: "intelligence", label: "Intelligence", description: tiered("+25%", "+50%", "+100%", "de mana maximum.") },
+  { id: "eagle_eye", label: "Œil d'aigle", description: flat("Apprend les sorts adverses lancés en combat.") },
+  { id: "learning", label: "Apprentissage", description: tiered("+5%", "+10%", "+15%", "d'expérience gagnée.") },
+  { id: "scholar", label: "Érudit", description: flat("Permet d'échanger des sorts entre héros adjacents.") },
+  { id: "first_aid", label: "Premiers secours", description: flat("Améliore la tente de soins.") },
+  { id: "navigation", label: "Navigation", description: tiered("+50%", "+100%", "+150%", "de mouvement en mer.") },
+  { id: "estates", label: "Domaines", description: tiered("+125", "+250", "+500", "or par jour.") },
+  { id: "resistance", label: "Résistance", description: tiered("5%", "10%", "20%", "de chance d'ignorer les sorts.") },
+  { id: "diplomacy", label: "Diplomatie", description: flat("Permet aux armées neutres de se joindre ou s'enfuir.") },
 ];
 
 export type HeroSkills = Partial<Record<SkillId, SkillLevel>>;

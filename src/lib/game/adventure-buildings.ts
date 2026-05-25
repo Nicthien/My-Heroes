@@ -378,3 +378,75 @@ export function addVisit(visits: Record<string, string[]> | undefined, playerId:
 export function hasPlayerVisited(visits: Record<string, string[]> | undefined, playerId: string, buildingId: string) {
   return visits?.[playerId]?.includes(buildingId) ?? false;
 }
+
+export function getAdventureWeekKey(turnNumber: number) {
+  return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
+}
+
+export interface AdventureBuildingExhaustionContext {
+  buildingId: string;
+  subtype: string | undefined;
+  playerId: string;
+  selectedHeroId?: string | null;
+  turnNumber: number;
+  visitedAdventureBuildings: Set<string>;
+  playerAdventureVisits: Record<string, string[]>;
+  heroAdventureVisits: Record<string, string[]>;
+  weeklyAdventureVisits: Record<string, string>;
+  mysticalGardenVisits: Record<string, string>;
+}
+
+const ONCE_PER_PLAYER_SUBTYPES = new Set<string>([
+  AdventureBuildingType.OBSERVATORY,
+  AdventureBuildingType.LIGHTHOUSE,
+  AdventureBuildingType.CARTOGRAPHER,
+  AdventureBuildingType.OBELISK,
+  AdventureBuildingType.REDWOOD_OBSERVATORY,
+]);
+
+export function getAdventureBuildingExhaustion(ctx: AdventureBuildingExhaustionContext): { exhausted: boolean; reason?: string } {
+  const { buildingId, subtype, playerId, selectedHeroId, turnNumber } = ctx;
+  if (!subtype) return { exhausted: false };
+
+  if (ctx.visitedAdventureBuildings.has(buildingId)) {
+    return { exhausted: true, reason: "Déjà fouillé." };
+  }
+
+  if (ONCE_PER_PLAYER_SUBTYPES.has(subtype) && (ctx.playerAdventureVisits[playerId] ?? []).includes(buildingId)) {
+    return { exhausted: true, reason: "Déjà visité." };
+  }
+
+  if (selectedHeroId && (ctx.heroAdventureVisits[selectedHeroId] ?? []).includes(buildingId)) {
+    return { exhausted: true, reason: "Déjà visité par ce héros." };
+  }
+
+  const currentWeek = getAdventureWeekKey(turnNumber);
+  const currentDay = `day-${turnNumber}`;
+
+  if (selectedHeroId && (subtype === AdventureBuildingType.STABLES || subtype === AdventureBuildingType.MAGIC_WELL)) {
+    const visitKey = `${buildingId}:${selectedHeroId}`;
+    const cooldown = subtype === AdventureBuildingType.MAGIC_WELL ? currentDay : currentWeek;
+    if (ctx.weeklyAdventureVisits[visitKey] === cooldown) {
+      return {
+        exhausted: true,
+        reason: subtype === AdventureBuildingType.MAGIC_WELL ? "Disponible demain." : "Disponible la semaine prochaine.",
+      };
+    }
+  }
+
+  if (subtype === AdventureBuildingType.WATER_MILL || subtype === AdventureBuildingType.WATER_WHEEL) {
+    const visitKey = `${buildingId}:${playerId}`;
+    if (ctx.weeklyAdventureVisits[visitKey] === currentWeek) {
+      return { exhausted: true, reason: "Disponible la semaine prochaine." };
+    }
+  }
+
+  if (subtype === AdventureBuildingType.MYSTICAL_GARDEN) {
+    const visitKey = `${buildingId}:${playerId}`;
+    if (ctx.mysticalGardenVisits[visitKey] === currentWeek) {
+      return { exhausted: true, reason: "Disponible la semaine prochaine." };
+    }
+  }
+
+  return { exhausted: false };
+}

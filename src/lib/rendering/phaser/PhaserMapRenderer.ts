@@ -336,6 +336,9 @@ class PhaserMapScene extends Phaser.Scene {
       this.lastHoverLabelAt = now;
       this.updateHoverLabel(pointer.x, pointer.y);
     });
+    this.input.on("pointerdown", () => {
+      this.clearHoverLabel();
+    });
     this.createDirectionalAnimations();
     this.readyCallback?.();
   }
@@ -2366,7 +2369,12 @@ class PhaserMapScene extends Phaser.Scene {
       const metrics = getObjectMetrics(object);
       if (!metrics) return null;
       const renderY = surfaceY + metrics.offsetY;
-      rendered.sprite = this.addObjectSprite(object, iso.x, renderY, getAdventureBuildingSpritePath(object), metrics.width, metrics.height, getOriginForObject(object)) ?? undefined;
+      const sprite = this.addObjectSprite(object, iso.x, renderY, getAdventureBuildingSpritePath(object), metrics.width, metrics.height, getOriginForObject(object)) ?? undefined;
+      if (sprite && object.visited) {
+        sprite.setTint(0x707070);
+        sprite.setAlpha(0.55);
+      }
+      rendered.sprite = sprite;
       const bounds = this.getObjectBounds(object);
       if (bounds && object.playerId) {
         const width = bounds.right - bounds.left;

@@ -130,17 +130,7 @@ export function TurnStatusIcon({ ended }: { ended: boolean }) {
 function getPlayerTurnProgress(player: Player, gameState: GameState) {
   if (!player.isAlive || player.hasEndedTurn) return { ratio: 0, activeCombatCount: 0 };
 
-  const heroTotal = player.heroes.length;
-  const heroRemaining = player.heroes.reduce((total, hero) => {
-    if (hero.maxMovement <= 0) return total;
-    return total + Math.max(0, Math.min(1, hero.movement / hero.maxMovement));
-  }, 0);
-  const townTotal = player.towns.length;
-  const townRemaining = player.towns.filter((town) => town.lastBuiltTurn !== gameState.turnNumber).length;
-  const baseTotal = heroTotal + townTotal;
-  const baseRatio = baseTotal > 0
-    ? Math.max(0, Math.min(1, (heroRemaining + townRemaining) / baseTotal))
-    : 0;
+  const baseRatio = player.turnProgressRatio ?? computeLocalTurnProgressRatio(player, gameState);
   const activeCombatCount = (gameState.activeCombats ?? []).filter((combat) =>
     combatInvolvesPlayer(combat, player.id)
   ).length;
@@ -149,6 +139,20 @@ function getPlayerTurnProgress(player: Player, gameState: GameState) {
     ratio: baseRatio === 0 && activeCombatCount > 0 ? 0.08 : baseRatio,
     activeCombatCount,
   };
+}
+
+function computeLocalTurnProgressRatio(player: Player, gameState: GameState) {
+  const movableHeroes = player.heroes.filter((hero) => hero.maxMovement > 0);
+  const heroTotal = movableHeroes.length;
+  const heroRemaining = movableHeroes.reduce((total, hero) => {
+    return total + Math.max(0, Math.min(1, hero.movement / hero.maxMovement));
+  }, 0);
+  const townTotal = player.towns.length;
+  const townRemaining = player.towns.filter((town) => town.lastBuiltTurn !== gameState.turnNumber).length;
+  const baseTotal = heroTotal + townTotal;
+  return baseTotal > 0
+    ? Math.max(0, Math.min(1, (heroRemaining + townRemaining) / baseTotal))
+    : 0;
 }
 
 export function combatInvolvesPlayer(combat: PersistentCombat, playerId: string) {

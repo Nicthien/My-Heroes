@@ -191,8 +191,8 @@ export function getHeroMana(hero: { mana?: number | null; stats?: { knowledge?: 
 }
 
 export function heroKnowsSpell(hero: { knownSpellIds?: string[] | null; knownSpells?: string[] | null }, spellId: string) {
-  const known = hero.knownSpellIds ?? hero.knownSpells ?? null;
-  return known === null || known === undefined || known.includes(spellId);
+  const known = hero.knownSpellIds ?? hero.knownSpells;
+  return Array.isArray(known) && known.includes(spellId);
 }
 
 export function getSpellCost(spell: SpellDefinition) {

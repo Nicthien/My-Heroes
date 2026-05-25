@@ -17,6 +17,7 @@ export interface MapObjectData {
   dwellingUnitType?: string;
   guardianPower?: number;
   description?: string;
+  visited?: boolean;
 }
 
 export interface SpellRevealHint {

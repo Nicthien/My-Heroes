@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameSyncWithRelations } from "@/lib/supabase/game-db";
-import { getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "../shared";
+import { computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "../shared";
 
 export async function GET(
   request: Request,
@@ -38,6 +38,7 @@ export async function GET(
     mapState: game.mapState,
     players: players.map((item) => ({
       ...sanitizePlayerForViewer(item, player?.id),
+      turnProgressRatio: computeTurnProgressRatio(item, Number(game.turnNumber ?? 0)),
       exploredTiles: item.id === player?.id ? (isSpectator ? allTileKeys : item.exploredTiles) : [],
     })),
     turns: game.turns,

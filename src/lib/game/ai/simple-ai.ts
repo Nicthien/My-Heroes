@@ -332,9 +332,10 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   }
 
   if (buildingType === AdventureBuildingType.MAGIC_WELL) {
-    if (context.weeklyAdventureVisits[weeklyHeroKey] !== currentWeek) {
+    const currentDay = `day-${Number(context.game.turnNumber ?? 1)}`;
+    if (context.weeklyAdventureVisits[weeklyHeroKey] !== currentDay) {
       await supabase.from("heroes").update({ mana: Math.max(0, Number(hero.knowledge ?? 0) * 10) }).eq("id", hero.id);
-      await markAiWeeklyAdventureVisit(supabase, context, weeklyHeroKey, currentWeek);
+      await markAiWeeklyAdventureVisit(supabase, context, weeklyHeroKey, currentDay);
     }
     return;
   }

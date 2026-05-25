@@ -53,10 +53,24 @@ interface MinimalHero {
 
 interface MinimalTown {
   id: string;
+  x?: number;
+  y?: number;
   townType?: string;
   buildings?: string[];
   availableRecruits?: Record<string, number>;
   tavernOffer?: TavernOffer[];
+}
+
+const MAGE_GUILD_BUILDINGS: ReadonlySet<string> = new Set([
+  BuildingType.MAGE_GUILD,
+  BuildingType.MAGE_GUILD_2,
+  BuildingType.MAGE_GUILD_3,
+  BuildingType.MAGE_GUILD_4,
+  BuildingType.MAGE_GUILD_5,
+]);
+
+function townHasMageGuild(buildings: string[]) {
+  return buildings.some((b) => MAGE_GUILD_BUILDINGS.has(b));
 }
 
 interface MinimalResourceBuilding {
@@ -191,6 +205,10 @@ export async function completePlayerTurn(
         if (rule?.boatMovementBonus) townLighthouseBonus += rule.boatMovementBonus;
       }
     }
+    const mageGuildTowns = (player.towns ?? []).filter((town) =>
+      townHasMageGuild((town.buildings ?? []) as string[])
+    );
+
     for (const hero of player.heroes ?? []) {
       const isOnWater = embarkedHeroIds.has(hero.id);
       const base = isOnWater ? BOAT_DAILY_MOVEMENT : getDailyAdventureMovement(hero.armies);
@@ -200,10 +218,18 @@ export async function completePlayerTurn(
       const navigationPct = isOnWater ? getNavigationPercent(hero.skills) : 0;
       const skillBonus = Math.floor(base * (logisticsPct + navigationPct) / 100);
       const dailyMovement = base + seaTownBonus + artifactBonus + skillBonus;
-      await supabase.from("heroes").update({
+      const heroUpdate: Record<string, unknown> = {
         movement: dailyMovement,
         max_movement: dailyMovement,
-      }).eq("id", hero.id);
+      };
+      const visitingMageGuildTown = mageGuildTowns.some(
+        (town) => town.x === hero.x && town.y === hero.y
+      );
+      if (visitingMageGuildTown) {
+        const knowledge = Number((hero as unknown as { knowledge?: number }).knowledge ?? 0);
+        heroUpdate.mana = Math.max(0, knowledge * 10);
+      }
+      await supabase.from("heroes").update(heroUpdate).eq("id", hero.id);
 
       // First Aid skill : régénération d'armée chaque jour
       const firstAidLvl = ((hero.skills?.first_aid ?? null) as string | null);

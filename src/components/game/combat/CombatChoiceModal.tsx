@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
@@ -20,19 +20,10 @@ export default function CombatChoiceModal() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const devGodMode = useGameStore((state) => state.devGodMode);
-  const autoStartedRef = useRef<string | null>(null);
-  const pendingKey = pendingCombat ? `${pendingCombat.attackerHeroId}:${pendingCombat.targetId}:${pendingCombat.targetType}` : null;
   const encounterInfo = useMemo(
     () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat) : null,
     [gameState, pendingCombat]
   );
-  const targetHeroOwner = useMemo(
-    () => gameState && pendingCombat?.targetType === "hero"
-      ? gameState.players.find((player) => player.heroes.some((hero) => hero.id === pendingCombat.targetId))
-      : undefined,
-    [gameState, pendingCombat]
-  );
-  const isAiHeroTarget = Boolean(targetHeroOwner?.isAi);
 
   const startCombat = useCallback(async (mode: "AUTO" | "MANUAL") => {
     if (!gameState || !pendingCombat) return;
@@ -84,24 +75,50 @@ export default function CombatChoiceModal() {
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
   }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
 
-  useEffect(() => {
-    if (!pendingCombat || !pendingKey) return;
-    if (pendingCombat.targetType !== "hero") return;
-    if (isAiHeroTarget) return;
-    if (autoStartedRef.current === pendingKey) return;
-    autoStartedRef.current = pendingKey;
-    void startCombat("MANUAL");
-  }, [isAiHeroTarget, pendingCombat, pendingKey, startCombat]);
-
   if (!gameState || !pendingCombat || !encounterInfo) return null;
 
-  if (pendingCombat.targetType === "hero" && !isAiHeroTarget) {
+  if (pendingCombat.targetType === "hero") {
     return (
       <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
-        <div className="rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">
-          <div className="text-xs uppercase tracking-[0.28em] text-red-400">Combat joueur contre joueur</div>
-          <div className="mt-2 text-xl font-bold text-red-100">Ouverture du combat manuel...</div>
-          <div className="mt-2 text-sm text-stone-300">Les combats entre joueurs ne peuvent pas être résolus automatiquement.</div>
+        <div className="w-[min(92vw,34rem)] rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">
+          <div className="text-xs uppercase tracking-[0.28em] text-red-400">Héros adverse</div>
+          <h2 className="mt-2 text-2xl font-bold text-red-100">Engager le combat ?</h2>
+          <p className="mt-3 text-sm text-stone-300">
+            Votre héros croise la route d&apos;un adversaire. Vous pouvez l&apos;attaquer maintenant ou fuir et rester sur la carte.
+          </p>
+          <section className="mt-5 rounded-lg border border-red-700/50 bg-black/30 p-4 shadow-[0_0_0_1px_rgba(248,113,113,0.08)_inset]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.22em] text-red-400/80">Forces aperçues</div>
+                <div className="mt-1 text-sm text-stone-300">{encounterInfo.sourceLabel}</div>
+              </div>
+              <div className={`rounded-md border px-3 py-1 text-sm font-bold ${encounterInfo.difficulty.className}`}>
+                {encounterInfo.difficulty.label}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {encounterInfo.units.length > 0 ? encounterInfo.units.map((unit) => (
+                <div key={`${unit.unitType}-${unit.position}`} className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2">
+                  <div className="text-sm font-bold text-red-100">{unit.label}</div>
+                  <div className="mt-0.5 text-xs text-stone-400">{unit.range}</div>
+                </div>
+              )) : (
+                <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
+                  Défense inconnue
+                </div>
+              )}
+            </div>
+          </section>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button className="rounded-lg border border-red-500 bg-red-950/80 p-4 text-left hover:bg-red-900" onClick={() => startCombat("MANUAL")}>
+              <div className="font-bold text-red-100">Attaquer</div>
+              <div className="mt-1 text-sm text-red-200/80">Ouvrir le combat manuel contre ce héros.</div>
+            </button>
+            <button className="rounded-lg border border-stone-600 bg-stone-900/80 p-4 text-left hover:bg-stone-800" onClick={() => setPendingCombat(null)}>
+              <div className="font-bold text-stone-100">Fuir</div>
+              <div className="mt-1 text-sm text-stone-300/80">Annuler l&apos;engagement et revenir sur la carte.</div>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -306,6 +323,7 @@ function getDifficulty(ratio: number) {
 }
 
 function getSourceLabel(targetType: PendingCombat["targetType"]) {
+  if (targetType === "hero") return "Armée du héros adverse.";
   if (targetType === "building") return "Gardiens estimés du lieu.";
   if (targetType === "town") return "Garnison neutre repérée.";
   if (targetType === "gate") return "Garnison de porte reperee.";

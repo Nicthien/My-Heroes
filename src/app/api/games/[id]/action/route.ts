@@ -971,6 +971,25 @@ export async function POST(
       if (mapStatePatched) {
         await supabase.from("games").update({ map_state: mapStateNext }).eq("id", id);
       }
+
+      // Applique immédiatement les bonus de la nouvelle construction aux héros présents dans la ville
+      // (notamment l'apprentissage de sorts à la Guilde des mages, sans attendre une nouvelle visite).
+      const heroesInTown = (gamePlayer.heroes ?? []).filter((h) => h.x === town.x && h.y === town.y);
+      if (heroesInTown.length > 0) {
+        const updatedTown = { ...town, buildings: nextBuildings };
+        for (const heroInTown of heroesInTown) {
+          await applyOwnTownVisitBonuses({
+            supabase,
+            gameId: id,
+            mapState: mapStateNext,
+            hero: heroInTown,
+            town: updatedTown,
+            playerFaction: (gamePlayer.faction ?? Faction.CASTLE) as Faction,
+            turnNumber: Number(game.turnNumber ?? 1),
+          });
+        }
+      }
+
       return NextResponse.json({ success: true });
     }
 
@@ -1496,7 +1515,11 @@ export async function POST(
       const next: "basic" | "advanced" | "expert" =
         current === "expert" ? "expert" : current === "advanced" ? "expert" : current === "basic" ? "advanced" : "basic";
       const nextSkills = { ...currentSkills, [choice]: next };
-      await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      const skillUpdate = await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      if (skillUpdate.error) {
+        console.error("LEARN_SKILL: failed to persist hero skills", skillUpdate.error);
+        return NextResponse.json({ error: "Impossible d'enregistrer la compétence (DB)" }, { status: 500 });
+      }
       const remaining = pending.filter((_, i) => i !== idx);
       const nextPending = { ...pendingMap };
       if (remaining.length > 0) nextPending[hero.id] = remaining;
@@ -1529,7 +1552,11 @@ export async function POST(
       const wm = ((heroRow?.war_machines ?? {}) as Record<string, boolean>);
       if (wm[key]) return NextResponse.json({ error: "Ce héros possède déjà cette machine" }, { status: 400 });
       await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
-      await supabase.from("heroes").update({ war_machines: { ...wm, [key]: true } }).eq("id", hero.id);
+      const wmUpdate = await supabase.from("heroes").update({ war_machines: { ...wm, [key]: true } }).eq("id", hero.id);
+      if (wmUpdate.error) {
+        console.error("BUY_WAR_MACHINE: failed to persist war machines", wmUpdate.error);
+        return NextResponse.json({ error: "Impossible d'enregistrer la machine de guerre (DB)" }, { status: 500 });
+      }
       return NextResponse.json({ success: true });
     }
 
@@ -1556,7 +1583,11 @@ export async function POST(
       if (Object.keys(currentSkills).length >= 8) return NextResponse.json({ error: "Maximum 8 compétences" }, { status: 400 });
       await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
       const nextSkills = { ...currentSkills, [school]: "basic" as const };
-      await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      const schoolUpdate = await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
+      if (schoolUpdate.error) {
+        console.error("LEARN_MAGIC_SCHOOL: failed to persist hero skills", schoolUpdate.error);
+        return NextResponse.json({ error: "Impossible d'enregistrer l'école de magie (DB)" }, { status: 500 });
+      }
       return NextResponse.json({ success: true, school });
     }
 
@@ -2341,15 +2372,15 @@ async function handleAdventureBuildingVisit({
   }
 
   if (buildingType === AdventureBuildingType.MAGIC_WELL) {
-    const weekKey = `${object.id}:${hero.id}`;
-    const currentWeek = getAdventureWeekKey(turnNumber);
-    if (weeklyAdventureVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise cette semaine." };
+    const visitKey = `${object.id}:${hero.id}`;
+    const currentDay = `day-${turnNumber}`;
+    if (weeklyAdventureVisits[visitKey] === currentDay) {
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise aujourd'hui." };
     }
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
     const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
     await supabase.from("heroes").update({ mana: maxMana }).eq("id", hero.id);
-    await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
+    await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, visitKey, currentDay);
     return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Puits magique visite : mana restauree." };
   }
 

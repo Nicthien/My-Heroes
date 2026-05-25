@@ -119,14 +119,11 @@ import {
 import {
   drawBoulderCluster,
   drawBush,
-  drawDeadGrove,
   drawDeadTree,
   drawDecorShadow,
   drawFlowers,
   drawGrassTuft,
-  drawOakGrove,
   drawOakTree,
-  drawPineGrove,
   drawPineTree,
   drawRockCluster,
   drawSmallRock,
@@ -787,15 +784,6 @@ class PhaserMapScene extends Phaser.Scene {
         break;
       case "tree-dead":
         drawDeadTree(batchGraphics, isoX, baseY, scale);
-        break;
-      case "grove-pine":
-        drawPineGrove(batchGraphics, isoX, baseY, scale);
-        break;
-      case "grove-oak":
-        drawOakGrove(batchGraphics, isoX, baseY, scale);
-        break;
-      case "grove-dead":
-        drawDeadGrove(batchGraphics, isoX, baseY, scale);
         break;
       case "rock-large":
         drawRockCluster(batchGraphics, isoX, baseY, scale);

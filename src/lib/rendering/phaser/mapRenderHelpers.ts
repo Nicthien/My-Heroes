@@ -251,16 +251,22 @@ export function pickNaturalWallTreeSprite(tile: MapTile) {
   const roll = hashTile(tile.x + 37, tile.y + 73);
 
   if (tile.terrain === TerrainType.SNOW || tile.terrain === TerrainType.MOUNTAIN) {
-    return roll > 0.82 ? MAP_SPRITES.decor.grove_dead : MAP_SPRITES.decor.grove_pine;
+    return roll > 0.82 ? MAP_SPRITES.decor.mountain_deadwood : MAP_SPRITES.decor.mountain_pine_rock;
   }
 
   if (tile.terrain === TerrainType.SWAMP || tile.terrain === TerrainType.LAVA) {
-    return roll > 0.72 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_dead;
+    return tile.terrain === TerrainType.LAVA
+      ? roll > 0.5
+        ? MAP_SPRITES.decor.lava_scorched_deadwood
+        : MAP_SPRITES.decor.lava_obsidian_bramble
+      : roll > 0.72
+        ? MAP_SPRITES.decor.swamp_cypress_cluster
+        : MAP_SPRITES.decor.swamp_willow_grove;
   }
 
   if (tile.terrain === TerrainType.FOREST) {
-    return roll > 0.45 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_oak;
+    return roll > 0.45 ? MAP_SPRITES.decor.forest_pine_grove : MAP_SPRITES.decor.forest_broadleaf_grove;
   }
 
-  return roll > 0.64 ? MAP_SPRITES.decor.grove_pine : MAP_SPRITES.decor.grove_oak;
+  return roll > 0.64 ? MAP_SPRITES.decor.grass_oak_copse : MAP_SPRITES.decor.grass_bramble_mound;
 }

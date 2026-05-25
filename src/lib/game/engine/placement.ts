@@ -56,6 +56,8 @@ const STARTING_MINE_SPECS = [
   },
 ] as const;
 
+const ZONE_RESOURCE_BUDGET_MULTIPLIER = 1.5;
+
 export interface PlacementContext {
   tiles: MapTile[][];
   zoneGrid: ZoneGrid;
@@ -76,7 +78,7 @@ function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
 
   // Buildings rares mais existants, piles fréquentes
   const choices: { value: ObjectSpec; weight: number }[] = [
-    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 0.9 })),
+    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 1.2 })),
     ...piles,
   ];
   return weightedPick(rng, choices);
@@ -106,11 +108,11 @@ function hasMajorObjectNearby(
 
 function buildingTargetForZone(type: string, budget: number): number {
   if (budget < 1500) return 0;
-  if (budget >= 9000) return 7;
-  if (budget >= 7000) return 6;
-  if (type === "treasure") return 5;
-  if (budget >= 3000) return 4;
-  return 2;
+  if (budget >= 9000) return type === "treasure" ? 10 : 9;
+  if (budget >= 7000) return type === "treasure" ? 9 : 8;
+  if (type === "treasure") return 7;
+  if (budget >= 3000) return 5;
+  return 3;
 }
 
 function placePile(ctx: PlacementContext, tile: MapTile, pile: PileSpec): void {
@@ -476,7 +478,8 @@ export function fillZone(
   options: { allowBuildings?: boolean } = {},
 ): ZoneFillResult {
   const meta = ctx.zoneGrid.meta[zoneId];
-  let budget = meta.value;
+  const resourceBudget = Math.floor(meta.value * ZONE_RESOURCE_BUDGET_MULTIPLIER);
+  let budget = resourceBudget;
   const placedBuildings: ZoneFillResult["placedBuildings"] = [];
   const placedPiles: ZoneFillResult["placedPiles"] = [];
   const allowBuildings = options.allowBuildings !== false;
@@ -493,10 +496,12 @@ export function fillZone(
 
   // Place les mines en priorite avant que les piles de ressources consomment le budget.
   const buildingTarget = allowBuildings ? buildingTargetForZone(meta.type, budget) : 0;
-  const buildingBudgetSlack = 3000;
+  const buildingBudgetSlack = 4200;
   let buildingsPlaced = 0;
 
-  const shuffled = shuffle(ctx.rng, allTiles);
+  const shuffled = shuffle(ctx.rng, allTiles).sort((a, b) =>
+    organicPlacementScore(ctx, b.x, b.y, zoneId) - organicPlacementScore(ctx, a.x, a.y, zoneId)
+  );
 
   const prioritizedBuildings = shuffle(ctx.rng, BUILDING_SPECS).sort((a, b) => {
     const aPreferred = a.preferredTerrain.includes(meta.baseTerrain) ? 0 : 1;
@@ -563,7 +568,7 @@ export function fillZone(
     }
   }
 
-  const spent = meta.value - Math.max(0, budget);
+  const spent = resourceBudget - Math.max(0, budget);
   const guardianThreat = Math.floor(meta.value * MONSTER_STRENGTH_MULTIPLIER[monsterStrength]);
 
   // Place 1-3 piles de monstres gardiens près des objets les plus précieux
@@ -591,6 +596,25 @@ function tryPlaceBuilding(
     return { x: t.x, y: t.y };
   }
   return null;
+}
+
+function organicPlacementScore(ctx: PlacementContext, x: number, y: number, zoneId: number): number {
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const centerDistance = Math.max(Math.abs(x - meta.centerX), Math.abs(y - meta.centerY));
+  const centerPenalty = centerDistance / Math.max(1, Math.min(ctx.width, ctx.height));
+  const cluster = tileNoise(x, y, `${meta.templateZoneId}:cluster`);
+  const ridge = tileNoise(Math.floor(x / 3), Math.floor(y / 3), `${meta.templateZoneId}:ridge`);
+  return cluster * 0.55 + ridge * 0.35 - centerPenalty * 0.1;
+}
+
+function tileNoise(x: number, y: number, salt: string): number {
+  let value = 2166136261;
+  const input = `${x}:${y}:${salt}`;
+  for (let i = 0; i < input.length; i++) {
+    value ^= input.charCodeAt(i);
+    value = Math.imul(value, 16777619);
+  }
+  return (value >>> 0) / 4294967295;
 }
 
 function placeZoneArtifacts(ctx: PlacementContext, zoneId: number, zoneValue: number): void {

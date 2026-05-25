@@ -409,12 +409,12 @@ function buildShowcaseMap(): GameMap {
     }, false);
   }
 
-  placeObject(map, 1, 11, { type: "wall", id: "wall-brick-1", subtype: "brick" }, false);
-  placeObject(map, 2, 11, { type: "wall", id: "wall-brick-2", subtype: "brick" }, false);
-  placeObject(map, 3, 11, { type: "wall", id: "wall-brick-3", subtype: "brick" }, false);
-  placeDecor(map, 4, 10, "grove-pine", true);
-  placeDecor(map, 5, 10, "grove-oak", true);
-  placeDecor(map, 6, 10, "grove-dead", true);
+  placeObject(map, 1, 11, { type: "wall", id: "rampart-wall-1", subtype: "brick" }, false);
+  placeObject(map, 2, 11, { type: "wall", id: "rampart-wall-2", subtype: "brick" }, false);
+  placeObject(map, 3, 11, { type: "wall", id: "rampart-wall-3", subtype: "brick" }, false);
+  placeDecor(map, 4, 10, "forest-pine-grove", true);
+  placeDecor(map, 5, 10, "grass-oak-copse", true);
+  placeDecor(map, 6, 10, "deadwood-thicket", true);
   placeDecor(map, 7, 10, "boulder-cluster", true);
   placeDecor(map, 24, 18, "tree-oak", false);
   placeDecor(map, 25, 18, "flower", false);

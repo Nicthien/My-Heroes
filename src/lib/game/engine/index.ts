@@ -20,12 +20,13 @@ import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./templat
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
 import { buildConnectionsAndWalls, enforceChokepointGateFrames } from "./connections";
 import { applyChokepointGuards, fillZone, placeStartingEconomy, placeTownInZone } from "./placement";
-import { buildRoads, buildSecondaryRoads } from "./roads";
+import { buildRoads, buildSecondaryRoads, ensureInvisibleAccessToObjects } from "./roads";
 import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
 import { placeAdventureBuildings } from "./adventure-buildings";
+import { placeLargeMountainMassifs } from "./large-obstacles";
 import { applyWorldEdge } from "./world-edge";
 import { measureDevPerformance } from "@/lib/dev/performanceMetrics";
 export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
@@ -518,7 +519,9 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   placeAdventureBuildings({ tiles, zoneGrid, width, height, rng });
 
   // 6) Décor (passe finale)
+  placeLargeMountainMassifs({ tiles, zoneGrid, width, height, rng });
   placeDecor(tiles, width, height, rng);
+  ensureInvisibleAccessToObjects(tiles, width, height, townPositions, roadOptions);
   applyWorldEdge(tiles, width, height, seed);
 
   // 7) Garantir que chaque chokepoint reste praticable même après décor

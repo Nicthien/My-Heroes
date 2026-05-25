@@ -83,9 +83,66 @@ export function isAllowedDecor(kind: DecorKind) {
     kind === "tree-pine" ||
     kind === "tree-oak" ||
     kind === "tree-dead" ||
-    kind === "grove-pine" ||
-    kind === "grove-oak" ||
-    kind === "grove-dead" ||
+    kind === "bramble-thicket" ||
+    kind === "fallen-log-barricade" ||
+    kind === "willow-swamp-grove" ||
+    kind === "birch-grove" ||
+    kind === "deadwood-thicket" ||
+    kind === "flowering-hedge" ||
+    kind === "grass-oak-copse" ||
+    kind === "grass-bramble-mound" ||
+    kind === "grass-flowering-hedge" ||
+    kind === "grass-reed-thicket" ||
+    kind === "grass-root-barricade" ||
+    kind === "grass-sapling-grove" ||
+    kind === "forest-pine-grove" ||
+    kind === "forest-broadleaf-grove" ||
+    kind === "forest-underwood-thicket" ||
+    kind === "forest-stump-ferns" ||
+    kind === "forest-birch-pine-screen" ||
+    kind === "forest-deadfall" ||
+    kind === "dirt-thorn-scrub" ||
+    kind === "dirt-dead-brush" ||
+    kind === "dirt-dry-log-barrier" ||
+    kind === "dirt-root-snarl" ||
+    kind === "dirt-cactus-brush" ||
+    kind === "dirt-bramble-ravine" ||
+    kind === "sand-cactus-cluster" ||
+    kind === "sand-desert-scrub" ||
+    kind === "sand-palm-stump" ||
+    kind === "sand-agave-barrier" ||
+    kind === "sand-tumbleweed-heap" ||
+    kind === "sand-saltbush-clump" ||
+    kind === "snow-pine-grove" ||
+    kind === "snow-birch-thicket" ||
+    kind === "snow-deadwood-barrier" ||
+    kind === "snow-bramble-mound" ||
+    kind === "snow-evergreen-drift" ||
+    kind === "snow-shrub-wall" ||
+    kind === "mountain-pine-rock" ||
+    kind === "mountain-cliff-brush" ||
+    kind === "mountain-deadwood" ||
+    kind === "mountain-mossy-roots" ||
+    kind === "mountain-fir-grove" ||
+    kind === "mountain-rhododendron" ||
+    kind === "swamp-willow-grove" ||
+    kind === "swamp-mangrove-tangle" ||
+    kind === "swamp-reed-thicket" ||
+    kind === "swamp-cypress-cluster" ||
+    kind === "swamp-bog-bramble" ||
+    kind === "swamp-fungus-log" ||
+    kind === "lava-charred-thorns" ||
+    kind === "lava-ember-roots" ||
+    kind === "lava-ash-fungus" ||
+    kind === "lava-scorched-deadwood" ||
+    kind === "lava-sulfur-shrub" ||
+    kind === "lava-obsidian-bramble" ||
+    kind === "massif-mountain-granite-2x2" ||
+    kind === "massif-mountain-snowcap-2x2" ||
+    kind === "massif-mountain-pine-2x2" ||
+    kind === "massif-mountain-volcanic-2x2" ||
+    kind === "massif-mountain-desert-2x2" ||
+    kind === "massif-mountain-mossy-2x2" ||
     kind === "rock-large" ||
     kind === "rock-small" ||
     kind === "boulder-cluster" ||

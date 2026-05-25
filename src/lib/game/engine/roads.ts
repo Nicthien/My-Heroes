@@ -4,6 +4,8 @@ interface RoadBuildOptions {
   allowWaterRoads?: boolean;
 }
 
+type InvisibleAccessObjectType = NonNullable<MapTile["object"]>["type"];
+
 /** A* tolérant aux murs/objets : on cherche un chemin qui passe par les tiles passables. */
 function findRoadPath(
   tiles: MapTile[][],
@@ -46,7 +48,8 @@ function findRoadPath(
       if (t.terrain === TerrainType.WATER && !isStartOrEnd && !canBridgeWater(tiles, width, height, n.x, n.y)) continue;
       const wobble = ((n.x * 928371 + n.y * 523111) % 7) * 0.035;
       const bridgeCost = t.terrain === TerrainType.WATER ? 6 : 0;
-      const cost = (t.movementCost === 999 ? 5 : t.movementCost) + bridgeCost + wobble;
+      const roadReuseBonus = t.road ? -75 : 0;
+      const cost = Math.max(1, (t.movementCost === 999 ? 5 : t.movementCost) + bridgeCost + roadReuseBonus + wobble);
       const g = cur.g + cost;
       const nKey = `${n.x},${n.y}`;
       if (g >= (best.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
@@ -104,7 +107,8 @@ function findForcedRoadPath(
       const waterCost = tile.terrain === TerrainType.WATER ? 4 : 0;
       const wallCost = tile.object?.type === "wall" ? 8 : 0;
       const blockingDecorCost = tile.decor?.blocking ? 4 : 0;
-      const cost = (tile.movementCost === 999 ? 3 : tile.movementCost) + waterCost + wallCost + blockingDecorCost;
+      const roadReuseBonus = tile.road ? -75 : 0;
+      const cost = Math.max(1, (tile.movementCost === 999 ? 3 : tile.movementCost) + waterCost + wallCost + blockingDecorCost + roadReuseBonus);
       const g = cur.g + cost;
       const nKey = `${n.x},${n.y}`;
       if (g >= (best.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
@@ -294,39 +298,274 @@ export function buildSecondaryRoads(
   options: RoadBuildOptions = {},
 ): void {
   for (const mine of miningPositions) {
+    if (townPositions.length === 0) continue;
+
+    const { town: bestTown, distance: bestDist } = findBestTownForMine(tiles, townPositions, mine);
+
+    const mineTile = tiles[mine.y][mine.x];
+    const shouldForceFallback = bestDist <= maxDistance || !mineTile.road;
+    if (isPrimaryStartingMine(tiles[mine.y][mine.x])) {
+      const primaryPath = findForcedRoadPath(tiles, width, height, bestTown, mine, { ...options, allowWaterRoads: true });
+      if (primaryPath.length > 0) {
+        paintLandRoad(tiles, primaryPath, "dirt", options);
+        ensureLocalRoadAccess(tiles, width, height, mine, "dirt", options);
+        continue;
+      }
+    }
+
     const pathToRoad = findPathToNearestRoad(tiles, width, height, mine, options);
     if (pathToRoad.length > 0) {
       paintRoad(tiles, pathToRoad, "dirt", options);
       continue;
     }
 
-    if (townPositions.length === 0) continue;
-
-    let bestTown = townPositions[0];
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (const t of townPositions) {
-      const d = Math.abs(t.x - mine.x) + Math.abs(t.y - mine.y);
-      if (d < bestDist) {
-        bestDist = d;
-        bestTown = t;
-      }
-    }
-
-    const shouldForceFallback = bestDist <= maxDistance || !tiles[mine.y][mine.x].road;
-    const path = findRoadPath(tiles, width, height, bestTown, mine, options);
+    const path = findRoadPath(tiles, width, height, mine, bestTown, options);
     if (path.length > 0) {
       paintRoad(tiles, path, "dirt", options);
     } else if (shouldForceFallback) {
-      const forcedPath = findForcedRoadPath(tiles, width, height, bestTown, mine, options);
+      const forcedPath = findForcedRoadPath(tiles, width, height, mine, bestTown, options);
       if (forcedPath.length > 0) {
         paintRoad(tiles, forcedPath, "dirt", options);
-      } else if (options.allowWaterRoads === false) {
+      } else {
         ensureLocalRoadAccess(tiles, width, height, mine, "dirt", options);
       }
-    } else if (options.allowWaterRoads === false) {
+    } else {
       ensureLocalRoadAccess(tiles, width, height, mine, "dirt", options);
     }
   }
+}
+
+function isPrimaryStartingMine(tile: MapTile | undefined): boolean {
+  const role = tile?.object?.strategicRole;
+  return role === "start_wood" || role === "start_ore";
+}
+
+function paintLandRoad(
+  tiles: MapTile[][],
+  path: Position[],
+  type: RoadType,
+  options: RoadBuildOptions,
+): void {
+  for (const position of path) {
+    const tile = tiles[position.y][position.x];
+    if (tile.terrain === TerrainType.WATER) {
+      tile.terrain = TerrainType.GRASS;
+      tile.elevation = 0;
+      tile.isPassable = true;
+      tile.movementCost = 100;
+    }
+  }
+  paintRoad(tiles, path, type, { ...options, allowWaterRoads: true });
+}
+
+function findBestTownForMine(
+  tiles: MapTile[][],
+  townPositions: Position[],
+  mine: Position,
+): { town: Position; distance: number } {
+  const mineOwner = tiles[mine.y]?.[mine.x]?.object?.ownerIndex;
+  const ownerTown = typeof mineOwner === "number"
+    ? townPositions.find((town) => tiles[town.y]?.[town.x]?.object?.subtype === `player-${mineOwner}`)
+    : undefined;
+  const candidates = ownerTown ? [ownerTown] : townPositions;
+
+  let bestTown = candidates[0];
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const town of candidates) {
+    const distance = Math.abs(town.x - mine.x) + Math.abs(town.y - mine.y);
+    if (distance < bestDist) {
+      bestDist = distance;
+      bestTown = town;
+    }
+  }
+
+  return { town: bestTown, distance: bestDist };
+}
+
+export function ensureInvisibleAccessToObjects(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  anchors: Position[],
+  options: RoadBuildOptions = {},
+): void {
+  const landAnchors = anchors.filter((anchor) => isUsableInvisibleAccessTile(tiles[anchor.y]?.[anchor.x], options));
+  if (landAnchors.length === 0) return;
+  const roadPositions = collectRoadPositions(tiles, width, height);
+
+  const objectTypes = new Set<InvisibleAccessObjectType>([
+    "adventure_building",
+    "artifact",
+    "resource",
+    "monster",
+  ]);
+
+  for (const row of tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (!object || !objectTypes.has(object.type)) continue;
+      if (tile.terrain === TerrainType.WATER || tile.worldEdge) continue;
+
+      const target = findBestInvisibleAccessTarget(tiles, width, height, tile, options, roadPositions);
+      if (!target) continue;
+
+      const start = findNearestAnchor(target, landAnchors);
+      const path = findInvisibleAccessPath(tiles, width, height, start, target, options);
+      if (path.length > 0) clearInvisibleAccessPath(tiles, path, options);
+    }
+  }
+}
+
+function findBestInvisibleAccessTarget(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  objectTile: MapTile,
+  options: RoadBuildOptions,
+  roadPositions: Position[],
+): Position | null {
+  const candidates = getOrthogonalNeighbors(objectTile)
+    .filter((position) => position.x >= 0 && position.x < width && position.y >= 0 && position.y < height)
+    .filter((position) => canClearForInvisibleAccess(tiles[position.y][position.x], options));
+
+  if (candidates.length === 0) return null;
+  return candidates.sort((left, right) => {
+    const leftRoadDistance = distanceToNearestRoad(left, roadPositions);
+    const rightRoadDistance = distanceToNearestRoad(right, roadPositions);
+    return leftRoadDistance - rightRoadDistance;
+  })[0];
+}
+
+function findNearestAnchor(target: Position, anchors: Position[]): Position {
+  return anchors.reduce((best, anchor) =>
+    manhattan(anchor, target) < manhattan(best, target) ? anchor : best
+  , anchors[0]);
+}
+
+function findInvisibleAccessPath(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  start: Position,
+  end: Position,
+  options: RoadBuildOptions,
+): Position[] {
+  const openSet: { pos: Position; g: number; f: number; path: Position[] }[] = [];
+  const best = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  openSet.push({ pos: start, g: 0, f: manhattan(start, end), path: [start] });
+
+  while (openSet.length > 0) {
+    openSet.sort((a, b) => a.f - b.f);
+    const current = openSet.shift()!;
+    const currentKey = `${current.pos.x},${current.pos.y}`;
+    if (current.g > (best.get(currentKey) ?? Number.POSITIVE_INFINITY)) continue;
+    if (current.pos.x === end.x && current.pos.y === end.y) return current.path;
+
+    for (const next of getOrthogonalNeighbors(current.pos)) {
+      if (next.x < 0 || next.x >= width || next.y < 0 || next.y >= height) continue;
+      const tile = tiles[next.y][next.x];
+      if (!canClearForInvisibleAccess(tile, options)) continue;
+
+      const cost = invisibleAccessCost(tile);
+      const nextG = current.g + cost;
+      const nextKey = `${next.x},${next.y}`;
+      if (nextG >= (best.get(nextKey) ?? Number.POSITIVE_INFINITY)) continue;
+      best.set(nextKey, nextG);
+      openSet.push({
+        pos: next,
+        g: nextG,
+        f: nextG + manhattan(next, end),
+        path: [...current.path, next],
+      });
+    }
+  }
+
+  return [];
+}
+
+function clearInvisibleAccessPath(
+  tiles: MapTile[][],
+  path: Position[],
+  options: RoadBuildOptions,
+): void {
+  for (const position of path) {
+    const tile = tiles[position.y][position.x];
+    if (!canClearForInvisibleAccess(tile, options)) continue;
+    if (tile.decor?.blocking) tile.decor = undefined;
+    tile.isPassable = true;
+    if (tile.movementCost === 999) tile.movementCost = baseMovementCost(tile.terrain);
+  }
+}
+
+function getOrthogonalNeighbors(position: Position): Position[] {
+  return [
+    { x: position.x + 1, y: position.y },
+    { x: position.x - 1, y: position.y },
+    { x: position.x, y: position.y + 1 },
+    { x: position.x, y: position.y - 1 },
+  ];
+}
+
+function canClearForInvisibleAccess(tile: MapTile | undefined, options: RoadBuildOptions): tile is MapTile {
+  if (!tile || tile.worldEdge || isTownFootprint(tile)) return false;
+  if (tile.object && tile.object.type !== "wall") return false;
+  if (tile.object?.type === "wall") return false;
+  if (tile.terrain === TerrainType.LAVA) return false;
+  if (tile.terrain === TerrainType.WATER && options.allowWaterRoads === false) return false;
+  if (tile.terrain === TerrainType.WATER) return false;
+  return tile.isPassable || tile.decor?.blocking === true;
+}
+
+function isUsableInvisibleAccessTile(tile: MapTile | undefined, options: RoadBuildOptions): tile is MapTile {
+  if (!tile || tile.worldEdge || !tile.isPassable || tile.decor?.blocking) return false;
+  if (tile.object && tile.object.type !== "gate" && tile.object.type !== "town") return false;
+  if (tile.terrain === TerrainType.WATER && options.allowWaterRoads === false) return false;
+  return tile.terrain !== TerrainType.WATER && tile.terrain !== TerrainType.LAVA;
+}
+
+function invisibleAccessCost(tile: MapTile): number {
+  const decorPenalty = tile.decor?.blocking ? 350 : 0;
+  const roadBonus = tile.road ? -40 : 0;
+  return Math.max(10, baseMovementCost(tile.terrain) + decorPenalty + roadBonus);
+}
+
+function baseMovementCost(terrain: TerrainType): number {
+  switch (terrain) {
+    case TerrainType.SAND:
+    case TerrainType.FOREST:
+    case TerrainType.SNOW:
+      return 150;
+    case TerrainType.SWAMP:
+      return 175;
+    case TerrainType.MOUNTAIN:
+      return 250;
+    case TerrainType.WATER:
+      return 100;
+    default:
+      return 100;
+  }
+}
+
+function collectRoadPositions(tiles: MapTile[][], width: number, height: number): Position[] {
+  const roads: Position[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (tiles[y][x].road) roads.push({ x, y });
+    }
+  }
+  return roads;
+}
+
+function distanceToNearestRoad(
+  position: Position,
+  roads: Position[],
+): number {
+  if (roads.length === 0) return 0;
+  return roads.reduce((best, road) => Math.min(best, manhattan(position, road)), Number.POSITIVE_INFINITY);
+}
+
+function manhattan(a: Position, b: Position): number {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
 function ensureLocalRoadAccess(
@@ -337,6 +576,11 @@ function ensureLocalRoadAccess(
   type: RoadType,
   options: RoadBuildOptions,
 ): void {
+  const startTile = tiles[start.y]?.[start.x];
+  if (startTile?.road && getOrthogonalNeighbors(start).some((neighbor) => tiles[neighbor.y]?.[neighbor.x]?.road)) {
+    return;
+  }
+
   const local: Position[] = [start];
   const queue: { pos: Position; distance: number }[] = [{ pos: start, distance: 0 }];
   const seen = new Set<string>([`${start.x},${start.y}`]);

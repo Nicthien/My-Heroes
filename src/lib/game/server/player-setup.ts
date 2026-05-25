@@ -9,13 +9,13 @@ import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 export const PLAYER_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#ec4899"];
 export const AI_NAMES = ["Sandro IA", "Kyrre IA", "Solmyr IA", "Mephala IA", "Crag Hack IA", "Gunnar IA", "Tazar IA", "Loynis IA"];
 export const STARTING_RESOURCES = {
-  gold: 5000,
-  wood: 200,
-  ore: 100,
-  mercury: 50,
-  crystals: 50,
-  gems: 50,
-  sulfur: 50,
+  gold: 10000,
+  wood: 20,
+  ore: 20,
+  mercury: 10,
+  crystals: 10,
+  gems: 10,
+  sulfur: 10,
 };
 
 const STARTER_ARMY_COUNTS: [number, number, number] = [20, 12, 4];

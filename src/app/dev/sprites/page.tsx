@@ -314,11 +314,66 @@ ADVENTURE_BUILDING_DETAILS["adventure-sea-chest"] = {
 };
 
 const OBSTACLE_DETAILS: Record<string, { label: string; description: string }> = {
-  "wall-brick": { label: "Mur de pierre", description: "Décor minéral impassable. Bloque le mouvement." },
-  "wall-vegetal": { label: "Mur végétal", description: "Haie dense impassable. Bloque le mouvement." },
-  "grove-pine": { label: "Bosquet de pins", description: "Bosquet dense d'arbres conifères, infranchissable." },
-  "grove-oak": { label: "Bosquet de chênes", description: "Bosquet feuillu massif, infranchissable." },
-  "grove-dead": { label: "Bosquet mort", description: "Arbres morts compacts, infranchissables." },
+  "bramble-thicket": { label: "Roncier epais", description: "Vegetation epineuse impassable. Bloque le mouvement." },
+  "fallen-log-barricade": { label: "Barricade de troncs", description: "Troncs moussus et branches compactes, infranchissables." },
+  "willow-swamp-grove": { label: "Bosquet de saules", description: "Bosquet humide et dense, infranchissable." },
+  "birch-grove": { label: "Bosquet de bouleaux", description: "Rideau de bouleaux compact, infranchissable." },
+  "deadwood-thicket": { label: "Fourre de bois mort", description: "Racines mortes et troncs tordus, infranchissables." },
+  "flowering-hedge": { label: "Haie fleurie", description: "Haie fleurie dense, infranchissable." },
+  "grass-oak-copse": { label: "Plaine - chenaie dense", description: "Obstacle vegetal de plaine impassable." },
+  "grass-bramble-mound": { label: "Plaine - monticule de ronces", description: "Obstacle vegetal de plaine impassable." },
+  "grass-flowering-hedge": { label: "Plaine - haie fleurie", description: "Obstacle vegetal de plaine impassable." },
+  "grass-reed-thicket": { label: "Plaine - fourre de roseaux", description: "Obstacle vegetal de plaine impassable." },
+  "grass-root-barricade": { label: "Plaine - barricade de racines", description: "Obstacle vegetal de plaine impassable." },
+  "grass-sapling-grove": { label: "Plaine - jeunes arbres", description: "Obstacle vegetal de plaine impassable." },
+  "forest-pine-grove": { label: "Foret - bosquet de pins", description: "Obstacle forestier impassable." },
+  "forest-broadleaf-grove": { label: "Foret - bosquet feuillu", description: "Obstacle forestier impassable." },
+  "forest-underwood-thicket": { label: "Foret - sous-bois dense", description: "Obstacle forestier impassable." },
+  "forest-stump-ferns": { label: "Foret - souches et fougeres", description: "Obstacle forestier impassable." },
+  "forest-birch-pine-screen": { label: "Foret - ecran bouleaux-pins", description: "Obstacle forestier impassable." },
+  "forest-deadfall": { label: "Foret - chablis sombre", description: "Obstacle forestier impassable." },
+  "dirt-thorn-scrub": { label: "Terre - broussailles seches", description: "Obstacle de friche impassable." },
+  "dirt-dead-brush": { label: "Terre - tas de branches mortes", description: "Obstacle de friche impassable." },
+  "dirt-dry-log-barrier": { label: "Terre - barriere de troncs secs", description: "Obstacle de friche impassable." },
+  "dirt-root-snarl": { label: "Terre - noeud de racines", description: "Obstacle de friche impassable." },
+  "dirt-cactus-brush": { label: "Terre - cactus et broussailles", description: "Obstacle de friche impassable." },
+  "dirt-bramble-ravine": { label: "Terre - roncier ravine", description: "Obstacle de friche impassable." },
+  "sand-cactus-cluster": { label: "Sable - cactus serres", description: "Obstacle desertique impassable." },
+  "sand-desert-scrub": { label: "Sable - broussailles desertiques", description: "Obstacle desertique impassable." },
+  "sand-palm-stump": { label: "Sable - souches de palmiers", description: "Obstacle desertique impassable." },
+  "sand-agave-barrier": { label: "Sable - barriere d'agaves", description: "Obstacle desertique impassable." },
+  "sand-tumbleweed-heap": { label: "Sable - amas de virevoltants", description: "Obstacle desertique impassable." },
+  "sand-saltbush-clump": { label: "Sable - touffe de salicornes", description: "Obstacle desertique impassable." },
+  "snow-pine-grove": { label: "Neige - pins enneiges", description: "Obstacle hivernal impassable." },
+  "snow-birch-thicket": { label: "Neige - fourre de bouleaux", description: "Obstacle hivernal impassable." },
+  "snow-deadwood-barrier": { label: "Neige - bois mort gele", description: "Obstacle hivernal impassable." },
+  "snow-bramble-mound": { label: "Neige - roncier gele", description: "Obstacle hivernal impassable." },
+  "snow-evergreen-drift": { label: "Neige - coniferes et congeres", description: "Obstacle hivernal impassable." },
+  "snow-shrub-wall": { label: "Neige - mur d'arbustes", description: "Obstacle hivernal impassable." },
+  "mountain-pine-rock": { label: "Montagne - pins et rochers", description: "Obstacle alpin impassable." },
+  "mountain-cliff-brush": { label: "Montagne - broussailles de falaise", description: "Obstacle alpin impassable." },
+  "mountain-deadwood": { label: "Montagne - bois tordu", description: "Obstacle alpin impassable." },
+  "mountain-mossy-roots": { label: "Montagne - racines moussues", description: "Obstacle alpin impassable." },
+  "mountain-fir-grove": { label: "Montagne - sapins courbes", description: "Obstacle alpin impassable." },
+  "mountain-rhododendron": { label: "Montagne - rhododendrons", description: "Obstacle alpin impassable." },
+  "swamp-willow-grove": { label: "Marais - saules pleureurs", description: "Obstacle marecageux impassable." },
+  "swamp-mangrove-tangle": { label: "Marais - racines de mangrove", description: "Obstacle marecageux impassable." },
+  "swamp-reed-thicket": { label: "Marais - roseaux denses", description: "Obstacle marecageux impassable." },
+  "swamp-cypress-cluster": { label: "Marais - cypres morts", description: "Obstacle marecageux impassable." },
+  "swamp-bog-bramble": { label: "Marais - roncier de tourbiere", description: "Obstacle marecageux impassable." },
+  "swamp-fungus-log": { label: "Marais - tronc fongique", description: "Obstacle marecageux impassable." },
+  "lava-charred-thorns": { label: "Lave - epines carbonisees", description: "Obstacle volcanique impassable." },
+  "lava-ember-roots": { label: "Lave - racines braisantes", description: "Obstacle volcanique impassable." },
+  "lava-ash-fungus": { label: "Lave - champignons de cendre", description: "Obstacle volcanique impassable." },
+  "lava-scorched-deadwood": { label: "Lave - bois calcine", description: "Obstacle volcanique impassable." },
+  "lava-sulfur-shrub": { label: "Lave - buisson sulfureux", description: "Obstacle volcanique impassable." },
+  "lava-obsidian-bramble": { label: "Lave - ronces d'obsidienne", description: "Obstacle volcanique impassable." },
+  "massif-mountain-granite-2x2": { label: "Massif 2x2 - granite", description: "Grand obstacle mineral couvrant quatre cases." },
+  "massif-mountain-snowcap-2x2": { label: "Massif 2x2 - enneige", description: "Grand obstacle alpin couvrant quatre cases." },
+  "massif-mountain-pine-2x2": { label: "Massif 2x2 - pins", description: "Grand obstacle rocheux et boise couvrant quatre cases." },
+  "massif-mountain-volcanic-2x2": { label: "Massif 2x2 - volcanique", description: "Grand obstacle d'obsidienne couvrant quatre cases." },
+  "massif-mountain-desert-2x2": { label: "Massif 2x2 - mesa", description: "Grand obstacle desertique couvrant quatre cases." },
+  "massif-mountain-mossy-2x2": { label: "Massif 2x2 - moussu", description: "Grand obstacle de falaise moussue couvrant quatre cases." },
   "boulder-cluster": { label: "Amas de rochers", description: "Tas de rochers impassable." },
 };
 
@@ -692,29 +747,45 @@ const SIEGE_FORTIFICATION_GROUP: SpriteEntry[] = [
   },
 ];
 
-const WEBP_GROUPS: WebpGroup[] = [
-  { label: "Factions", entries: FACTION_TOWNS_GROUP },
-  { label: "Bâtiments de ressources", entries: RESOURCE_BUILDING_GROUP },
-  { label: "Aventures", entries: ADVENTURE_BUILDING_GROUP },
+const COMBAT_GROUPS: WebpGroup[] = [
   { label: "Machines de guerre", entries: WAR_MACHINE_GROUP },
-  { label: "Fortifications de siege", entries: SIEGE_FORTIFICATION_GROUP },
+  { label: "Fortifications de siège", entries: SIEGE_FORTIFICATION_GROUP },
+];
+
+const ADVENTURE_GROUPS: WebpGroup[] = [
+  { label: "Villes de faction", entries: FACTION_TOWNS_GROUP },
+  { label: "Bâtiments de ressources", entries: RESOURCE_BUILDING_GROUP },
+  { label: "Bâtiments d'aventure", entries: ADVENTURE_BUILDING_GROUP },
+  { label: "Banques de créatures", entries: CREATURE_BANK_GROUP },
   { label: "Demeures externes", entries: EXTERNAL_DWELLING_GROUP },
-  { label: "Bâtiments de ville - communs", entries: TOWN_BUILDING_COMMON_GROUP },
-  { label: "Bâtiments de ville - demeures améliorées", entries: TOWN_BUILDING_UPGRADED_DWELLING_GROUP },
-  { label: "Bâtiments de ville - uniques", entries: TOWN_BUILDING_UNIQUE_GROUP },
-  ...ARTIFACT_GROUPS,
-  { label: "Banques de creatures", entries: CREATURE_BANK_GROUP },
   { label: "Obstacles", entries: OBSTACLE_GROUP },
   { label: "Ressources", entries: RESOURCE_GROUP },
 ];
 
-const WEBP_FLAT: SpriteEntry[] = WEBP_GROUPS.flatMap((group) => group.entries);
+const TOWN_GROUPS: WebpGroup[] = [
+  { label: "Bâtiments communs", entries: TOWN_BUILDING_COMMON_GROUP },
+  { label: "Demeures améliorées", entries: TOWN_BUILDING_UPGRADED_DWELLING_GROUP },
+  { label: "Bâtiments uniques", entries: TOWN_BUILDING_UNIQUE_GROUP },
+];
 
-const UNIT_COUNT = UNIT_ENTRIES.length;
+const ARTIFACT_FLAT = ARTIFACT_GROUPS.flatMap((group) => group.entries);
+const COMBAT_FLAT = [...UNIT_ENTRIES, ...COMBAT_GROUPS.flatMap((group) => group.entries)];
+const ADVENTURE_FLAT = ADVENTURE_GROUPS.flatMap((group) => group.entries);
+const TOWN_FLAT = TOWN_GROUPS.flatMap((group) => group.entries);
+
+const COMBAT_COUNT = COMBAT_FLAT.length;
+const ADVENTURE_COUNT = ADVENTURE_FLAT.length;
+const TOWN_COUNT = TOWN_FLAT.length;
+const ARTIFACT_COUNT = ARTIFACT_FLAT.length;
 const SPRITESHEET_COUNT = SHEET_ENTRIES.length;
-const WEBP_COUNT = WEBP_FLAT.length;
 
-type GalleryTab = "units" | "spritesheets" | "webp" | "svg";
+type GalleryTab = "combat" | "adventure" | "towns" | "artifacts" | "spritesheets" | "svg";
+type GalleryTabDefinition = {
+  id: GalleryTab;
+  label: string;
+  count: number;
+  render: (onSelect: (selection: Selection) => void) => ReactNode;
+};
 
 function findFlatIndex(entries: SpriteEntry[], target: SpriteEntry): number {
   const byPath = entries.findIndex((entry) => entry.path === target.path && entry.label === target.label);
@@ -1405,7 +1476,7 @@ function CollapsibleGroup({
   );
 }
 
-function UnitsTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
+function CombatTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
   return (
     <section>
       {FACTION_GROUPS.map((group, index) => (
@@ -1414,7 +1485,7 @@ function UnitsTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
           count={group.units.length}
           defaultOpen={index < 2 || FEATURED_UNIT_GROUPS.has(group.key)}
           title={group.label}
-          subtitle="Unités WebP"
+          subtitle="Unités de combat"
         >
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7">
             {group.units.map((unitType) => {
@@ -1431,6 +1502,80 @@ function UnitsTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
           </div>
         </CollapsibleGroup>
       ))}
+      <GroupedSpritesSections
+        groups={COMBAT_GROUPS}
+        onSelect={onSelect}
+        openLabels={new Set(["Machines de guerre", "Fortifications de siège"])}
+      />
+    </section>
+  );
+}
+
+function GroupedSpritesSections({
+  groups,
+  onSelect,
+  openLabels,
+}: {
+  groups: WebpGroup[];
+  onSelect: (selection: Selection) => void;
+  openLabels?: Set<string>;
+}) {
+  const flatEntries = groups.flatMap((group) => group.entries);
+  return (
+    <>
+      {groups.map((group, index) => {
+        if (group.entries.length === 0) return null;
+        const defaultOpen = openLabels ? openLabels.has(group.label) : index < 2;
+        return (
+          <CollapsibleGroup key={group.label} count={group.entries.length} defaultOpen={defaultOpen} title={group.label}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+              {group.entries.map((entry) => {
+                const flatIndex = findFlatIndex(flatEntries, entry);
+                return (
+                  <StaticCard
+                    key={`${group.label}-${entry.path}-${entry.label}`}
+                    entries={flatEntries}
+                    index={flatIndex}
+                    onSelect={onSelect}
+                  />
+                );
+              })}
+            </div>
+          </CollapsibleGroup>
+        );
+      })}
+    </>
+  );
+}
+
+function AdventureTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
+  return (
+    <section>
+      <GroupedSpritesSections
+        groups={ADVENTURE_GROUPS}
+        onSelect={onSelect}
+        openLabels={new Set(["Villes de faction", "Bâtiments de ressources", "Bâtiments d'aventure"])}
+      />
+    </section>
+  );
+}
+
+function TownsTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
+  return (
+    <section>
+      <GroupedSpritesSections
+        groups={TOWN_GROUPS}
+        onSelect={onSelect}
+        openLabels={new Set(["Bâtiments communs", "Demeures améliorées"])}
+      />
+    </section>
+  );
+}
+
+function ArtifactsTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
+  return (
+    <section>
+      <GroupedSpritesSections groups={ARTIFACT_GROUPS} onSelect={onSelect} />
     </section>
   );
 }
@@ -1571,35 +1716,49 @@ function SvgTab() {
   );
 }
 
-function WebpTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
-  return (
-    <section>
-      {WEBP_GROUPS.map((group, index) => {
-        if (group.entries.length === 0) return null;
-        const defaultOpen =
-          index < 2 ||
-          group.label === "Machines de guerre" ||
-          group.label === "Fortifications de siege";
-        return (
-          <CollapsibleGroup key={group.label} count={group.entries.length} defaultOpen={defaultOpen} title={group.label}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-              {group.entries.map((entry) => {
-                const flatIndex = findFlatIndex(WEBP_FLAT, entry);
-                return (
-                  <StaticCard key={`${group.label}-${entry.path}-${entry.label}`} entries={WEBP_FLAT} index={flatIndex} onSelect={onSelect} />
-                );
-              })}
-            </div>
-          </CollapsibleGroup>
-        );
-      })}
-    </section>
-  );
-}
+const GALLERY_TABS: GalleryTabDefinition[] = [
+  {
+    id: "combat",
+    label: "Combat",
+    count: COMBAT_COUNT,
+    render: (onSelect) => <CombatTab onSelect={onSelect} />,
+  },
+  {
+    id: "adventure",
+    label: "Aventure",
+    count: ADVENTURE_COUNT,
+    render: (onSelect) => <AdventureTab onSelect={onSelect} />,
+  },
+  {
+    id: "towns",
+    label: "Villes",
+    count: TOWN_COUNT,
+    render: (onSelect) => <TownsTab onSelect={onSelect} />,
+  },
+  {
+    id: "artifacts",
+    label: "Artefacts",
+    count: ARTIFACT_COUNT,
+    render: (onSelect) => <ArtifactsTab onSelect={onSelect} />,
+  },
+  {
+    id: "spritesheets",
+    label: "Spritesheets",
+    count: SPRITESHEET_COUNT,
+    render: (onSelect) => <SpritesheetsTab onSelect={onSelect} />,
+  },
+  {
+    id: "svg",
+    label: "UI / SVG",
+    count: SVG_COUNT,
+    render: () => <SvgTab />,
+  },
+];
 
 export default function SpritesGalleryPage() {
-  const [activeTab, setActiveTab] = useState<GalleryTab>("units");
+  const [activeTab, setActiveTab] = useState<GalleryTab>("combat");
   const [selection, setSelection] = useState<Selection>(null);
+  const activeTabDefinition = GALLERY_TABS.find((tab) => tab.id === activeTab) ?? GALLERY_TABS[0];
 
   const navigate = (offset: number) => {
     if (!selection) return;
@@ -1614,28 +1773,32 @@ export default function SpritesGalleryPage() {
   return (
     <div className="h-screen overflow-y-auto bg-[#151712] px-4 py-6 text-stone-100 sm:px-8 sm:py-10">
       <header className="sticky top-0 z-10 mx-auto max-w-7xl border-b border-stone-800 bg-[#151712]/95 pb-4 backdrop-blur">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid gap-4">
           <div>
             <h1 className="text-3xl font-black text-amber-200">Galerie des sprites</h1>
-            <p className="mt-1 text-sm text-stone-400">
-              Inventaire visuel : unités WebP, spritesheets et fichiers statiques de <code>public/</code>. Navigation au clavier
-              (← →) et boutons dans la fenêtre pour parcourir une catégorie.
+            <p className="mt-1 max-w-3xl text-sm text-stone-400">
+              Inspection métier des sprites du jeu. Ouvrez une carte pour vérifier le rendu, les détails et la navigation au clavier.
             </p>
           </div>
-          <nav aria-label="Types de ressources" className="flex flex-wrap gap-2">
-            <TabButton active={activeTab === "units"} count={UNIT_COUNT} label="Unités" onClick={() => setActiveTab("units")} />
-            <TabButton active={activeTab === "spritesheets"} count={SPRITESHEET_COUNT} label="Spritesheets" onClick={() => setActiveTab("spritesheets")} />
-            <TabButton active={activeTab === "webp"} count={WEBP_COUNT} label="Images WebP" onClick={() => setActiveTab("webp")} />
-            <TabButton active={activeTab === "svg"} count={SVG_COUNT} label="Icônes SVG" onClick={() => setActiveTab("svg")} />
+          <nav aria-label="Types de ressources" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {GALLERY_TABS.map((tab) => (
+              <TabButton
+                key={tab.id}
+                active={activeTab === tab.id}
+                count={tab.count}
+                label={tab.label}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setSelection(null);
+                }}
+              />
+            ))}
           </nav>
         </div>
       </header>
 
       <main className="mx-auto mt-6 max-w-7xl">
-        {activeTab === "units" ? <UnitsTab onSelect={setSelection} /> : null}
-        {activeTab === "spritesheets" ? <SpritesheetsTab onSelect={setSelection} /> : null}
-        {activeTab === "webp" ? <WebpTab onSelect={setSelection} /> : null}
-        {activeTab === "svg" ? <SvgTab /> : null}
+        {activeTabDefinition.render(setSelection)}
       </main>
       {selection && selectedEntry ? (
         <SpriteLightbox

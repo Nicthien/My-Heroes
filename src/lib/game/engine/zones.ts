@@ -18,18 +18,31 @@ export function buildZoneGrid(
   rng?: RNG,
   landmass?: Landmass,
 ): ZoneGrid {
-  const meta: ZoneMeta[] = template.zones.map((z, idx) => ({
-    id: idx,
-    templateZoneId: z.id,
-    type: z.type,
-    ownerIndex: z.ownerIndex,
-    centerX: Math.round(jitterNormalized(z.nx, rng) * (width - 1)),
-    centerY: Math.round(jitterNormalized(z.ny, rng) * (height - 1)),
-    baseTerrain: z.baseTerrain,
-    value: z.value,
-    hasTown: z.hasTown,
-    townIsNeutral: z.townIsNeutral,
-  }));
+  const meta: ZoneMeta[] = template.zones.map((z, idx) => {
+    // Défauts: les zones joueur n'ont PAS de pocket (cadeau visible devant la porte
+    // = mauvais design). Pockets réservés aux zones neutres. Léger boost de densité
+    // (1.10) pour compenser le fait que les mines de démarrage occupent déjà des
+    // tiles, ce qui réduit les candidats pour les piles libres.
+    const treasureDensity = z.treasureDensity ?? (z.type === "player" ? 1.10 : 1);
+    const pocketCount = z.pocketCount ?? 0;
+    const pocketGuardStrength = z.pocketGuardStrength ?? "normal";
+    return {
+      id: idx,
+      templateZoneId: z.id,
+      type: z.type,
+      ownerIndex: z.ownerIndex,
+      centerX: Math.round(jitterNormalized(z.nx, rng) * (width - 1)),
+      centerY: Math.round(jitterNormalized(z.ny, rng) * (height - 1)),
+      baseTerrain: z.baseTerrain,
+      value: z.value,
+      hasTown: z.hasTown,
+      townIsNeutral: z.townIsNeutral,
+      treasureDensity,
+      pocketCount,
+      pocketGuardStrength,
+      pocketArtifactClass: z.pocketArtifactClass,
+    };
+  });
 
   if (landmass) {
     for (const zone of meta) {

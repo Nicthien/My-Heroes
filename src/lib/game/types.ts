@@ -770,6 +770,10 @@ export interface ZoneMeta {
   value: number;
   hasTown?: boolean;
   townIsNeutral?: boolean;
+  treasureDensity?: number;
+  pocketCount?: number;
+  pocketGuardStrength?: "weak" | "normal" | "strong" | "veryStrong";
+  pocketArtifactClass?: "treasure" | "minor" | "major" | "relic";
 }
 
 export interface Player {

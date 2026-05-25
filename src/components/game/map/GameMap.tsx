@@ -29,6 +29,9 @@ import { refreshGameState } from "@/lib/game/refresh";
 
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
+const TOUCH_PAN_START_THRESHOLD_PX = 14;
+const TOUCH_PAN_CONTINUE_THRESHOLD_PX = 2;
+const TOUCH_PINCH_ZOOM_THRESHOLD_PX = 8;
 const ADVENTURE_CURSORS = {
   default: GAME_CURSORS.default,
   dragging: GAME_CURSORS.dragging,
@@ -125,6 +128,16 @@ export default function GameMapComponent() {
     destination: Position;
     path: Position[];
   } | null>(null);
+  const touchPointersRef = useRef(new Map<number, Position>());
+  const touchGestureRef = useRef<{ dragged: boolean; lastDistance: number; lastCenter: Position | null; startCenter: Position | null }>({
+    dragged: false,
+    lastDistance: 0,
+    lastCenter: null,
+    startCenter: null,
+  });
+  const suppressNextClickRef = useRef(false);
+  const dispatchingTouchTapRef = useRef(false);
+  const ignoreNextNativeTouchClickRef = useRef(false);
   const isSyncingMoveRef = useRef(false);
   const isDragging = useRef(false);
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
@@ -294,9 +307,15 @@ export default function GameMapComponent() {
         lastGateRenderKeyRef.current = gateRenderKey;
       }
 
-      if (renderedMapRef.current !== gameState.map) {
+      const mapReferenceChanged = renderedMapRef.current !== gameState.map;
+      if (mapReferenceChanged) {
         reportMapLoading(91, "Construction du terrain...");
-        renderer.renderMap(gameState.map);
+      }
+      // Incremental sync mutates the existing map object with dynamic tile.object
+      // updates. Always let Phaser compare signatures so resources, monsters, and
+      // gates re-render even when the GameMap reference stays stable.
+      renderer.renderMap(gameState.map);
+      if (mapReferenceChanged) {
         reportMapLoading(94, "Placement des objets...");
         renderedMapRef.current = gameState.map;
         lastFogVisibleRef.current = null;
@@ -562,6 +581,91 @@ export default function GameMapComponent() {
     setMapContainerCursor(containerRef.current, ADVENTURE_CURSORS.default);
   }, []);
 
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    touchGestureRef.current = {
+      dragged: false,
+      lastDistance: getTouchDistance(touchPointersRef.current),
+      lastCenter: getTouchCenter(touchPointersRef.current),
+      startCenter: getTouchCenter(touchPointersRef.current),
+    };
+  }, []);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" || !touchPointersRef.current.has(event.pointerId)) return;
+    const renderer = rendererRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!renderer || !rect) return;
+
+    touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const center = getTouchCenter(touchPointersRef.current);
+    const distance = getTouchDistance(touchPointersRef.current);
+    const gesture = touchGestureRef.current;
+
+    if (touchPointersRef.current.size >= 2 && center && gesture.lastCenter) {
+      const dx = center.x - gesture.lastCenter.x;
+      const dy = center.y - gesture.lastCenter.y;
+      if (Math.abs(dx) + Math.abs(dy) > TOUCH_PAN_CONTINUE_THRESHOLD_PX) renderer.panCamera(dx, dy);
+      if (distance > 0 && gesture.lastDistance > 0) {
+        const delta = distance - gesture.lastDistance;
+        if (Math.abs(delta) > TOUCH_PINCH_ZOOM_THRESHOLD_PX) {
+          renderer.zoomCamera(delta > 0 ? 1 : -1, center.x - rect.left, center.y - rect.top);
+        }
+      }
+      gesture.dragged = true;
+      gesture.lastDistance = distance;
+      gesture.lastCenter = center;
+      gesture.startCenter = gesture.startCenter ?? center;
+      suppressNextClickRef.current = true;
+      return;
+    }
+
+    if (touchPointersRef.current.size === 1 && center && gesture.lastCenter) {
+      const dx = center.x - gesture.lastCenter.x;
+      const dy = center.y - gesture.lastCenter.y;
+      const start = gesture.startCenter ?? gesture.lastCenter;
+      const totalDistance = Math.hypot(center.x - start.x, center.y - start.y);
+      const shouldPan = gesture.dragged || totalDistance > TOUCH_PAN_START_THRESHOLD_PX;
+      if (shouldPan && Math.hypot(dx, dy) > TOUCH_PAN_CONTINUE_THRESHOLD_PX) {
+        renderer.panCamera(dx, dy);
+        gesture.dragged = true;
+        suppressNextClickRef.current = true;
+      }
+      gesture.lastCenter = center;
+    }
+  }, []);
+
+  const handlePointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") return;
+    const shouldDispatchTap = touchPointersRef.current.size === 1 && !touchGestureRef.current.dragged;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (shouldDispatchTap) {
+      dispatchingTouchTapRef.current = true;
+      event.currentTarget.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      }));
+      dispatchingTouchTapRef.current = false;
+      ignoreNextNativeTouchClickRef.current = true;
+      window.setTimeout(() => {
+        ignoreNextNativeTouchClickRef.current = false;
+      }, 350);
+    }
+    touchPointersRef.current.delete(event.pointerId);
+    touchGestureRef.current = {
+      dragged: false,
+      lastDistance: getTouchDistance(touchPointersRef.current),
+      lastCenter: getTouchCenter(touchPointersRef.current),
+      startCenter: getTouchCenter(touchPointersRef.current),
+    };
+  }, []);
+
   const handleWheel = useCallback((e: WheelEvent) => {
     if (e.cancelable) e.preventDefault();
 
@@ -752,6 +856,16 @@ export default function GameMapComponent() {
   }, [devRevealMap, handleMoveInteraction, session?.user?.id, setCombatMessage]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    if (ignoreNextNativeTouchClickRef.current && !dispatchingTouchTapRef.current) {
+      ignoreNextNativeTouchClickRef.current = false;
+      e.preventDefault();
+      return;
+    }
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      e.preventDefault();
+      return;
+    }
     if (!rendererRef.current || !gameState) return;
     if (gameState.status === "PENDING") {
       pendingMoveRef.current = null;
@@ -2225,11 +2339,15 @@ export default function GameMapComponent() {
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full"
+      className="relative h-full w-full touch-none"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
@@ -2715,6 +2833,23 @@ function getCollectInteractionAmount(interaction: Extract<MoveInteraction, { typ
     return 3;
   }
   return 1;
+}
+
+function getTouchCenter(points: Map<number, Position>): Position | null {
+  if (points.size === 0) return null;
+  let x = 0;
+  let y = 0;
+  for (const point of points.values()) {
+    x += point.x;
+    y += point.y;
+  }
+  return { x: x / points.size, y: y / points.size };
+}
+
+function getTouchDistance(points: Map<number, Position>) {
+  const [first, second] = Array.from(points.values());
+  if (!first || !second) return 0;
+  return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
 function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending: PendingMove): PendingMove | null {

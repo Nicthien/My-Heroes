@@ -243,14 +243,14 @@ export function useDevPanel(gameId: string | undefined) {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-md border border-stone-600 bg-stone-900 px-3 py-2 text-xs font-black uppercase tracking-wider text-stone-200 transition hover:border-stone-400"
+                className="rounded-md border border-stone-600 bg-stone-900 px-3 py-1.5 text-[10px] font-black uppercase leading-snug tracking-wide text-stone-200 transition hover:border-stone-400"
                 onClick={() => setShowDevPassword(false)}
               >
                 Fermer
               </button>
               <button
                 type="submit"
-                className="rounded-md border border-amber-400/70 bg-amber-500 px-3 py-2 text-xs font-black uppercase tracking-wider text-stone-950 transition hover:bg-amber-300"
+                className="rounded-md border border-amber-400/70 bg-amber-500 px-3 py-1.5 text-[10px] font-black uppercase leading-snug tracking-wide text-stone-950 transition hover:bg-amber-300"
               >
                 Entrer
               </button>
@@ -277,7 +277,7 @@ export function useDevPanel(gameId: string | undefined) {
             onPointerCancel={stopDevPanelDrag}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <div className={`min-w-0 truncate text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode DEV</div>
+              <div className={`min-w-0 truncate text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>Mode DEV</div>
               <div className="shrink-0 rounded border border-amber-700/50 bg-black/35 px-2 py-0.5 font-mono text-[10px] font-black leading-none text-amber-100">
                 {devFpsText}
               </div>
@@ -324,7 +324,7 @@ export function useDevPanel(gameId: string | undefined) {
                   <button
                     key={tab.id}
                     type="button"
-                    className={`min-w-0 rounded px-1.5 py-1.5 text-[9px] font-black uppercase tracking-normal transition ${
+                    className={`min-w-0 rounded px-1 py-1.5 text-[8px] font-black uppercase leading-none tracking-normal transition ${
                       activeTab === tab.id
                         ? "bg-amber-500 text-stone-950"
                         : "text-amber-200/75 hover:bg-amber-950/60 hover:text-amber-100"
@@ -347,7 +347,7 @@ export function useDevPanel(gameId: string | undefined) {
                         href={route.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300"
+                        className="block w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide text-amber-100 transition hover:border-amber-300"
                       >
                         {route.label}
                       </a>
@@ -359,7 +359,7 @@ export function useDevPanel(gameId: string | undefined) {
                   <div className="space-y-2">
                     <button
                       type="button"
-                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
                         devRevealMap
                           ? "border-emerald-400/50 bg-emerald-900/70 text-emerald-100 hover:border-emerald-200"
                           : "border-amber-400/70 bg-amber-500 text-stone-950 hover:bg-amber-300"
@@ -370,7 +370,7 @@ export function useDevPanel(gameId: string | undefined) {
                     </button>
                     <button
                       type="button"
-                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
                         devGodMode
                           ? "border-emerald-400/50 bg-emerald-900/70 text-emerald-100 hover:border-emerald-200"
                           : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
@@ -381,7 +381,7 @@ export function useDevPanel(gameId: string | undefined) {
                     </button>
                     <button
                       type="button"
-                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
                         devInfiniteMana
                           ? "border-violet-300/70 bg-violet-950 text-violet-100 hover:border-violet-100"
                           : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
@@ -392,7 +392,7 @@ export function useDevPanel(gameId: string | undefined) {
                     </button>
                     <button
                       type="button"
-                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
                       onClick={() => void grantResources()}
                       disabled={!gameId}
                     >
@@ -400,7 +400,7 @@ export function useDevPanel(gameId: string | undefined) {
                     </button>
                     <button
                       type="button"
-                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-2 text-left text-xs font-black uppercase tracking-wider text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-900 px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide text-amber-100 transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"
                       onClick={() => void grantHeroExperience()}
                       disabled={!gameId || !selectedHeroId}
                     >
@@ -408,7 +408,7 @@ export function useDevPanel(gameId: string | undefined) {
                     </button>
                     <button
                       type="button"
-                      className={`w-full rounded-md border px-3 py-2 text-left text-xs font-black uppercase tracking-wider transition ${
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
                         devTeleportArmed
                           ? "border-sky-300/70 bg-sky-950 text-sky-100 hover:border-sky-100"
                           : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
@@ -417,7 +417,7 @@ export function useDevPanel(gameId: string | undefined) {
                     >
                       {devTeleportArmed ? "Téléportation armée" : "Téléporter au prochain clic"}
                     </button>
-                    <div className="rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-2 text-[11px] font-semibold leading-snug text-amber-200/75">
+                    <div className="rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-1.5 text-[10px] font-semibold leading-snug text-amber-200/75">
                       Héros cible : {getSelectedHeroName(gameState, selectedHeroId)}
                     </div>
                   </div>

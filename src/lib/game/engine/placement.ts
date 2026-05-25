@@ -11,6 +11,7 @@ import {
   makePileSpec,
 } from "./value";
 import { RNG, randInt, shuffle, weightedPick } from "./rng";
+import { DEFAULT_RMG_TUNING, RmgTuning, tuningPercentToMultiplier } from "./rmg-tuning";
 import { Chokepoint } from "./connections";
 import { GUARD_MULTIPLIER, MONSTER_STRENGTH_MULTIPLIER } from "./template";
 
@@ -35,7 +36,7 @@ const STARTING_MINE_SPECS = [
     role: "start_ore",
     minDistance: 3,
     idealDistance: 4,
-    maxDistance: 5,
+    maxDistance: 4,
     guardianPower: 220,
   },
   {
@@ -56,7 +57,8 @@ const STARTING_MINE_SPECS = [
   },
 ] as const;
 
-const ZONE_RESOURCE_BUDGET_MULTIPLIER = 1.5;
+const ZONE_RESOURCE_BUDGET_MULTIPLIER = 1.9;
+const RESOURCE_TOWN_EXCLUSION_RADIUS = 4;
 
 export interface PlacementContext {
   tiles: MapTile[][];
@@ -67,21 +69,41 @@ export interface PlacementContext {
 }
 
 /** Tirage pondéré d'un objet à placer dans une zone. */
-function pickObject(rng: RNG, terrainBias: TerrainType): ObjectSpec {
+function pickObject(rng: RNG, terrainBias: TerrainType, buildingMultiplier: number): ObjectSpec {
   const buildings = BUILDING_SPECS.map((b) => ({
     value: b as ObjectSpec,
     weight: b.preferredTerrain.includes(terrainBias) ? 1 : 0.4,
   }));
   const piles: { value: ObjectSpec; weight: number }[] = (
     ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"] as ResourceSubtype[]
-  ).map((s) => ({ value: makePileSpec(s), weight: s === "gold" ? 4 : 2 }));
+  ).map((s) => ({ value: makePileSpec(s), weight: s === "gold" ? 5 : 3 }));
 
   // Buildings rares mais existants, piles fréquentes
   const choices: { value: ObjectSpec; weight: number }[] = [
-    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 1.2 })),
+    ...buildings.map((b) => ({ value: b.value, weight: b.weight * 1.2 * buildingMultiplier })),
     ...piles,
   ];
   return weightedPick(rng, choices);
+}
+
+function pickLooseResourceSubtype(rng: RNG, terrainBias: TerrainType): ResourceSubtype {
+  const terrainWeights: Record<ResourceSubtype, number> = {
+    gold: terrainBias === TerrainType.MOUNTAIN ? 5 : 4,
+    wood: terrainBias === TerrainType.FOREST ? 5 : 3,
+    ore: terrainBias === TerrainType.MOUNTAIN ? 5 : 3,
+    mercury: terrainBias === TerrainType.SNOW ? 3 : 2,
+    crystals: terrainBias === TerrainType.MOUNTAIN || terrainBias === TerrainType.SNOW ? 3 : 2,
+    gems: terrainBias === TerrainType.SNOW || terrainBias === TerrainType.GRASS ? 3 : 2,
+    sulfur: terrainBias === TerrainType.SAND || terrainBias === TerrainType.LAVA ? 3 : 2,
+  };
+
+  return weightedPick(
+    rng,
+    (["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"] as ResourceSubtype[]).map((subtype) => ({
+      value: subtype,
+      weight: terrainWeights[subtype],
+    })),
+  );
 }
 
 function isTileFree(tile: MapTile): boolean {
@@ -106,13 +128,38 @@ function hasMajorObjectNearby(
   return false;
 }
 
-function buildingTargetForZone(type: string, budget: number): number {
+function distanceToNearestTown(ctx: PlacementContext, x: number, y: number): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (const row of ctx.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "town" && tile.object?.type !== "town_footprint") continue;
+      best = Math.min(best, Math.max(Math.abs(tile.x - x), Math.abs(tile.y - y)));
+    }
+  }
+  return best;
+}
+
+function isTooCloseToTown(ctx: PlacementContext, x: number, y: number, radius: number): boolean {
+  return distanceToNearestTown(ctx, x, y) <= radius;
+}
+
+function buildingTargetForBudget(budget: number, zoneType: string): number {
   if (budget < 1500) return 0;
-  if (budget >= 9000) return type === "treasure" ? 10 : 9;
-  if (budget >= 7000) return type === "treasure" ? 9 : 8;
-  if (type === "treasure") return 7;
-  if (budget >= 3000) return 5;
-  return 3;
+  const cap = zoneType === "treasure" ? 14 : zoneType === "junction" ? 12 : 8;
+  const divisor = zoneType === "treasure" ? 2400 : zoneType === "junction" ? 2600 : 3000;
+  return Math.min(cap, Math.max(1, Math.floor(budget / divisor)));
+}
+
+function resourcePileTargetForBudget(budget: number, zoneType: string): number {
+  if (budget < 1000) return 0;
+  const cap = zoneType === "treasure" ? 18 : zoneType === "junction" ? 14 : 10;
+  const divisor = zoneType === "treasure" || zoneType === "junction" ? 900 : 1300;
+  return Math.min(cap, Math.max(2, Math.floor(budget / divisor)));
+}
+
+function resourceClusterCount(rng: RNG, spec: BuildingSpec): number {
+  const [minC, maxC] = spec.clusterCount;
+  return randInt(rng, minC, maxC);
 }
 
 function placePile(ctx: PlacementContext, tile: MapTile, pile: PileSpec): void {
@@ -140,6 +187,31 @@ function placeBuilding(
   };
 }
 
+function hasFreeAdjacentTileForMine(ctx: PlacementContext, x: number, y: number, zoneId: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) continue;
+      if (ctx.zoneGrid.tilesZone[ny][nx] !== zoneId) continue;
+      if (isTileFree(ctx.tiles[ny][nx])) return true;
+    }
+  }
+  return false;
+}
+
+function hasAdjacentResourcePile(ctx: PlacementContext, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (ctx.tiles[y + dy]?.[x + dx]?.object?.type === "resource") return true;
+    }
+  }
+  return false;
+}
+
+/** Crée le château (joueur ou neutre) au centre d'une zone si demandé par le template. */
 function adjacentFreeTiles(
   ctx: PlacementContext,
   x: number,
@@ -154,14 +226,37 @@ function adjacentFreeTiles(
       const ny = y + dy;
       if (nx < 0 || nx >= ctx.width || ny < 0 || ny >= ctx.height) continue;
       if (ctx.zoneGrid.tilesZone[ny][nx] !== zoneId) continue;
-      const t = ctx.tiles[ny][nx];
-      if (isTileFree(t)) out.push(t);
+      const tile = ctx.tiles[ny][nx];
+      if (isTileFree(tile)) out.push(tile);
     }
   }
   return out;
 }
 
-/** Crée le château (joueur ou neutre) au centre d'une zone si demandé par le template. */
+function placeMineResourceCluster(
+  ctx: PlacementContext,
+  x: number,
+  y: number,
+  zoneId: number,
+  spec: BuildingSpec,
+  placedPiles?: ZoneFillResult["placedPiles"],
+): void {
+  const target = resourceClusterCount(ctx.rng, spec);
+  if (target <= 0) return;
+
+  const candidates = shuffle(ctx.rng, adjacentFreeTiles(ctx, x, y, zoneId));
+  const preferred = candidates.filter((tile) => !isTooCloseToTown(ctx, tile.x, tile.y, RESOURCE_TOWN_EXCLUSION_RADIUS));
+  const picks = (preferred.length >= target ? preferred : candidates)
+    .sort((a, b) => distanceToNearestTown(ctx, b.x, b.y) - distanceToNearestTown(ctx, a.x, a.y))
+    .slice(0, target);
+
+  for (const tile of picks) {
+    const pile = makePileSpec(spec.clusterResource);
+    placePile(ctx, tile, pile);
+    placedPiles?.push({ x: tile.x, y: tile.y, pile });
+  }
+}
+
 export function placeTownInZone(
   ctx: PlacementContext,
   zoneId: number,
@@ -237,10 +332,60 @@ export function placeStartingEconomy(
       ownerIndex,
       strategicRole: entry.role,
     });
+    placeMineResourceCluster(ctx, tile.x, tile.y, zoneId, spec);
     placed.push({ x: tile.x, y: tile.y, spec, role: entry.role });
   }
 
+  enforceStartingMineStrategicOrder(ctx, town, placed);
   return placed;
+}
+
+function enforceStartingMineStrategicOrder(
+  ctx: PlacementContext,
+  town: Position,
+  placed: StartingEconomyPlacement[],
+): void {
+  const gold = placed.find((item) => item.role === "start_gold");
+  if (!gold) return;
+
+  const goldDistance = chebyshevDistance(town, gold);
+  const farthestPrimary = placed
+    .filter((item) => item.role === "start_wood" || item.role === "start_ore")
+    .sort((a, b) => chebyshevDistance(town, b) - chebyshevDistance(town, a))[0];
+  if (!farthestPrimary || chebyshevDistance(town, farthestPrimary) <= goldDistance) return;
+
+  swapStartingMineObjects(ctx, gold, farthestPrimary);
+  const goldSpec = gold.spec;
+  const goldRole = gold.role;
+  gold.spec = farthestPrimary.spec;
+  gold.role = farthestPrimary.role;
+  farthestPrimary.spec = goldSpec;
+  farthestPrimary.role = goldRole;
+}
+
+function swapStartingMineObjects(
+  ctx: PlacementContext,
+  a: StartingEconomyPlacement,
+  b: StartingEconomyPlacement,
+): void {
+  const tileA = ctx.tiles[a.y]?.[a.x];
+  const tileB = ctx.tiles[b.y]?.[b.x];
+  if (!tileA?.object || !tileB?.object) return;
+
+  const objectA = { ...tileA.object };
+  const objectB = { ...tileB.object };
+  tileA.object = {
+    ...objectB,
+    id: `bld-${objectB.subtype}-${tileA.x}-${tileA.y}`,
+  };
+  tileB.object = {
+    ...objectA,
+    id: `bld-${objectA.subtype}-${tileB.x}-${tileB.y}`,
+  };
+}
+
+function chebyshevDistance(a: Position, b: Position): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
 function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y: number): boolean {
@@ -323,13 +468,23 @@ function findStartingMineTile(
     .map((tile) => makeStartingMineCandidate(ctx, town, spec, tile))
     .filter((item) => item.distance >= entry.minDistance && item.distance <= entry.maxDistance);
 
+  const minimumStrategicDistance = getMinimumStrategicMineDistance(town, entry, placed);
   const spacedCandidates = buildCandidates(true);
-  if (spacedCandidates.length > 0) return pickBestStartingMineCandidate(spacedCandidates, entry.idealDistance)?.tile ?? null;
+  if (spacedCandidates.length > 0) {
+    return pickBestStartingMineCandidate(
+      preferMinimumDistance(spacedCandidates, minimumStrategicDistance),
+      entry.idealDistance,
+    )?.tile ?? null;
+  }
 
   const coastalCandidates = buildCandidates(true, true);
-  if (coastalCandidates.length > 0) return pickBestStartingMineCandidate(coastalCandidates, entry.idealDistance)?.tile ?? null;
+  if (coastalCandidates.length > 0) {
+    return pickBestStartingMineCandidate(
+      preferMinimumDistance(coastalCandidates, minimumStrategicDistance),
+      entry.idealDistance,
+    )?.tile ?? null;
+  }
 
-  const minimumStrategicDistance = getMinimumStrategicMineDistance(town, entry, placed);
   const relaxedDistanceCandidates = zoneTiles
     .filter((tile) => canPlaceStartingMineAt(ctx, tile, placed, true, true))
     .map((tile) => makeStartingMineCandidate(ctx, town, spec, tile));
@@ -341,7 +496,12 @@ function findStartingMineTile(
   }
 
   const fallback = buildCandidates(false, true);
-  if (fallback.length > 0) return pickBestStartingMineCandidate(fallback, entry.idealDistance)?.tile ?? null;
+  if (fallback.length > 0) {
+    return pickBestStartingMineCandidate(
+      preferMinimumDistance(fallback, minimumStrategicDistance),
+      entry.idealDistance,
+    )?.tile ?? null;
+  }
 
   const relaxedFallback = zoneTiles
     .filter((tile) => canPlaceStartingMineAt(ctx, tile, placed, false, true))
@@ -362,7 +522,7 @@ function getMinimumStrategicMineDistance(
     .filter((item) => item.role === "start_wood" || item.role === "start_ore")
     .map((item) => Math.max(Math.abs(item.x - town.x), Math.abs(item.y - town.y)));
   if (primaryDistances.length === 0) return 0;
-  return Math.max(...primaryDistances);
+  return Math.max(...primaryDistances) + 1;
 }
 
 function preferMinimumDistance<T extends { distance: number }>(candidates: T[], minimumDistance: number): T[] {
@@ -393,6 +553,8 @@ function canPlaceStartingMineAt(
   const isCoastalWater = allowCoastalWater && tile.terrain === TerrainType.WATER;
   if (!isSolidLandTile(tile) && !isCoastalWater) return false;
   if (!hasLandSupportNearby(ctx, tile.x, tile.y)) return false;
+  if (!hasFreeAdjacentTileForMine(ctx, tile.x, tile.y, ctx.zoneGrid.tilesZone[tile.y][tile.x])) return false;
+  if (hasAdjacentResourcePile(ctx, tile.x, tile.y)) return false;
   if (!respectSpacing) return true;
   return !hasBlockingObjectNearby(ctx, tile.x, tile.y, 1) && !hasPlacedStartingMineNearby(placed, tile.x, tile.y, 1);
 }
@@ -475,14 +637,18 @@ export function fillZone(
   ctx: PlacementContext,
   zoneId: number,
   monsterStrength: "weak" | "normal" | "strong",
-  options: { allowBuildings?: boolean } = {},
+  options: { tuning?: RmgTuning } = {},
 ): ZoneFillResult {
   const meta = ctx.zoneGrid.meta[zoneId];
-  const resourceBudget = Math.floor(meta.value * ZONE_RESOURCE_BUDGET_MULTIPLIER);
+  const tuning = options.tuning ?? DEFAULT_RMG_TUNING;
+  const densityBoost = meta.treasureDensity ?? 1;
+  const resourceBudgetMultiplier = tuningPercentToMultiplier(tuning.resourceBudgetPercent);
+  const buildingMultiplier = tuningPercentToMultiplier(tuning.buildingPercent) * densityBoost;
+  const monsterMultiplier = tuningPercentToMultiplier(tuning.monsterPercent);
+  const resourceBudget = Math.floor(meta.value * ZONE_RESOURCE_BUDGET_MULTIPLIER * resourceBudgetMultiplier * densityBoost);
   let budget = resourceBudget;
   const placedBuildings: ZoneFillResult["placedBuildings"] = [];
   const placedPiles: ZoneFillResult["placedPiles"] = [];
-  const allowBuildings = options.allowBuildings !== false;
 
   // Châteaux : leur valeur a déjà été soustraite à l'extérieur si placé en amont (cf orchestrator)
   // Réduit le budget proportionnellement à la place déjà prise.
@@ -495,9 +661,11 @@ export function fillZone(
   }
 
   // Place les mines en priorite avant que les piles de ressources consomment le budget.
-  const buildingTarget = allowBuildings ? buildingTargetForZone(meta.type, budget) : 0;
+  const buildingTarget = Math.floor(buildingTargetForBudget(budget, meta.type) * buildingMultiplier);
+  const pileTarget = Math.floor(resourcePileTargetForBudget(budget, meta.type) * tuningPercentToMultiplier(tuning.looseResourcePercent) * densityBoost);
   const buildingBudgetSlack = 4200;
   let buildingsPlaced = 0;
+  let pilesPlaced = 0;
 
   const shuffled = shuffle(ctx.rng, allTiles).sort((a, b) =>
     organicPlacementScore(ctx, b.x, b.y, zoneId) - organicPlacementScore(ctx, a.x, a.y, zoneId)
@@ -518,28 +686,19 @@ export function fillZone(
     budget -= obj.value;
     buildingsPlaced++;
     placedBuildings.push({ x: placed.x, y: placed.y, spec: obj });
-
-    const [minC, maxC] = obj.clusterCount;
-    const n = randInt(ctx.rng, minC, maxC);
-    const adj = shuffle(ctx.rng, adjacentFreeTiles(ctx, placed.x, placed.y, zoneId));
-    for (let i = 0; i < Math.min(n, adj.length); i++) {
-      const pile = makePileSpec(obj.clusterResource);
-      placePile(ctx, adj[i], pile);
-      budget -= pile.value;
-      placedPiles.push({ x: adj[i].x, y: adj[i].y, pile });
-    }
+    placeMineResourceCluster(ctx, placed.x, placed.y, zoneId, obj, placedPiles);
   }
 
-  budget = Math.max(budget, meta.type === "treasure" ? 2200 : 1200);
+  budget = Math.max(budget, meta.type === "treasure" ? 1200 : 700);
 
   let attempts = 0;
-  const maxAttempts = 800;
+  const maxAttempts = 1500;
   while (budget > 0 && attempts < maxAttempts) {
+    if (buildingsPlaced >= buildingTarget && pilesPlaced >= pileTarget) break;
     attempts++;
-    const obj = pickObject(ctx.rng, meta.baseTerrain);
+    const obj = pickObject(ctx.rng, meta.baseTerrain, buildingMultiplier);
 
     if (obj.kind === "building") {
-      if (!allowBuildings) continue;
       if (buildingsPlaced >= buildingTarget) continue;
       if (obj.value > budget + buildingBudgetSlack) continue;
       const placed = tryPlaceBuilding(ctx, shuffled, zoneId, obj);
@@ -547,35 +706,79 @@ export function fillZone(
         budget -= obj.value;
         buildingsPlaced++;
         placedBuildings.push({ x: placed.x, y: placed.y, spec: obj });
-        // Cluster : 1-2 piles adjacentes de la ressource correspondante
-        const [minC, maxC] = obj.clusterCount;
-        const n = randInt(ctx.rng, minC, maxC);
-        const adj = shuffle(ctx.rng, adjacentFreeTiles(ctx, placed.x, placed.y, zoneId));
-        for (let i = 0; i < Math.min(n, adj.length); i++) {
-          const pile = makePileSpec(obj.clusterResource);
-          placePile(ctx, adj[i], pile);
-          budget -= pile.value;
-          placedPiles.push({ x: adj[i].x, y: adj[i].y, pile });
-        }
+        placeMineResourceCluster(ctx, placed.x, placed.y, zoneId, obj, placedPiles);
       }
     } else {
+      if (pilesPlaced >= pileTarget) continue;
       if (obj.value > budget + 100) continue;
       const placed = tryPlacePile(ctx, shuffled, zoneId, obj);
       if (placed) {
         budget -= obj.value;
+        pilesPlaced++;
         placedPiles.push({ x: placed.x, y: placed.y, pile: obj });
       }
     }
   }
 
-  const spent = resourceBudget - Math.max(0, budget);
-  const guardianThreat = Math.floor(meta.value * MONSTER_STRENGTH_MULTIPLIER[monsterStrength]);
+  const bonusSpent = placeBonusResourcePiles(ctx, zoneId, meta.value, placedPiles, tuning);
+  budget -= bonusSpent;
 
-  // Place 1-3 piles de monstres gardiens près des objets les plus précieux
-  placeZoneArtifacts(ctx, zoneId, meta.value);
-  placeZoneGuardians(ctx, zoneId, placedBuildings, guardianThreat);
+  const spent = resourceBudget - Math.max(0, budget);
+  const guardianThreat = Math.floor(meta.value * MONSTER_STRENGTH_MULTIPLIER[monsterStrength] * monsterMultiplier);
 
   return { zoneId, spentValue: spent, placedBuildings, placedPiles, guardianThreat };
+}
+
+function bonusResourcePileTarget(zoneType: string, zoneValue: number, freeTileCount: number): number {
+  // Seuil plus permissif : 8 tiles libres suffisent pour amorcer la passe bonus. Évite
+  // que les zones serrées (joueur avec château + mines + adventures) ne reçoivent zéro.
+  if (freeTileCount < 10 || zoneValue < 2500) return 0;
+  const cap = zoneType === "treasure" ? 18 : zoneType === "junction" ? 14 : 6;
+  const divisor = zoneType === "treasure" || zoneType === "junction" ? 900 : 1800;
+  return Math.min(cap, Math.max(1, Math.floor(zoneValue / divisor)));
+}
+
+function placeBonusResourcePiles(
+  ctx: PlacementContext,
+  zoneId: number,
+  zoneValue: number,
+  placedPiles: ZoneFillResult["placedPiles"],
+  tuning: RmgTuning,
+): number {
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId))
+    .map((position) => ctx.tiles[position.y][position.x])
+    .filter((tile) =>
+      isTileFree(tile) &&
+      !tile.road &&
+      !isGateFrameTile(ctx, tile.x, tile.y) &&
+      !hasMajorObjectNearby(ctx, tile.x, tile.y, meta.type === "player" ? 1 : 0) &&
+      !isTooCloseToTown(
+        ctx,
+        tile.x,
+        tile.y,
+        RESOURCE_TOWN_EXCLUSION_RADIUS,
+      )
+    )
+    .sort((a, b) =>
+      organicPlacementScore(ctx, b.x, b.y, zoneId) - organicPlacementScore(ctx, a.x, a.y, zoneId)
+    );
+
+  const densityBoost = meta.treasureDensity ?? 1;
+  const target = Math.floor(
+    bonusResourcePileTarget(meta.type, zoneValue, candidates.length) *
+      tuningPercentToMultiplier(tuning.looseResourcePercent) *
+      densityBoost,
+  );
+  let spent = 0;
+  for (let index = 0; index < Math.min(target, candidates.length); index++) {
+    const tile = candidates[index];
+    const pile = makePileSpec(pickLooseResourceSubtype(ctx.rng, meta.baseTerrain));
+    placePile(ctx, tile, pile);
+    placedPiles.push({ x: tile.x, y: tile.y, pile });
+    spent += pile.value;
+  }
+  return spent;
 }
 
 function tryPlaceBuilding(
@@ -587,6 +790,8 @@ function tryPlaceBuilding(
   for (const t of tiles) {
     const tile = ctx.tiles[t.y][t.x];
     if (!isTileFree(tile)) continue;
+    if (!hasFreeAdjacentTileForMine(ctx, t.x, t.y, zoneId)) continue;
+    if (hasAdjacentResourcePile(ctx, t.x, t.y)) continue;
     if (!spec.preferredTerrain.includes(tile.terrain)) {
       // Permet quand même, mais avec proba réduite
       if (ctx.rng() > 0.3) continue;
@@ -601,10 +806,14 @@ function tryPlaceBuilding(
 function organicPlacementScore(ctx: PlacementContext, x: number, y: number, zoneId: number): number {
   const meta = ctx.zoneGrid.meta[zoneId];
   const centerDistance = Math.max(Math.abs(x - meta.centerX), Math.abs(y - meta.centerY));
-  const centerPenalty = centerDistance / Math.max(1, Math.min(ctx.width, ctx.height));
+  // Léger push périphérie + interdiction stricte des 2 tiles collées au château
+  // (pour éviter le tas direct devant la porte). Tout le reste est libre — la
+  // distribution suit principalement le noise pour rester organique.
+  const peripheryBonus = centerDistance / Math.max(1, Math.min(ctx.width, ctx.height));
   const cluster = tileNoise(x, y, `${meta.templateZoneId}:cluster`);
   const ridge = tileNoise(Math.floor(x / 3), Math.floor(y / 3), `${meta.templateZoneId}:ridge`);
-  return cluster * 0.55 + ridge * 0.35 - centerPenalty * 0.1;
+  const stuckToCastle = meta.hasTown && centerDistance <= 1 ? 1 : 0;
+  return cluster * 0.55 + ridge * 0.35 + peripheryBonus * 0.15 - stuckToCastle * 0.8;
 }
 
 function tileNoise(x: number, y: number, salt: string): number {
@@ -617,7 +826,7 @@ function tileNoise(x: number, y: number, salt: string): number {
   return (value >>> 0) / 4294967295;
 }
 
-function placeZoneArtifacts(ctx: PlacementContext, zoneId: number, zoneValue: number): void {
+export function placeZoneArtifacts(ctx: PlacementContext, zoneId: number, zoneValue: number): void {
   const meta = ctx.zoneGrid.meta[zoneId];
   const targetCount = meta.type === "treasure"
     ? zoneValue >= 9000 ? 3 : zoneValue >= 5500 ? 2 : 1
@@ -666,13 +875,20 @@ function tryPlacePile(
     const tile = ctx.tiles[t.y][t.x];
     if (!isTileFree(tile)) continue;
     if (ctx.zoneGrid.tilesZone[t.y][t.x] !== zoneId) continue;
+    if (hasMajorObjectNearby(ctx, t.x, t.y, 1)) continue;
+    if (isTooCloseToTown(
+      ctx,
+      t.x,
+      t.y,
+      RESOURCE_TOWN_EXCLUSION_RADIUS,
+    )) continue;
     placePile(ctx, tile, pile);
     return { x: t.x, y: t.y };
   }
   return null;
 }
 
-function placeZoneGuardians(
+export function placeZoneGuardians(
   ctx: PlacementContext,
   zoneId: number,
   buildings: ZoneFillResult["placedBuildings"],
@@ -733,4 +949,27 @@ export function applyChokepointGuards(
       tile.object.guardianPower = threat;
     }
   }
+}
+
+export function capResourcesAdjacentToMines(ctx: PlacementContext): void {
+  for (const row of ctx.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "building") continue;
+      const resources = adjacentResourceTiles(ctx, tile.x, tile.y);
+      if (resources.length <= 2) continue;
+      for (const extra of resources.slice(2)) extra.object = undefined;
+    }
+  }
+}
+
+function adjacentResourceTiles(ctx: PlacementContext, x: number, y: number): MapTile[] {
+  const tiles: MapTile[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const tile = ctx.tiles[y + dy]?.[x + dx];
+      if (tile?.object?.type === "resource") tiles.push(tile);
+    }
+  }
+  return tiles;
 }

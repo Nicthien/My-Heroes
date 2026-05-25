@@ -44,7 +44,7 @@ export function MovementGauge({ movement, maxMovement }: { movement: number; max
         style={{ width: `${ratio * 100}%` }}
       />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[length:12px_100%] opacity-25" />
-      <div className="relative flex items-center justify-between gap-3 text-sm font-bold">
+      <div className="relative flex items-center justify-between gap-3 text-xs font-bold">
         <span className="flex min-w-0 items-center gap-2">
           <HourglassIcon className="h-4 w-4 flex-none" />
           <span className="truncate">Mouvement</span>

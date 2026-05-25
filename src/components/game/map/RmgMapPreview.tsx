@@ -37,6 +37,7 @@ interface RmgMapPreviewProps {
   maxSize?: number;
   cellScale?: number;
   heightOffset?: number;
+  showPockets?: boolean;
 }
 
 export function RmgMapPreview({
@@ -46,6 +47,7 @@ export function RmgMapPreview({
   maxSize = 1120,
   cellScale = 8,
   heightOffset = 18,
+  showPockets = false,
 }: RmgMapPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -125,6 +127,13 @@ export function RmgMapPreview({
           ctx.beginPath();
           ctx.arc(cx, cy, Math.max(2, cell * objectRadius(tile.object.type)), 0, Math.PI * 2);
           ctx.fill();
+          if (showPockets && isPocketObject(tile.object)) {
+            ctx.strokeStyle = tile.object.type === "artifact" ? "#f5d0fe" : "#fecaca";
+            ctx.lineWidth = Math.max(1.4, cell * 0.12);
+            ctx.beginPath();
+            ctx.arc(cx, cy, Math.max(3.2, cell * 0.42), 0, Math.PI * 2);
+            ctx.stroke();
+          }
           if (tile.object.type === "wall") {
             ctx.fillStyle = "rgba(0,0,0,0.45)";
             ctx.fillRect(tile.x * cell, tile.y * cell, Math.ceil(cell), Math.ceil(cell));
@@ -132,7 +141,7 @@ export function RmgMapPreview({
         }
       }
     }
-  }, [map, viewportSize]);
+  }, [map, showPockets, viewportSize]);
 
   return (
     <div
@@ -141,6 +150,14 @@ export function RmgMapPreview({
     >
       <canvas ref={canvasRef} className="block max-w-full rounded-sm" />
     </div>
+  );
+}
+
+function isPocketObject(object: MapObject): boolean {
+  return (
+    (object.type === "artifact" && object.id.startsWith("pocket-art-")) ||
+    (object.type === "monster" && object.id.startsWith("pocket-mon-")) ||
+    (object.type === "resource" && object.id.startsWith("pocket-res-"))
   );
 }
 

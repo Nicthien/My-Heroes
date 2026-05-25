@@ -19,15 +19,26 @@ import { makeRng, randomSeed, type RNG } from "./rng";
 import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
 import { buildConnectionsAndWalls, enforceChokepointGateFrames } from "./connections";
-import { applyChokepointGuards, fillZone, placeStartingEconomy, placeTownInZone } from "./placement";
-import { buildRoads, buildSecondaryRoads, ensureInvisibleAccessToObjects } from "./roads";
+import {
+  applyChokepointGuards,
+  capResourcesAdjacentToMines,
+  fillZone,
+  placeStartingEconomy,
+  placeTownInZone,
+  placeZoneArtifacts,
+  placeZoneGuardians,
+  type ZoneFillResult,
+} from "./placement";
+import { buildRoads, buildSecondaryRoads, ensureInvisibleAccessToObjects, removeOrphanRoadSegments } from "./roads";
 import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
-import { placeAdventureBuildings } from "./adventure-buildings";
+import { placeAdventureBuildings, repairUnreachableAdventureBuildings } from "./adventure-buildings";
+import { RmgTuning, normalizeRmgTuning } from "./rmg-tuning";
 import { placeLargeMountainMassifs } from "./large-obstacles";
 import { applyWorldEdge } from "./world-edge";
+import { placeZonePockets, repairUnreachablePockets } from "./pockets";
 import { measureDevPerformance } from "@/lib/dev/performanceMetrics";
 export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
 
@@ -130,6 +141,33 @@ function toPositionKeySet(positions: Position[]): Set<string> {
 
 function isBlockedPosition(pos: Position, blocked: Set<string>): boolean {
   return blocked.has(positionKey(pos));
+}
+
+function floodPassableTiles(map: GameMap, start: Position): Set<string> {
+  const seen = new Set<string>();
+  const queue: Position[] = [start];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = positionKey(current);
+    if (seen.has(key)) continue;
+
+    const tile = map.tiles[current.y]?.[current.x];
+    if (!tile?.isPassable) continue;
+
+    seen.add(key);
+    for (const next of [
+      { x: current.x + 1, y: current.y },
+      { x: current.x - 1, y: current.y },
+      { x: current.x, y: current.y + 1 },
+      { x: current.x, y: current.y - 1 },
+    ]) {
+      if (!isInsideMap(map, next) || seen.has(positionKey(next))) continue;
+      queue.push(next);
+    }
+  }
+
+  return seen;
 }
 
 class MinPriorityQueue<T> {
@@ -408,6 +446,7 @@ export interface GenerateMapOptions {
   seed?: string;
   templateId?: string;
   playerCount: number;
+  tuning?: Partial<RmgTuning>;
 }
 
 export function generateMap(opts: GenerateMapOptions): GameMap;
@@ -421,6 +460,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     opts = arg1;
   }
   const { width, height, playerCount } = opts;
+  const tuning = normalizeRmgTuning(opts.tuning);
   const seed = opts.seed && opts.seed.length > 0 ? opts.seed : randomSeed();
   const rng = makeRng(seed);
 
@@ -458,6 +498,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   // 3) Châteaux (joueurs + neutres) puis remplissage value-system
   const townPositions: Position[] = [];
   const playerTownPositions = new Map<number, { zoneId: number; position: Position }>();
+  const fillResults: ZoneFillResult[] = [];
   for (let zoneId = 0; zoneId < zoneGrid.meta.length; zoneId++) {
     const meta = zoneGrid.meta[zoneId];
     if (!meta.hasTown) continue;
@@ -501,10 +542,12 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
       { tiles, zoneGrid, width, height, rng },
       zoneId,
       tplZone.monsterStrength,
-      { allowBuildings: meta.type !== "player" },
+      { tuning },
     );
+    fillResults.push(r);
     for (const b of r.placedBuildings) miningPositions.push({ x: b.x, y: b.y });
   }
+  capResourcesAdjacentToMines({ tiles, zoneGrid, width, height, rng });
 
   // 4) Gardes des chokepoints
   applyChokepointGuards({ tiles, zoneGrid, width, height, rng }, chokepoints);
@@ -514,12 +557,29 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   buildRoads(tiles, width, height, townPositions, "paved", roadOptions);
   buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10, roadOptions);
   enforceChokepointGateFrames(tiles, width, height, chokepoints, "paved");
+  removeOrphanRoadSegments(tiles, width, height);
 
-  // Batiments d'aventure hors route pour recompenser l'exploration.
-  placeAdventureBuildings({ tiles, zoneGrid, width, height, rng });
+  const pockets = placeZonePockets({ tiles, zoneGrid, width, height, rng });
+  const pocketThreatByZone = new Map<number, number>();
+  for (const pocket of pockets) {
+    pocketThreatByZone.set(pocket.zoneId, (pocketThreatByZone.get(pocket.zoneId) ?? 0) + pocket.guardianPower);
+  }
+  for (const result of fillResults) {
+    const meta = zoneGrid.meta[result.zoneId];
+    placeZoneArtifacts({ tiles, zoneGrid, width, height, rng }, result.zoneId, meta.value);
+    placeZoneGuardians(
+      { tiles, zoneGrid, width, height, rng },
+      result.zoneId,
+      result.placedBuildings,
+      Math.max(0, result.guardianThreat - (pocketThreatByZone.get(result.zoneId) ?? 0)),
+    );
+  }
+
 
   // 6) Décor (passe finale)
   placeLargeMountainMassifs({ tiles, zoneGrid, width, height, rng });
+  // Batiments d'aventure hors route pour recompenser l'exploration.
+  placeAdventureBuildings({ tiles, zoneGrid, width, height, rng }, tuning);
   placeDecor(tiles, width, height, rng);
   ensureInvisibleAccessToObjects(tiles, width, height, townPositions, roadOptions);
   applyWorldEdge(tiles, width, height, seed);
@@ -534,7 +594,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   }
   enforceChokepointGateFrames(tiles, width, height, chokepoints, "paved");
 
-  return {
+  const map: GameMap = {
     width,
     height,
     tiles,
@@ -542,6 +602,15 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     templateId,
     zones: zoneGrid.meta,
   };
+  const finalReachable = floodPassableTiles(map, placePlayerStart(map, 0));
+  repairUnreachablePockets(
+    { tiles, zoneGrid, width, height, rng },
+    pockets,
+    finalReachable,
+  );
+  repairUnreachableAdventureBuildings(map, finalReachable);
+
+  return map;
 }
 
 function pickDefaultTemplate(playerCount: number, rng: RNG): string {

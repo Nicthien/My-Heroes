@@ -459,7 +459,7 @@ export default function CombatScreen() {
             onSpellTarget={(unitId) => void castPendingCombatSpell(unitId)}
           />
         </main>
-        <aside className="pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
+        <aside className="mobile-combat-aside pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
           <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
             <div className="text-sm text-stone-200">
               {(inspectedUnit ?? currentUnit) ? (

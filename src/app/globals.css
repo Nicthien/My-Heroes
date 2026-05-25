@@ -3,10 +3,20 @@
 :root {
   --background: #060713;
   --foreground: #f9fafb;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --touch-target: 44px;
+  --mobile-panel-bg: rgba(10, 8, 5, 0.94);
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 body {
@@ -15,7 +25,20 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.game-shell {
+  height: 100dvh;
+  width: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.mobile-only {
+  display: none;
 }
 
 body::before {
@@ -194,4 +217,129 @@ body::before {
   box-shadow: 0 0 14px rgba(255, 200, 90, 0.95), 0 0 28px rgba(255, 150, 40, 0.55);
   pointer-events: none;
   animation: combat-projectile-travel 380ms cubic-bezier(0.4, 0.05, 0.6, 1) both;
+}
+
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  body {
+    font-size: 14px;
+  }
+
+  .touch-target {
+    min-height: var(--touch-target);
+    min-width: var(--touch-target);
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block;
+  }
+
+  .mobile-flex {
+    display: flex;
+  }
+
+  .mobile-game-topbar {
+    padding: calc(var(--safe-top) + 0.35rem) calc(var(--safe-right) + 0.5rem) 0.45rem calc(var(--safe-left) + 0.5rem);
+  }
+
+  .mobile-bottom-nav {
+    left: calc(var(--safe-left) + 0.5rem);
+    right: calc(var(--safe-right) + 0.5rem);
+    bottom: calc(var(--safe-bottom) + 0.5rem);
+  }
+
+  .mobile-bottom-sheet {
+    position: absolute !important;
+    left: calc(var(--safe-left) + 0.5rem) !important;
+    right: calc(var(--safe-right) + 0.5rem) !important;
+    bottom: calc(var(--safe-bottom) + 4.35rem) !important;
+    top: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(72dvh, 34rem) !important;
+    border-radius: 0.75rem 0.75rem 0.45rem 0.45rem;
+  }
+
+  .mobile-town-tabs,
+  .mobile-hero-tabs {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    scrollbar-width: none;
+  }
+
+  .mobile-town-tabs::-webkit-scrollbar,
+  .mobile-hero-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-resource-bar {
+    width: min(15rem, 47vw) !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.25rem !important;
+    font-size: 10px !important;
+  }
+
+  .mobile-resource-bar > span {
+    min-height: 1.75rem !important;
+    gap: 0.15rem !important;
+    padding: 0.15rem 0.25rem !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+  }
+
+  .mobile-resource-bar > span:first-child {
+    grid-column: span 2 / span 2;
+    grid-row: auto !important;
+  }
+
+  .mobile-resource-bar img,
+  .mobile-resource-bar [aria-hidden="true"] {
+    height: 1rem !important;
+    width: 1rem !important;
+  }
+
+  .mobile-hud-drawer {
+    position: absolute;
+    left: calc(var(--safe-left) + 0.5rem);
+    right: calc(var(--safe-right) + 0.5rem);
+    bottom: calc(var(--safe-bottom) + 4.35rem);
+    z-index: 35;
+    max-height: min(58dvh, 28rem);
+    overflow: hidden;
+    border: 1px solid rgba(180, 83, 9, 0.58);
+    background: var(--mobile-panel-bg);
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-combat-aside {
+    left: calc(var(--safe-left) + 0.5rem) !important;
+    right: calc(var(--safe-right) + 0.5rem) !important;
+    top: auto !important;
+    bottom: calc(var(--safe-bottom) + 0.5rem) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(42dvh, 20rem);
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0.5rem !important;
+  }
+
+  .mobile-combat-aside > section {
+    min-width: min(78vw, 19rem);
+    max-height: calc(min(42dvh, 20rem) - 1rem);
+    overflow: hidden;
+  }
+
+  .mobile-combat-board {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    touch-action: none;
+  }
 }

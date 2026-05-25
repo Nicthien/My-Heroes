@@ -173,6 +173,23 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
   );
 }
 
+function getPointerCenter(points: Map<number, { x: number; y: number }>) {
+  if (points.size === 0) return null;
+  let x = 0;
+  let y = 0;
+  for (const point of points.values()) {
+    x += point.x;
+    y += point.y;
+  }
+  return { x: x / points.size, y: y / points.size };
+}
+
+function getPointerDistance(points: Map<number, { x: number; y: number }>) {
+  const [first, second] = Array.from(points.values());
+  if (!first || !second) return 0;
+  return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
 // ============================================================
 // Porte VUE DE PROFIL - même format que le mur (viewBox 40×80)
 // Battant bois bombé sur la gauche (vu de côté), 2 piliers de pierre en haut/bas
@@ -303,6 +320,12 @@ export function IsoBattlefield({
   const isTacticsActive = Boolean(tacticsPhase);
   const viewportRef = useRef<HTMLDivElement>(null);
   const rightDragRef = useRef({ active: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
+  const touchPointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const touchGestureRef = useRef<{ dragged: boolean; lastDistance: number; lastCenter: { x: number; y: number } | null }>({
+    dragged: false,
+    lastDistance: 0,
+    lastCenter: null,
+  });
   const previousCombatIdRef = useRef<string | null>(null);
   const previousUnitsRef = useRef<CombatBoardUnit[]>(units);
   const previousCurrentUnitIdRef = useRef<string | null>(combat.currentUnitId);
@@ -545,6 +568,64 @@ export function IsoBattlefield({
   };
   const stopRightDrag = () => {
     rightDragRef.current.active = false;
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    touchGestureRef.current = {
+      dragged: false,
+      lastDistance: getPointerDistance(touchPointersRef.current),
+      lastCenter: getPointerCenter(touchPointersRef.current),
+    };
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" || !touchPointersRef.current.has(event.pointerId)) return;
+    touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const center = getPointerCenter(touchPointersRef.current);
+    const distance = getPointerDistance(touchPointersRef.current);
+    const gesture = touchGestureRef.current;
+    if (!center || !gesture.lastCenter) return;
+
+    const dx = center.x - gesture.lastCenter.x;
+    const dy = center.y - gesture.lastCenter.y;
+    if (touchPointersRef.current.size >= 2) {
+      const delta = distance - gesture.lastDistance;
+      setCamera((prev) => {
+        const zoomFactor = Math.abs(delta) > 4 ? (delta > 0 ? 1.08 : 0.92) : 1;
+        const nextZoom = clamp(prev.zoom * zoomFactor, MIN_BATTLE_ZOOM, MAX_BATTLE_ZOOM);
+        return {
+          zoom: nextZoom,
+          panX: prev.panX + dx,
+          panY: prev.panY + dy,
+        };
+      });
+      gesture.dragged = true;
+      gesture.lastDistance = distance;
+      gesture.lastCenter = center;
+      return;
+    }
+
+    if (gesture.dragged || Math.hypot(dx, dy) > 6) {
+      setCamera((prev) => ({ ...prev, panX: prev.panX + dx, panY: prev.panY + dy }));
+      gesture.dragged = true;
+    }
+    gesture.lastCenter = center;
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    touchPointersRef.current.delete(event.pointerId);
+    touchGestureRef.current = {
+      dragged: false,
+      lastDistance: getPointerDistance(touchPointersRef.current),
+      lastCenter: getPointerCenter(touchPointersRef.current),
+    };
   };
 
   const fortifications = (combat.boardState as { fortifications?: { towerCount: number; towerDamage: number; gateOpen?: boolean; gateCurrentHp?: number; gateHp?: number } }).fortifications;
@@ -857,11 +938,15 @@ export function IsoBattlefield({
   return (
     <div
       ref={viewportRef}
-      className="relative h-full min-h-[680px] w-full min-w-[860px] cursor-default overflow-hidden"
+      className="mobile-combat-board relative h-full min-h-[680px] w-full min-w-[860px] cursor-default overflow-hidden"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={stopRightDrag}
       onMouseLeave={stopRightDrag}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
       onContextMenu={(event) => event.preventDefault()}
     >
       <BattlefieldScenery environment={environment} />

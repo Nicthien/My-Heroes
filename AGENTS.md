@@ -52,6 +52,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Do not use generated SVGs or rough vector placeholders for in-game objects when a sprite can be used.
 - Never use SVG/vector drawings as the source for generated sprites or cursor assets. Use `imagegen` or hand-edited raster sources, then export the final `.webp`.
 - If a temporary fallback is needed for resilience, keep it internal to rendering code and replace it with a real `.webp` sprite before considering the feature visually complete.
+- Hard rule: visible map/game objects and decor must not be drawn with Phaser/canvas primitives (`fillTriangle`, `fillCircle`, `lineTo`, etc.) as a substitute for sprites. If a visual element appears as an object on the adventure map, use an existing `.webp` sprite or create a real raster sprite first.
+- `npm run lint` runs `scripts/validate-visual-assets.mjs` to catch accidental procedural visible map decor before code review.
 
 # Directional Naming
 

@@ -66,15 +66,15 @@ function collectCandidates(ctx: PlacementContext, zoneId: number): Candidate[] {
 }
 
 function getTargetMassifCount(freeLandTiles: number, zoneType: string, baseTerrain: TerrainType): number {
-  const divisor = zoneType === "treasure" ? 130 : zoneType === "junction" ? 170 : 230;
+  const divisor = zoneType === "treasure" ? 70 : zoneType === "junction" ? 95 : 170;
   const terrainBonus =
     baseTerrain === TerrainType.MOUNTAIN || baseTerrain === TerrainType.SNOW || baseTerrain === TerrainType.FOREST
-      ? 1
+      ? 2
       : baseTerrain === TerrainType.SAND || baseTerrain === TerrainType.SWAMP
-        ? 0
-        : -1;
+        ? 1
+        : 0;
   const raw = Math.floor(freeLandTiles / divisor) + terrainBonus;
-  const cap = zoneType === "player" ? 2 : zoneType === "junction" ? 3 : 5;
+  const cap = zoneType === "player" ? 4 : zoneType === "junction" ? 7 : 11;
   return clamp(raw, 0, cap);
 }
 
@@ -88,9 +88,9 @@ function canPlaceMassif(ctx: PlacementContext, x: number, y: number, zoneId: num
     if (!isOpenLandTile(tile)) return false;
   }
 
-  if (hasNearbyRoadOrObject(ctx.tiles, ctx.width, ctx.height, x, y, 4)) return false;
+  if (hasNearbyRoadOrObject(ctx.tiles, ctx.width, ctx.height, x, y, 2)) return false;
   if (hasNearbyWorldEdge(ctx.tiles, ctx.width, ctx.height, x, y, 2)) return false;
-  if (countOpenRingTiles(ctx.tiles, ctx.width, ctx.height, x, y) < 10) return false;
+  if (countOpenRingTiles(ctx.tiles, ctx.width, ctx.height, x, y) < 8) return false;
 
   return true;
 }
@@ -185,7 +185,7 @@ function scoreMassifCandidate(ctx: PlacementContext, x: number, y: number, terra
     terrain === TerrainType.MOUNTAIN ? 5 : terrain === TerrainType.FOREST || terrain === TerrainType.SNOW ? 3 : terrain === baseTerrain ? 2 : 0;
   const roughNeighbors = countRoughNeighbors(ctx.tiles, ctx.width, ctx.height, x, y);
   const centerDistance = Math.hypot(x - ctx.zoneGrid.meta[ctx.zoneGrid.tilesZone[y][x]].centerX, y - ctx.zoneGrid.meta[ctx.zoneGrid.tilesZone[y][x]].centerY);
-  const centerPenalty = Math.max(0, 8 - centerDistance) * 0.35;
+  const centerPenalty = Math.max(0, 5 - centerDistance) * 0.12;
   const organicNoise = tileNoise(x, y, 707) * 2.4 + tileNoise(x + 4, y - 3, 911) * 1.2;
   return mountainAffinity + roughNeighbors * 0.45 + organicNoise - centerPenalty;
 }

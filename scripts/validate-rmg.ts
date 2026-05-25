@@ -34,7 +34,21 @@ interface MapStats {
   gates: number;
   decor: number;
   blockingDecor: number;
+  pocketArtifacts: number;
+  pocketGuardians: number;
   terrain: Record<string, number>;
+}
+
+interface NeutralZoneDensityMetric {
+  templateId: string;
+  seed: string;
+  playerCount: number;
+  size: number;
+  zoneId: number;
+  zoneType: string;
+  emptyRatio: number;
+  empty: number;
+  total: number;
 }
 
 const sizes = [36, 72, 108];
@@ -53,6 +67,10 @@ const PRIMARY_MINE_DAILY_MOVEMENT = 1500;
 
 const issues: ValidationIssue[] = [];
 const summaries: string[] = [];
+const neutralZoneDensityMetrics: NeutralZoneDensityMetric[] = [];
+let totalExpectedPockets = 0;
+let totalPocketArtifacts = 0;
+let totalPocketGuardians = 0;
 const TOWN_FOOTPRINT_OFFSETS = [
   { x: -1, y: -2 },
   { x: 0, y: -2 },
@@ -88,6 +106,7 @@ const warnings = issues.filter((issue) => issue.severity === "warning");
 
 console.log(`RMG validation checked ${summaries.length} template/player groups.`);
 for (const line of summaries) console.log(`- ${line}`);
+printRmgMetricSummary();
 
 if (warnings.length > 0) {
   console.log(`\nWarnings (${warnings.length}):`);
@@ -171,7 +190,10 @@ function validateMap(
   }
 
   validateStartingEconomy(map, templateId, seed, playerCount, size);
+  validateMineResourceClusters(map, templateId, seed, playerCount, size);
   validateStargateSpacing(map, templateId, seed, playerCount, size);
+  validatePockets(map, stats, connected, templateId, seed, playerCount, size);
+  validateNeutralZoneDensity(map, templateId, seed, playerCount, size);
 
   for (const row of map.tiles) {
     for (const tile of row) {
@@ -203,12 +225,15 @@ function validateMap(
           addIssue("error", templateId, seed, playerCount, size, `road crosses town footprint ${tile.object.id} at ${tile.x},${tile.y}`);
         }
       }
+      if (tile.road && tile.decor?.blocking) {
+        addIssue("error", templateId, seed, playerCount, size, `road has blocking decor at ${tile.x},${tile.y}`);
+      }
       if (tile.object?.type === "building") {
         const key = `${tile.x},${tile.y}`;
-        if (!tile.road) {
-          addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} has no access path at ${tile.x},${tile.y}`);
-        } else if (!allowsSplitRoadNetworks && !connectedRoads.has(key)) {
+        if (tile.road && !allowsSplitRoadNetworks && !connectedRoads.has(key)) {
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} path is not connected to the road network at ${tile.x},${tile.y}`);
+        } else if (!tile.road && !hasConnectedAdjacentAccess(map, tile, connected)) {
+          addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} has no connected visible or invisible access at ${tile.x},${tile.y}`);
         }
       }
       if (tile.object?.type === "adventure_building") {
@@ -218,6 +243,9 @@ function validateMap(
         if (tile.object.subtype === "stargate" && !tile.object.targetId) {
           addIssue("error", templateId, seed, playerCount, size, `stargate ${tile.object.id} has no target at ${tile.x},${tile.y}`);
         }
+      }
+      if (isTerrestrialInvisibleAccessTarget(tile) && !hasConnectedObjectAccess(map, tile, connected)) {
+        addIssue("error", templateId, seed, playerCount, size, `${tile.object?.type} ${tile.object?.id} has no connected access at ${tile.x},${tile.y}`);
       }
       if (tile.object?.type === "wall" && tile.terrain === TerrainType.WATER) {
         addIssue("error", templateId, seed, playerCount, size, `wall placed on water at ${tile.x},${tile.y}`);
@@ -321,6 +349,198 @@ function validateStartingEconomy(
       }
     }
   }
+}
+
+function validateMineResourceClusters(
+  map: GameMap,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "building") continue;
+      const adjacentResources = countAdjacentResourcePiles(map, tile.x, tile.y);
+      if (adjacentResources > 2) {
+        addIssue(
+          "error",
+          templateId,
+          seed,
+          playerCount,
+          size,
+          `mine ${tile.object.id} expected 0-2 adjacent resource piles, got ${adjacentResources} at ${tile.x},${tile.y}`,
+        );
+      }
+    }
+  }
+}
+
+function countAdjacentResourcePiles(map: GameMap, x: number, y: number): number {
+  let count = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (map.tiles[y + dy]?.[x + dx]?.object?.type === "resource") count++;
+    }
+  }
+  return count;
+}
+
+function validatePockets(
+  map: GameMap,
+  stats: MapStats,
+  connected: Set<string>,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  const template = TEMPLATES.find((item) => item.id === templateId);
+  if (!template) return;
+  const expectedPockets = template.zones.reduce((sum, zone) => sum + (zone.pocketCount ?? 0), 0);
+  if (expectedPockets === 0) return;
+  totalExpectedPockets += expectedPockets;
+  totalPocketArtifacts += stats.pocketArtifacts;
+  totalPocketGuardians += stats.pocketGuardians;
+
+  // We expect at least half of the templated pockets to materialize (seeding may fail
+  // legitimately on small/cramped maps).
+  if (stats.pocketArtifacts < Math.max(1, Math.floor(expectedPockets / 2))) {
+    addIssue(
+      "warning",
+      templateId,
+      seed,
+      playerCount,
+      size,
+      `low pocket artifact count: ${stats.pocketArtifacts}/${expectedPockets}`,
+    );
+  }
+
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "artifact" && tile.object.id.startsWith("pocket-art-")) {
+        if (!connected.has(`${tile.x},${tile.y}`)) {
+          addIssue(
+            "error",
+            templateId,
+            seed,
+            playerCount,
+            size,
+            `pocket artifact ${tile.object.id} is unreachable at ${tile.x},${tile.y}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+function validateNeutralZoneDensity(
+  map: GameMap,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  if (!map.zones) return;
+  for (const zone of map.zones) {
+    if (zone.type === "player") continue;
+    let total = 0;
+    let empty = 0;
+    for (const row of map.tiles) {
+      for (const tile of row) {
+        if (tileZoneId(map, tile.x, tile.y) !== zone.id) continue;
+        if (tile.terrain === TerrainType.WATER) continue;
+        total++;
+        if (!tile.object && !tile.decor && !tile.road) empty++;
+      }
+    }
+    if (total < 20) continue;
+    const emptyRatio = empty / total;
+    neutralZoneDensityMetrics.push({
+      templateId,
+      seed,
+      playerCount,
+      size,
+      zoneId: zone.id,
+      zoneType: zone.type,
+      emptyRatio,
+      empty,
+      total,
+    });
+    if (emptyRatio > 0.35) {
+      addIssue(
+        "warning",
+        templateId,
+        seed,
+        playerCount,
+        size,
+        `neutral zone ${zone.templateZoneId} has high empty-tile ratio: ${percent(emptyRatio)}`,
+      );
+    }
+  }
+}
+
+function isTerrestrialInvisibleAccessTarget(tile: MapTile): boolean {
+  const objectType = tile.object?.type;
+  if (objectType !== "adventure_building") return false;
+  return tile.terrain !== TerrainType.WATER && tile.terrain !== TerrainType.LAVA && !tile.worldEdge;
+}
+
+function hasConnectedAdjacentAccess(map: GameMap, tile: MapTile, connected: Set<string>): boolean {
+  for (const neighbor of getAdjacentNeighbors(tile)) {
+    const accessTile = map.tiles[neighbor.y]?.[neighbor.x];
+    if (!isAccessibleStandingTile(accessTile)) continue;
+    if (connected.has(`${neighbor.x},${neighbor.y}`)) return true;
+  }
+  return false;
+}
+
+function hasConnectedObjectAccess(map: GameMap, tile: MapTile, connected: Set<string>): boolean {
+  if (tile.object?.type !== "adventure_building" && connected.has(`${tile.x},${tile.y}`)) return true;
+  return hasConnectedAdjacentAccess(map, tile, connected);
+}
+
+function isAccessibleStandingTile(tile: MapTile | undefined): tile is MapTile {
+  if (!tile || tile.worldEdge || !tile.isPassable || tile.decor?.blocking) return false;
+  if (tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) return false;
+  if (!tile.object) return true;
+  return (
+    tile.object.type === "gate" ||
+    tile.object.type === "town" ||
+    tile.object.type === "resource" ||
+    tile.object.type === "monster" ||
+    tile.object.type === "hero"
+  );
+}
+
+function getAdjacentNeighbors(tile: Pick<MapTile, "x" | "y">) {
+  const neighbors: Array<{ x: number; y: number }> = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      neighbors.push({ x: tile.x + dx, y: tile.y + dy });
+    }
+  }
+  return neighbors;
+}
+
+function tileZoneId(map: GameMap, x: number, y: number): number | null {
+  const zones = map.zones;
+  if (!zones) return null;
+  // Nearest-center approximation since tilesZone isn't serialized; matches Voronoi assignment.
+  let bestId: number | null = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const zone of zones) {
+    const dx = x - zone.centerX;
+    const dy = y - zone.centerY;
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) {
+      bestDist = d;
+      bestId = zone.id;
+    }
+  }
+  return bestId;
 }
 
 function validateStargateSpacing(
@@ -508,6 +728,8 @@ function collectStats(map: GameMap): MapStats {
     gates: 0,
     decor: 0,
     blockingDecor: 0,
+    pocketArtifacts: 0,
+    pocketGuardians: 0,
     terrain: {},
   };
 
@@ -527,6 +749,8 @@ function collectStats(map: GameMap): MapStats {
       if (tile.object?.type === "adventure_building") stats.adventureBuildings++;
       if (tile.object?.type === "monster") stats.monsters++;
       if (tile.object?.type === "gate") stats.gates++;
+      if (tile.object?.type === "artifact" && tile.object.id.startsWith("pocket-art-")) stats.pocketArtifacts++;
+      if (tile.object?.type === "monster" && tile.object.id.startsWith("pocket-mon-")) stats.pocketGuardians++;
     }
   }
 
@@ -621,6 +845,33 @@ function addIssue(
   message: string,
 ): void {
   issues.push({ severity, templateId, seed, playerCount, size, message });
+}
+
+function printRmgMetricSummary(): void {
+  if (neutralZoneDensityMetrics.length === 0 && totalExpectedPockets === 0) return;
+
+  console.log("\nRMG metrics:");
+  if (neutralZoneDensityMetrics.length > 0) {
+    const avgEmpty =
+      neutralZoneDensityMetrics.reduce((sum, metric) => sum + metric.emptyRatio, 0) /
+      neutralZoneDensityMetrics.length;
+    const overTarget = neutralZoneDensityMetrics.filter((metric) => metric.emptyRatio > 0.35).length;
+    console.log(
+      `- neutral zones: ${neutralZoneDensityMetrics.length}, avg empty ${percent(avgEmpty)}, above 35% target ${overTarget}`,
+    );
+    for (const metric of [...neutralZoneDensityMetrics]
+      .sort((a, b) => b.emptyRatio - a.emptyRatio)
+      .slice(0, 12)) {
+      console.log(
+        `  ${metric.templateId}/${metric.playerCount}p/${metric.size}/${metric.seed} zone ${metric.zoneId} ${metric.zoneType}: ${percent(metric.emptyRatio)} empty (${metric.empty}/${metric.total})`,
+      );
+    }
+  }
+  if (totalExpectedPockets > 0) {
+    console.log(
+      `- pockets: ${totalPocketArtifacts}/${totalExpectedPockets} artifacts, ${totalPocketGuardians} guardians`,
+    );
+  }
 }
 
 function formatIssue(issue: ValidationIssue): string {

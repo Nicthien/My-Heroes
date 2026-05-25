@@ -5,6 +5,7 @@ import { createNeutralArmyStacksForTile, getDominantUnitType } from "@/lib/game/
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/game/types";
+import { normalizeRmgTuning } from "@/lib/game/engine/rmg-tuning";
 import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
@@ -66,8 +67,10 @@ export async function POST(request: Request) {
       mapSize = "M",
       seed,
       templateId,
+      rmgTuning,
       faction = "castle",
     } = body;
+    const tuning = normalizeRmgTuning(rmgTuning);
 
     const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
     const gateSchema = await getGateSchemaStatus(supabase);
@@ -94,6 +97,7 @@ export async function POST(request: Request) {
       seed,
       templateId,
       playerCount: maxPlayers,
+      tuning,
     });
     const objectIdPrefix = randomUUID();
     prefixMonsterIds(mapData, objectIdPrefix);
@@ -111,7 +115,7 @@ export async function POST(request: Request) {
         map_height: size,
         status: "PENDING",
         map_data: mapData,
-        game_config: { turnTimeLimit: 86400 },
+        game_config: { turnTimeLimit: 86400, rmgTuning: tuning },
         seed: mapData.seed,
         map_size: mapSize,
         template_id: mapData.templateId,

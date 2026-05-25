@@ -4,18 +4,17 @@ import { useEffect } from "react";
 import HUD from "@/components/game/hud/HUD";
 import { AuthContext } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { buildMockState, mockAuthValue } from "./mockState";
+import { buildMockState, mockAuthValue } from "../hud/mockState";
 
-export default function DevHudPage() {
+export default function DevHudBuildPage() {
   useEffect(() => {
     useGameStore.getState().setGameState(buildMockState());
-    useGameStore.getState().selectHero("h1");
+    useGameStore.getState().selectTown("t1");
   }, []);
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
-      <div className="game-shell relative bg-gradient-to-br from-emerald-900 via-stone-800 to-slate-900">
-        {/* Fake map backdrop */}
+      <div className="relative h-screen w-screen overflow-hidden bg-gradient-to-br from-emerald-900 via-stone-800 to-slate-900">
         <div
           aria-hidden
           className="absolute inset-0 opacity-40"

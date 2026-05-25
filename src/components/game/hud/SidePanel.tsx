@@ -7,7 +7,6 @@ import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/ec
 import { MAP_SPRITES } from "@/lib/rendering/phaser/assets";
 import {
   HourglassIcon,
-  MineIcon,
   PortraitSeal,
   TowerIcon,
   goldText,
@@ -135,13 +134,26 @@ export default function SidePanel() {
             const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === m.type);
             const label = rule?.label ?? m.type;
             const prod = rule ? formatResourceProduction(rule.production) : "";
+            const sprite = MAP_SPRITES.buildings[m.type];
             return (
               <Row
                 key={m.id}
                 onClick={() => focusTile(m.position.x, m.position.y)}
                 left={
-                  <div className="grid h-10 w-10 place-items-center rounded-lg border border-amber-700/60 bg-stone-900/80">
-                    <MineIcon className="h-6 w-6 text-amber-300" />
+                  <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg border border-amber-700/60 bg-stone-900/80">
+                    {sprite ? (
+                      <Image
+                        src={sprite}
+                        alt={label}
+                        width={40}
+                        height={40}
+                        className="h-full w-full object-contain"
+                        style={{ imageRendering: "pixelated" }}
+                        draggable={false}
+                      />
+                    ) : (
+                      <span className="text-lg font-black text-amber-300">?</span>
+                    )}
                   </div>
                 }
                 title={label}

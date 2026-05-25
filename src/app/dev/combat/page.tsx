@@ -129,7 +129,7 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
           stats: { attack: 1, defense: 1, spellPower: 5, knowledge: 4, morale: 0, luck: 0 },
           mana: 40,
           hasSpellBook: true,
-          knownSpellIds: null,
+          knownSpellIds: ["magic_arrow"],
           artifacts: { inventory: [], equipment: {} },
           position: { x: 4, y: 4 },
           movement: 1800,
@@ -160,7 +160,7 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
           stats: { attack: 1, defense: 1, spellPower: 3, knowledge: 3, morale: 0, luck: 0 },
           mana: 30,
           hasSpellBook: true,
-          knownSpellIds: null,
+          knownSpellIds: ["magic_arrow"],
           artifacts: { inventory: [], equipment: {} },
           position: { x: 4, y: 4 },
           movement: 1800,
@@ -265,8 +265,8 @@ export default function DevCombatPage() {
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
-      <div className="relative h-screen w-screen overflow-hidden bg-stone-950">
-        <div className="absolute bottom-4 left-4 z-50 space-y-2 rounded-md border border-amber-600/40 bg-black/70 p-2 shadow-xl">
+      <div className="game-shell relative bg-stone-950">
+        <div className="desktop-only absolute bottom-4 left-4 z-50 space-y-2 rounded-md border border-amber-600/40 bg-black/70 p-2 shadow-xl">
           <div className="flex gap-2">
             {COMBAT_PREVIEW_SCENARIOS.map((item) => (
               <button

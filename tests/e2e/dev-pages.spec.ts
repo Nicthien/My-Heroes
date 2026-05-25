@@ -20,6 +20,7 @@ type DevPage = {
 
 const DEV_PAGES: DevPage[] = [
   { path: "/dev/hud",          expect: { selector: "body",   description: "HUD preview body" } },
+  { path: "/dev/hud-build",    expect: { selector: "body",   description: "HUD build preview body" } },
   { path: "/dev/combat",       expect: { selector: "body",   description: "Combat preview body" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
@@ -101,4 +102,80 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByRole("button", { name: "Feu" })).toBeVisible();
     await expect(page.getByText("Fleche magique")).toBeVisible();
   });
+
+  test("town build tree modal shows construction dependencies", async ({ page }) => {
+    await page.goto("/dev/hud-build", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Construire" }).first().click();
+    await page.getByRole("button", { name: "Arbre des constructions" }).click();
+
+    const buildTree = page.getByRole("dialog", { name: "Arbre des constructions" });
+    await expect(buildTree).toBeVisible();
+    await expect(buildTree.getByRole("heading", { name: "Guilde des mages (niveau 1)" })).toBeVisible();
+    await expect(buildTree.getByRole("heading", { name: "Guilde des mages (niveau 2)" })).toBeVisible();
+    await expect(buildTree.getByRole("heading", { name: "Guilde des mages (niveau 3)" })).toBeVisible();
+    await expect(buildTree.getByRole("button", { name: "Construire" }).first()).toBeVisible();
+  });
 });
+
+const MOBILE_VIEWPORTS = [
+  { name: "phone portrait 390", width: 390, height: 844 },
+  { name: "phone landscape 844", width: 844, height: 390 },
+  { name: "phone portrait 430", width: 430, height: 932 },
+  { name: "phone landscape 932", width: 932, height: 430 },
+];
+
+test.describe("Mobile smoke - core screens stay usable", () => {
+  for (const viewport of MOBILE_VIEWPORTS) {
+    test(`/auth/login fits ${viewport.name}`, async ({ browser }) => {
+      const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        isMobile: true,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      try {
+        await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: "My Heroes" })).toBeVisible();
+        await expect(page.locator("#login-email")).toBeVisible();
+        await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
+        await expectNoHorizontalOverflow(page);
+      } finally {
+        await context.close();
+      }
+    });
+
+    for (const path of ["/dev/hud", "/dev/hud-build", "/dev/combat", "/dev/map-showcase"]) {
+      test(`${path} supports ${viewport.name}`, async ({ browser }) => {
+        const context = await browser.newContext({
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: true,
+          hasTouch: true,
+        });
+        const page = await context.newPage();
+        try {
+          await page.goto(path, { waitUntil: "domcontentloaded" });
+          await expect(page.locator("body")).toBeVisible();
+          await page.waitForTimeout(1000);
+          await expectNoHorizontalOverflow(page);
+
+          if (path === "/dev/hud" || path === "/dev/hud-build") {
+            await expect(page.getByTestId("end-turn-mobile")).toBeVisible();
+            await page.getByRole("button", { name: "Carte" }).click();
+            await expect(page.getByLabel("Mini carte").last()).toBeVisible();
+          }
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+});
+
+async function expectNoHorizontalOverflow(page: import("@playwright/test").Page) {
+  const overflow = await page.evaluate(() => {
+    const documentWidth = document.documentElement.scrollWidth;
+    const viewportWidth = document.documentElement.clientWidth;
+    return documentWidth - viewportWidth;
+  });
+  expect(overflow).toBeLessThanOrEqual(2);
+}

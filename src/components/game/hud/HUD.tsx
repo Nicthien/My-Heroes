@@ -9,6 +9,7 @@ import { PlayersListPanel } from "./PlayersListPanel";
 import { CountDialog } from "./townDialogs";
 import { TownSummaryTab } from "./TownSummaryTab";
 import { TownBuildTab } from "./TownBuildTab";
+import { TownBuildTreeModal } from "./TownBuildTreeModal";
 import { TownRecruitTab } from "./TownRecruitTab";
 import { TownTavernTab } from "./TownTavernTab";
 import { TownGarrisonTab } from "./TownGarrisonTab";
@@ -37,6 +38,7 @@ import {
 } from "./recruitHelpers";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useResponsiveGameLayout } from "@/lib/ui/useResponsiveGameLayout";
 import { Faction, BuildingType, UnitType, type Hero } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -76,12 +78,15 @@ export default function HUD() {
 function HUDContent() {
   const router = useRouter();
   const { data: session } = useSession();
+  const layout = useResponsiveGameLayout();
+  const [mobileDrawer, setMobileDrawer] = useState<"heroes" | "towns" | "map" | "players" | "actions" | null>(null);
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
     townId: null,
     tab: "summary",
   });
   const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
   const [hideBuiltBuildings, setHideBuiltBuildings] = useState(true);
+  const [buildTreeTownId, setBuildTreeTownId] = useState<string | null>(null);
   const [hideMissingRecruitRequirements, setHideMissingRecruitRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
   const [recruitDialog, setRecruitDialog] = useState<{ townId: string; unitType: UnitType; count: number } | null>(null);
@@ -846,12 +851,13 @@ function HUDContent() {
     : undefined;
   const activeReturnMax = activeReturnStack?.count ?? 0;
   const activeReturnCount = Math.min(Math.max(1, returnDialog?.count ?? 1), Math.max(1, activeReturnMax));
+  const isCompactHud = layout.isCompactHud;
 
   return (
     <div className="absolute inset-0 pointer-events-none">
       {/* Top bar */}
-      <div className="pointer-events-auto absolute left-0 right-0 top-0 border-b-2 border-amber-700/60 bg-gradient-to-b from-[#1a1208] via-[#0e0904] to-[#1a1208] px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(252,211,77,0.15)]">
-        <div className="relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="mobile-game-topbar pointer-events-auto absolute left-0 right-0 top-0 border-b-2 border-amber-700/60 bg-gradient-to-b from-[#1a1208] via-[#0e0904] to-[#1a1208] px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(252,211,77,0.15)]">
+        <div className="relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:gap-3">
           <div className="flex min-w-0 items-center gap-3 justify-self-start text-left">
             <button
               type="button"
@@ -871,10 +877,12 @@ function HUDContent() {
                 <span>Sem. {gameState.calendar.weekOfMonth} · Jour {gameState.calendar.dayOfWeek}</span>
               </div>
             </div>
-            <AdventureMusicControl />
+            <div className="desktop-only">
+              <AdventureMusicControl />
+            </div>
           </div>
 
-          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-center">
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 text-center md:block">
             {isPending && (
               <span className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-amber-400/50 bg-gradient-to-b from-amber-900/60 to-stone-950/80 px-5 py-2 text-sm font-black uppercase tracking-widest text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]">
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
@@ -897,10 +905,10 @@ function HUDContent() {
             )}
           </div>
 
-          <div className="flex min-w-0 items-stretch justify-end gap-3 justify-self-end">
+          <div className="flex min-w-0 items-stretch justify-end gap-2 justify-self-end md:gap-3">
             {myPlayer && <ResourceBar resources={myPlayer.resources} />}
             <button
-              className="flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-3 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200"
+              className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}
               title={myPlayer?.turnOrder !== 0 && isPending ? "Quitter la partie" : "Retour au dashboard"}
             >
@@ -914,7 +922,7 @@ function HUDContent() {
       </div>
 
       {/* Right column: players + side shortcuts */}
-      <div className="pointer-events-none absolute right-3 top-[7rem] bottom-3 flex w-64 flex-col gap-3 overflow-hidden">
+      <div className="desktop-only pointer-events-none absolute right-3 top-[7rem] bottom-3 flex w-64 flex-col gap-3 overflow-hidden">
         <CollapsiblePanel
           title="Carte"
           className={`${ornateFrame} pointer-events-auto shrink-0`}
@@ -943,6 +951,30 @@ function HUDContent() {
       {devPanel.overlay}
       {turnNotifications.promptUI}
 
+      {isCompactHud && mobileDrawer && (
+        <div className="mobile-hud-drawer pointer-events-auto rounded-xl">
+          <div className="flex items-center justify-between border-b border-amber-700/40 px-3 py-2">
+            <div className={`text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
+              {mobileDrawer === "heroes" ? "Heros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Actions"}
+            </div>
+            <button
+              type="button"
+              className="touch-target rounded-md border border-amber-700/50 px-3 text-sm font-black text-amber-100"
+              onClick={() => setMobileDrawer(null)}
+              aria-label="Fermer"
+            >
+              x
+            </button>
+          </div>
+          <div className="max-h-[calc(min(58dvh,28rem)-3rem)] overflow-y-auto overscroll-contain p-2">
+            {mobileDrawer === "map" && <MiniMap />}
+            {mobileDrawer === "players" && <PlayersListPanel gameState={gameState} myPlayer={myPlayer} />}
+            {mobileDrawer === "actions" && <SidePanel />}
+            {(mobileDrawer === "heroes" || mobileDrawer === "towns") && <SidePanel />}
+          </div>
+        </div>
+      )}
+
       {/* Hero panel */}
       {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} />}
 
@@ -950,7 +982,7 @@ function HUDContent() {
       {selectedTown && (
         <CollapsiblePanel
           title={selectedTown.name}
-          className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+          className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
           bodyClassName="flex min-h-0 flex-1 flex-col"
           right={
               <button
@@ -978,7 +1010,7 @@ function HUDContent() {
             )}
           </div>
 
-          <div className="flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
+          <div className="mobile-town-tabs flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
             {townTabs.map((tab) => (
               <TownTabButton
                 key={tab.id}
@@ -1026,6 +1058,7 @@ function HUDContent() {
                 selectedTown={selectedTown}
                 selectedTownFaction={selectedTownFaction}
                 displayedBuildRules={displayedBuildRules}
+                onOpenBuildTree={() => setBuildTreeTownId(selectedTown.id)}
                 hideMissingBuildRequirements={hideMissingBuildRequirements}
                 setHideMissingBuildRequirements={setHideMissingBuildRequirements}
                 hideBuiltBuildings={hideBuiltBuildings}
@@ -1152,6 +1185,22 @@ function HUDContent() {
         />
       )}
 
+      {selectedTown && buildTreeTownId === selectedTown.id && (
+        <TownBuildTreeModal
+          selectedTown={selectedTown}
+          selectedTownFaction={selectedTownFaction}
+          rules={selectedTownBuildingRules}
+          myPlayer={myPlayer}
+          gameState={gameState}
+          hasPlayerCapitol={hasPlayerCapitol}
+          canAct={canAct}
+          isPending={isPending}
+          isMyTown={isMyTown}
+          onBuild={handleBuild}
+          onClose={() => setBuildTreeTownId(null)}
+        />
+      )}
+
       {selectedTown && activeUpgradeBaseEntry && activeUpgradeEntry && upgradeDialog?.townId === selectedTown.id && activeUpgradeMax > 0 && (
         <CountDialog
           tone="sky"
@@ -1192,7 +1241,7 @@ function HUDContent() {
       )}
 
       {/* Bouton de fin de tour */}
-      <div className="pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2">
+      <div className="desktop-only pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2">
         {isPending ? (
           <div className={`${ornateFramePolished} min-w-80 p-5 text-center`}>
             <CornerOrnaments />
@@ -1251,6 +1300,39 @@ function HUDContent() {
             </span>
           </button>
           </div>
+        )}
+      </div>
+      <div className="mobile-flex mobile-bottom-nav pointer-events-auto absolute z-30 hidden items-center gap-2 rounded-xl border border-amber-700/55 bg-stone-950/92 p-2 shadow-2xl shadow-black/70 backdrop-blur">
+        {(["heroes", "towns", "map", "players", "actions"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`touch-target min-w-0 flex-1 rounded-md border px-1 text-[10px] font-black uppercase tracking-wide ${
+              mobileDrawer === item
+                ? "border-amber-300 bg-amber-700/30 text-amber-50"
+                : "border-amber-800/55 bg-black/35 text-amber-200"
+            }`}
+            onClick={() => setMobileDrawer((current) => current === item ? null : item)}
+          >
+            {item === "heroes" ? "Heros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Actions"}
+          </button>
+        ))}
+        {!isPending && (
+          <button
+            className={`touch-target min-w-[4.5rem] rounded-full border-2 px-2 text-[10px] font-black uppercase tracking-wide ${
+              isWaitingForPlayers
+                ? "border-stone-400 bg-stone-800 text-stone-100"
+                : canAct && !hasActiveCombats
+                  ? "border-amber-300 bg-red-800 text-amber-50"
+                  : "cursor-not-allowed border-stone-700 bg-stone-900 text-stone-500"
+            }`}
+            disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
+            onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
+            data-testid="end-turn-mobile"
+            title={isWaitingForPlayers ? "Annuler la fin du tour" : "Fin du tour"}
+          >
+            {isWaitingForPlayers ? "Annuler" : "Fin tour"}
+          </button>
         )}
       </div>
     </div>

@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
 import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { generateMap } from "@/lib/game/engine";
+import {
+  DEFAULT_RMG_TUNING,
+  RmgTuning,
+  normalizeRmgTuning,
+} from "@/lib/game/engine/rmg-tuning";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
 import { GameMap, TerrainType } from "@/lib/game/types";
 import { createClient } from "@/lib/supabase/browser";
@@ -140,6 +145,20 @@ const MAP_SIZES = {
   XL: 144,
 } as const;
 
+const RMG_TUNING_CONTROLS: {
+  key: keyof RmgTuning;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}[] = [
+  { key: "resourceBudgetPercent", label: "Budget de ressources", min: 25, max: 250, step: 5 },
+  { key: "buildingPercent", label: "B\u00e2timents \u00e9conomiques", min: 0, max: 250, step: 5 },
+  { key: "looseResourcePercent", label: "Ressources libres", min: 0, max: 300, step: 5 },
+  { key: "monsterPercent", label: "Monstres gardiens", min: 0, max: 250, step: 5 },
+  { key: "adventurePercent", label: "B\u00e2timents d'aventure", min: 0, max: 250, step: 5 },
+];
+
 function factionLabel(faction: string) {
   return FACTION_META[faction]?.label ?? faction;
 }
@@ -221,6 +240,62 @@ function randomSeedValue() {
   return value;
 }
 
+function RmgTuningSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block rounded-md border border-amber-700/30 bg-stone-950/55 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-amber-100">{label}</span>
+        <span className="rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-xs font-black text-amber-200">
+          {value}%
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-amber-500"
+      />
+    </label>
+  );
+}
+
+function GearIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21a2 2 0 1 1-4 0v-.09A1.8 1.8 0 0 0 8.7 19.25a1.8 1.8 0 0 0-1.98.36l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.8 1.8 0 0 0 4.25 15a1.8 1.8 0 0 0-1.66-1.1H2.5a2 2 0 1 1 0-4h.09A1.8 1.8 0 0 0 4.25 8.8a1.8 1.8 0 0 0-.36-1.98l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.8 1.8 0 0 0 8.7 4.35a1.8 1.8 0 0 0 1.1-1.66V2.6a2 2 0 1 1 4 0v.09a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 1.98-.36l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.66 1.1h.09a2 2 0 1 1 0 4h-.09A1.8 1.8 0 0 0 19.4 15Z" />
+    </svg>
+  );
+}
+
+function SignOutIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 17l5-5-5-5" />
+      <path d="M15 12H3" />
+      <path d="M21 19V5a2 2 0 0 0-2-2h-5" />
+      <path d="M14 21h5a2 2 0 0 0 2-2" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const [games, setGames] = useState<GameInfo[]>([]);
@@ -228,10 +303,18 @@ export default function DashboardPage() {
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
+  const [showRmgTuning, setShowRmgTuning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const [profilePassword, setProfilePassword] = useState("");
+  const [profilePasswordConfirm, setProfilePasswordConfirm] = useState("");
+  const [profileMessage, setProfileMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [dashboardMessage, setDashboardMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [selectedFaction, setSelectedFaction] = useState<string>("castle");
   const [gameName, setGameName] = useState("");
@@ -239,12 +322,14 @@ export default function DashboardPage() {
   const [mapSize, setMapSize] = useState<"S" | "M" | "L" | "XL">("M");
   const [seed, setSeed] = useState(() => randomSeedValue());
   const [templateId, setTemplateId] = useState<string>("auto");
+  const [rmgTuning, setRmgTuning] = useState<RmgTuning>(DEFAULT_RMG_TUNING);
   const router = useRouter();
   const templateOptions = useMemo(() => listTemplatesForPlayers(maxPlayers), [maxPlayers]);
   const selectedTemplateId = templateId !== "auto" && templateOptions.some((template) => template.id === templateId)
     ? templateId
     : "auto";
   const effectiveTemplateId = selectedTemplateId === "auto" ? undefined : selectedTemplateId;
+  const normalizedRmgTuning = useMemo(() => normalizeRmgTuning(rmgTuning), [rmgTuning]);
   const previewMap = useMemo(
     () =>
       generateMap({
@@ -253,12 +338,16 @@ export default function DashboardPage() {
         seed,
         playerCount: maxPlayers,
         templateId: effectiveTemplateId,
+        tuning: normalizedRmgTuning,
       }),
-    [effectiveTemplateId, mapSize, maxPlayers, seed],
+    [effectiveTemplateId, mapSize, maxPlayers, normalizedRmgTuning, seed],
   );
   const previewStats = useMemo(() => summarizeMap(previewMap), [previewMap]);
   const generateRandomSeed = () => {
     setSeed(randomSeedValue());
+  };
+  const updateRmgTuning = (key: keyof RmgTuning, value: number) => {
+    setRmgTuning((current) => normalizeRmgTuning({ ...current, [key]: value }));
   };
 
   const signOut = async () => {
@@ -342,6 +431,85 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [loadOpenGames, showJoin]);
 
+  const openOptions = () => {
+    setProfileEmail(session?.user?.email ?? "");
+    setProfileName(session?.user?.name ?? "");
+    setProfilePassword("");
+    setProfilePasswordConfirm("");
+    setProfileMessage(null);
+    setShowOptions(true);
+    setShowCreate(false);
+    setShowJoin(false);
+    setShowRmgPreview(false);
+  };
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!session?.user) return;
+
+    const nextEmail = profileEmail.trim();
+    const nextName = profileName.trim();
+    const nextPassword = profilePassword.trim();
+
+    if (!nextEmail) {
+      setProfileMessage({ kind: "error", text: "L'adresse mail est requise." });
+      return;
+    }
+    if (!nextName) {
+      setProfileMessage({ kind: "error", text: "Le pseudo est requis." });
+      return;
+    }
+    if (nextPassword && nextPassword !== profilePasswordConfirm.trim()) {
+      setProfileMessage({ kind: "error", text: "Les mots de passe ne correspondent pas." });
+      return;
+    }
+
+    setSavingProfile(true);
+    setProfileMessage(null);
+
+    const supabase = createClient();
+    const authUpdates: {
+      email?: string;
+      password?: string;
+      data?: { name: string };
+    } = { data: { name: nextName } };
+
+    if (nextEmail !== (session.user.email ?? "")) authUpdates.email = nextEmail;
+    if (nextPassword) authUpdates.password = nextPassword;
+
+    const { error: authError } = await supabase.auth.updateUser(authUpdates);
+    if (authError) {
+      setProfileMessage({ kind: "error", text: authError.message || "Impossible de mettre a jour le compte." });
+      setSavingProfile(false);
+      return;
+    }
+
+    const profileResponse = await fetchWithAuth("/api/auth/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    });
+
+    if (!profileResponse.ok) {
+      const data = await parseJsonResponse(profileResponse);
+      setProfileMessage({ kind: "error", text: data?.error || "Impossible de mettre a jour le profil." });
+      setSavingProfile(false);
+      return;
+    }
+
+    await loadMyGames();
+    setProfilePassword("");
+    setProfilePasswordConfirm("");
+    setProfileMessage({
+      kind: "success",
+      text: nextEmail !== (session.user.email ?? "")
+        ? "Profil mis a jour. Confirmez la nouvelle adresse mail si Supabase vous envoie un message."
+        : "Profil mis a jour.",
+    });
+    setSavingProfile(false);
+    router.refresh();
+  };
+
   const createGame = async () => {
     setCreating(true);
     useGameStore.getState().resetGame();
@@ -354,6 +522,7 @@ export default function DashboardPage() {
         mapSize,
         seed,
         templateId: effectiveTemplateId,
+        rmgTuning: normalizedRmgTuning,
         faction: selectedFaction,
       }),
     });
@@ -454,29 +623,38 @@ export default function DashboardPage() {
           "radial-gradient(circle at 15% 10%, rgba(217,119,6,0.08) 0, transparent 40%), radial-gradient(circle at 85% 80%, rgba(120,53,15,0.12) 0, transparent 45%)",
       }}
     >
-      <div className="max-w-5xl mx-auto p-8">
-        <div className="flex items-center justify-between mb-8">
+      <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
+        <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <FleurDeLis className="h-10 w-10 text-amber-400 drop-shadow" />
             <div>
-              <h1 className={`text-4xl font-black tracking-[0.15em] ${goldText}`}>MY HEROES</h1>
+              <h1 className={`text-3xl font-black tracking-[0.15em] sm:text-4xl ${goldText}`}>MY HEROES</h1>
               <p className="text-sm uppercase tracking-wider text-amber-200/70 mt-1">
                 Bienvenue, {session?.user?.name}
               </p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
-              onClick={() => { setShowCreate(true); setShowJoin(false); setShowRmgPreview(false); }}
-              className="rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700"
+              onClick={() => { setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowRmgPreview(false); }}
+              className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
               Nouvelle partie
             </button>
             <button
-              onClick={() => { setShowJoin(true); setShowCreate(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
-              className="rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
+              onClick={() => { setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
+              className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
             >
               Rejoindre
+            </button>
+            <button
+              type="button"
+              onClick={openOptions}
+              title="Options"
+              aria-label="Options"
+              className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 sm:w-12"
+            >
+              <GearIcon />
             </button>
             <button
               type="button"
@@ -486,27 +664,143 @@ export default function DashboardPage() {
                 setSigningOut(false);
               })}
               disabled={signingOut}
-              className="rounded-lg border border-amber-700/50 bg-stone-950/80 px-6 py-3 font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={signingOut ? "Déconnexion..." : "Déconnexion"}
+              aria-label={signingOut ? "Déconnexion..." : "Déconnexion"}
+              className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-12"
             >
-              {signingOut ? "Déconnexion..." : "Déconnexion"}
+              <SignOutIcon />
             </button>
           </div>
         </div>
 
+        {showOptions && (
+          <div
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+            onClick={() => {
+              if (!savingProfile) setShowOptions(false);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="account-options-title"
+              className={`relative ${ornateFramePolished} my-auto w-full max-w-2xl p-4 sm:p-6`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <CornerOrnaments />
+              <ParchmentBackground />
+              <h2 id="account-options-title" className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+                Options
+              </h2>
+
+              {profileMessage && (
+                <div
+                  role="status"
+                  className={`mb-4 rounded-md border px-4 py-3 text-sm font-semibold ${
+                    profileMessage.kind === "success"
+                      ? "border-emerald-400/50 bg-emerald-950/45 text-emerald-100"
+                      : "border-red-400/50 bg-red-950/45 text-red-100"
+                  }`}
+                >
+                  {profileMessage.text}
+                </div>
+              )}
+
+              <form onSubmit={saveProfile} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="profile-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                      Pseudo
+                    </label>
+                    <input
+                      id="profile-name"
+                      type="text"
+                      value={profileName}
+                      onChange={(event) => setProfileName(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="profile-email" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                      Adresse mail
+                    </label>
+                    <input
+                      id="profile-email"
+                      type="email"
+                      value={profileEmail}
+                      onChange={(event) => setProfileEmail(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="profile-password" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                      Nouveau mot de passe
+                    </label>
+                    <input
+                      id="profile-password"
+                      type="password"
+                      value={profilePassword}
+                      onChange={(event) => setProfilePassword(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="profile-password-confirm" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                      Confirmer
+                    </label>
+                    <input
+                      id="profile-password-confirm"
+                      type="password"
+                      value={profilePasswordConfirm}
+                      onChange={(event) => setProfilePasswordConfirm(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={savingProfile}
+                    onClick={() => setShowOptions(false)}
+                    className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProfile}
+                    className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingProfile ? "Enregistrement..." : "Enregistrer"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Dialogue de création */}
         {showCreate && (
           <div
-            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
             onClick={() => { setShowCreate(false); setShowRmgPreview(false); }}
           >
           <div
-            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-6`}
+            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-4 sm:p-6`}
             onClick={(e) => e.stopPropagation()}
           >
             <CornerOrnaments />
             <ParchmentBackground />
             <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Créer une partie</h2>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Nom</label>
                 <input
@@ -535,7 +829,7 @@ export default function DashboardPage() {
 
             <div className="mb-4">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Taille de carte</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {(["S", "M", "L", "XL"] as const).map((s) => (
                   <button
                     key={s}
@@ -556,7 +850,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-2 gap-4">
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Modèle</label>
                 <select
@@ -597,6 +891,40 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60">
+              <button
+                type="button"
+                onClick={() => setShowRmgTuning((value) => !value)}
+                aria-expanded={showRmgTuning}
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+              >
+                <span>
+                  <span className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">R&eacute;glages de g&eacute;n&eacute;ration</span>
+                  <span className="block text-[11px] uppercase tracking-wider text-amber-200/50">
+                    Ressources {normalizedRmgTuning.resourceBudgetPercent}% - B&acirc;timents {normalizedRmgTuning.buildingPercent}% - Monstres {normalizedRmgTuning.monsterPercent}%
+                  </span>
+                </span>
+                <span className="shrink-0 rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-sm font-black text-amber-200">
+                  {showRmgTuning ? "-" : "+"}
+                </span>
+              </button>
+              {showRmgTuning && (
+                <div className="grid gap-3 border-t border-amber-700/30 p-3 md:grid-cols-2">
+                  {RMG_TUNING_CONTROLS.map((control) => (
+                    <RmgTuningSlider
+                      key={control.key}
+                      label={control.label}
+                      min={control.min}
+                      max={control.max}
+                      step={control.step}
+                      value={normalizedRmgTuning[control.key]}
+                      onChange={(value) => updateRmgTuning(control.key, value)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
@@ -625,7 +953,7 @@ export default function DashboardPage() {
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
             <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
 
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
               <button
                 onClick={createGame}
                 disabled={creating}
@@ -756,11 +1084,11 @@ export default function DashboardPage() {
         {/* Dialogue pour rejoindre une partie */}
         {showJoin && (
           <div
-            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
             onClick={() => setShowJoin(false)}
           >
           <div
-            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-6`}
+            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-4 sm:p-6`}
             onClick={(e) => e.stopPropagation()}
           >
             <CornerOrnaments />
@@ -777,7 +1105,7 @@ export default function DashboardPage() {
                 {openGames.map((game) => (
                   <div
                     key={game.id}
-                    className="flex items-center justify-between rounded-md border border-amber-700/40 bg-stone-950/60 p-3"
+                    className="flex flex-col gap-3 rounded-md border border-amber-700/40 bg-stone-950/60 p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
                       <div className="font-bold text-amber-100">{game.name}</div>
@@ -824,7 +1152,7 @@ export default function DashboardPage() {
 
         {deleteTarget && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6"
             onClick={() => {
               if (!deletingGameId) setDeleteTarget(null);
             }}
@@ -833,7 +1161,7 @@ export default function DashboardPage() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-game-title"
-              className={`relative ${ornateFramePolished} w-full max-w-lg p-6`}
+              className={`relative ${ornateFramePolished} w-full max-w-lg p-4 sm:p-6`}
               onClick={(event) => event.stopPropagation()}
             >
               <CornerOrnaments />

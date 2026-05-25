@@ -126,13 +126,15 @@ function RmgPreviewContent() {
         </section>
 
         <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <RmgMapPreview map={map} minSize={420} maxSize={1120} cellScale={8} />
+          <RmgMapPreview map={map} minSize={420} maxSize={1120} cellScale={8} showPockets />
 
           <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
             <Legend />
             <StatBlock title="Terrain" values={stats.terrain} total={map.width * map.height} />
             <StatBlock title="Objets" values={stats.objects} total={stats.objectTotal} />
             <StatBlock title="Details" values={stats.details} />
+            <StatBlock title="Poches" values={stats.pockets} />
+            <ZoneDensityBlock zones={stats.zoneDensity} />
           </aside>
         </section>
       </div>
@@ -228,6 +230,29 @@ function StatBlock({
   );
 }
 
+function ZoneDensityBlock({
+  zones,
+}: {
+  zones: Array<{ label: string; emptyRatio: number; pockets: number; empty: number; total: number }>;
+}) {
+  if (zones.length === 0) return null;
+  return (
+    <div className="border border-stone-800 bg-stone-900/80 p-3">
+      <h2 className="mb-2 text-sm font-semibold text-amber-100">Zones neutres</h2>
+      <div className="grid gap-1.5">
+        {zones.map((zone) => (
+          <div key={zone.label} className="grid grid-cols-[1fr_auto] gap-3 text-xs">
+            <span className="truncate text-stone-300">{zone.label}</span>
+            <span className="font-mono text-stone-100">
+              {Math.round(zone.emptyRatio * 100)}% vide · {zone.pockets} poche{zone.pockets > 1 ? "s" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function summarizeMap(map: GameMap) {
   const terrain: Record<string, number> = {};
   const objects: Record<string, number> = {};
@@ -238,6 +263,9 @@ function summarizeMap(map: GameMap) {
   let blockingDecor = 0;
   let towns = 0;
   let neutralTowns = 0;
+  let pocketArtifacts = 0;
+  let pocketGuardians = 0;
+  let pocketResources = 0;
 
   for (const row of map.tiles) {
     for (const tile of row) {
@@ -253,6 +281,9 @@ function summarizeMap(map: GameMap) {
       if (tile.object) {
         objectTotal++;
         objects[tile.object.type] = (objects[tile.object.type] ?? 0) + 1;
+        if (tile.object.type === "artifact" && tile.object.id.startsWith("pocket-art-")) pocketArtifacts++;
+        if (tile.object.type === "monster" && tile.object.id.startsWith("pocket-mon-")) pocketGuardians++;
+        if (tile.object.type === "resource" && tile.object.id.startsWith("pocket-res-")) pocketResources++;
         if (tile.object.type === "town") {
           towns++;
           if (tile.object.subtype === "neutral") neutralTowns++;
@@ -274,7 +305,50 @@ function summarizeMap(map: GameMap) {
       towns,
       neutralTowns,
     },
+    pockets: {
+      artifacts: pocketArtifacts,
+      guardians: pocketGuardians,
+      resources: pocketResources,
+    },
+    zoneDensity: summarizeNeutralZones(map),
   };
+}
+
+function summarizeNeutralZones(map: GameMap) {
+  if (!map.zones) return [];
+  const zones = map.zones.filter((zone) => zone.type !== "player");
+  return zones.map((zone) => {
+    let total = 0;
+    let empty = 0;
+    let pockets = 0;
+    for (const row of map.tiles) {
+      for (const tile of row) {
+        if (tileZoneId(map, tile.x, tile.y) !== zone.id) continue;
+        if (tile.terrain === TerrainType.WATER) continue;
+        total++;
+        if (!tile.object && !tile.decor && !tile.road) empty++;
+        if (tile.object?.type === "artifact" && tile.object.id.startsWith("pocket-art-")) pockets++;
+      }
+    }
+    return {
+      label: `${zone.templateZoneId}`,
+      emptyRatio: total > 0 ? empty / total : 0,
+      pockets,
+      empty,
+      total,
+    };
+  }).sort((a, b) => b.emptyRatio - a.emptyRatio);
+}
+
+function tileZoneId(map: GameMap, x: number, y: number): number | null {
+  let best: { id: number; distance: number } | null = null;
+  for (const zone of map.zones ?? []) {
+    const dx = x - zone.centerX;
+    const dy = y - zone.centerY;
+    const distance = dx * dx + dy * dy;
+    if (!best || distance < best.distance) best = { id: zone.id, distance };
+  }
+  return best?.id ?? null;
 }
 
 function randomSeed() {

@@ -41,9 +41,9 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800">
-      <div className="bg-gray-800/90 backdrop-blur p-8 rounded-xl shadow-2xl w-96 border border-gray-700">
-        <h1 className="text-3xl font-bold text-white text-center mb-2">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800 p-4">
+      <div className="w-full max-w-96 rounded-xl border border-gray-700 bg-gray-800/90 p-5 shadow-2xl backdrop-blur sm:p-8">
+        <h1 className="mb-2 text-center text-2xl font-bold text-white sm:text-3xl">
           My Heroes
         </h1>
         <p className="text-gray-400 text-center mb-8">

@@ -1,3 +1,4 @@
+import type { ArtifactClass } from "../artifacts";
 import { TerrainType } from "../types";
 import { shuffle, type RNG } from "./rng";
 
@@ -19,6 +20,14 @@ export interface ZoneTemplate {
   /** Position normalisée [0..1] dans la carte */
   nx: number;
   ny: number;
+  /** Multiplicateur local sur les budgets de remplissage de la zone (def 1.0). */
+  treasureDensity?: number;
+  /** Nombre de poches enclavées à générer dans la zone. */
+  pocketCount?: number;
+  /** Force du gardien unique d'une poche. */
+  pocketGuardStrength?: GuardStrength;
+  /** Override de la classe d'artefact placée dans une poche. */
+  pocketArtifactClass?: ArtifactClass;
 }
 
 export interface ConnectionTemplate {
@@ -118,6 +127,9 @@ const JEBUS_CROSS: MapTemplate = {
       townIsNeutral: true,
       nx: 0.5,
       ny: 0.18,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "j-s",
@@ -130,6 +142,9 @@ const JEBUS_CROSS: MapTemplate = {
       townIsNeutral: true,
       nx: 0.5,
       ny: 0.82,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "j-w",
@@ -142,6 +157,9 @@ const JEBUS_CROSS: MapTemplate = {
       townIsNeutral: true,
       nx: 0.18,
       ny: 0.5,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "j-e",
@@ -154,6 +172,9 @@ const JEBUS_CROSS: MapTemplate = {
       townIsNeutral: true,
       nx: 0.82,
       ny: 0.5,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "center",
@@ -166,6 +187,9 @@ const JEBUS_CROSS: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.5,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
   ],
   connections: [
@@ -225,6 +249,9 @@ const DUEL: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.5,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
   ],
   connections: [
@@ -301,6 +328,9 @@ const ARCHIPELAGO: MapTemplate = {
       monsterStrength: "normal",
       nx: 0.5,
       ny: 0.2,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "south-isle",
@@ -313,6 +343,9 @@ const ARCHIPELAGO: MapTemplate = {
       monsterStrength: "normal",
       nx: 0.5,
       ny: 0.8,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "center",
@@ -325,6 +358,9 @@ const ARCHIPELAGO: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.5,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
   ],
   connections: [
@@ -402,6 +438,9 @@ const BROKEN_KINGDOMS: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.32,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
     {
       id: "east-vault",
@@ -414,6 +453,9 @@ const BROKEN_KINGDOMS: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.68,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
     {
       id: "crown",
@@ -424,6 +466,9 @@ const BROKEN_KINGDOMS: MapTemplate = {
       monsterStrength: "normal",
       nx: 0.5,
       ny: 0.5,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
   ],
   connections: [
@@ -526,6 +571,9 @@ const VOLCANIC_CROWN: MapTemplate = {
       monsterStrength: "normal",
       nx: 0.5,
       ny: 0.23,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "south-pass",
@@ -538,6 +586,9 @@ const VOLCANIC_CROWN: MapTemplate = {
       monsterStrength: "normal",
       nx: 0.5,
       ny: 0.78,
+      treasureDensity: 1.15,
+      pocketCount: 2,
+      pocketGuardStrength: "normal",
     },
     {
       id: "volcanic-ring",
@@ -550,6 +601,9 @@ const VOLCANIC_CROWN: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.5,
       ny: 0.5,
+      treasureDensity: 1.35,
+      pocketCount: 3,
+      pocketGuardStrength: "strong",
     },
     {
       id: "hellcore",
@@ -562,6 +616,9 @@ const VOLCANIC_CROWN: MapTemplate = {
       monsterStrength: "strong",
       nx: 0.5,
       ny: 0.57,
+      treasureDensity: 1.25,
+      pocketCount: 2,
+      pocketGuardStrength: "veryStrong",
     },
   ],
   connections: [

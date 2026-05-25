@@ -326,11 +326,7 @@ export function buildSecondaryRoads(
       const forcedPath = findForcedRoadPath(tiles, width, height, mine, bestTown, options);
       if (forcedPath.length > 0) {
         paintRoad(tiles, forcedPath, "dirt", options);
-      } else {
-        ensureLocalRoadAccess(tiles, width, height, mine, "dirt", options);
       }
-    } else {
-      ensureLocalRoadAccess(tiles, width, height, mine, "dirt", options);
     }
   }
 }
@@ -389,13 +385,14 @@ export function ensureInvisibleAccessToObjects(
   anchors: Position[],
   options: RoadBuildOptions = {},
 ): void {
-  const landAnchors = anchors.filter((anchor) => isUsableInvisibleAccessTile(tiles[anchor.y]?.[anchor.x], options));
-  if (landAnchors.length === 0) return;
   const roadPositions = collectRoadPositions(tiles, width, height);
+  const accessAnchors = collectInvisibleAccessAnchors(tiles, width, height, anchors, roadPositions, options);
+  if (accessAnchors.length === 0) return;
 
   const objectTypes = new Set<InvisibleAccessObjectType>([
     "adventure_building",
     "artifact",
+    "building",
     "resource",
     "monster",
   ]);
@@ -409,11 +406,127 @@ export function ensureInvisibleAccessToObjects(
       const target = findBestInvisibleAccessTarget(tiles, width, height, tile, options, roadPositions);
       if (!target) continue;
 
-      const start = findNearestAnchor(target, landAnchors);
+      const start = findNearestAnchor(target, accessAnchors);
       const path = findInvisibleAccessPath(tiles, width, height, start, target, options);
       if (path.length > 0) clearInvisibleAccessPath(tiles, path, options);
     }
   }
+}
+
+export function removeOrphanRoadSegments(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+): void {
+  const seen = new Set<string>();
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const tile = tiles[y][x];
+      const key = `${x},${y}`;
+      if (!tile.road || seen.has(key)) continue;
+
+      const component = collectRoadComponent(tiles, width, height, { x, y }, seen);
+      if (component.some((position) => isRoadNetworkAnchor(tiles[position.y]?.[position.x]))) continue;
+
+      for (const position of component) {
+        tiles[position.y][position.x].road = undefined;
+      }
+    }
+  }
+}
+
+function collectRoadComponent(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  start: Position,
+  seen: Set<string>,
+): Position[] {
+  const component: Position[] = [];
+  const queue = [start];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = `${current.x},${current.y}`;
+    if (seen.has(key)) continue;
+
+    const tile = tiles[current.y]?.[current.x];
+    if (!tile?.road) continue;
+
+    seen.add(key);
+    component.push(current);
+
+    for (const next of getOrthogonalNeighbors(current)) {
+      if (next.x < 0 || next.x >= width || next.y < 0 || next.y >= height) continue;
+      if (!seen.has(`${next.x},${next.y}`)) queue.push(next);
+    }
+  }
+
+  return component;
+}
+
+function isRoadNetworkAnchor(tile: MapTile | undefined): boolean {
+  return tile?.object?.type === "town" || tile?.object?.type === "gate";
+}
+
+function collectInvisibleAccessAnchors(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  anchors: Position[],
+  roadPositions: Position[],
+  options: RoadBuildOptions,
+): Position[] {
+  const connected = collectConnectedAccessArea(tiles, width, height, anchors, options);
+  const unique = new Map<string, Position>();
+  for (const position of anchors) {
+    if (position.x < 0 || position.x >= width || position.y < 0 || position.y >= height) continue;
+    if (!isUsableInvisibleAccessTile(tiles[position.y]?.[position.x], options)) continue;
+    unique.set(`${position.x},${position.y}`, position);
+  }
+  for (const position of roadPositions) {
+    if (!connected.has(`${position.x},${position.y}`)) continue;
+    if (position.x < 0 || position.x >= width || position.y < 0 || position.y >= height) continue;
+    if (!isUsableInvisibleAccessTile(tiles[position.y]?.[position.x], options)) continue;
+    unique.set(`${position.x},${position.y}`, position);
+  }
+
+  return Array.from(unique.values());
+}
+
+function collectConnectedAccessArea(
+  tiles: MapTile[][],
+  width: number,
+  height: number,
+  anchors: Position[],
+  options: RoadBuildOptions,
+): Set<string> {
+  const seen = new Set<string>();
+  const queue = anchors.filter((position) =>
+    position.x >= 0 &&
+    position.x < width &&
+    position.y >= 0 &&
+    position.y < height &&
+    isUsableInvisibleAccessTile(tiles[position.y]?.[position.x], options),
+  );
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = `${current.x},${current.y}`;
+    if (seen.has(key)) continue;
+
+    const tile = tiles[current.y]?.[current.x];
+    if (!isUsableInvisibleAccessTile(tile, options)) continue;
+
+    seen.add(key);
+    for (const next of getOrthogonalNeighbors(current)) {
+      if (next.x < 0 || next.x >= width || next.y < 0 || next.y >= height) continue;
+      if (!seen.has(`${next.x},${next.y}`)) queue.push(next);
+    }
+  }
+
+  return seen;
 }
 
 function findBestInvisibleAccessTarget(
@@ -424,7 +537,7 @@ function findBestInvisibleAccessTarget(
   options: RoadBuildOptions,
   roadPositions: Position[],
 ): Position | null {
-  const candidates = getOrthogonalNeighbors(objectTile)
+  const candidates = getAdjacentNeighbors(objectTile)
     .filter((position) => position.x >= 0 && position.x < width && position.y >= 0 && position.y < height)
     .filter((position) => canClearForInvisibleAccess(tiles[position.y][position.x], options));
 
@@ -504,6 +617,17 @@ function getOrthogonalNeighbors(position: Position): Position[] {
     { x: position.x, y: position.y + 1 },
     { x: position.x, y: position.y - 1 },
   ];
+}
+
+function getAdjacentNeighbors(position: Position): Position[] {
+  const neighbors: Position[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      neighbors.push({ x: position.x + dx, y: position.y + dy });
+    }
+  }
+  return neighbors;
 }
 
 function canClearForInvisibleAccess(tile: MapTile | undefined, options: RoadBuildOptions): tile is MapTile {

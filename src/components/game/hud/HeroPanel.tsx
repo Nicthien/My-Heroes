@@ -106,7 +106,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     <>
       <CollapsiblePanel
         title={hero.name}
-        className={`${ornateFramePolished} pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+        className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
         bodyClassName="flex min-h-0 flex-1 flex-col"
         right={
           <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           )}
         </div>
 
-        <div className="flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
+        <div className="mobile-hero-tabs flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
           {heroTabs.map((tab) => (
             <HeroTabButton
               key={tab.id}
@@ -454,7 +454,7 @@ function ArtifactPanel({
 
   return (
     <div>
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Artefacts</div>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-300/80">Artefacts</div>
       <div className="grid grid-cols-4 gap-1">
         {equippedEntries.map(({ slot, artifactId }) => {
           const artifact = artifactId ? getArtifact(artifactId) : null;
@@ -462,7 +462,7 @@ function ArtifactPanel({
             <button
               key={slot}
               type="button"
-              className={`group flex h-14 flex-col rounded-md border px-1 py-1 text-left text-[9px] transition ${
+              className={`group flex h-12 flex-col rounded-md border px-1 py-1 text-left text-[8px] leading-none transition ${
                 artifact
                   ? "border-amber-500/55 bg-gradient-to-b from-amber-950/35 to-black/55 text-amber-100 shadow-[inset_0_0_12px_rgba(251,191,36,0.08)] hover:border-amber-300/80"
                   : "border-amber-900/45 bg-black/30 text-amber-200/45 hover:border-amber-700/65"
@@ -470,13 +470,13 @@ function ArtifactPanel({
               title={artifact ? artifactTooltip(artifact.id) : slotLabel(slot)}
               onClick={() => artifactId && onUnequip(slot)}
             >
-              <span className="block w-full truncate font-bold uppercase text-amber-300/75">{slotLabel(slot)}</span>
+              <span className="block w-full truncate font-bold uppercase tracking-normal text-amber-300/75">{slotLabel(slot)}</span>
               {artifact ? (
                 <span className="grid min-h-0 flex-1 place-items-center">
                   <ArtifactIcon artifactId={artifact.id} size="slot" />
                 </span>
               ) : (
-                <span className="grid min-h-0 flex-1 place-items-center text-sm font-black text-amber-200/20">-</span>
+                <span className="grid min-h-0 flex-1 place-items-center text-xs font-black text-amber-200/20">-</span>
               )}
             </button>
           );
@@ -484,7 +484,7 @@ function ArtifactPanel({
       </div>
       <div className="mt-2 grid grid-cols-1 gap-1">
         {bag.inventory.length === 0 && (
-          <div className="rounded-md border border-amber-900/40 bg-black/30 px-2 py-1 text-xs text-amber-200/55">Inventaire vide</div>
+          <div className="rounded-md border border-amber-900/40 bg-black/30 px-2 py-1 text-[11px] text-amber-200/55">Inventaire vide</div>
         )}
         {bag.inventory.map((artifactId, index) => {
           const artifact = ARTIFACTS_BY_ID[artifactId];

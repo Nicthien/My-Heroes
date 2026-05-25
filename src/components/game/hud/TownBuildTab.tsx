@@ -14,6 +14,7 @@ export function TownBuildTab({
   selectedTown,
   selectedTownFaction,
   displayedBuildRules,
+  onOpenBuildTree,
   hideMissingBuildRequirements,
   setHideMissingBuildRequirements,
   hideBuiltBuildings,
@@ -30,6 +31,7 @@ export function TownBuildTab({
   selectedTown: Town;
   selectedTownFaction: Faction;
   displayedBuildRules: TownBuildingRule[];
+  onOpenBuildTree: () => void;
   hideMissingBuildRequirements: boolean;
   setHideMissingBuildRequirements: (next: boolean) => void;
   hideBuiltBuildings: boolean;
@@ -57,6 +59,14 @@ export function TownBuildTab({
   );
   return (
     <div className="space-y-2">
+      <button
+        type="button"
+        onClick={onOpenBuildTree}
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-amber-500/50 bg-amber-950/45 px-3 py-2 text-[10px] font-black uppercase leading-tight tracking-wide text-amber-100 shadow-inner shadow-black/35 transition hover:border-amber-300/70 hover:bg-amber-900/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70"
+      >
+        <BuildTreeIcon className="h-4 w-4" />
+        Arbre des constructions
+      </button>
       <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
         <input
           type="checkbox"
@@ -188,4 +198,19 @@ export function TownBuildTab({
 
 function isTownCoastal(gameState: GameState, town: Town) {
   return isTownCoastalForBoats(gameState.map, town.position);
+}
+
+function BuildTreeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v5" />
+      <path d="M6 13v3" />
+      <path d="M18 13v3" />
+      <path d="M12 8H6v5" />
+      <path d="M12 8h6v5" />
+      <rect x="9" y="2" width="6" height="4" rx="1" />
+      <rect x="3" y="16" width="6" height="5" rx="1" />
+      <rect x="15" y="16" width="6" height="5" rx="1" />
+    </svg>
+  );
 }

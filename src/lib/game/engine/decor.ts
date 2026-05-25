@@ -10,8 +10,8 @@ interface BiomeDecor {
 
 const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   [TerrainType.GRASS]: {
-    density: 0.68,
-    blockingRatio: 0.07,
+    density: 0.78,
+    blockingRatio: 0.24,
     scenicKinds: ["flower", "bush", "grass-tuft", "tree-oak", "tree-pine", "rock-small"],
     obstacleKinds: [
       "grass-oak-copse",
@@ -24,7 +24,7 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   },
   [TerrainType.FOREST]: {
     density: 0.94,
-    blockingRatio: 0.22,
+    blockingRatio: 0.36,
     scenicKinds: ["tree-pine", "tree-oak", "tree-dead", "bush", "flower", "grass-tuft"],
     obstacleKinds: [
       "forest-pine-grove",
@@ -36,8 +36,8 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
     ],
   },
   [TerrainType.DIRT]: {
-    density: 0.52,
-    blockingRatio: 0.06,
+    density: 0.66,
+    blockingRatio: 0.23,
     scenicKinds: ["bush", "rock-small", "grass-tuft", "flower", "tree-dead"],
     obstacleKinds: [
       "dirt-thorn-scrub",
@@ -49,8 +49,8 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
     ],
   },
   [TerrainType.SAND]: {
-    density: 0.34,
-    blockingRatio: 0.04,
+    density: 0.48,
+    blockingRatio: 0.19,
     scenicKinds: ["rock-small", "grass-tuft"],
     obstacleKinds: [
       "sand-cactus-cluster",
@@ -62,8 +62,8 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
     ],
   },
   [TerrainType.SNOW]: {
-    density: 0.72,
-    blockingRatio: 0.14,
+    density: 0.82,
+    blockingRatio: 0.34,
     scenicKinds: ["tree-pine", "tree-oak", "rock-small", "tree-dead", "grass-tuft"],
     obstacleKinds: [
       "snow-pine-grove",
@@ -75,8 +75,8 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
     ],
   },
   [TerrainType.MOUNTAIN]: {
-    density: 0.66,
-    blockingRatio: 0.14,
+    density: 0.78,
+    blockingRatio: 0.38,
     scenicKinds: ["rock-small", "tree-dead", "grass-tuft"],
     obstacleKinds: [
       "mountain-pine-rock",
@@ -89,7 +89,7 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   },
   [TerrainType.SWAMP]: {
     density: 0.74,
-    blockingRatio: 0.17,
+    blockingRatio: 0.31,
     scenicKinds: ["tree-dead", "tree-oak", "bush", "grass-tuft", "rock-small"],
     obstacleKinds: [
       "swamp-willow-grove",
@@ -102,7 +102,7 @@ const BIOME_DECOR: Partial<Record<TerrainType, BiomeDecor>> = {
   },
   [TerrainType.LAVA]: {
     density: 0.24,
-    blockingRatio: 0.05,
+    blockingRatio: 0.08,
     scenicKinds: ["rock-small"],
     obstacleKinds: [
       "lava-charred-thorns",
@@ -148,6 +148,10 @@ export function placeDecor(
         continue;
       }
       if (tile.road) continue;
+      // Préserve uniquement le décor BLOQUANT volontaire (sealing de pocket / maze obstacles
+      // posés en amont). Les marqueurs scenic non-bloquants se laissent réécrire par la passe
+      // principale pour conserver la richesse visuelle autour des objets.
+      if (tile.decor?.blocking) continue;
 
       const conf = BIOME_DECOR[tile.terrain];
       if (!conf) continue;
@@ -195,7 +199,7 @@ function placeMazeObstacles(
   for (const candidate of candidates) {
     const tile = tiles[candidate.y][candidate.x];
     if (!canPlaceMazeObstacle(tiles, width, height, candidate.x, candidate.y)) continue;
-    if (countBlockingNeighbors(tiles, width, height, candidate.x, candidate.y) < MAZE_OBSTACLE_MIN_NEIGHBORS && rng() < 0.58) continue;
+    if (countBlockingNeighbors(tiles, width, height, candidate.x, candidate.y) < MAZE_OBSTACLE_MIN_NEIGHBORS && rng() < 0.3) continue;
 
     const kind = pickBlockingForTerrain(tile.terrain, rng);
     if (!kind) continue;
@@ -245,18 +249,18 @@ function mazeObstacleScore(
 function mazeThreshold(terrain: TerrainType): number {
   switch (terrain) {
     case TerrainType.FOREST:
-      return 0.48;
+      return 0.36;
     case TerrainType.SWAMP:
-      return 0.52;
+      return 0.40;
     case TerrainType.SNOW:
     case TerrainType.MOUNTAIN:
-      return 0.56;
+      return 0.43;
     case TerrainType.GRASS:
-      return 0.58;
+      return 0.46;
     case TerrainType.DIRT:
-      return 0.62;
+      return 0.49;
     case TerrainType.SAND:
-      return 0.68;
+      return 0.54;
     default:
       return 0.72;
   }
@@ -397,7 +401,7 @@ function getOrganicDecorDensity(base: number, x: number, y: number, terrain: Ter
 function getOrganicBlockingRatio(base: number, x: number, y: number, terrain: TerrainType): number {
   const obstacleNoise = smoothTileNoise(x, y, 91);
   const terrainBoost = terrain === TerrainType.FOREST ? 0.05 : terrain === TerrainType.SWAMP ? 0.03 : 0;
-  return clamp(base + (obstacleNoise - 0.5) * 0.12 + terrainBoost, 0.01, 0.28);
+  return clamp(base + (obstacleNoise - 0.5) * 0.14 + terrainBoost, 0.03, 0.46);
 }
 
 function isInClearing(x: number, y: number, terrain: TerrainType): boolean {

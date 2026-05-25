@@ -1,4 +1,4 @@
-import { AdventureBuildingType, MapTile, TerrainType } from "../types";
+import { AdventureBuildingType, GameMap, MapTile, TerrainType } from "../types";
 import { getAdventureBuildingLabel } from "../adventure-buildings";
 import {
   CREATURE_BANK_DEFINITIONS,
@@ -9,6 +9,7 @@ import {
 import { EXTERNAL_DWELLING_TYPE, getExternalDwellingLabel, pickExternalDwellingUnit } from "../external-dwellings";
 import { PlacementContext } from "./placement";
 import { shuffle } from "./rng";
+import { DEFAULT_RMG_TUNING, RmgTuning, tuningPercentToMultiplier } from "./rmg-tuning";
 import { tilesInZone } from "./zones";
 
 type AdventurePlacement = {
@@ -28,45 +29,58 @@ const WATER_ADVENTURE_TYPES = [
   AdventureBuildingType.SEA_CHEST,
 ] as const;
 
-const ADVENTURE_BUILDING_DENSITY_MULTIPLIER = 1.65;
-const CREATURE_BANK_DENSITY_MULTIPLIER = 1.45;
-const EXTERNAL_DWELLING_DENSITY_MULTIPLIER = 1.35;
-const WATER_ADVENTURE_DENSITY_MULTIPLIER = 1.5;
-const WATER_CREATURE_BANK_DENSITY_MULTIPLIER = 1.35;
+const ADVENTURE_BUILDING_DENSITY_MULTIPLIER = 2.05;
+const CREATURE_BANK_DENSITY_MULTIPLIER = 1.75;
+const EXTERNAL_DWELLING_DENSITY_MULTIPLIER = 1.65;
+const WATER_ADVENTURE_DENSITY_MULTIPLIER = 1.85;
+const WATER_CREATURE_BANK_DENSITY_MULTIPLIER = 1.6;
 
-export function placeAdventureBuildings(ctx: PlacementContext): void {
+export function placeAdventureBuildings(ctx: PlacementContext, tuning: RmgTuning = DEFAULT_RMG_TUNING): void {
   const stargateCandidates: MapTile[] = [];
+  const adventureMultiplier = tuningPercentToMultiplier(tuning.adventurePercent);
 
   for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
     const meta = ctx.zoneGrid.meta[zoneId];
-    const targetCount = adventureTargetForZone(meta.type, meta.value);
+    const targetCount = adventureTargetForZone(meta.type, meta.value, adventureMultiplier);
     const choices = pickAdventureTypesForZone(ctx, zoneId, targetCount);
+    const reachable = zoneReachableTiles(ctx, zoneId);
 
     for (const type of choices) {
-      const tile = findAdventureTile(ctx, zoneId, type);
+      const tile = findAdventureTile(ctx, zoneId, type, reachable);
       if (!tile) continue;
       placeAdventureBuilding(tile, type);
     }
 
-    const stargateTile = findAdventureTile(ctx, zoneId, AdventureBuildingType.STARGATE);
+    const stargateTile = findAdventureTile(ctx, zoneId, AdventureBuildingType.STARGATE, reachable);
     if (stargateTile) stargateCandidates.push(stargateTile);
   }
 
   placeStargatePairs(ctx, stargateCandidates);
-  placeCreatureBanks(ctx);
-  placeExternalDwellings(ctx);
-  placeWaterAdventureObjects(ctx);
+  placeCreatureBanks(ctx, adventureMultiplier);
+  placeExternalDwellings(ctx, adventureMultiplier);
+  placeWaterAdventureObjects(ctx, adventureMultiplier);
   placeWaterMonsterPatrols(ctx);
 }
 
-function adventureTargetForZone(type: string, value: number): number {
+export function repairUnreachableAdventureBuildings(map: GameMap, reachable: Set<string>): void {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "adventure_building") continue;
+      if (tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA || tile.worldEdge) continue;
+      if (hasConnectedAdventureAccess(map, tile, reachable)) continue;
+      tile.object = undefined;
+    }
+  }
+}
+
+function adventureTargetForZone(type: string, value: number, tuningMultiplier: number): number {
   if (value < 1400) return 0;
   const base = type === "treasure"
     ? value >= 6000 ? 7 : 5
     : type === "junction"
       ? value >= 3600 ? 3 : 2
       : value >= 4500 ? 5 : 3;
-  return scaleTarget(base, ADVENTURE_BUILDING_DENSITY_MULTIPLIER);
+  return scaleTarget(base, ADVENTURE_BUILDING_DENSITY_MULTIPLIER * tuningMultiplier);
 }
 
 function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count: number): AdventureBuildingType[] {
@@ -135,11 +149,13 @@ function findAdventureTile(
   ctx: PlacementContext,
   zoneId: number,
   type: AdventureBuildingType,
+  reachable: Set<string>,
 ): MapTile | null {
   const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
   for (const roadBuffer of [1, 0]) {
     for (const pos of candidates) {
       const tile = ctx.tiles[pos.y][pos.x];
+      if (!isReachableAdventureCandidate(tile, reachable)) continue;
       if (!isValidAdventureTile(ctx, tile, type, roadBuffer)) continue;
       return tile;
     }
@@ -217,15 +233,16 @@ function placeAdventureBuilding(
   return { tile, type };
 }
 
-function placeCreatureBanks(ctx: PlacementContext): void {
+function placeCreatureBanks(ctx: PlacementContext, tuningMultiplier: number): void {
   for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
     const meta = ctx.zoneGrid.meta[zoneId];
-    const targetCount = creatureBankTargetForZone(meta.type, meta.value);
+    const targetCount = creatureBankTargetForZone(meta.type, meta.value, tuningMultiplier);
     if (targetCount <= 0) continue;
 
     const picks = pickCreatureBanksForZone(ctx, zoneId, targetCount);
+    const reachable = zoneReachableTiles(ctx, zoneId);
     for (const type of picks) {
-      const tile = findCreatureBankTile(ctx, zoneId, type);
+      const tile = findCreatureBankTile(ctx, zoneId, type, reachable);
       if (!tile) continue;
       const id = `creature-bank-${type}-${tile.x}-${tile.y}`;
       placeAdventureBuilding(tile, type, id, undefined, getCreatureBankGuardPower(type, id));
@@ -233,15 +250,16 @@ function placeCreatureBanks(ctx: PlacementContext): void {
   }
 }
 
-function placeExternalDwellings(ctx: PlacementContext): void {
+function placeExternalDwellings(ctx: PlacementContext, tuningMultiplier: number): void {
   const seed = `${ctx.width}x${ctx.height}`;
   for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
     const meta = ctx.zoneGrid.meta[zoneId];
-    const targetCount = externalDwellingTargetForZone(meta.type, meta.value);
+    const targetCount = externalDwellingTargetForZone(meta.type, meta.value, tuningMultiplier);
     if (targetCount <= 0) continue;
+    const reachable = zoneReachableTiles(ctx, zoneId);
 
     for (let index = 0; index < targetCount; index++) {
-      const tile = findExternalDwellingTile(ctx, zoneId);
+      const tile = findExternalDwellingTile(ctx, zoneId, reachable);
       if (!tile) continue;
       const unitType = pickExternalDwellingUnit(tile, `${seed}:${zoneId}:${index}`, externalDwellingMaxTierForZone(meta.value));
       tile.object = {
@@ -255,14 +273,14 @@ function placeExternalDwellings(ctx: PlacementContext): void {
   }
 }
 
-function externalDwellingTargetForZone(type: string, value: number): number {
+function externalDwellingTargetForZone(type: string, value: number, tuningMultiplier: number): number {
   if (value < 2400) return 0;
   const base = type === "treasure"
     ? value >= 7000 ? 3 : 2
     : type === "junction"
       ? value >= 4200 ? 2 : 1
       : value >= 5200 ? 2 : 1;
-  return scaleTarget(base, EXTERNAL_DWELLING_DENSITY_MULTIPLIER);
+  return scaleTarget(base, EXTERNAL_DWELLING_DENSITY_MULTIPLIER * tuningMultiplier);
 }
 
 function externalDwellingMaxTierForZone(value: number): number {
@@ -273,11 +291,12 @@ function externalDwellingMaxTierForZone(value: number): number {
   return 2;
 }
 
-function findExternalDwellingTile(ctx: PlacementContext, zoneId: number): MapTile | null {
+function findExternalDwellingTile(ctx: PlacementContext, zoneId: number, reachable: Set<string>): MapTile | null {
   const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
   for (const roadBuffer of [1, 0]) {
     for (const pos of candidates) {
       const tile = ctx.tiles[pos.y][pos.x];
+      if (!isReachableAdventureCandidate(tile, reachable)) continue;
       if (!isValidExternalDwellingTile(ctx, tile, roadBuffer)) continue;
       return tile;
     }
@@ -285,14 +304,14 @@ function findExternalDwellingTile(ctx: PlacementContext, zoneId: number): MapTil
   return null;
 }
 
-function creatureBankTargetForZone(type: string, value: number): number {
+function creatureBankTargetForZone(type: string, value: number, tuningMultiplier: number): number {
   if (value < 2000) return 0;
   const base = type === "treasure"
     ? value >= 8000 ? 5 : 4
     : type === "junction"
       ? value >= 3200 ? 3 : 2
       : value >= 4200 ? 3 : 2;
-  return scaleTarget(base, CREATURE_BANK_DENSITY_MULTIPLIER);
+  return scaleTarget(base, CREATURE_BANK_DENSITY_MULTIPLIER * tuningMultiplier);
 }
 
 function pickCreatureBanksForZone(ctx: PlacementContext, zoneId: number, count: number): CreatureBankType[] {
@@ -315,11 +334,13 @@ function findCreatureBankTile(
   ctx: PlacementContext,
   zoneId: number,
   type: CreatureBankType,
+  reachable?: Set<string>,
 ): MapTile | null {
   const candidates = shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId));
   for (const roadBuffer of [2, 1, 0]) {
     for (const pos of candidates) {
       const tile = ctx.tiles[pos.y][pos.x];
+      if (!isReachableAdventureCandidate(tile, reachable)) continue;
       if (!isValidCreatureBankTile(ctx, tile, type, roadBuffer)) continue;
       return tile;
     }
@@ -337,6 +358,40 @@ function isValidCreatureBankTile(ctx: PlacementContext, tile: MapTile, type: Cre
   if (roadBuffer > 0 && hasRoadNearby(ctx, tile.x, tile.y, roadBuffer)) return false;
   if (hasMajorObjectNearby(ctx, tile.x, tile.y, 2)) return false;
   return true;
+}
+
+function isReachableAdventureCandidate(tile: MapTile, reachable?: Set<string>): boolean {
+  if (!reachable) return true;
+  if (tile.terrain === TerrainType.WATER) return true;
+  return reachable.has(`${tile.x},${tile.y}`);
+}
+
+function hasConnectedAdventureAccess(map: GameMap, tile: MapTile, reachable: Set<string>): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      const neighbor = map.tiles[y]?.[x];
+      if (!neighbor || !reachable.has(`${x},${y}`)) continue;
+      if (!isAdventureStandingTile(neighbor)) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+function isAdventureStandingTile(tile: MapTile): boolean {
+  if (tile.worldEdge || !tile.isPassable || tile.decor?.blocking) return false;
+  if (tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) return false;
+  if (!tile.object) return true;
+  return (
+    tile.object.type === "gate" ||
+    tile.object.type === "town" ||
+    tile.object.type === "resource" ||
+    tile.object.type === "monster" ||
+    tile.object.type === "hero"
+  );
 }
 
 function isValidExternalDwellingTile(ctx: PlacementContext, tile: MapTile, roadBuffer: number): boolean {
@@ -360,6 +415,60 @@ function isValidAdventureTile(ctx: PlacementContext, tile: MapTile, type: Advent
   if (isCoastalAdventureBuilding(type) && !hasWaterNearby(ctx, tile.x, tile.y, 2)) return false;
   if (!getAdventureBuildingPreferredTerrain(type).includes(tile.terrain) && ctx.rng() > 0.32) return false;
   return true;
+}
+
+function zoneReachableTiles(ctx: PlacementContext, zoneId: number): Set<string> {
+  const start = findZoneReachableStart(ctx, zoneId);
+  const seen = new Set<string>();
+  if (!start) return seen;
+
+  const queue: Array<{ x: number; y: number }> = [start];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = `${current.x},${current.y}`;
+    if (seen.has(key)) continue;
+
+    const tile = ctx.tiles[current.y]?.[current.x];
+    if (!tile?.isPassable || tile.decor?.blocking) continue;
+    if (tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) continue;
+    if (tile.object?.type === "wall" || tile.object?.type === "town_footprint") continue;
+
+    seen.add(key);
+    for (const next of [
+      { x: current.x + 1, y: current.y },
+      { x: current.x - 1, y: current.y },
+      { x: current.x, y: current.y + 1 },
+      { x: current.x, y: current.y - 1 },
+    ]) {
+      if (next.x < 0 || next.x >= ctx.width || next.y < 0 || next.y >= ctx.height) continue;
+      if (!seen.has(`${next.x},${next.y}`)) queue.push(next);
+    }
+  }
+
+  return seen;
+}
+
+function findZoneReachableStart(ctx: PlacementContext, zoneId: number): { x: number; y: number } | null {
+  const meta = ctx.zoneGrid.meta[zoneId];
+  const direct = ctx.tiles[meta.centerY]?.[meta.centerX];
+  if (direct && ctx.zoneGrid.tilesZone[direct.y][direct.x] === zoneId && direct.isPassable) {
+    return { x: direct.x, y: direct.y };
+  }
+
+  return tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
+    .map((position) => ctx.tiles[position.y][position.x])
+    .filter((tile) =>
+      tile.isPassable &&
+      !tile.decor?.blocking &&
+      tile.terrain !== TerrainType.WATER &&
+      tile.terrain !== TerrainType.LAVA &&
+      tile.object?.type !== "wall" &&
+      tile.object?.type !== "town_footprint",
+    )
+    .sort((a, b) =>
+      Math.max(Math.abs(a.x - meta.centerX), Math.abs(a.y - meta.centerY)) -
+      Math.max(Math.abs(b.x - meta.centerX), Math.abs(b.y - meta.centerY)),
+    )[0] ?? null;
 }
 
 function getAdventureBuildingPreferredTerrain(type: AdventureBuildingType): TerrainType[] {
@@ -482,7 +591,8 @@ function isRareAdventureBuilding(type: AdventureBuildingType): boolean {
 }
 
 function scaleTarget(base: number, multiplier: number): number {
-  return Math.max(base, Math.ceil(base * multiplier));
+  if (multiplier <= 0) return 0;
+  return Math.ceil(base * multiplier);
 }
 
 function hasRoadNearby(ctx: PlacementContext, x: number, y: number, radius: number): boolean {
@@ -516,10 +626,10 @@ function hasMajorObjectNearby(ctx: PlacementContext, x: number, y: number, radiu
   return false;
 }
 
-function placeWaterAdventureObjects(ctx: PlacementContext): void {
+function placeWaterAdventureObjects(ctx: PlacementContext, tuningMultiplier: number): void {
   for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
     const meta = ctx.zoneGrid.meta[zoneId];
-    const targetCount = waterAdventureTargetForZone(ctx, zoneId);
+    const targetCount = waterAdventureTargetForZone(ctx, zoneId, tuningMultiplier);
     if (targetCount <= 0) continue;
 
     const waterTypes = pickWaterAdventureTypes(ctx, targetCount);
@@ -529,7 +639,7 @@ function placeWaterAdventureObjects(ctx: PlacementContext): void {
       placeAdventureBuilding(tile, type);
     }
 
-    const bankCount = waterCreatureBankTargetForZone(meta.type, meta.value, targetCount);
+    const bankCount = waterCreatureBankTargetForZone(meta.type, meta.value, targetCount, tuningMultiplier);
     const bankPicks = pickWaterCreatureBanks(ctx, bankCount);
     for (const type of bankPicks) {
       const tile = findCreatureBankTile(ctx, zoneId, type);
@@ -540,7 +650,7 @@ function placeWaterAdventureObjects(ctx: PlacementContext): void {
   }
 }
 
-function waterAdventureTargetForZone(ctx: PlacementContext, zoneId: number): number {
+function waterAdventureTargetForZone(ctx: PlacementContext, zoneId: number, tuningMultiplier: number): number {
   const waterTiles = tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId)
     .filter((position) => isFreeWaterTile(ctx.tiles[position.y][position.x]));
   if (waterTiles.length < 6) return 0;
@@ -548,7 +658,7 @@ function waterAdventureTargetForZone(ctx: PlacementContext, zoneId: number): num
   const meta = ctx.zoneGrid.meta[zoneId];
   const byWater = waterTiles.length >= 56 ? 4 : waterTiles.length >= 22 ? 3 : 2;
   const base = meta.type === "treasure" ? Math.min(5, byWater + 1) : byWater;
-  return scaleTarget(base, WATER_ADVENTURE_DENSITY_MULTIPLIER);
+  return scaleTarget(base, WATER_ADVENTURE_DENSITY_MULTIPLIER * tuningMultiplier);
 }
 
 function pickWaterAdventureTypes(ctx: PlacementContext, count: number): AdventureBuildingType[] {
@@ -572,14 +682,19 @@ function findWaterAdventureTile(
   return null;
 }
 
-function waterCreatureBankTargetForZone(type: string, value: number, waterAdventureCount: number): number {
+function waterCreatureBankTargetForZone(
+  type: string,
+  value: number,
+  waterAdventureCount: number,
+  tuningMultiplier: number,
+): number {
   if (waterAdventureCount <= 0 || value < 2600) return 0;
   const base = type === "treasure"
     ? value >= 8000 ? 3 : 2
     : type === "junction"
       ? value >= 4200 ? 2 : 1
       : value >= 5600 ? 2 : 1;
-  return scaleTarget(base, WATER_CREATURE_BANK_DENSITY_MULTIPLIER);
+  return scaleTarget(base, WATER_CREATURE_BANK_DENSITY_MULTIPLIER * tuningMultiplier);
 }
 
 function pickWaterCreatureBanks(ctx: PlacementContext, count: number): CreatureBankType[] {

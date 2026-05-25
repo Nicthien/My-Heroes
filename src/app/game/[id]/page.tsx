@@ -202,7 +202,7 @@ export default function GamePage() {
   const showLoadingOverlay = isLoading || !gameState || gameState.id !== gameId;
 
   return (
-    <div className="h-screen w-screen bg-gray-900 relative overflow-hidden">
+    <div className="game-shell relative bg-gray-900">
       {gameState && gameState.id === gameId ? (
         <>
           <GameMapComponent />

@@ -84,7 +84,7 @@ export default function DevMapShowcasePage() {
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
-      <main className="relative h-screen w-screen overflow-hidden bg-[#11140f] text-stone-100">
+      <main className="game-shell relative bg-[#11140f] text-stone-100">
         <GameMapComponent />
         <div className="pointer-events-none absolute left-4 top-4 border border-stone-700/70 bg-black/55 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-100 shadow-lg">
           Carte de test visuelle

@@ -16,6 +16,7 @@ export interface MapObjectData {
   buildingType?: string;
   dwellingUnitType?: string;
   guardianPower?: number;
+  description?: string;
 }
 
 export interface SpellRevealHint {

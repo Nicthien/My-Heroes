@@ -17,6 +17,7 @@ export const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
 
 // Hover label sampling
 export const HOVER_LABEL_SAMPLE_MS = 40;
+export const HOVER_LABEL_LINGER_MS = 5000;
 
 // Reachable tile highlight
 export const REACHABLE_TILE_COLOR = 0x2f80ff;

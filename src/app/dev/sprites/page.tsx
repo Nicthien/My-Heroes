@@ -747,6 +747,41 @@ const SIEGE_FORTIFICATION_GROUP: SpriteEntry[] = [
   },
 ];
 
+const MAP_WALL_GATE_GROUP: SpriteEntry[] = [
+  {
+    kind: "generic",
+    path: "/assets/sprites/map/wall-rampart-cube.png",
+    label: "Mur de rempart",
+    detail: "Mur de carte aventure",
+    width: 512,
+    height: 512,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/map/gate.webp",
+    label: "Porte générique",
+    detail: "Porte de carte aventure",
+    width: 512,
+    height: 512,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/map/gate-N-S.webp",
+    label: "Porte N_S",
+    detail: "Porte de carte aventure",
+    width: 512,
+    height: 512,
+  },
+  {
+    kind: "generic",
+    path: "/assets/sprites/map/gate-E-W.webp",
+    label: "Porte E_W",
+    detail: "Porte de carte aventure",
+    width: 512,
+    height: 512,
+  },
+];
+
 const COMBAT_GROUPS: WebpGroup[] = [
   { label: "Machines de guerre", entries: WAR_MACHINE_GROUP },
   { label: "Fortifications de siège", entries: SIEGE_FORTIFICATION_GROUP },
@@ -758,6 +793,7 @@ const ADVENTURE_GROUPS: WebpGroup[] = [
   { label: "Bâtiments d'aventure", entries: ADVENTURE_BUILDING_GROUP },
   { label: "Banques de créatures", entries: CREATURE_BANK_GROUP },
   { label: "Demeures externes", entries: EXTERNAL_DWELLING_GROUP },
+  { label: "Murs et portes", entries: MAP_WALL_GATE_GROUP },
   { label: "Obstacles", entries: OBSTACLE_GROUP },
   { label: "Ressources", entries: RESOURCE_GROUP },
 ];

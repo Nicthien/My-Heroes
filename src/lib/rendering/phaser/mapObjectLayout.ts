@@ -1,7 +1,8 @@
-import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { getAdventureBuildingLabel, getAdventureBuildingRule } from "@/lib/game/adventure-buildings";
 import { getArtifactMapLabel } from "@/lib/game/artifacts";
+import { getCreatureBankDefinition, isCreatureBankType } from "@/lib/game/creature-banks";
+import { getResourceBuildingLabel, UNIT_RULES as ECONOMY_UNIT_RULES } from "@/lib/game/economy";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
-import { getResourceBuildingLabel } from "@/lib/game/economy";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
 import { TILE_HEIGHT } from "@/lib/rendering/phaser/iso";
@@ -157,6 +158,14 @@ export const TOWN_ORIGINS: Record<string, SpriteOrigin> = {
 };
 
 export function getMapObjectHoverText(object: MapObject) {
+  const title = getMapObjectHoverTitle(object);
+  if (!title) return null;
+
+  const description = getMapObjectHoverDescription(object);
+  return description ? `${title}\n${description}` : title;
+}
+
+export function getMapObjectHoverTitle(object: MapObject) {
   if (object.type === "resource" && object.subtype) {
     return RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase();
   }
@@ -174,6 +183,22 @@ export function getMapObjectHoverText(object: MapObject) {
   if (object.type === "boat") return "Bateau";
 
   return null;
+}
+
+export function getMapObjectHoverDescription(object: MapObject): string | null {
+  if (object.type !== "adventure_building") return null;
+
+  if (isExternalDwellingType(object.subtype)) {
+    const unit = object.targetId ? ECONOMY_UNIT_RULES[object.targetId as keyof typeof ECONOMY_UNIT_RULES] : undefined;
+    if (!unit) return "Permet de recruter des creatures sur la carte.";
+    return `Permet de recruter ${unit.label} chaque semaine. Croissance : ${unit.growth}.`;
+  }
+
+  if (isCreatureBankType(object.subtype)) {
+    return getCreatureBankDefinition(object.subtype)?.description ?? "Combat protegeant un tresor.";
+  }
+
+  return getAdventureBuildingRule(object.subtype)?.description ?? null;
 }
 
 export function getMapObjectHoverY(object: MapObject, surfaceY: number) {

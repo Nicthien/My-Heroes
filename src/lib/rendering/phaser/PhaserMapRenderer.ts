@@ -49,6 +49,7 @@ import {
 } from "@/lib/rendering/phaser/fogConstants";
 import {
   CAMERA_ZOOM_STEP,
+  HOVER_LABEL_LINGER_MS,
   HOVER_LABEL_SAMPLE_MS,
   LAVA_TEXTURE_PREFIX,
   MAP_LAYER_BASE_DEPTH,
@@ -190,6 +191,14 @@ function getAdventureBuildingSpritePath(object: MapObjectData) {
     : MAP_SPRITES.adventureBuildings.external_dwelling;
 }
 
+function splitHoverLabelText(text: string) {
+  const [title, ...descriptionLines] = text.split("\n");
+  return {
+    title: title.trim(),
+    description: descriptionLines.join("\n").trim(),
+  };
+}
+
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
   objects: MapObjectData[] = [];
@@ -212,7 +221,9 @@ class PhaserMapScene extends Phaser.Scene {
   private hoverLabelLayer!: Phaser.GameObjects.Container;
   private hoverLabelBackground?: Phaser.GameObjects.Graphics;
   private hoverLabelText?: Phaser.GameObjects.Text;
+  private hoverLabelDescriptionText?: Phaser.GameObjects.Text;
   private hoverLabelKey: string | null = null;
+  private hoverLabelTimer?: Phaser.Time.TimerEvent;
   private visibleTiles: Set<string> | null = null;
   private exploredTiles: Set<string> | null = null;
   private fogChunkColumns = 0;
@@ -242,6 +253,7 @@ class PhaserMapScene extends Phaser.Scene {
   private lastTerrainAnimationAt = 0;
   private lastWaterAnimationAt = 0;
   private lastHoverLabelAt = 0;
+  private hoverLabelExpiresAt = 0;
   private fogDriftTweens: Phaser.Tweens.Tween[] = [];
   private objectLayerSortDirty = false;
   private mapTileObjectSprites: Phaser.GameObjects.GameObject[] = [];
@@ -2125,7 +2137,6 @@ class PhaserMapScene extends Phaser.Scene {
 
   private renderObjects() {
     if (!this.map || !this.objectLayer) return;
-    this.clearHoverLabel();
     const nextHeroAnimations: HeroSpriteAnimation[] = [];
     const seenHeroIds = new Set<string>();
     const seenStaticIds = new Set<string>();
@@ -2782,47 +2793,80 @@ class PhaserMapScene extends Phaser.Scene {
   private updateHoverLabel(screenX: number, screenY: number) {
     const hover = this.getHoverLabel(screenX, screenY);
     if (!hover) {
+      if (this.hoverLabelKey && this.time.now < this.hoverLabelExpiresAt) return;
       this.clearHoverLabel();
       return;
     }
 
-    if (!this.hoverLabelText || !this.hoverLabelBackground) {
+    if (!this.hoverLabelText || !this.hoverLabelDescriptionText || !this.hoverLabelBackground) {
       this.hoverLabelBackground = this.add.graphics();
       this.hoverLabelText = this.add.text(0, 0, "", {
-        color: "#ffffff",
-        fontSize: "10px",
+        color: "#ffd166",
+        fontSize: "12px",
+        fontFamily: "Arial, sans-serif",
         fontStyle: "bold",
+        align: "center",
+        stroke: "#000000",
+        strokeThickness: 4,
+        wordWrap: { width: 290, useAdvancedWrap: true },
+      });
+      this.hoverLabelDescriptionText = this.add.text(0, 0, "", {
+        color: "#f8e9c4",
+        fontSize: "11px",
+        fontFamily: "Arial, sans-serif",
+        fontStyle: "normal",
+        align: "center",
         stroke: "#000000",
         strokeThickness: 3,
+        wordWrap: { width: 290, useAdvancedWrap: true },
       });
       this.hoverLabelText.setOrigin(0.5);
+      this.hoverLabelDescriptionText.setOrigin(0.5);
       this.hoverLabelLayer.add(this.hoverLabelBackground);
       this.hoverLabelLayer.add(this.hoverLabelText);
+      this.hoverLabelLayer.add(this.hoverLabelDescriptionText);
     }
 
     if (this.hoverLabelKey !== hover.key) {
-      this.hoverLabelText.setText(hover.text);
+      const { title, description } = splitHoverLabelText(hover.text);
+      this.hoverLabelText.setText(title);
+      this.hoverLabelDescriptionText.setText(description);
       this.hoverLabelKey = hover.key;
     }
 
-    this.hoverLabelText.setPosition(hover.x, hover.y);
-    this.hoverLabelText.setDepth(hover.y + 2);
+    const horizontalPadding = 10;
+    const verticalPadding = 7;
+    const textGap = this.hoverLabelDescriptionText.text.length > 0 ? 4 : 0;
+    const labelWidth = Math.max(this.hoverLabelText.width, this.hoverLabelDescriptionText.width) + horizontalPadding * 2;
+    const labelHeight = this.hoverLabelText.height + this.hoverLabelDescriptionText.height + textGap + verticalPadding * 2;
+    const top = hover.y - labelHeight / 2;
+    const labelDepth = hover.y + 2;
+
+    this.hoverLabelText.setPosition(hover.x, top + verticalPadding + this.hoverLabelText.height / 2);
+    this.hoverLabelDescriptionText.setPosition(
+      hover.x,
+      top + verticalPadding + this.hoverLabelText.height + textGap + this.hoverLabelDescriptionText.height / 2
+    );
+    this.hoverLabelText.setDepth(labelDepth);
+    this.hoverLabelDescriptionText.setDepth(labelDepth);
+    this.hoverLabelExpiresAt = this.time.now + HOVER_LABEL_LINGER_MS;
+    this.scheduleHoverLabelExpiration();
     this.hoverLabelBackground.clear();
-    this.hoverLabelBackground.fillStyle(0x0b0a08, 0.76);
-    this.hoverLabelBackground.lineStyle(1, 0xffd166, 0.78);
+    this.hoverLabelBackground.fillStyle(0x100b06, 0.94);
+    this.hoverLabelBackground.lineStyle(2, 0xffc247, 0.92);
     this.hoverLabelBackground.fillRoundedRect(
-      hover.x - this.hoverLabelText.width / 2 - 5,
-      hover.y - this.hoverLabelText.height / 2 - 3,
-      this.hoverLabelText.width + 10,
-      this.hoverLabelText.height + 6,
-      4
+      hover.x - labelWidth / 2,
+      top,
+      labelWidth,
+      labelHeight,
+      6
     );
     this.hoverLabelBackground.strokeRoundedRect(
-      hover.x - this.hoverLabelText.width / 2 - 5,
-      hover.y - this.hoverLabelText.height / 2 - 3,
-      this.hoverLabelText.width + 10,
-      this.hoverLabelText.height + 6,
-      4
+      hover.x - labelWidth / 2,
+      top,
+      labelWidth,
+      labelHeight,
+      6
     );
     this.hoverLabelBackground.setDepth(hover.y + 1);
   }
@@ -2857,9 +2901,10 @@ class PhaserMapScene extends Phaser.Scene {
       const bounds = this.getObjectBounds(object);
       if (!bounds) return null;
       const iso = cartToIso(object.x, object.y);
+      const text = object.description ? `${object.name}\n${object.description}` : object.name;
       return {
         key: `object:${object.id}`,
-        text: object.name,
+        text,
         x: iso.x + (object.renderOffsetX ?? 0),
         y: bounds.top - 8,
       };
@@ -2869,8 +2914,21 @@ class PhaserMapScene extends Phaser.Scene {
 
   private clearHoverLabel() {
     this.hoverLabelKey = null;
+    this.hoverLabelExpiresAt = 0;
+    this.hoverLabelTimer?.remove(false);
+    this.hoverLabelTimer = undefined;
     this.hoverLabelBackground?.clear();
     this.hoverLabelText?.setText("");
+    this.hoverLabelDescriptionText?.setText("");
+  }
+
+  private scheduleHoverLabelExpiration() {
+    this.hoverLabelTimer?.remove(false);
+    this.hoverLabelTimer = this.time.delayedCall(HOVER_LABEL_LINGER_MS, () => {
+      if (this.time.now >= this.hoverLabelExpiresAt) {
+        this.clearHoverLabel();
+      }
+    });
   }
 
   private addBanner(

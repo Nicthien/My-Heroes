@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
+import { getMapObjectHoverDescription } from "@/lib/rendering/phaser/mapObjectLayout";
 import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
@@ -3048,6 +3049,7 @@ function buildObjects(
           name: isExternalDwellingType(tile.object.subtype)
             ? getExternalDwellingLabel(tile.object.targetId)
             : tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
+          description: getMapObjectHoverDescription(tile.object) ?? undefined,
           buildingType: tile.object.subtype,
           dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,
           guardianPower: tile.object.guardianPower ?? 0,

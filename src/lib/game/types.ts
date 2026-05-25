@@ -815,7 +815,8 @@ export type GameAction =
   | { type: "CLAIM_CREATURE_BANK_REWARD"; bankId: string; heroId: string; creatures?: Partial<Record<UnitType, number>> }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }
-  | { type: "END_TURN" };
+  | { type: "END_TURN" }
+  | { type: "CANCEL_END_TURN" };
 
 export interface CombatState {
   board: (UnitStack | null)[][];

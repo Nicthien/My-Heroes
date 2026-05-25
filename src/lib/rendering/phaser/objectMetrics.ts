@@ -62,6 +62,6 @@ export function getHeroBannerMetrics(object: MapObjectData) {
 
 export function getGateBannerPlacement(textureKey: string) {
   return textureKey === MAP_SPRITES.gates.E_W
-    ? { xRatio: 0.77, yRatio: 0.18 }
-    : { xRatio: 0.23, yRatio: 0.18 };
+    ? { xRatio: 0.54, yRatio: 0.34 }
+    : { xRatio: 0.46, yRatio: 0.34 };
 }

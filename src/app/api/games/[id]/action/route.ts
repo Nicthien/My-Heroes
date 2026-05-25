@@ -65,7 +65,7 @@ import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBui
 import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
-import { completePlayerTurn } from "@/lib/game/server/turns";
+import { cancelPlayerTurnCompletion, completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -175,7 +175,7 @@ interface MinimalPlayer {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string; alreadyVisited?: boolean }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }
@@ -307,7 +307,7 @@ export async function POST(
     const completedTurn = turns.find((turn) =>
       turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
     );
-    if (completedTurn && action.type !== "END_TURN") {
+    if (completedTurn && action.type !== "END_TURN" && action.type !== "CANCEL_END_TURN") {
       return NextResponse.json({ error: "Vous avez deja termine votre tour" }, { status: 403 });
     }
 
@@ -1623,6 +1623,12 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    if (action.type === "CANCEL_END_TURN") {
+      const result = await cancelPlayerTurnCompletion(supabase, id, Number(game.turnNumber), gamePlayer.id);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
   } catch (err) {
     console.error("Action error:", err);
@@ -1995,6 +2001,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       message: `${getAdventureBuildingLabel(buildingType)} deja visite.`,
+      alreadyVisited: true,
     };
   }
 
@@ -2004,6 +2011,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       message: `${getAdventureBuildingLabel(buildingType)} deja visite par ce heros.`,
+      alreadyVisited: true,
     };
   }
 
@@ -2013,6 +2021,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       message: `${getAdventureBuildingLabel(buildingType)} deja fouille.`,
+      alreadyVisited: true,
     };
   }
 
@@ -2317,7 +2326,7 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${gamePlayer.id}`;
     const currentWeek = getMysticalGardenWeekKey(turnNumber);
     if (mysticalGardenVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le jardin mystique a deja fleuri cette semaine." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le jardin mystique a deja fleuri cette semaine.", alreadyVisited: true };
     }
     const rewardGems = makeRng(`${gameId}:${object.id}:${gamePlayer.id}:${currentWeek}`)() > 0.55;
     const resourceUpdate: Partial<Resources> = rewardGems
@@ -2346,7 +2355,7 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${hero.id}`;
     const currentWeek = getAdventureWeekKey(turnNumber);
     if (weeklyAdventureVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Les ecuries ont deja equipe ce heros cette semaine." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Les ecuries ont deja equipe ce heros cette semaine.", alreadyVisited: true };
     }
     await supabase.from("heroes").update({ movement: hero.movement + STABLES_MOVEMENT_BONUS }).eq("id", hero.id);
     await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
@@ -2375,7 +2384,7 @@ async function handleAdventureBuildingVisit({
     const visitKey = `${object.id}:${hero.id}`;
     const currentDay = `day-${turnNumber}`;
     if (weeklyAdventureVisits[visitKey] === currentDay) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise aujourd'hui." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise aujourd'hui.", alreadyVisited: true };
     }
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
     const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
@@ -2398,7 +2407,7 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${gamePlayer.id}`;
     const currentWeek = getAdventureWeekKey(turnNumber);
     if (weeklyAdventureVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette roue a eau a deja produit cette semaine." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette roue a eau a deja produit cette semaine.", alreadyVisited: true };
     }
     const reward = buildingType === AdventureBuildingType.WATER_MILL ? WATER_MILL_GOLD_REWARD : WATER_WHEEL_GOLD_REWARD;
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + reward });

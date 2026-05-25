@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
 import CombatResultModal from "@/components/game/combat/CombatResultModal";
@@ -26,6 +26,7 @@ function clampProgress(progress: number) {
 
 export default function GamePage() {
   const params = useParams();
+  const router = useRouter();
   const gameId = params?.id as string;
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -173,9 +174,26 @@ export default function GamePage() {
   }, [gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat, lastCombatResult]);
 
   if (error) {
+    const handleBack = () => {
+      if (window.history.length > 1) {
+        router.back();
+      } else {
+        router.push("/dashboard");
+      }
+    };
+
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-red-400 text-xl">{error}</div>
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="text-red-400 text-xl">{error}</div>
+          <button
+            type="button"
+            onClick={handleBack}
+            className="rounded-lg border border-amber-700/50 bg-stone-950/80 px-5 py-2 text-sm font-black uppercase tracking-wider text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-amber-400/70 hover:bg-amber-950/40 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/70"
+          >
+            Retour
+          </button>
+        </div>
       </div>
     );
   }

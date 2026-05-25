@@ -2369,12 +2369,7 @@ class PhaserMapScene extends Phaser.Scene {
       const metrics = getObjectMetrics(object);
       if (!metrics) return null;
       const renderY = surfaceY + metrics.offsetY;
-      const sprite = this.addObjectSprite(object, iso.x, renderY, getAdventureBuildingSpritePath(object), metrics.width, metrics.height, getOriginForObject(object)) ?? undefined;
-      if (sprite && object.visited) {
-        sprite.setTint(0x707070);
-        sprite.setAlpha(0.55);
-      }
-      rendered.sprite = sprite;
+      rendered.sprite = this.addObjectSprite(object, iso.x, renderY, getAdventureBuildingSpritePath(object), metrics.width, metrics.height, getOriginForObject(object)) ?? undefined;
       const bounds = this.getObjectBounds(object);
       if (bounds && object.playerId) {
         const width = bounds.right - bounds.left;
@@ -2806,6 +2801,12 @@ class PhaserMapScene extends Phaser.Scene {
       return;
     }
 
+    if (hover.visited && hover.objectId) {
+      this.startVisitedHoverAnimation(hover.objectId);
+    } else {
+      this.stopVisitedHoverAnimation();
+    }
+
     if (!this.hoverLabelText || !this.hoverLabelDescriptionText || !this.hoverLabelBackground) {
       this.hoverLabelBackground = this.add.graphics();
       this.hoverLabelText = this.add.text(0, 0, "", {
@@ -2891,11 +2892,14 @@ class PhaserMapScene extends Phaser.Scene {
       if (text) {
         const iso = cartToIso(tile.x, tile.y);
         const surfaceY = this.getSurfaceY(tile.x, tile.y);
+        const dataObject = this.objectsByTile.get(`${tile.x},${tile.y}`)?.find((o) => o.id === mapObject.id);
         return {
           key: `map:${mapObject.id}`,
           text,
           x: iso.x,
           y: getMapObjectHoverY(mapObject, surfaceY),
+          objectId: mapObject.id,
+          visited: Boolean(dataObject?.visited),
         };
       }
     }
@@ -2915,9 +2919,43 @@ class PhaserMapScene extends Phaser.Scene {
         text,
         x: iso.x + (object.renderOffsetX ?? 0),
         y: bounds.top - 8,
+        objectId: object.id,
+        visited: Boolean(object.visited),
       };
     }
     return null;
+  }
+
+  private hoveredAnimation?: { id: string; tween: Phaser.Tweens.Tween; baseScaleX: number; baseScaleY: number };
+
+  private startVisitedHoverAnimation(objectId: string) {
+    if (this.hoveredAnimation?.id === objectId) return;
+    this.stopVisitedHoverAnimation();
+    const rendered = this.renderedStaticObjects.get(objectId);
+    const sprite = rendered?.sprite;
+    if (!sprite) return;
+    const baseScaleX = sprite.scaleX;
+    const baseScaleY = sprite.scaleY;
+    const tween = this.tweens.add({
+      targets: sprite,
+      scaleX: baseScaleX * 1.08,
+      scaleY: baseScaleY * 1.08,
+      duration: 460,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      repeat: -1,
+    });
+    this.hoveredAnimation = { id: objectId, tween, baseScaleX, baseScaleY };
+  }
+
+  private stopVisitedHoverAnimation() {
+    if (!this.hoveredAnimation) return;
+    const rendered = this.renderedStaticObjects.get(this.hoveredAnimation.id);
+    this.hoveredAnimation.tween.stop();
+    if (rendered?.sprite) {
+      rendered.sprite.setScale(this.hoveredAnimation.baseScaleX, this.hoveredAnimation.baseScaleY);
+    }
+    this.hoveredAnimation = undefined;
   }
 
   private clearHoverLabel() {
@@ -2928,6 +2966,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.hoverLabelBackground?.clear();
     this.hoverLabelText?.setText("");
     this.hoverLabelDescriptionText?.setText("");
+    this.stopVisitedHoverAnimation();
   }
 
   private scheduleHoverLabelExpiration() {

@@ -254,8 +254,10 @@ function formatSignedMorale(value: number | undefined) {
 }
 
 function formatStatBonus(value: number, bonus: number, signed = false) {
-  const base = signed ? formatSignedMorale(value) : String(value);
-  return bonus ? `${base} (${bonus > 0 ? "+" : ""}${bonus})` : base;
+  const formatValue = signed ? formatSignedMorale : (stat: number | undefined) => String(stat ?? 0);
+  if (!bonus) return formatValue(value);
+  const base = value - bonus;
+  return `${formatValue(base)} (${bonus > 0 ? "+" : ""}${bonus})`;
 }
 
 function moraleStatColor(value: number | undefined) {
@@ -453,19 +455,29 @@ function ArtifactPanel({
   return (
     <div>
       <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Artefacts</div>
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-4 gap-1">
         {equippedEntries.map(({ slot, artifactId }) => {
           const artifact = artifactId ? getArtifact(artifactId) : null;
           return (
             <button
               key={slot}
               type="button"
-              className="min-h-12 rounded-md border border-amber-700/40 bg-black/45 px-1 py-1 text-left text-[10px] text-amber-100 transition hover:border-amber-300/70"
+              className={`group flex h-14 flex-col rounded-md border px-1 py-1 text-left text-[9px] transition ${
+                artifact
+                  ? "border-amber-500/55 bg-gradient-to-b from-amber-950/35 to-black/55 text-amber-100 shadow-[inset_0_0_12px_rgba(251,191,36,0.08)] hover:border-amber-300/80"
+                  : "border-amber-900/45 bg-black/30 text-amber-200/45 hover:border-amber-700/65"
+              }`}
               title={artifact ? artifactTooltip(artifact.id) : slotLabel(slot)}
               onClick={() => artifactId && onUnequip(slot)}
             >
-              <span className="block truncate text-amber-300/70">{slotLabel(slot)}</span>
-              <span className="block truncate font-black">{artifact?.name ?? "-"}</span>
+              <span className="block w-full truncate font-bold uppercase text-amber-300/75">{slotLabel(slot)}</span>
+              {artifact ? (
+                <span className="grid min-h-0 flex-1 place-items-center">
+                  <ArtifactIcon artifactId={artifact.id} size="slot" />
+                </span>
+              ) : (
+                <span className="grid min-h-0 flex-1 place-items-center text-sm font-black text-amber-200/20">-</span>
+              )}
             </button>
           );
         })}
@@ -480,6 +492,7 @@ function ArtifactPanel({
           const freeSlot = artifact.slots.find((slot) => !bag.equipment[slot]) ?? artifact.slots[0];
           return (
             <div key={`${artifactId}-${index}`} className="flex items-center gap-1 rounded-md border border-amber-700/35 bg-black/45 px-2 py-1 text-xs">
+              <ArtifactIcon artifactId={artifactId} size="row" />
               <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId)}>{artifact.name}</span>
               <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
                 Éq.
@@ -494,6 +507,23 @@ function ArtifactPanel({
         })}
       </div>
     </div>
+  );
+}
+
+function ArtifactIcon({ artifactId, size }: { artifactId: string; size: "row" | "slot" }) {
+  const boxClass = size === "row" ? "h-7 w-7" : "h-9 w-9";
+  const imageClass = size === "row" ? "h-5 w-5" : "h-7 w-7";
+  return (
+    <span className={`${boxClass} grid shrink-0 place-items-center rounded border border-amber-700/45 bg-stone-950/70 shadow-inner shadow-black/40`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- HUD sprites use direct public asset paths and fixed tiny dimensions. */}
+      <img
+        src={`/assets/sprites/artifacts/${artifactId}.webp`}
+        alt=""
+        className={`${imageClass} object-contain [image-rendering:auto]`}
+        loading="lazy"
+        draggable={false}
+      />
+    </span>
   );
 }
 

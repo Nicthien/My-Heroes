@@ -332,6 +332,41 @@ export async function completePlayerTurn(
   await supabase.from("games").update(gameUpdate).eq("id", gameId);
 }
 
+export async function cancelPlayerTurnCompletion(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  turnNumber: number,
+  gamePlayerId: string
+) {
+  const { data: turn, error: turnError } = await supabase
+    .from("turns")
+    .select("id,is_completed")
+    .eq("game_id", gameId)
+    .eq("game_player_id", gamePlayerId)
+    .eq("turn_number", turnNumber)
+    .maybeSingle();
+
+  if (turnError) throw turnError;
+  if (!turn?.is_completed) {
+    return { ok: false, error: "Votre tour est deja actif." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("turns")
+    .update({ is_completed: false })
+    .eq("id", turn.id);
+  if (updateError) throw updateError;
+
+  const { error: gameError } = await supabase
+    .from("games")
+    .update({ current_turn_player_id: gamePlayerId })
+    .eq("id", gameId)
+    .eq("turn_number", turnNumber);
+  if (gameError) throw gameError;
+
+  return { ok: true };
+}
+
 function isStartOfWeek(dayNumber: number) {
   return dayNumber > 1 && (dayNumber - 1) % 7 === 0;
 }

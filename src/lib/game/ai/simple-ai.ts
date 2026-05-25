@@ -33,9 +33,17 @@ export async function runAiTurnsUntilHuman(supabase: SupabaseAdmin, gameId: stri
       if (!currentPlayer?.isAi) return;
 
       await sleep(AI_TURN_START_DELAY_MS);
-      await runUtilityAiTurn(supabase, game, currentPlayer);
+      const latestGame = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
+      if (!latestGame || latestGame.status !== "ACTIVE" || latestGame.currentTurnPlayerId !== currentPlayer.id) return;
+      const latestPlayer = latestGame.players.find((player) => player.id === currentPlayer.id && player.isAlive);
+      if (!latestPlayer?.isAi) return;
+
+      await runUtilityAiTurn(supabase, latestGame, latestPlayer);
       await sleep(AI_TURN_END_DELAY_MS);
-      await completePlayerTurn(supabase, game.id, Number(game.turnNumber), currentPlayer.id);
+      const gameBeforeEnd = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
+      if (!gameBeforeEnd || gameBeforeEnd.status !== "ACTIVE" || gameBeforeEnd.currentTurnPlayerId !== latestPlayer.id) return;
+
+      await completePlayerTurn(supabase, gameBeforeEnd.id, Number(gameBeforeEnd.turnNumber), latestPlayer.id);
     }
   } finally {
     await supabase.from("games").update({ ai_runner_locked_at: null }).eq("id", gameId);

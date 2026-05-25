@@ -175,6 +175,23 @@ function HUDContent() {
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
+  const handleCancelEndTurn = async () => {
+    if (!isWaitingForPlayers) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "CANCEL_END_TURN" }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Impossible d'annuler la fin du tour."));
+      return;
+    }
+
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
+  };
+
   const handleStartGame = async () => {
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/start`, {
       method: "POST",
@@ -1217,18 +1234,20 @@ function HUDContent() {
           )}
           <button
             className={`group relative h-24 w-24 rounded-full border-4 transition ${
-              canAct && !hasActiveCombats
-                ? "border-amber-300 bg-gradient-to-b from-red-600 via-red-800 to-red-950 text-amber-50 shadow-[0_0_30px_rgba(220,38,38,0.5),inset_0_0_0_2px_rgba(252,211,77,0.4)] hover:-translate-y-0.5 hover:from-red-500"
+              isWaitingForPlayers
+                ? "border-stone-400 bg-gradient-to-b from-stone-500 via-stone-700 to-stone-950 text-stone-100 shadow-[0_0_24px_rgba(120,113,108,0.4),inset_0_0_0_2px_rgba(214,211,209,0.24)] hover:-translate-y-0.5 hover:from-stone-400"
+                : canAct && !hasActiveCombats
+                  ? "border-amber-300 bg-gradient-to-b from-red-600 via-red-800 to-red-950 text-amber-50 shadow-[0_0_30px_rgba(220,38,38,0.5),inset_0_0_0_2px_rgba(252,211,77,0.4)] hover:-translate-y-0.5 hover:from-red-500"
                 : "cursor-not-allowed border-stone-700 bg-stone-900 text-stone-500"
             }`}
-            disabled={!canAct || hasActiveCombats}
-            onClick={handleEndTurn}
+            disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
+            onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn"
-            title={isWaitingForPlayers ? "Tour terminé" : "Fin du tour"}
+            title={isWaitingForPlayers ? "Annuler la fin du tour" : "Fin du tour"}
           >
             <HourglassIcon className="mx-auto h-9 w-9 drop-shadow" />
             <span className="mt-1 block text-[10px] font-black uppercase tracking-widest">
-              {isWaitingForPlayers ? "Terminé" : "Fin tour"}
+              {isWaitingForPlayers ? "Annuler" : "Fin tour"}
             </span>
           </button>
           </div>

@@ -50,11 +50,15 @@ import {
   BOAT_SPRITESHEETS,
   HERO_DIRECTIONS,
   HERO_SPRITESHEETS,
+  ROAD_TEXTURES,
+  TERRAIN_TOP_TEXTURES,
+  getTerrainSideTexturePath,
   getUnitSpritePath,
   type BoatSpritesheet,
   type DirectionalSpritesheet,
   type HeroDirection,
   type HeroSpritesheet,
+  type TerrainTopTexture,
 } from "@/lib/rendering/phaser/assets";
 import {
   type UnitModelKind,
@@ -74,6 +78,8 @@ type SpriteKind =
   | "factionTown"
   | "heroSheet"
   | "boatSheet"
+  | "terrainTexture"
+  | "roadTexture"
   | "generic";
 
 type SpriteEntry = {
@@ -93,6 +99,8 @@ type SpriteEntry = {
   adventure?: { description: string };
   obstacle?: { description: string };
   factionTown?: { faction: Faction; description: string };
+  terrainTexture?: { terrain: TerrainType; face: "top" | "SW" | "SE"; tags: readonly string[] };
+  roadTexture?: { kind: string; mask: number };
 };
 
 type Selection = { entries: SpriteEntry[]; index: number } | null;
@@ -607,6 +615,36 @@ function buildBoatSheetEntry(sheet: BoatSpritesheet): SpriteEntry {
   };
 }
 
+function buildTerrainTextureEntry(
+  terrain: TerrainType,
+  texture: TerrainTopTexture,
+  face: "top" | "SW" | "SE",
+): SpriteEntry {
+  const terrainLabel = TERRAIN_LABELS[terrain] ?? terrain;
+  const labelFace = face === "top" ? "dessus" : `cote ${face}`;
+  return {
+    kind: "terrainTexture",
+    path: face === "top" ? texture.path : getTerrainSideTexturePath(texture.path, face),
+    label: `${terrainLabel} - ${labelFace}`,
+    detail: texture.tags.length > 0 ? texture.tags.join(", ") : "Texture de terrain",
+    width: 160,
+    height: 112,
+    terrainTexture: { terrain, face, tags: texture.tags },
+  };
+}
+
+function buildRoadTextureEntry(kind: string, mask: number, path: string): SpriteEntry {
+  return {
+    kind: "roadTexture",
+    path,
+    label: `${kind} ${mask}`,
+    detail: `Masque route ${mask}`,
+    width: 160,
+    height: 112,
+    roadTexture: { kind, mask },
+  };
+}
+
 const FACTION_GROUPS: { key: string; label: string; units: UnitType[] }[] = CREATURE_GROUPS.map((group) => ({
   key: group.key,
   label: group.label,
@@ -782,6 +820,25 @@ const MAP_WALL_GATE_GROUP: SpriteEntry[] = [
   },
 ];
 
+const TERRAIN_TEXTURE_GROUPS: WebpGroup[] = Object.entries(TERRAIN_TOP_TEXTURES).map(([terrain, textures]) => ({
+  label: `Terrain - ${TERRAIN_LABELS[terrain as TerrainType] ?? terrain}`,
+  entries: (textures as readonly TerrainTopTexture[]).flatMap((texture) => [
+    buildTerrainTextureEntry(terrain as TerrainType, texture, "top"),
+    buildTerrainTextureEntry(terrain as TerrainType, texture, "SW"),
+    buildTerrainTextureEntry(terrain as TerrainType, texture, "SE"),
+  ]),
+}));
+
+const ROAD_TEXTURE_GROUPS: WebpGroup[] = Object.entries(ROAD_TEXTURES).map(([kind, textures]) => ({
+  label: `Routes - ${kind}`,
+  entries: Object.entries(textures).map(([mask, path]) => buildRoadTextureEntry(kind, Number(mask), path)),
+}));
+
+const TEXTURE_GROUPS: WebpGroup[] = [
+  ...TERRAIN_TEXTURE_GROUPS,
+  ...ROAD_TEXTURE_GROUPS,
+];
+
 const COMBAT_GROUPS: WebpGroup[] = [
   { label: "Machines de guerre", entries: WAR_MACHINE_GROUP },
   { label: "Fortifications de siège", entries: SIEGE_FORTIFICATION_GROUP },
@@ -808,14 +865,16 @@ const ARTIFACT_FLAT = ARTIFACT_GROUPS.flatMap((group) => group.entries);
 const COMBAT_FLAT = [...UNIT_ENTRIES, ...COMBAT_GROUPS.flatMap((group) => group.entries)];
 const ADVENTURE_FLAT = ADVENTURE_GROUPS.flatMap((group) => group.entries);
 const TOWN_FLAT = TOWN_GROUPS.flatMap((group) => group.entries);
+const TEXTURE_FLAT = TEXTURE_GROUPS.flatMap((group) => group.entries);
 
 const COMBAT_COUNT = COMBAT_FLAT.length;
 const ADVENTURE_COUNT = ADVENTURE_FLAT.length;
 const TOWN_COUNT = TOWN_FLAT.length;
 const ARTIFACT_COUNT = ARTIFACT_FLAT.length;
 const SPRITESHEET_COUNT = SHEET_ENTRIES.length;
+const TEXTURE_COUNT = TEXTURE_FLAT.length;
 
-type GalleryTab = "combat" | "adventure" | "towns" | "artifacts" | "spritesheets" | "svg";
+type GalleryTab = "combat" | "adventure" | "towns" | "artifacts" | "spritesheets" | "textures" | "svg";
 type GalleryTabDefinition = {
   id: GalleryTab;
   label: string;
@@ -1337,6 +1396,29 @@ function SpriteDetails({ entry }: { entry: SpriteEntry }) {
           </p>
         </Section>
       );
+    case "terrainTexture":
+      return entry.terrainTexture ? (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="Terrain" value={TERRAIN_LABELS[entry.terrainTexture.terrain] ?? entry.terrainTexture.terrain} />
+            <Stat label="Face cube" value={entry.terrainTexture.face === "top" ? "Dessus" : entry.terrainTexture.face} />
+          </div>
+          <Section title="Tags">
+            <div className="flex flex-wrap gap-2">
+              {entry.terrainTexture.tags.map((tag) => (
+                <Badge key={tag}>{tag}</Badge>
+              ))}
+            </div>
+          </Section>
+        </>
+      ) : null;
+    case "roadTexture":
+      return entry.roadTexture ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label="Type" value={entry.roadTexture.kind} />
+          <Stat label="Masque" value={entry.roadTexture.mask} />
+        </div>
+      ) : null;
     default:
       return null;
   }
@@ -1653,6 +1735,18 @@ function SpritesheetsTab({ onSelect }: { onSelect: (selection: Selection) => voi
   );
 }
 
+function TexturesTab({ onSelect }: { onSelect: (selection: Selection) => void }) {
+  return (
+    <section>
+      <GroupedSpritesSections
+        groups={TEXTURE_GROUPS}
+        onSelect={onSelect}
+        openLabels={new Set(["Terrain - Plaine", "Terrain - Foret", "Routes - dirt"])}
+      />
+    </section>
+  );
+}
+
 type SvgItem = { id: string; label: string; description: string; render: ReactNode };
 
 function TownTabMarketSvg() {
@@ -1782,6 +1876,12 @@ const GALLERY_TABS: GalleryTabDefinition[] = [
     label: "Spritesheets",
     count: SPRITESHEET_COUNT,
     render: (onSelect) => <SpritesheetsTab onSelect={onSelect} />,
+  },
+  {
+    id: "textures",
+    label: "Textures",
+    count: TEXTURE_COUNT,
+    render: (onSelect) => <TexturesTab onSelect={onSelect} />,
   },
   {
     id: "svg",

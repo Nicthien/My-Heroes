@@ -68,7 +68,7 @@ type PendingAdventureChoice = {
 
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string; alreadyVisited?: boolean }
   | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
@@ -638,6 +638,9 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "ADVENTURE_BUILDING") {
+      if (interaction.alreadyVisited) {
+        return true;
+      }
       if (interaction.choices?.length && interaction.buildingId) {
         setPendingAdventureChoice({
           heroId,
@@ -1645,7 +1648,9 @@ export default function GameMapComponent() {
           pendingMoveRef.current = { heroId: selectedHeroId, destination, path };
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x22d3ee);
-          setCombatMessage(`Cliquez a nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
+          if (!obj.visited) {
+            setCombatMessage(`Cliquez a nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
+          }
           return;
         }
 

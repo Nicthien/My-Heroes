@@ -119,9 +119,7 @@ export function areObjectsRenderEquivalent(left: MapObjectData, right: MapObject
     (left.renderOffsetY ?? 0) === (right.renderOffsetY ?? 0) &&
     (left.buildingType ?? "") === (right.buildingType ?? "") &&
     (left.dwellingUnitType ?? "") === (right.dwellingUnitType ?? "") &&
-    (left.guardianPower ?? 0) === (right.guardianPower ?? 0) &&
-    Boolean(left.visited) === Boolean(right.visited) &&
-    (left.description ?? "") === (right.description ?? "")
+    (left.guardianPower ?? 0) === (right.guardianPower ?? 0)
   );
 }
 

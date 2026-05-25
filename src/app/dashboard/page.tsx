@@ -144,6 +144,76 @@ function factionLabel(faction: string) {
   return FACTION_META[faction]?.label ?? faction;
 }
 
+function FactionPicker({
+  selectedFaction,
+  onSelect,
+}: {
+  selectedFaction: string;
+  onSelect: (faction: string) => void;
+}) {
+  return (
+    <div className="mb-4 space-y-3">
+      {ALIGNMENT_GROUPS.map((group) => (
+        <div key={group.key}>
+          <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(FACTION_META)
+              .filter(([, m]) => m.alignment === group.key)
+              .map(([key, meta]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onSelect(key)}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    selectedFaction === key
+                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <Image
+                        src={`/assets/sprites/map/town-${key}.webp`}
+                        alt=""
+                        aria-hidden
+                        width={56}
+                        height={56}
+                        unoptimized
+                        className="h-14 w-14 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                      {FACTION_FIRST_UNIT[key] && (
+                        <Image
+                          src={`/assets/sprites/units/${FACTION_FIRST_UNIT[key]}.webp`}
+                          alt=""
+                          aria-hidden
+                          width={48}
+                          height={48}
+                          unoptimized
+                          className="h-12 w-12 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
+                          style={{ imageRendering: "pixelated" }}
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base" aria-hidden>{meta.emblem}</span>
+                        <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
+                        <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
+                      <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function randomSeedValue() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let value = "";
@@ -553,64 +623,7 @@ export default function DashboardPage() {
             </div>
 
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
-            <div className="mb-4 space-y-3">
-              {ALIGNMENT_GROUPS.map((group) => (
-                <div key={group.key}>
-                  <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {Object.entries(FACTION_META)
-                      .filter(([, m]) => m.alignment === group.key)
-                      .map(([key, meta]) => (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedFaction(key)}
-                          className={`rounded-lg border p-3 text-left transition ${
-                            selectedFaction === key
-                              ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                              : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex shrink-0 flex-col items-center gap-1">
-                              <Image
-                                src={`/assets/sprites/map/town-${key}.webp`}
-                                alt=""
-                                aria-hidden
-                                width={56}
-                                height={56}
-                                unoptimized
-                                className="h-14 w-14 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
-                                style={{ imageRendering: "pixelated" }}
-                              />
-                              {FACTION_FIRST_UNIT[key] && (
-                                <Image
-                                  src={`/assets/sprites/units/${FACTION_FIRST_UNIT[key]}.webp`}
-                                  alt=""
-                                  aria-hidden
-                                  width={48}
-                                  height={48}
-                                  unoptimized
-                                  className="h-12 w-12 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
-                                  style={{ imageRendering: "pixelated" }}
-                                />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-base" aria-hidden>{meta.emblem}</span>
-                                <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                                <span className="text-sm font-bold text-amber-100">{meta.label}</span>
-                              </div>
-                              <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
-                              <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
 
             <div className="flex gap-3">
               <button
@@ -755,36 +768,7 @@ export default function DashboardPage() {
             <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Rejoindre une partie</h2>
 
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Votre faction</label>
-            <div className="mb-4 space-y-2">
-              {ALIGNMENT_GROUPS.map((group) => (
-                <div key={group.key}>
-                  <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {Object.entries(FACTION_META)
-                      .filter(([, m]) => m.alignment === group.key)
-                      .map(([key, meta]) => (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedFaction(key)}
-                          title={meta.desc}
-                          className={`rounded-lg border p-2 text-left transition ${
-                            selectedFaction === key
-                              ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                              : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm" aria-hidden>{meta.emblem}</span>
-                            <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                            <span className="text-sm font-bold text-amber-100">{meta.label}</span>
-                          </div>
-                          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-amber-200/60">{meta.tagline}</div>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
 
             {openGames.length === 0 ? (
               <div className="py-4 text-center italic text-amber-200/50">Aucune partie en attente</div>

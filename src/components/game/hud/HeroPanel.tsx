@@ -14,7 +14,8 @@ import {
 } from "@/lib/game/artifacts";
 import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } from "@/lib/game/spells";
 import { SKILL_DEFINITIONS, type SkillId, type SkillLevel } from "@/lib/game/skills";
-import type { Hero, Town } from "@/lib/game/types";
+import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP } from "@/lib/game/army-stacks";
+import type { Hero, Town, UnitStack } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
@@ -50,7 +51,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
   const heroTabs: { id: HeroTab; label: string; badge?: number }[] = [
     { id: "profile", label: "Profil" },
     { id: "skills", label: "Compétences", badge: skillEntries.length },
-    { id: "army", label: "Armee", badge: hero.armies.length },
+    { id: "army", label: "Armée", badge: hero.armies.length },
     { id: "artifacts", label: "Artefacts", badge: artifactCount },
   ];
 
@@ -98,6 +99,23 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
       setCombatMessage(data.error ?? "Action impossible.");
       return;
     }
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshed) setGameState(refreshed);
+  }
+
+  async function performHeroStackAction(body: Record<string, unknown>) {
+    if (!gameState) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setCombatMessage(data.error ?? "Action impossible.");
+      return;
+    }
+    if (data?.moved) setCombatMessage(`Fusion : ${data.moved} unités transférées.`);
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshed) setGameState(refreshed);
   }
@@ -217,7 +235,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
 
           {activeTab === "skills" && <HeroSkillsPanel hero={hero} />}
 
-          {activeTab === "army" && <HeroArmyPanel hero={hero} />}
+          {activeTab === "army" && <HeroArmyPanel hero={hero} onAction={performHeroStackAction} />}
 
           {activeTab === "artifacts" && (
             <ArtifactPanel
@@ -407,30 +425,110 @@ function HeroTabIcon({ tab }: { tab: HeroTab }) {
   }
 }
 
-function HeroArmyPanel({ hero }: { hero: Hero }) {
-  if (hero.armies.length === 0) {
-    return (
-      <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
-        Armee vide
-      </div>
-    );
+function HeroArmyPanel({ hero, onAction }: { hero: Hero; onAction: (body: Record<string, unknown>) => Promise<void> }) {
+  const [selectedStackId, setSelectedStackId] = useState<string | null>(null);
+  const [splitCount, setSplitCount] = useState(1);
+  const sortedArmies = [...hero.armies].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+  const selected = sortedArmies.find((stack) => stack.id === selectedStackId) ?? null;
+  const splitMax = selected ? Math.max(1, selected.count - 1) : 1;
+  const canSplit = Boolean(selected && selected.count > 1 && sortedArmies.length < HERO_ARMY_STACK_LIMIT);
+
+  async function mergeInto(target: UnitStack) {
+    if (!selected || selected.id === target.id || selected.unitType !== target.unitType) return;
+    await onAction({ type: "MERGE_HERO_STACKS", heroId: hero.id, sourceStackId: selected.id, targetStackId: target.id });
+    setSelectedStackId(null);
+  }
+
+  async function splitSelected() {
+    if (!selected || !canSplit) return;
+    await onAction({
+      type: "SPLIT_HERO_STACK",
+      heroId: hero.id,
+      sourceStackId: selected.id,
+      count: Math.min(splitMax, Math.max(1, Math.floor(splitCount))),
+    });
+    setSelectedStackId(null);
+    setSplitCount(1);
   }
 
   return (
     <div>
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armee</div>
-      <div className="grid grid-cols-2 gap-1">
-        {hero.armies.map((unit) => (
-          <div
-            key={unit.id}
-            className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-black/50 px-2 py-1 text-sm"
-          >
-            <UnitSprite unitType={unit.unitType} size="xs" />
-            <span className="min-w-0 flex-1 truncate text-[11px] text-amber-200/70">{unitTypeLabel(unit.unitType)}</span>
-            <span className="font-black text-amber-100">{unit.count}</span>
-          </div>
-        ))}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armée</div>
+        <div className="text-[10px] font-black text-amber-200/60">{sortedArmies.length}/{HERO_ARMY_STACK_LIMIT}</div>
       </div>
+      {selected && (
+        <div className="mb-3 rounded-md border border-amber-700/35 bg-black/40 p-2">
+          <div className="flex items-center gap-2 text-xs text-amber-100">
+            <UnitSprite unitType={selected.unitType} size="xs" />
+            <span className="min-w-0 flex-1 truncate font-black">{unitTypeLabel(selected.unitType)}</span>
+            <span>{selected.count}/{UNIT_STACK_COUNT_CAP}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
+            <input
+              type="range"
+              min={1}
+              max={splitMax}
+              value={Math.min(splitMax, splitCount)}
+              disabled={!canSplit}
+              onChange={(event) => setSplitCount(Math.max(1, Math.floor(Number(event.target.value || 1))))}
+              className="min-w-0 accent-amber-400"
+            />
+            <input
+              type="number"
+              min={1}
+              max={splitMax}
+              value={Math.min(splitMax, splitCount)}
+              disabled={!canSplit}
+              onChange={(event) => setSplitCount(Math.max(1, Math.floor(Number(event.target.value || 1))))}
+              className="h-8 w-16 rounded border border-amber-700/45 bg-stone-950 px-2 text-right text-xs font-black text-amber-100"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={!canSplit}
+            onClick={() => void splitSelected()}
+            className="mt-2 w-full rounded-md border border-amber-600/50 bg-amber-950/55 px-3 py-1.5 text-xs font-black text-amber-100 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            Séparer
+          </button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        {sortedArmies.map((unit) => {
+          const selectedUnit = unit.id === selected?.id;
+          const mergeTarget = Boolean(selected && unit.id !== selected.id && unit.unitType === selected.unitType && unit.count < UNIT_STACK_COUNT_CAP);
+          return (
+            <button
+              key={unit.id}
+              type="button"
+              onClick={() => {
+                if (mergeTarget) void mergeInto(unit);
+                else setSelectedStackId(selectedUnit ? null : unit.id);
+              }}
+              className={`grid min-h-[4.75rem] min-w-0 grid-cols-[2.75rem_1fr] items-center gap-2 rounded-md border px-2 py-2 text-left transition ${
+                selectedUnit
+                  ? "border-amber-200 bg-amber-900/65 text-amber-50"
+                  : mergeTarget
+                  ? "border-emerald-300/75 bg-emerald-950/55 text-emerald-100 hover:bg-emerald-900/60"
+                  : "border-amber-700/40 bg-black/50 text-amber-100 hover:border-amber-400/70"
+              }`}
+              title={`${unitTypeLabel(unit.unitType)} x ${unit.count}`}
+            >
+              <UnitSprite unitType={unit.unitType} size="xs" />
+              <span className="min-w-0">
+                <span className="block truncate text-[11px] font-black leading-tight text-amber-100">{unitTypeLabel(unit.unitType)}</span>
+                <span className="mt-1 block text-sm font-black leading-none text-amber-50">{unit.count}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {hero.armies.length === 0 && (
+        <div className="mt-2 rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
+          Armée vide
+        </div>
+      )}
     </div>
   );
 }

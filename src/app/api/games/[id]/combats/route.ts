@@ -318,6 +318,16 @@ export async function POST(
       ),
     };
   }
+  const attackerTacticsAdvance = tacticsAdvanceFor((attacker as unknown as { skills?: Record<string, string> }).skills);
+  const defenderTacticsAdvance = tacticsAdvanceFor((targetDefender as unknown as { skills?: Record<string, string> }).skills);
+  const tacticsAdvantage = attackerTacticsAdvance - defenderTacticsAdvance;
+  const tacticsPhase = body.mode === "AUTO" || result
+    ? null
+    : tacticsAdvantage > 0
+      ? { side: "attacker" as const, maxColumn: 1 + attackerTacticsAdvance }
+      : tacticsAdvantage < 0
+        ? { side: "defender" as const, minColumn: COMBAT_COLS - 2 - defenderTacticsAdvance }
+        : null;
 
   const { data, error } = await supabase
     .from("combats")
@@ -334,14 +344,6 @@ export async function POST(
       x: targetDefender.x,
       y: targetDefender.y,
       board_state: (() => {
-        const atk = tacticsAdvanceFor((attacker as unknown as { skills?: Record<string, string> }).skills);
-        const def = tacticsAdvanceFor((targetDefender as unknown as { skills?: Record<string, string> }).skills);
-        const tacticsAdv = atk - def;
-        const tacticsPhase = tacticsAdv > 0
-          ? { side: "attacker" as const, maxColumn: 1 + atk }
-          : tacticsAdv < 0
-          ? { side: "defender" as const, minColumn: COMBAT_COLS - 2 - def }
-          : null;
         return {
           ...combatStart.boardState,
           environment,
@@ -362,10 +364,10 @@ export async function POST(
           units: applyTowerVolley(applySulfurDamage(combatStart.boardState.units, siegeEffects.sulfurDamagePerUnit), siegeFortifications),
         };
       })(),
-      current_player_id: result ? null : combatStart.currentPlayerId,
-      current_unit_id: result ? null : combatStart.currentUnitId,
+      current_player_id: result || tacticsPhase ? null : combatStart.currentPlayerId,
+      current_unit_id: result || tacticsPhase ? null : combatStart.currentUnitId,
       turn_queue: combatStart.turnQueue,
-      action_log: result ? ["Combat automatique.", ...result.log] : ["Combat lance."],
+      action_log: result ? ["Combat automatique.", ...result.log] : tacticsPhase ? ["Phase de tactique."] : ["Combat lance."],
       result,
     })
     .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")

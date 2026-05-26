@@ -103,6 +103,98 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByText("Flèche magique")).toBeVisible();
   });
 
+  test("combat tactics phase blocks regular combat actions", async ({ page }) => {
+    await page.route("**/api/games/dev-combat-game/combats/dev-combat/action", async (route) => {
+      const action = route.request().postDataJSON() as { type?: string; q?: number; r?: number };
+      const tacticsActive = action.type !== "TACTICS_END";
+      const currentUnitId = tacticsActive ? null : "atk-0";
+      const unit = {
+        id: "atk-0",
+        unitType: "pikeman",
+        count: 12,
+        health: 120,
+        maxHealth: 10,
+        position: 0,
+        ownerPlayerId: "p1",
+        heroId: "h1",
+        participantId: null,
+        joinsRound: 1,
+        speed: 6,
+        minDamage: 1,
+        maxDamage: 3,
+        ranged: false,
+        shots: 0,
+        hasRetaliated: false,
+        defended: false,
+        waited: false,
+        morale: 0,
+        moraleApplied: false,
+        moraleBonus: false,
+        side: "attacker",
+        q: action.type === "TACTICS_MOVE" ? action.q : 1,
+        r: action.type === "TACTICS_MOVE" ? action.r : 0,
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          combat: {
+            id: "dev-combat",
+            gameId: "dev-combat-game",
+            mode: "MANUAL",
+            status: "ACTIVE",
+            attackerPlayerId: "p1",
+            defenderPlayerId: "p2",
+            attackerHeroId: "h1",
+            defenderHeroId: "h2",
+            neutralArmyId: null,
+            currentPlayerId: currentUnitId ? "p1" : null,
+            currentUnitId,
+            round: 1,
+            x: 4,
+            y: 4,
+            boardState: {
+              units: [unit],
+              terrain: [],
+              ...(tacticsActive ? { tacticsPhase: { side: "attacker", maxColumn: 4 } } : {}),
+            },
+            turnQueue: ["atk-0"],
+            actionLog: tacticsActive ? ["Phase de tactique."] : ["Phase de tactique.", "Phase de tactique terminée.", "Combat lance."],
+            participants: [],
+            reinforcementRequests: [],
+            surrenderNegotiations: [],
+            truces: [],
+            result: null,
+            visibility: "full",
+          },
+          result: null,
+        }),
+      });
+    });
+    await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Combat lance.")).toBeVisible();
+    await page.getByRole("button", { name: "Tactique" }).click();
+
+    await expect(page.getByRole("button", { name: "Phase de tactique", exact: true })).toBeVisible();
+    await expect(page.getByText("Aucune unité sélectionnée")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Terminer la phase de tactique" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Attendre" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Defendre" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Fuir" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Livre de sorts combat" })).toBeDisabled();
+
+    const unitBox = await page.getByTestId("combat-unit-atk-19").boundingBox();
+    expect(unitBox).not.toBeNull();
+    await page.mouse.click(unitBox!.x + unitBox!.width / 2, unitBox!.y + unitBox!.height / 2);
+    await expect(page.locator('[data-tactics-selected="true"]')).toHaveCount(1);
+    await expect(page.locator('[data-tactics-destination="true"]')).not.toHaveCount(0);
+    await page.getByTestId("combat-cell-2-0").click();
+    await expect(page.locator('[data-tactics-selected="true"]')).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Terminer la phase de tactique" }).click();
+    await expect(page.getByRole("button", { name: "Attendre" })).toBeEnabled();
+  });
+
   test("town build tree modal shows construction dependencies", async ({ page }) => {
     await page.goto("/dev/hud-build", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Construire" }).first().click();

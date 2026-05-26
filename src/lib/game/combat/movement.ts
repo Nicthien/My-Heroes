@@ -1,7 +1,9 @@
 import type { CombatBoardUnit, CombatTerrainFeature } from "../types";
+import { getUnitRule } from "../units";
 
 export const COMBAT_COLS = 13;
-export const COMBAT_ROWS = 9;
+export const COMBAT_BASE_ROWS = 10;
+export const COMBAT_ROWS = 20;
 
 export interface HexCell {
   q: number;
@@ -51,6 +53,8 @@ export function findHexPath(
   occupied: Set<string>,
   blocked: Set<string>
 ) {
+  if (canFlyOverObstacles(start)) return getFlyingPath(start, end);
+
   const startKey = getHexKey(start);
   const endKey = getHexKey(end);
   const queue: Array<HexCell & { path: HexCell[] }> = [
@@ -81,6 +85,19 @@ export function getReachableCombatCells(
 ) {
   const occupied = getOccupiedCombatCells(units, actor.id);
   const blocked = getBlockedCombatCells(terrain);
+  if (canFlyOverObstacles(actor)) {
+    const cells: HexCell[] = [];
+    for (let r = 0; r < COMBAT_ROWS; r++) {
+      for (let q = 0; q < COMBAT_COLS; q++) {
+        const cell = { q, r };
+        const key = getHexKey(cell);
+        if (key === getHexKey(actor) || occupied.has(key) || blocked.has(key)) continue;
+        if (getHexDistance(actor, cell) <= actor.speed) cells.push(cell);
+      }
+    }
+    return cells;
+  }
+
   const visited = new Set<string>([getHexKey(actor)]);
   const queue: Array<HexCell & { dist: number }> = [{ q: actor.q, r: actor.r, dist: 0 }];
   const cells: HexCell[] = [];
@@ -132,6 +149,15 @@ export function findMeleeApproach(
 
 export function getHexKey(cell: HexCell) {
   return `${cell.q},${cell.r}`;
+}
+
+function canFlyOverObstacles(cell: HexCell | CombatBoardUnit) {
+  return "unitType" in cell && (getUnitRule(cell.unitType).abilities ?? []).includes("flying");
+}
+
+function getFlyingPath(start: HexCell, end: HexCell) {
+  const distance = getHexDistance(start, end);
+  return Array.from({ length: distance + 1 }, (_, index) => index === 0 ? { q: start.q, r: start.r } : { q: end.q, r: end.r });
 }
 
 function offsetToCube(q: number, r: number) {

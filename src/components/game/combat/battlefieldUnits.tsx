@@ -12,6 +12,9 @@ export function UnitModel({
   attacking = null,
   lifted = false,
   depthScale = 1,
+  interactive = false,
+  onClick,
+  onContextMenu,
 }: {
   unit: CombatBoardUnit;
   active: boolean;
@@ -20,6 +23,9 @@ export function UnitModel({
   attacking?: "mêlée" | "ranged" | null;
   lifted?: boolean;
   depthScale?: number;
+  interactive?: boolean;
+  onClick?: () => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLSpanElement>) => void;
 }) {
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
@@ -31,7 +37,18 @@ export function UnitModel({
 
   return (
     <span
-      className={`pointer-events-none absolute block h-[159px] w-[125px] ${damaged ? "combat-unit-damaged" : ""} ${
+      data-testid={`combat-unit-${unit.id}`}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+      onKeyDown={interactive ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.();
+        }
+      } : undefined}
+      className={`${interactive ? "pointer-events-auto cursor-pointer" : "pointer-events-none"} absolute block h-[159px] w-[125px] ${damaged ? "combat-unit-damaged" : ""} ${
         active ? "drop-shadow-[0_0_12px_rgba(252,211,77,0.75)]" : attackable ? "drop-shadow-[0_0_12px_rgba(248,113,113,0.65)]" : ""
       }`}
       style={{
@@ -41,9 +58,9 @@ export function UnitModel({
         transformOrigin: "50% 100%",
       }}
     >
-      <span className={`absolute inset-0 block ${attackClass}`}>
+      <span className={`pointer-events-none absolute inset-0 block ${attackClass}`}>
         <span
-          className="absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
+          className="pointer-events-none absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
           style={{ transform: `translateX(-50%) ${sideFlip}` }}
         >
           <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
 import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUnits, sideHasActivePlayerUnits } from "../src/lib/game/combat/concession";
+import { findHexPath, getBlockedCombatCells, getOccupiedCombatCells, getReachableCombatCells } from "../src/lib/game/combat/movement";
 import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
 import { computeSurrenderGoldCost } from "../src/lib/game/combat/surrender";
 import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
@@ -316,7 +317,26 @@ function testRangedShotAndMoveMeleeAttack() {
   });
   assert.deepEqual({ q: melee.units.find((item) => item.id === "shooter")?.q, r: melee.units.find((item) => item.id === "shooter")?.r }, { q: 3, r: 1 });
   assert.equal(melee.units.find((item) => item.id === "shooter")?.shots, 3);
-  assert.ok(melee.log.some((line) => line.includes("corps-a-corps")));
+  assert.ok(melee.log.some((line) => line.toLowerCase().includes("corps-a-corps")));
+}
+
+function testFlyingUnitsCrossBlockingTerrain() {
+  const flyer = unit({ id: "flyer", unitType: UnitType.GRIFFIN, side: "attacker", q: 1, r: 1, speed: 2 });
+  const walker = unit({ id: "walker", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, speed: 2 });
+  const terrain = [
+    { type: "rock" as const, q: 2, r: 1 },
+    { type: "rock" as const, q: 2, r: 0 },
+    { type: "rock" as const, q: 2, r: 2 },
+  ];
+  const destination = { q: 3, r: 1 };
+  const blocked = getBlockedCombatCells(terrain);
+  const occupied = getOccupiedCombatCells([flyer], flyer.id);
+
+  assert.equal(findHexPath(flyer, destination, occupied, blocked).length, 3);
+  assert.ok(findHexPath(walker, destination, occupied, blocked).length > walker.speed + 1);
+  assert.ok(getReachableCombatCells(flyer, [flyer], terrain).some((cell) => cell.q === destination.q && cell.r === destination.r));
+  assert.ok(!getReachableCombatCells(walker, [walker], terrain).some((cell) => cell.q === destination.q && cell.r === destination.r));
+  assert.ok(!getReachableCombatCells(flyer, [flyer], terrain).some((cell) => cell.q === 2 && cell.r === 1));
 }
 
 function testMoveDoesNotAttack() {
@@ -535,6 +555,7 @@ testRangedRestrictionsAndPenalties();
 testMoveAndMeleeAttack();
 testBlockedMoveAndMeleeAttack();
 testRangedShotAndMoveMeleeAttack();
+testFlyingUnitsCrossBlockingTerrain();
 testMoveDoesNotAttack();
 testSpellDamageAndMana();
 testCombatSpellOncePerRoundAndDamage();

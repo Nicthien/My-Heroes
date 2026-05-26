@@ -86,6 +86,7 @@ export default function CombatScreen() {
   const [truceConfirmOpen, setTruceConfirmOpen] = useState(false);
   const [retreatConfirmOpen, setRetreatConfirmOpen] = useState(false);
   const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
+  const [tacticsSelectedUnitId, setTacticsSelectedUnitId] = useState<string | null>(null);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
   const neutralActionKeyRef = useRef<string | null>(null);
@@ -264,6 +265,13 @@ export default function CombatScreen() {
   }, [activeCombat, gameState, setActiveCombat]);
 
   useEffect(() => {
+    const activeTacticsPhase = (activeCombat?.boardState as { tacticsPhase?: unknown } | undefined)?.tacticsPhase;
+    if (activeTacticsPhase) return;
+    const timeout = window.setTimeout(() => setTacticsSelectedUnitId(null), 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeCombat?.id, activeCombat?.boardState]);
+
+  useEffect(() => {
     if (!activeCombat || !gameState || activeCombat.status !== "ACTIVE") return;
     if (combatAnimationBlocked) return;
 
@@ -335,37 +343,60 @@ export default function CombatScreen() {
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
   const units = activeCombat.boardState.units;
+  const tacticsPhase = (activeCombat.boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+  const isTacticsPhaseActive = Boolean(tacticsPhase);
   // Lag the displayed "active unit" behind the canonical state so panels,
   // queue, and gating only swap once the previous action finishes animating.
-  const effectiveCurrentUnitId = displayedCurrentUnitId ?? activeCombat.currentUnitId ?? null;
+  const effectiveCurrentUnitId = isTacticsPhaseActive ? null : displayedCurrentUnitId ?? activeCombat.currentUnitId ?? null;
   const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
   const inspectedUnit = units.find((unit) => unit.id === inspectedUnitId) ?? null;
+  const tacticsSelectedUnit = isTacticsPhaseActive ? units.find((unit) => unit.id === tacticsSelectedUnitId) ?? null : null;
   const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, effectiveCurrentUnitId, activeCombat.currentPlayerId);
   const pendingSurrenderNegotiation = activeCombat.surrenderNegotiations?.find((negotiation) => negotiation.status === "PENDING") ?? null;
   const activeTruce = findActiveCombatTruce(activeCombat.truces, gameState.turnNumber);
   const truceNeedsAck = Boolean(activeTruce && myPlayer && !activeTruce.acknowledgedPlayerIds.includes(myPlayer.id));
   const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
-  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !pendingSurrenderNegotiation && !activeTruce && !isSubmittingAction && !combatAnimationBlocked;
+  const isMyTacticsPhase = Boolean(
+    myPlayer &&
+    tacticsPhase &&
+    ((tacticsPhase.side === "attacker" && activeCombat.attackerPlayerId === myPlayer.id) ||
+      (tacticsPhase.side === "defender" && activeCombat.defenderPlayerId === myPlayer.id))
+  );
+  const actionBlockedByBusyState = isSubmittingAction || combatAnimationBlocked;
+  const canSubmitAction = isMyAction && !isTacticsPhaseActive && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !pendingSurrenderNegotiation && !activeTruce && !actionBlockedByBusyState;
+  const canSubmitTacticsAction = isMyTacticsPhase && activeCombat.status === "ACTIVE" && !pendingSurrenderNegotiation && !activeTruce && !actionBlockedByBusyState;
   const actionUnavailableReason = activeCombat.status !== "ACTIVE"
     ? "Le combat n'est pas actif."
     : pendingSurrenderNegotiation
       ? "Une négociation de reddition est déjà en cours."
       : activeTruce
         ? "Une trêve est déjà en cours."
-        : isSubmittingAction || combatAnimationBlocked
+        : actionBlockedByBusyState
           ? "Une action est en cours."
+          : isTacticsPhaseActive
+            ? "Terminez la phase de tactique avant les actions de combat."
           : !currentUnit
             ? "Aucune unité ne peut agir maintenant."
             : !isMyAction
               ? "Ce n'est pas votre tour d'action."
               : null;
+  const combatStatusLabel = activeTruce
+    ? "Trêve en cours"
+    : combatAnimationBlocked
+      ? "Action en cours"
+      : isTacticsPhaseActive
+        ? "Phase de tactique"
+        : isMyAction
+          ? "À vous de jouer"
+          : "En attente de l'adversaire";
   const displayedCombat = effectiveCurrentUnitId === activeCombat.currentUnitId
     ? activeCombat
     : { ...activeCombat, currentUnitId: effectiveCurrentUnitId };
 
   const submitAction = async (action: Record<string, unknown>) => {
     const canBypassTurn = action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER" || action.type === "ACK_TRUCE";
-    if ((!canSubmitAction && !canBypassTurn) || isSubmittingActionRef.current) return false;
+    const isTacticsAction = action.type === "TACTICS_MOVE" || action.type === "TACTICS_END";
+    if (((isTacticsAction ? !canSubmitTacticsAction : !canSubmitAction) && !canBypassTurn) || isSubmittingActionRef.current) return false;
 
     const submissionToken = ++actionSubmissionTokenRef.current;
     isSubmittingActionRef.current = true;
@@ -402,6 +433,12 @@ export default function CombatScreen() {
         await settleResolvedCombat(activeCombat, { ...mapped, result: mapped.result ?? data.result });
       } else {
         setActiveCombat(mapped);
+        if (gameState.activeCombats?.some((combat) => combat.id === mapped.id)) {
+          setGameState({
+            ...gameState,
+            activeCombats: gameState.activeCombats.map((combat) => combat.id === mapped.id ? mapped : combat),
+          });
+        }
       }
       return true;
     } finally {
@@ -524,8 +561,8 @@ export default function CombatScreen() {
           <div className={`text-xs font-black uppercase tracking-[0.28em] ${goldText}`}>Combat tactique</div>
           <div className={`mt-0.5 text-lg font-black ${goldText}`}>Round {activeCombat.round}</div>
         </div>
-        <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
-          {activeTruce ? "Trêve en cours" : combatAnimationBlocked ? "Action en cours" : isMyAction ? "À vous de jouer" : "En attente de l'adversaire"}
+        <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction || isMyTacticsPhase ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
+          {combatStatusLabel}
         </div>
         <div className="flex items-center gap-3">
           {pendingTargetSpell && (
@@ -537,7 +574,7 @@ export default function CombatScreen() {
               Cible: {pendingTargetSpell.label}
             </button>
           )}
-          {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label="Livre de sorts combat" />}
+          {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label="Livre de sorts combat" disabled={isTacticsPhaseActive} />}
           <CombatAudioControl />
           <button
             type="button"
@@ -567,56 +604,50 @@ export default function CombatScreen() {
         )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <div className="absolute left-1/2 top-3 z-30 w-[min(760px,calc(100%-7rem))] -translate-x-1/2">
-            <InitiativeQueue combat={displayedCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
+            {isTacticsPhaseActive ? (
+              <div className="mx-auto w-fit rounded-md border border-amber-700/50 bg-black/55 px-4 py-2 text-center text-xs font-black uppercase tracking-[0.24em] text-amber-200 shadow-[0_10px_26px_rgba(0,0,0,0.5),0_0_0_1px_rgba(252,211,77,0.12)_inset] backdrop-blur-sm">
+                Phase de tactique
+              </div>
+            ) : (
+              <InitiativeQueue combat={displayedCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
+            )}
           </div>
           <IsoBattlefield
             combat={activeCombat}
             displayedCurrentUnitId={effectiveCurrentUnitId}
             gameState={gameState}
             inspectedUnitId={inspectedUnitId}
-            isMyAction={canSubmitAction}
+            isMyAction={canSubmitAction || canSubmitTacticsAction}
             onAction={submitAction}
             onInspectUnit={setInspectedUnitId}
+            tacticsSelectedUnitId={tacticsSelectedUnitId}
+            onTacticsSelectedUnitChange={setTacticsSelectedUnitId}
             pendingSpellTarget={Boolean(pendingTargetSpell)}
             onSpellTarget={(unitId) => void castPendingCombatSpell(unitId)}
           />
         </main>
         <aside className="mobile-combat-aside pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
-          <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
+          <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : isTacticsPhaseActive ? "Unité sélectionnée" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
             <div className="text-sm text-stone-200">
-              {(inspectedUnit ?? currentUnit) ? (
-                <UnitDetails unit={(inspectedUnit ?? currentUnit)!} combat={activeCombat} gameState={gameState} />
+              {(inspectedUnit ?? tacticsSelectedUnit ?? currentUnit) ? (
+                <UnitDetails unit={(inspectedUnit ?? tacticsSelectedUnit ?? currentUnit)!} combat={activeCombat} gameState={gameState} />
               ) : (
-                <div className="py-4 text-center text-stone-400">Aucune</div>
+                <div className="py-4 text-center text-stone-400">{isTacticsPhaseActive ? "Aucune unité sélectionnée" : "Aucune"}</div>
               )}
             </div>
           </CombatFloatingPanel>
 
-          {Boolean((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase) && myPlayer && (
-            (((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase?.side === "attacker" && activeCombat.attackerPlayerId === myPlayer.id) ||
-             ((activeCombat.boardState as { tacticsPhase?: { side: string } }).tacticsPhase?.side === "defender" && activeCombat.defenderPlayerId === myPlayer.id))
-          ) && (
+          {isMyTacticsPhase && (
             <CombatFloatingPanel title="Phase de tactique" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
               <div className="text-xs text-amber-200/80 mb-2">Repositionnez vos unités, puis terminez la phase.</div>
               <button
                 type="button"
+                disabled={!canSubmitTacticsAction}
                 onClick={() => submitAction({ type: "TACTICS_END" })}
-                className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-700 to-amber-900 px-3 py-2 font-bold text-amber-50 hover:from-amber-600 hover:to-amber-800"
+                className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-700 to-amber-900 px-3 py-2 font-bold text-amber-50 hover:from-amber-600 hover:to-amber-800 disabled:opacity-40"
               >
                 Terminer la phase de tactique
               </button>
-            </CombatFloatingPanel>
-          )}
-
-          {combatHero && (combatHero.skills && Object.keys(combatHero.skills).length > 0) && (
-            <CombatFloatingPanel title="Compétences" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
-              <div className="flex flex-wrap gap-1">
-                {Object.entries(combatHero.skills).map(([id, level]) => (
-                  <span key={id} className="rounded-full border border-amber-600/50 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
-                    {id.replace(/_/g, " ")} · {level}
-                  </span>
-                ))}
-              </div>
             </CombatFloatingPanel>
           )}
 

@@ -1,5 +1,6 @@
 import type { Resources, UnitStack, UnitType } from "@/lib/game/types";
 import type { ResourceCost } from "@/lib/game/economy";
+import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP, addUnitsToStacks } from "@/lib/game/army-stacks";
 
 export function addUnitsToLocalStackList(
   stacks: UnitStack[],
@@ -7,26 +8,14 @@ export function addUnitsToLocalStackList(
   count: number,
   maxHealth: number
 ) {
-  const existing = stacks.find((unit) => unit.unitType === unitType);
-  if (existing) {
-    return stacks.map((unit) =>
-      unit.id === existing.id
-        ? { ...unit, count: unit.count + count, health: unit.health + maxHealth * count }
-        : unit
-    );
-  }
-
-  return [
-    ...stacks,
-    {
-      id: `local-${Date.now()}`,
-      unitType,
-      count,
-      health: maxHealth * count,
-      maxHealth,
-      position: stacks.length,
-    },
-  ];
+  return addUnitsToStacks(
+    stacks,
+    unitType,
+    count,
+    maxHealth,
+    (position) => `local-${Date.now()}-${position}`,
+    Math.max(HERO_ARMY_STACK_LIMIT, stacks.length + Math.ceil(count / UNIT_STACK_COUNT_CAP)),
+  ).stacks;
 }
 
 export function getMaxRecruitCount(resources: Resources, cost: ResourceCost, available: number) {
@@ -62,12 +51,14 @@ export function removeUnitsFromLocalStackList(
   count: number,
   maxHealth: number
 ) {
+  let remaining = Math.max(0, Math.floor(count));
   return stacks
-    .map((unit) =>
-      unit.unitType === unitType
-        ? { ...unit, count: unit.count - count, health: Math.max(0, unit.health - maxHealth * count) }
-        : unit
-    )
+    .map((unit) => {
+      if (unit.unitType !== unitType || remaining <= 0) return unit;
+      const removed = Math.min(unit.count, remaining);
+      remaining -= removed;
+      return { ...unit, count: unit.count - removed, health: Math.max(0, unit.health - maxHealth * removed) };
+    })
     .filter((unit) => unit.count > 0)
     .map((unit, position) => ({ ...unit, position }));
 }

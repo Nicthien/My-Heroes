@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import { AuthContext } from "@/lib/auth/client";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
+import { COMBAT_BASE_ROWS, COMBAT_COLS } from "@/lib/game/combat/movement";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -20,7 +21,7 @@ import {
 
 const MOCK_USER_ID = "dev-user";
 type CombatPreviewScenario = "hero" | "mine" | "town" | "adventure";
-type CombatPreviewPhase = "start" | "mid" | "end" | "death" | "truce" | "truceAcked";
+type CombatPreviewPhase = "start" | "tactics" | "mid" | "end" | "death" | "truce" | "truceAcked";
 
 const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
   { id: "hero", label: "Héros" },
@@ -30,6 +31,7 @@ const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string
 ];
 const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; label: string }> = [
   { id: "start", label: "Debut" },
+  { id: "tactics", label: "Tactique" },
   { id: "mid", label: "Milieu" },
   { id: "end", label: "Fin" },
   { id: "death", label: "Mort" },
@@ -179,24 +181,51 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     ],
   };
 
+  const attackerTypes = [
+    UnitType.PIKEMAN, UnitType.ARCHER, UnitType.GRIFFIN, UnitType.SWORDSMAN, UnitType.MONK,
+    UnitType.CAVALIER, UnitType.CENTAUR, UnitType.WOOD_ELF, UnitType.DWARF, UnitType.GREMLIN,
+    UnitType.GARGOYLE, UnitType.GOLEM, UnitType.IMP, UnitType.GOG, UnitType.SKELETON,
+    UnitType.WALKING_DEAD, UnitType.TROGLODYTE, UnitType.HARPY, UnitType.BEHOLDER, UnitType.MEDUSA,
+  ];
+  const defenderTypes = [
+    UnitType.DEMON, UnitType.GOG, UnitType.EFREET, UnitType.PIT_FIEND, UnitType.DEVIL,
+    UnitType.ORC, UnitType.WOLF_RIDER, UnitType.OGRE, UnitType.ROC, UnitType.CYCLOPS,
+    UnitType.LIZARDMAN, UnitType.SERPENT_FLY, UnitType.BASILISK, UnitType.WYVERN, UnitType.GNOLL,
+    UnitType.TROGLODYTE, UnitType.HARPY, UnitType.BEHOLDER, UnitType.MINOTAUR, UnitType.MANTICORE,
+  ];
   const units = [
-    buildUnit({ id: "u1", unitType: UnitType.PIKEMAN, count: 28, side: "attacker", q: 1, r: 1, speed: 4 }),
-    buildUnit({ id: "u2", unitType: UnitType.ARCHER, count: 18, side: "attacker", q: 2, r: 3, ranged: true, shots: 12, speed: 4 }),
-    buildUnit({ id: "u3", unitType: UnitType.GRIFFIN, count: 6, side: "attacker", q: 1, r: 6, speed: 6, maxHealth: 25, health: 150 }),
-    buildUnit({ id: "u4", unitType: UnitType.CAVALIER, count: 4, side: "attacker", q: 4, r: 5, speed: 7, maxHealth: 100, health: 400 }),
-    buildUnit({ id: "u5", unitType: UnitType.DEMON, count: 22, side: "defender", q: 11, r: 2, speed: 5, maxHealth: 35, health: 770 }),
-    buildUnit({ id: "u6", unitType: UnitType.GOG, count: 16, side: "defender", q: 10, r: 4, ranged: true, shots: 12, speed: 4 }),
-    buildUnit({ id: "u7", unitType: UnitType.EFREET, count: 3, side: "defender", q: 11, r: 7, speed: 9, maxHealth: 90, health: 270 }),
+    ...attackerTypes.map((unitType, index) => buildUnit({
+      id: `atk-${index}`,
+      unitType,
+      count: 12 + index * 3,
+      side: "attacker" as const,
+      q: index < COMBAT_BASE_ROWS ? 1 : 0,
+      r: index % COMBAT_BASE_ROWS,
+      ranged: [UnitType.ARCHER, UnitType.MONK, UnitType.WOOD_ELF, UnitType.GREMLIN, UnitType.GOG, UnitType.BEHOLDER, UnitType.MEDUSA].includes(unitType),
+      shots: 12,
+      speed: 4 + (index % 5),
+    })),
+    ...defenderTypes.map((unitType, index) => buildUnit({
+      id: `def-${index}`,
+      unitType,
+      count: 10 + index * 2,
+      side: "defender" as const,
+      q: index < COMBAT_BASE_ROWS ? COMBAT_COLS - 2 : COMBAT_COLS - 1,
+      r: index % COMBAT_BASE_ROWS,
+      ranged: [UnitType.GOG, UnitType.ORC, UnitType.CYCLOPS, UnitType.LIZARDMAN, UnitType.BEHOLDER, UnitType.MEDUSA].includes(unitType),
+      shots: 12,
+      speed: 4 + (index % 6),
+    })),
   ];
   const scenarioUnits = scenario === "hero"
     ? units
     : units.map((unit) => unit.side === "defender" ? { ...unit, ownerPlayerId: null, heroId: null } : unit);
   const combatUnits = phase === "death"
-    ? scenarioUnits.map((unit) => unit.id === "u6" ? { ...unit, count: 0, health: 0 } : unit)
+    ? scenarioUnits.map((unit) => unit.id === "def-1" ? { ...unit, count: 0, health: 0 } : unit)
     : scenarioUnits;
   const fullTurnQueue = buildTurnQueue(combatUnits, 1);
   const phaseTurnQueue = getPhaseTurnQueue(fullTurnQueue, phase);
-  const currentUnitId = phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;
+  const currentUnitId = phase === "tactics" ? null : phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;
   const currentPlayerId = combatUnits.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
 
   const isSiege = scenario === "town";
@@ -232,9 +261,10 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
         ...siegeTerrain,
       ],
       ...(siegeFortifications ? { fortifications: siegeFortifications } : {}),
+      ...(phase === "tactics" ? { tacticsPhase: { side: "attacker" as const, maxColumn: 4 } } : {}),
     },
     turnQueue: phaseTurnQueue,
-    actionLog: ["Combat lance."],
+    actionLog: phase === "tactics" ? ["Phase de tactique."] : ["Combat lance."],
     participants: [],
     truces: phase === "truce" || phase === "truceAcked"
       ? [{

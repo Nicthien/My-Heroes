@@ -4,9 +4,7 @@ import {
   Hero,
   Position,
 } from "../types";
-
-const COMBAT_GRID_ROWS = 7;
-const COMBAT_GRID_COLS = 11;
+import { COMBAT_BASE_ROWS as COMBAT_GRID_BASE_ROWS, COMBAT_COLS as COMBAT_GRID_COLS, COMBAT_ROWS as COMBAT_GRID_ROWS } from "./movement";
 
 export function initCombat(attacker: Hero, defender: Hero): CombatState {
   const allUnits = [
@@ -20,13 +18,15 @@ export function initCombat(attacker: Hero, defender: Hero): CombatState {
   );
 
   attacker.armies.forEach((unit, i) => {
-    const row = Math.floor(i / 2);
-    board[row][1] = { ...unit };
+    const row = Math.min(i % COMBAT_GRID_BASE_ROWS, COMBAT_GRID_ROWS - 1);
+    const col = i < COMBAT_GRID_BASE_ROWS ? 1 : 0;
+    board[row][col] = { ...unit };
   });
 
   defender.armies.forEach((unit, i) => {
-    const row = Math.floor(i / 2);
-    board[row][COMBAT_GRID_COLS - 2] = { ...unit };
+    const row = Math.min(i % COMBAT_GRID_BASE_ROWS, COMBAT_GRID_ROWS - 1);
+    const col = i < COMBAT_GRID_BASE_ROWS ? COMBAT_GRID_COLS - 2 : COMBAT_GRID_COLS - 1;
+    board[row][col] = { ...unit };
   });
 
   return {

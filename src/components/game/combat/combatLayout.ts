@@ -1,6 +1,6 @@
 import { CombatBoardUnit, CombatTerrainFeature, GameState, PersistentCombat } from "@/lib/game/types";
 import { calculateCombatDamageRange, hasAdjacentEnemy } from "@/lib/game/combat/rules";
-import { COMBAT_COLS, COMBAT_ROWS, findMeleeApproach, getHexDistance } from "@/lib/game/combat/movement";
+import { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, findMeleeApproach, getHexDistance } from "@/lib/game/combat/movement";
 import { getUnitRule } from "@/lib/game/units";
 import { getEffectiveHeroStats } from "@/lib/game/artifacts";
 
@@ -17,11 +17,12 @@ export const BOARD_PADDING_TOP = 128;
 export const BOARD_PADDING_BOTTOM = 122;
 export const ISO_GRID_WIDTH = (COMBAT_COLS - 1) * COL_STEP + ROW_STAGGER + TILE_WIDTH + BOARD_PADDING_X * 2;
 export const ISO_GRID_HEIGHT = (COMBAT_ROWS - 1) * ROW_STEP + TILE_HEIGHT + UNIT_HEIGHT + BOARD_PADDING_TOP + BOARD_PADDING_BOTTOM;
+export const ISO_BASE_GRID_HEIGHT = (COMBAT_BASE_ROWS - 1) * ROW_STEP + TILE_HEIGHT + UNIT_HEIGHT + BOARD_PADDING_TOP + BOARD_PADDING_BOTTOM;
 export const ISO_ORIGIN_X = BOARD_PADDING_X;
 export const ISO_ORIGIN_Y = BOARD_PADDING_TOP;
 
 // Camera / interaction
-export const MIN_BATTLE_ZOOM = 0.58;
+export const MIN_BATTLE_ZOOM = 0.34;
 export const MAX_BATTLE_ZOOM = 1.55;
 export const DEFAULT_BATTLE_ZOOM = 0.82;
 export const DEFAULT_BATTLE_PAN_X = -95;
@@ -62,6 +63,10 @@ export function getIsoPosition(q: number, r: number) {
 
 export function getDepthScale(r: number) {
   return 0.86 + (r / Math.max(1, COMBAT_ROWS - 1)) * 0.22;
+}
+
+export function getIsoGridHeight(rowCount: number) {
+  return (rowCount - 1) * ROW_STEP + TILE_HEIGHT + UNIT_HEIGHT + BOARD_PADDING_TOP + BOARD_PADDING_BOTTOM;
 }
 
 export function getUnitRenderOffsetX(unit: CombatBoardUnit) {

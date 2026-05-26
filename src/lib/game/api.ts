@@ -9,6 +9,7 @@ import { isCreatureBankType } from "./creature-banks";
 import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
+import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
 
 interface ApiPlayer {
@@ -181,6 +182,24 @@ function getCompletedTurnPlayerIds(data: Record<string, unknown>, turnNumber: nu
   );
 }
 
+function getVisiblePendingSkillChoices(params: {
+  gameId: string;
+  heroId: string;
+  heroLevel: number;
+  skills: HeroSkills;
+  mapState: Record<string, unknown>;
+}) {
+  const pendingMap = (params.mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: SkillId[] }>> | undefined) ?? {};
+  const pending = pendingMap[params.heroId] ?? [];
+  const learnedFromLevels = countSkillLevels(params.skills);
+  const expectedFromLevels = Math.max(0, Math.floor(Number(params.heroLevel ?? 1)) - 1);
+  if (pending.length > 0 || learnedFromLevels >= expectedFromLevels) return pending;
+
+  const level = learnedFromLevels + 2;
+  const options = generateSkillChoices(params.skills, `${params.gameId}:${params.heroId}:level:${level}`);
+  return options.length > 0 ? [{ level, options }] : pending;
+}
+
 function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
   const completedTurnPlayerIds = getCompletedTurnPlayerIds(data, turnNumber);
   const mapState = (data.mapState as Record<string, unknown> | undefined) ?? {};
@@ -203,40 +222,50 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
       gems: player.gems ?? 0,
       sulfur: player.sulfur,
     },
-    heroes: player.heroes.map((hero): Hero => ({
-      id: hero.id,
-      name: hero.name,
-      class: (hero.class ?? "knight") as HeroClass,
-      specialty: hero.specialty ?? undefined,
-      level: hero.level,
-      experience: hero.experience,
-      stats: {
-        attack: hero.attack,
-        defense: hero.defense,
-        spellPower: hero.spellPower,
-        knowledge: hero.knowledge,
-        morale: Number(hero.morale ?? 0),
-        luck: Number(hero.luck ?? 0),
-      },
-      mana: hero.mana ?? hero.knowledge * 10,
-      hasSpellBook: hero.hasSpellBook ?? true,
-      knownSpellIds: hero.knownSpellIds ?? null,
-      artifacts: normalizeArtifactBag(hero.artifacts),
-      skills: (hero.skills as Partial<Record<string, "basic" | "advanced" | "expert">> | undefined) ?? {},
-      warMachines: (hero.warMachines as { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } | undefined) ?? {},
-      pendingSkillChoices: (((mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {})[hero.id]) ?? [],
-      position: { x: hero.x, y: hero.y },
-      movement: hero.movement,
-      maxMovement: hero.maxMovement,
-      armies: hero.armies.map((army) => ({
-        id: army.id,
-        unitType: army.unitType as UnitType,
-        count: army.count,
-        health: army.health,
-        maxHealth: army.maxHealth,
-        position: army.position,
-      })),
-    })),
+    heroes: player.heroes.map((hero): Hero => {
+      const skills = (hero.skills as HeroSkills | undefined) ?? {};
+      const pendingSkillChoices = getVisiblePendingSkillChoices({
+        gameId: String(data.id ?? ""),
+        heroId: hero.id,
+        heroLevel: hero.level,
+        skills,
+        mapState,
+      });
+      return {
+        id: hero.id,
+        name: hero.name,
+        class: (hero.class ?? "knight") as HeroClass,
+        specialty: hero.specialty ?? undefined,
+        level: hero.level,
+        experience: hero.experience,
+        stats: {
+          attack: hero.attack,
+          defense: hero.defense,
+          spellPower: hero.spellPower,
+          knowledge: hero.knowledge,
+          morale: Number(hero.morale ?? 0),
+          luck: Number(hero.luck ?? 0),
+        },
+        mana: hero.mana ?? hero.knowledge * 10,
+        hasSpellBook: hero.hasSpellBook ?? true,
+        knownSpellIds: hero.knownSpellIds ?? null,
+        artifacts: normalizeArtifactBag(hero.artifacts),
+        skills,
+        warMachines: (hero.warMachines as { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } | undefined) ?? {},
+        pendingSkillChoices,
+        position: { x: hero.x, y: hero.y },
+        movement: hero.movement,
+        maxMovement: hero.maxMovement,
+        armies: hero.armies.map((army) => ({
+          id: army.id,
+          unitType: army.unitType as UnitType,
+          count: army.count,
+          health: army.health,
+          maxHealth: army.maxHealth,
+          position: army.position,
+        })),
+      };
+    }),
     tavernHeroes: player.tavernHeroes ?? [],
     towns: player.towns.map((town): Town => ({
       id: town.id,

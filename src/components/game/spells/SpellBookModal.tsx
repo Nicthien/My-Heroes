@@ -33,14 +33,15 @@ const SCHOOL_LABELS: Record<SpellSchool, string> = {
   all: "Toutes",
 };
 
-export function SpellBookButton({ onClick, label = "Livre de sorts" }: { onClick: () => void; label?: string }) {
+export function SpellBookButton({ onClick, label = "Livre de sorts", disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-violet-400/50 bg-violet-950/70 text-violet-100 shadow-[0_0_0_1px_rgba(221,214,254,0.14)_inset] transition hover:border-violet-200 hover:bg-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200/80"
+      className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-violet-400/50 bg-violet-950/70 text-violet-100 shadow-[0_0_0_1px_rgba(221,214,254,0.14)_inset] transition hover:border-violet-200 hover:bg-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200/80 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-violet-400/50 disabled:hover:bg-violet-950/70"
     >
       <BookIcon className="h-5 w-5" />
       <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-violet-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-violet-100 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-visible:opacity-100">

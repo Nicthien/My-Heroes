@@ -2,6 +2,7 @@ import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSideStatsSnapshot
 import { getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 import {
+  COMBAT_BASE_ROWS,
   COMBAT_COLS,
   COMBAT_ROWS,
   findHexPath,
@@ -22,7 +23,7 @@ import {
 } from "./rules";
 import { assignMoraleToBoard, refreshMoraleForRound, rollMorale, type MoraleContext } from "./morale";
 
-export { COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
+export { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
 
 export interface CombatParticipantSnapshot {
   id: string;
@@ -43,11 +44,12 @@ export function createCombatBoard(
   options: { environment?: CombatEnvironment; tacticsAdvance?: { attacker?: number; defender?: number } } = {}
 ) {
   const units: CombatBoardUnit[] = [];
-  const terrain = createCombatTerrain();
   const attackerAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.attacker ?? 0));
   const defenderAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.defender ?? 0));
-  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, 1 + attackerAdvance, 1, undefined, terrain);
-  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, COMBAT_COLS - 2 - defenderAdvance, 1, undefined, terrain);
+  const rowCount = getInitialCombatRows(attacker.armies.length, defender.armies.length);
+  const terrain = createCombatTerrain(rowCount);
+  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain);
+  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain);
   assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
@@ -95,14 +97,17 @@ function addUnits(
   ownerPlayerId: string | null,
   heroId: string | null,
   participantId: string | null,
-  q: number,
+  qColumns: number[],
   joinsRound: number,
-  preferredRows = [1, 2, 3, 4, 5, 6, 7],
+  rowCount = COMBAT_BASE_ROWS,
   terrain: CombatTerrainFeature[] = []
 ) {
+  const preferredRows = Array.from({ length: rowCount }, (_, row) => row);
   armies.filter((army) => army.count > 0).forEach((army, index) => {
     const rule = getUnitRule(army.unitType);
-    const r = findFreeRow(units, q, preferredRows[index % preferredRows.length], terrain);
+    const lane = Math.floor(index / rowCount);
+    const q = qColumns[Math.min(lane, qColumns.length - 1)];
+    const r = findFreeRow(units, q, preferredRows[index % preferredRows.length], terrain, rowCount);
     const count = Math.max(0, Number(army.count ?? 0));
     const maxHealth = rule.health;
     const health = Math.max(0, Math.min(Number(army.health ?? count * maxHealth), count * maxHealth));
@@ -142,7 +147,8 @@ export function addReinforcementUnits(params: {
   moraleContext?: MoraleContext;
 }) {
   const q = params.side === "attacker" ? 0 : COMBAT_COLS - 1;
-  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, q, params.joinsRound, [0, 1, 2, 3, 4, 5, 6, 7, 8], params.terrain ?? []);
+  const rowCount = getReinforcementCombatRows(params.units, params.armies.length, q, params.terrain ?? []);
+  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, [q], params.joinsRound, rowCount, params.terrain ?? []);
   assignMoraleToBoard(params.units, params.moraleContext ?? {});
 }
 
@@ -158,16 +164,38 @@ function buildMoraleContext(params: {
   };
 }
 
-function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, terrain: CombatTerrainFeature[]) {
-  for (let offset = 0; offset < COMBAT_ROWS; offset++) {
+function getInitialCombatRows(attackerStackCount: number, defenderStackCount: number) {
+  const maxStacks = Math.max(attackerStackCount, defenderStackCount);
+  return maxStacks > COMBAT_BASE_ROWS * 2 ? COMBAT_ROWS : COMBAT_BASE_ROWS;
+}
+
+function getVisibleCombatRows(units: CombatBoardUnit[], terrain: CombatTerrainFeature[] = []) {
+  const maxRow = [...units, ...terrain].reduce((max, item) => Math.max(max, Number(item.r ?? 0)), COMBAT_BASE_ROWS - 1);
+  return Math.max(COMBAT_BASE_ROWS, Math.min(COMBAT_ROWS, maxRow + 1));
+}
+
+function getReinforcementCombatRows(units: CombatBoardUnit[], incomingStacks: number, q: number, terrain: CombatTerrainFeature[] = []) {
+  const occupiedRows = new Set(units.filter((unit) => unit.count > 0 && unit.q === q).map((unit) => unit.r));
+  const neededRows = occupiedRows.size + incomingStacks;
+  return Math.max(getVisibleCombatRows(units, terrain), Math.min(COMBAT_ROWS, neededRows));
+}
+
+function getInitialColumns(side: CombatSide, advance: number) {
+  return side === "attacker"
+    ? [1 + advance, 0]
+    : [COMBAT_COLS - 2 - advance, COMBAT_COLS - 1];
+}
+
+function findFreeRow(units: CombatBoardUnit[], q: number, preferredRow: number, terrain: CombatTerrainFeature[], rowCount = COMBAT_BASE_ROWS) {
+  for (let offset = 0; offset < rowCount; offset++) {
     const candidates = [preferredRow + offset, preferredRow - offset];
     for (const r of candidates) {
-      if (r < 0 || r >= COMBAT_ROWS) continue;
+      if (r < 0 || r >= rowCount) continue;
       if (!isTerrainBlocked(q, r, terrain) && !units.some((unit) => unit.q === q && unit.r === r)) return r;
     }
   }
 
-  return Math.max(0, Math.min(COMBAT_ROWS - 1, preferredRow));
+  return Math.max(0, Math.min(rowCount - 1, preferredRow));
 }
 
 export function buildTurnQueue(units: CombatBoardUnit[], round = 1) {
@@ -459,7 +487,7 @@ function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | nu
   return attackerAlive ? "attacker" : "defender";
 }
 
-function createCombatTerrain() {
+function createCombatTerrain(rowCount = COMBAT_BASE_ROWS) {
   const terrain: CombatTerrainFeature[] = [];
   const occupied = new Set<string>();
   const addFeature = (type: CombatTerrainFeature["type"], q: number, r: number) => {
@@ -471,7 +499,7 @@ function createCombatTerrain() {
   };
 
   for (let pool = 0; pool < 2; pool++) {
-    let current = { q: 4 + Math.floor(Math.random() * 5), r: 2 + Math.floor(Math.random() * 5) };
+    let current = { q: 4 + Math.floor(Math.random() * 5), r: Math.min(rowCount - 1, 2 + Math.floor(Math.random() * 5)) };
     const size = 2 + Math.floor(Math.random() * 2);
     for (let index = 0; index < size; index++) {
       addFeature("water", current.q, current.r);
@@ -481,7 +509,7 @@ function createCombatTerrain() {
   }
 
   for (let rock = 0; rock < 4; rock++) {
-    addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * COMBAT_ROWS));
+    addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * rowCount));
   }
 
   return terrain;

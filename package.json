@@ -10,7 +10,7 @@
     "db:reset": "supabase db reset",
     "build": "next build",
     "start": "next start",
-    "lint": "node scripts/validate-visual-assets.mjs && eslint",
+    "lint": "node scripts/validate-text-encoding.mjs && node scripts/validate-visual-assets.mjs && eslint",
     "generate:hero-sprites": "node scripts/generate-hero-spritesheets.mjs",
     "generate:boat-sprites": "node scripts/generate-boat-spritesheet.mjs",
     "generate:town-sprites": "node scripts/generate-town-sprites.mjs",
@@ -22,6 +22,7 @@
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
     "validate:combat": "tsx scripts/validate-combat-core.ts",
     "validate:visual-assets": "node scripts/validate-visual-assets.mjs",
+    "validate:text-encoding": "node scripts/validate-text-encoding.mjs",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs",
     "test:e2e": "playwright test"

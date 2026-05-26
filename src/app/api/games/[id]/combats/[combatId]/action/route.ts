@@ -8,7 +8,7 @@ import {
   sideHasActivePlayerUnits,
   type CombatConcessionParticipant,
 } from "@/lib/game/combat/concession";
-import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
+import { findMeleeApproach, getReachableCombatCells, isInsideCombatCell, isTerrainBlocked } from "@/lib/game/combat/movement";
 import {
   executeCombatSpell,
   hasHeroCastCombatSpell,
@@ -27,6 +27,7 @@ import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { computeRaisedSkeletons } from "@/lib/game/combat/necromancy";
 import { computeSurrenderGoldCost } from "@/lib/game/combat/surrender";
 import { UNIT_RULES } from "@/lib/game/economy";
+import { HERO_ARMY_STACK_LIMIT } from "@/lib/game/army-stacks";
 import type { HeroSkills } from "@/lib/game/skills";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -107,7 +108,8 @@ export async function POST(
     });
   }
 
-  const bypassTurnAction = action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER" || action.type === "ACK_TRUCE";
+  const isTacticsAction = action.type === "TACTICS_MOVE" || action.type === "TACTICS_END";
+  const bypassTurnAction = action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER" || action.type === "ACK_TRUCE" || isTacticsAction;
   if (!bypassTurnAction && currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId && !currentActorIsAi) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
@@ -148,6 +150,11 @@ export async function POST(
     action.type !== "SURRENDER_COMBAT"
   ) {
     return NextResponse.json({ error: "Une negociation de reddition est en cours." }, { status: 400 });
+  }
+
+  const tacticsPhase = (boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+  if (tacticsPhase && !isTacticsAction) {
+    return NextResponse.json({ error: "Terminez la phase de tactique avant les actions de combat." }, { status: 400 });
   }
 
   if (action.type === "REQUEST_TRUCE") {
@@ -241,7 +248,6 @@ export async function POST(
   }
 
   if (action.type === "TACTICS_MOVE" || action.type === "TACTICS_END") {
-    const tacticsPhase = (boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
     if (!tacticsPhase) return NextResponse.json({ error: "Pas de phase de tactique en cours" }, { status: 400 });
     const expectedPlayerId = tacticsPhase.side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
     if (gamePlayerId !== expectedPlayerId) return NextResponse.json({ error: "Pas votre phase de tactique" }, { status: 403 });
@@ -249,9 +255,18 @@ export async function POST(
     if (action.type === "TACTICS_END") {
       const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
       void _drop;
+      const nextCurrentUnitId = (combat.turn_queue ?? []).find((unitId: string) =>
+        (boardState.units ?? []).some((unit) => unit.id === unitId && unit.count > 0)
+      ) ?? null;
+      const nextCurrentPlayerId = (boardState.units ?? []).find((unit) => unit.id === nextCurrentUnitId)?.ownerPlayerId ?? null;
       const { data, error } = await supabase
         .from("combats")
-        .update({ board_state: restBoard, action_log: [...(combat.action_log ?? []), "Phase de tactique terminée."] })
+        .update({
+          board_state: restBoard,
+          current_unit_id: nextCurrentUnitId,
+          current_player_id: nextCurrentPlayerId,
+          action_log: [...(combat.action_log ?? []), "Phase de tactique terminée.", "Combat lance."],
+        })
         .eq("id", combatId)
         .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
         .single();
@@ -263,7 +278,9 @@ export async function POST(
     const targetR = Number(action.r);
     const unit = (boardState.units ?? []).find((u: CombatBoardUnit) => u.id === action.unitId && u.side === tacticsPhase.side);
     if (!unit) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
-    if (!Number.isFinite(targetQ) || !Number.isFinite(targetR)) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
+    if (!Number.isInteger(targetQ) || !Number.isInteger(targetR) || !isInsideCombatCell(targetQ, targetR)) {
+      return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
+    }
     if (tacticsPhase.side === "attacker" && targetQ >= (tacticsPhase.maxColumn ?? 0)) {
       return NextResponse.json({ error: "Hors zone de tactique" }, { status: 400 });
     }
@@ -272,6 +289,9 @@ export async function POST(
     }
     if ((boardState.units ?? []).some((u: CombatBoardUnit) => u.q === targetQ && u.r === targetR)) {
       return NextResponse.json({ error: "Case occupée" }, { status: 400 });
+    }
+    if (isTerrainBlocked(targetQ, targetR, boardState.terrain ?? [])) {
+      return NextResponse.json({ error: "Case bloquee" }, { status: 400 });
     }
     const nextUnits = (boardState.units ?? []).map((u: CombatBoardUnit) => u.id === unit.id ? { ...u, q: targetQ, r: targetR } : u);
     const { data, error } = await supabase
@@ -1582,7 +1602,7 @@ async function applyNecromancyPostCombat(
   } else {
     const { data: armies } = await supabase.from("armies").select("position").eq("hero_id", winnerHeroId);
     const position = armies?.length ?? 0;
-    if (position < 7) {
+    if (position < HERO_ARMY_STACK_LIMIT) {
       await supabase.from("armies").insert({
         hero_id: winnerHeroId,
         unit_type: raised.unitType,

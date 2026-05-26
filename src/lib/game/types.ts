@@ -852,6 +852,8 @@ export type GameAction =
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
   | { type: "CAPTURE_BUILDING"; heroId: string; buildingId: string }
   | { type: "RECRUIT_UNIT"; townId: string; unitType: UnitType; count: number }
+  | { type: "MERGE_HERO_STACKS"; heroId: string; sourceStackId: string; targetStackId: string }
+  | { type: "SPLIT_HERO_STACK"; heroId: string; sourceStackId: string; count: number }
   | { type: "UPGRADE_TROOPS"; townId: string; unitType: UnitType; count: number; heroId?: string }
   | { type: "TRANSFER_GARRISON_TO_HERO"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
@@ -866,6 +868,7 @@ export type GameAction =
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }
   | { type: "END_TURN" }
+  | { type: "DEV_GRANT_HERO_SKILLS"; heroId: string }
   | { type: "CANCEL_END_TURN" };
 
 export interface CombatState {

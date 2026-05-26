@@ -20,6 +20,15 @@ import {
   type ExternalDwellingStateMap,
 } from "@/lib/game/external-dwellings";
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
+import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
+import {
+  HERO_ARMY_STACK_LIMIT,
+  UNIT_STACK_COUNT_CAP,
+  addUnitsToStacks,
+  removeUnitsFromStack,
+  sortedStacks,
+} from "@/lib/game/army-stacks";
+import { getCreature } from "@/lib/game/creature-catalog";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { makeRng } from "@/lib/game/engine/rng";
 import {
@@ -60,6 +69,7 @@ import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
 import { SPELLS, getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
+import { SKILL_DEFINITIONS, countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "@/lib/game/skills";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
 import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
@@ -250,6 +260,31 @@ export async function POST(
       const experience = hero.experience + amount;
       await applyHeroExperienceGain(supabase, id, hero.id, experience);
       return NextResponse.json({ success: true, heroId: hero.id, experience, amount });
+    }
+
+    if (action.type === "DEV_GRANT_HERO_SKILLS") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const skills = Object.fromEntries(SKILL_DEFINITIONS.map((skill) => [skill.id, "expert"])) as HeroSkills;
+      const skillUpdate = await supabase.from("heroes").update({ skills }).eq("id", hero.id);
+      if (skillUpdate.error) return NextResponse.json({ error: "Impossible d'ajouter les compétences." }, { status: 500 });
+
+      const mapState = (game.mapState as Record<string, unknown>) ?? {};
+      const latestMapState = await getLatestMapState(supabase, id, mapState);
+      const pendingMap = (latestMapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
+      if (pendingMap[hero.id]) {
+        const nextPending = { ...pendingMap };
+        delete nextPending[hero.id];
+        await supabase.from("games").update({
+          map_state: { ...latestMapState, pendingSkillChoices: nextPending },
+        }).eq("id", id);
+      }
+
+      return NextResponse.json({ success: true, heroId: hero.id, skillCount: SKILL_DEFINITIONS.length });
     }
 
     if (action.type === "DEV_TELEPORT_HERO") {
@@ -487,10 +522,12 @@ export async function POST(
           interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos, targetPosition: stopTargetPosition };
         }
       } else if (stopObject?.type === "monster" && stopTargetPosition && !killed.has(stopObject.id)) {
-        const diplomacy = await tryDiplomacyOnMonster({
+        const diplomacy = await resolveDiplomacyOnMonster({
           supabase,
           gameId: id,
           gamePlayerId: gamePlayer.id,
+          playerFaction: gamePlayer.faction,
+          playerGold: gamePlayer.gold,
           heroId: hero.id,
           monsterId: stopObject.id,
           neutralArmies: (game.neutralArmies ?? []) as Array<{ id: string; status: string; stacks?: Array<{ unitType: UnitType; count: number }> }>,
@@ -502,7 +539,9 @@ export async function POST(
           interaction = { type: "STOP", message: `Diplomatie : l'armée neutre s'enfuit.`, destination: lastPos };
         } else if (diplomacy?.outcome === "join") {
           await supabase.from("games").update({ map_state: { ...mapState, killed: Array.from(killed) } }).eq("id", id);
-          interaction = { type: "STOP", message: `Diplomatie : l'armée se joint à vous (${diplomacy.joinedCount} unités).`, destination: lastPos };
+          const costText = diplomacy.goldCost ? ` pour ${diplomacy.goldCost} or` : "";
+          const spaceText = diplomacy.remainder ? ` ${diplomacy.remainder} unités n'ont pas pu rejoindre faute de place.` : "";
+          interaction = { type: "STOP", message: `Diplomatie : l'armée se joint à vous (${diplomacy.joinedCount} unités${costText}).${spaceText}`, destination: lastPos };
         } else {
           interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "monster", destination: lastPos, targetPosition: stopTargetPosition };
         }
@@ -1142,6 +1181,81 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    if (action.type === "MERGE_HERO_STACKS") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      const sourceStackId = String(action.sourceStackId ?? "");
+      const targetStackId = String(action.targetStackId ?? "");
+      if (!hero || !sourceStackId || !targetStackId || sourceStackId === targetStackId) {
+        return NextResponse.json({ error: "Fusion invalide" }, { status: 400 });
+      }
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const stacks = sortedStacks(hero.armies);
+      const source = stacks.find((stack) => stack.id === sourceStackId);
+      const target = stacks.find((stack) => stack.id === targetStackId);
+      if (!source || !target || source.unitType !== target.unitType) {
+        return NextResponse.json({ error: "Les stacks doivent contenir la même unité" }, { status: 400 });
+      }
+      const room = Math.max(0, UNIT_STACK_COUNT_CAP - target.count);
+      if (room <= 0) return NextResponse.json({ error: "Le stack cible est déjà plein" }, { status: 400 });
+      const moved = Math.min(source.count, room);
+      const sourceRemoval = removeUnitsFromStack(source, moved);
+      const next = stacks
+        .flatMap((stack): MinimalArmy[] => {
+          if (stack.id === source.id) {
+            return sourceRemoval.remaining.count > 0 ? [sourceRemoval.remaining] : [];
+          }
+          if (stack.id === target.id) {
+            const nextCount = target.count + moved;
+            return [{
+              ...target,
+              count: nextCount,
+              health: Math.min(nextCount * target.maxHealth, target.health + sourceRemoval.removedHealth),
+            }];
+          }
+          return [stack];
+        })
+        .map((stack, position) => ({ ...stack, position }));
+      await persistHeroArmyDiff(supabase, hero.id, stacks, next);
+      return NextResponse.json({ success: true, moved });
+    }
+
+    if (action.type === "SPLIT_HERO_STACK") {
+      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+      const sourceStackId = String(action.sourceStackId ?? "");
+      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+      if (!hero || !sourceStackId) return NextResponse.json({ error: "Séparation invalide" }, { status: 400 });
+      if (isHeroInActiveCombat(game.combats, hero.id)) {
+        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
+      }
+
+      const stacks = sortedStacks(hero.armies);
+      if (stacks.length >= HERO_ARMY_STACK_LIMIT) {
+        return NextResponse.json({ error: "L'armée du héros est pleine" }, { status: 400 });
+      }
+      const source = stacks.find((stack) => stack.id === sourceStackId);
+      if (!source || source.count <= 1 || count >= source.count) {
+        return NextResponse.json({ error: "Quantité invalide" }, { status: 400 });
+      }
+
+      const removal = removeUnitsFromStack(source, count);
+      const position = stacks.length;
+      const newStack: MinimalArmy = {
+        id: randomUUID(),
+        unitType: source.unitType,
+        count: removal.removed,
+        health: removal.removedHealth,
+        maxHealth: source.maxHealth,
+        position,
+      };
+      const next = sortedStacks(stacks.map((stack) => stack.id === source.id ? removal.remaining : stack).concat(newStack))
+        .map((stack, nextPosition) => ({ ...stack, position: nextPosition }));
+      await persistHeroArmyDiff(supabase, hero.id, stacks, next);
+      return NextResponse.json({ success: true });
+    }
+
     if (action.type === "UPGRADE_TROOPS") {
       const unitType = action.unitType as UnitType;
       const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
@@ -1185,11 +1299,17 @@ export async function POST(
       const resources = playerResources(gamePlayer);
       if (!canAfford(resources, totalCost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
-      await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
       if (sourceHero) {
+        const afterRemoval = removeUnitsFromStackList(sourceHero.armies, unitType, count, baseRule.health);
+        const capacity = addUnitsToStacks(afterRemoval, upgradedUnitType, count, upgradedRule.health, () => randomUUID());
+        if (capacity.remainder > 0) {
+          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
+        }
+        await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
         await removeUnitsFromHeroArmy(supabase, source, count, baseRule.health);
         await addUnitsToHeroArmy(supabase, sourceHero, upgradedUnitType, count, upgradedRule.health);
       } else {
+        await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
         const nextGarrison = addUnitsToStackList(
           removeUnitsFromStackList(garrison, unitType, count, baseRule.health),
           upgradedUnitType,
@@ -1218,11 +1338,22 @@ export async function POST(
       }
 
       const acceptedCreatures = normalizeCreatureRewardSelection(action.creatures, pendingReward.reward.creatures ?? []);
+      let rewardCapacityCheck = sortedStacks(hero.armies);
+      for (const [unitTypeValue, count] of Object.entries(acceptedCreatures)) {
+        const unitType = unitTypeValue as UnitType;
+        if (count <= 0) continue;
+        const rule = getUnitRule(unitType);
+        const result = addUnitsToStacks(rewardCapacityCheck, unitType, count, rule.health, () => randomUUID());
+        if (result.remainder > 0) {
+          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
+        }
+        rewardCapacityCheck = result.stacks;
+      }
       const newStackTypes = Object.entries(acceptedCreatures)
         .filter(([, count]) => count > 0)
         .map(([unitType]) => unitType as UnitType)
         .filter((unitType) => !hero.armies.some((army) => army.unitType === unitType));
-      const maxHeroStacks = 7;
+      const maxHeroStacks = HERO_ARMY_STACK_LIMIT;
       if (hero.armies.length + newStackTypes.length > maxHeroStacks) {
         return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
       }
@@ -1241,27 +1372,11 @@ export async function POST(
         await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + pendingReward.reward.experience);
       }
 
-      let nextPosition = hero.armies.length;
       for (const [unitTypeValue, count] of Object.entries(acceptedCreatures)) {
         const unitType = unitTypeValue as UnitType;
         if (count <= 0) continue;
         const rule = getUnitRule(unitType);
-        const existing = hero.armies.find((army) => army.unitType === unitType);
-        if (existing) {
-          await supabase.from("armies").update({
-            count: existing.count + count,
-            health: existing.health + rule.health * count,
-          }).eq("id", existing.id);
-        } else {
-          await supabase.from("armies").insert({
-            hero_id: hero.id,
-            unit_type: unitType,
-            count,
-            health: rule.health * count,
-            max_health: rule.health,
-            position: nextPosition++,
-          });
-        }
+        await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
       }
 
       let nextHeroArtifacts = normalizeArtifactBag(hero.artifacts);
@@ -1275,11 +1390,12 @@ export async function POST(
         };
         await supabase.from("heroes").update({ artifacts: nextHeroArtifacts }).eq("id", hero.id);
       }
+      const latestMapState = await getLatestMapState(supabase, id, mapState);
       await supabase.from("games").update({
         map_state: {
-          ...mapState,
+          ...latestMapState,
           creatureBanks: {
-            ...creatureBanks,
+            ...((latestMapState.creatureBanks as typeof creatureBanks | undefined) ?? creatureBanks),
             [pendingReward.bankId]: {
               ...bankState,
               defeated: true,
@@ -1309,26 +1425,15 @@ export async function POST(
       if (!source || source.count < count) {
         return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
       }
+      const capacity = addUnitsToStacks(sortedStacks(hero.armies), unitType, count, rule.health, () => randomUUID());
+      if (capacity.remainder > 0) {
+        return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
+      }
 
       const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
       await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
 
-      const existing = hero.armies.find((army) => army.unitType === unitType);
-      if (existing) {
-        await supabase.from("armies").update({
-          count: existing.count + count,
-          health: existing.health + rule.health * count,
-        }).eq("id", existing.id);
-      } else {
-        await supabase.from("armies").insert({
-          hero_id: hero.id,
-          unit_type: unitType,
-          count,
-          health: rule.health * count,
-          max_health: rule.health,
-          position: hero.armies.length,
-        });
-      }
+      await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
 
       return NextResponse.json({ success: true });
     }
@@ -1380,6 +1485,10 @@ export async function POST(
       if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO") {
         const source = (gate.garrison ?? []).find((unit) => unit.unitType === unitType);
         if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
+        const capacity = addUnitsToStacks(sortedStacks(hero.armies), unitType, count, rule.health, () => randomUUID());
+        if (capacity.remainder > 0) {
+          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
+        }
 
         if (source.count === count) {
           await supabase.from("gate_stacks").delete().eq("id", source.id);
@@ -1505,22 +1614,35 @@ export async function POST(
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
       const pendingMap = (mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
       const pending = pendingMap[hero.id] ?? [];
-      const idx = pending.findIndex((entry) => entry.level === level);
-      if (idx < 0) return NextResponse.json({ error: "Aucun choix de compétence en attente pour ce niveau" }, { status: 400 });
-      const entry = pending[idx];
-      if (!entry.options.includes(choice)) return NextResponse.json({ error: "Choix invalide" }, { status: 400 });
       const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
-      const currentSkills = ((heroRow?.skills ?? {}) as Record<string, "basic" | "advanced" | "expert">);
-      const current = currentSkills[choice];
+      const currentSkills = ((heroRow?.skills ?? {}) as HeroSkills);
+      let idx = pending.findIndex((entry) => entry.level === level);
+      let entry = idx >= 0 ? pending[idx] : null;
+      if (!entry) {
+        const expectedFromLevels = Math.max(0, Number(hero.level ?? 1) - 1);
+        const learnedFromLevels = countSkillLevels(currentSkills);
+        const repairLevel = learnedFromLevels + 2;
+        const repairedOptions = learnedFromLevels < expectedFromLevels && level === repairLevel
+          ? generateSkillChoices(currentSkills, `${id}:${hero.id}:level:${level}`)
+          : [];
+        if (repairedOptions.length > 0) {
+          entry = { level, options: repairedOptions };
+          idx = -1;
+        }
+      }
+      if (!entry) return NextResponse.json({ error: "Aucun choix de compétence en attente pour ce niveau" }, { status: 400 });
+      if (!entry.options.includes(choice as SkillId)) return NextResponse.json({ error: "Choix invalide" }, { status: 400 });
+      const skillChoice = choice as SkillId;
+      const current = currentSkills[skillChoice];
       const next: "basic" | "advanced" | "expert" =
         current === "expert" ? "expert" : current === "advanced" ? "expert" : current === "basic" ? "advanced" : "basic";
-      const nextSkills = { ...currentSkills, [choice]: next };
+      const nextSkills = { ...currentSkills, [skillChoice]: next };
       const skillUpdate = await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
       if (skillUpdate.error) {
         console.error("LEARN_SKILL: failed to persist hero skills", skillUpdate.error);
         return NextResponse.json({ error: "Impossible d'enregistrer la compétence (DB)" }, { status: 500 });
       }
-      const remaining = pending.filter((_, i) => i !== idx);
+      const remaining = idx >= 0 ? pending.filter((_, i) => i !== idx) : pending;
       const nextPending = { ...pendingMap };
       if (remaining.length > 0) nextPending[hero.id] = remaining;
       else delete nextPending[hero.id];
@@ -1691,35 +1813,25 @@ function addRecruitGrowth(
 }
 
 function addUnitsToStackList(stacks: MinimalArmy[], unitType: UnitType, count: number, maxHealth: number) {
-  const existing = stacks.find((unit) => unit.unitType === unitType);
-  if (existing) {
-    return stacks.map((unit) =>
-      unit.id === existing.id
-        ? { ...unit, count: unit.count + count, health: unit.health + maxHealth * count }
-        : unit
-    );
-  }
-
-  return [
-    ...stacks,
-    {
-      id: randomUUID(),
-      unitType,
-      count,
-      health: maxHealth * count,
-      maxHealth,
-      position: stacks.length,
-    },
-  ];
+  return addUnitsToStacks(
+    stacks,
+    unitType,
+    count,
+    maxHealth,
+    () => randomUUID(),
+    Math.max(HERO_ARMY_STACK_LIMIT, stacks.length + Math.ceil(count / UNIT_STACK_COUNT_CAP)),
+  ).stacks;
 }
 
 function removeUnitsFromStackList(stacks: MinimalArmy[], unitType: UnitType, count: number, maxHealth: number) {
+  let remaining = Math.max(0, Math.floor(count));
   return stacks
-    .map((unit) =>
-      unit.unitType === unitType
-        ? { ...unit, count: unit.count - count, health: Math.max(0, unit.health - maxHealth * count) }
-        : unit
-    )
+    .map((unit) => {
+      if (unit.unitType !== unitType || remaining <= 0) return unit;
+      const removed = Math.min(unit.count, remaining);
+      remaining -= removed;
+      return { ...unit, count: unit.count - removed, health: Math.max(0, unit.health - maxHealth * removed) };
+    })
     .filter((unit) => unit.count > 0)
     .map((unit, position) => ({ ...unit, position }));
 }
@@ -1830,23 +1942,24 @@ async function addUnitsToHeroArmy(
   count: number,
   maxHealth: number,
 ) {
-  const existing = hero.armies.find((army) => army.unitType === unitType);
-  if (existing) {
-    await supabase.from("armies").update({
-      count: existing.count + count,
-      health: existing.health + maxHealth * count,
-    }).eq("id", existing.id);
-    return;
-  }
-
-  await supabase.from("armies").insert({
-    hero_id: hero.id,
-    unit_type: unitType,
-    count,
-    health: maxHealth * count,
-    max_health: maxHealth,
-    position: hero.armies.length,
-  });
+  const { data } = await supabase
+    .from("armies")
+    .select("id,unit_type,count,health,max_health,position")
+    .eq("hero_id", hero.id)
+    .order("position", { ascending: true });
+  const current = sortedStacks(
+    ((data ?? []) as Array<{ id: string; unit_type: UnitType; count: number; health: number; max_health: number; position: number }>)
+      .map((stack) => ({
+        id: stack.id,
+        unitType: stack.unit_type,
+        count: Number(stack.count ?? 0),
+        health: Number(stack.health ?? 0),
+        maxHealth: Number(stack.max_health ?? maxHealth),
+        position: Number(stack.position ?? 0),
+      }))
+  );
+  const next = addUnitsToStacks(current, unitType, count, maxHealth, () => randomUUID()).stacks;
+  await persistHeroArmyDiff(supabase, hero.id, current, next);
 }
 
 async function removeUnitsFromHeroArmy(
@@ -1864,6 +1977,43 @@ async function removeUnitsFromHeroArmy(
     count: source.count - count,
     health: Math.max(0, source.health - maxHealth * count),
   }).eq("id", source.id);
+}
+
+async function persistHeroArmyDiff(
+  supabase: ReturnType<typeof createAdminClient>,
+  heroId: string,
+  before: MinimalArmy[],
+  after: MinimalArmy[],
+) {
+  const afterById = new Map(after.map((stack) => [stack.id, stack]));
+  for (const stack of before) {
+    if (!afterById.has(stack.id)) {
+      await supabase.from("armies").delete().eq("id", stack.id).eq("hero_id", heroId);
+    }
+  }
+
+  const beforeIds = new Set(before.map((stack) => stack.id));
+  for (const stack of after) {
+    if (beforeIds.has(stack.id)) {
+      await supabase.from("armies").update({
+        unit_type: stack.unitType,
+        count: stack.count,
+        health: stack.health,
+        max_health: stack.maxHealth,
+        position: stack.position,
+      }).eq("id", stack.id).eq("hero_id", heroId);
+    } else {
+      await supabase.from("armies").insert({
+        id: stack.id,
+        hero_id: heroId,
+        unit_type: stack.unitType,
+        count: stack.count,
+        health: stack.health,
+        max_health: stack.maxHealth,
+        position: stack.position,
+      });
+    }
+  }
 }
 
 async function addUnitsToGateGarrison(
@@ -2035,10 +2185,9 @@ async function handleAdventureBuildingVisit({
     const unitRule = UNIT_RULES[current.unitType];
     const recruitCost = tierForUnit(current.unitType)?.tier === 0 ? {} : unitRule.cost;
     const resources = playerResources(gamePlayer);
-    const stackAlreadyPresent = hero.armies.some((army) => army.unitType === current.unitType);
-    const hasFreeStack = hero.armies.length < 7;
     const maxByResources = getAffordableCount(resources, recruitCost, current.available);
-    const recruitCount = stackAlreadyPresent || hasFreeStack ? maxByResources : 0;
+    const capacity = addUnitsToStacks(sortedStacks(hero.armies), current.unitType, maxByResources, unitRule.health, () => randomUUID());
+    const recruitCount = capacity.added;
     const nextState = {
       ...current,
       ownerId: gamePlayer.id,
@@ -2066,7 +2215,7 @@ async function handleAdventureBuildingVisit({
     const label = getExternalDwellingLabel(current.unitType);
     const message = recruitCount > 0
       ? `${label} capturée : ${recruitCount} ${unitRule.label} recruté(e)s.`
-      : !stackAlreadyPresent && !hasFreeStack
+      : maxByResources > 0 && capacity.added <= 0
       ? `${label} capturée, mais l'armée du héros est pleine.`
       : `${label} capturée. Recrues disponibles : ${nextState.available}.`;
 
@@ -2660,12 +2809,22 @@ async function updateHeroAdventureVisits(
   heroId: string,
   buildingId: string,
 ) {
+  const latestMapState = await getLatestMapState(supabase, gameId, mapState);
   await supabase.from("games").update({
     map_state: {
-      ...mapState,
+      ...latestMapState,
       heroAdventureVisits: addVisit(visits, heroId, buildingId),
     },
   }).eq("id", gameId);
+}
+
+async function getLatestMapState(
+  supabase: SupabaseAdminClient,
+  gameId: string,
+  fallback: Record<string, unknown>,
+) {
+  const { data } = await supabase.from("games").select("map_state").eq("id", gameId).maybeSingle();
+  return (data?.map_state as Record<string, unknown> | undefined) ?? fallback;
 }
 
 async function applyHeroAttributeVisit(
@@ -2824,63 +2983,162 @@ function getArtifactMerchantBuilding(faction: Faction): BuildingType | null {
   return null;
 }
 
-async function tryDiplomacyOnMonster(params: {
+async function resolveDiplomacyOnMonster(params: {
   supabase: SupabaseAdminClient;
   gameId: string;
   gamePlayerId: string;
+  playerFaction?: string;
+  playerGold: number;
   heroId: string;
   monsterId: string;
   neutralArmies: Array<{ id: string; status: string; stacks?: Array<{ unitType: UnitType; count: number }> }>;
   killedSet: Set<string>;
   mapState: Record<string, unknown>;
-}): Promise<{ outcome: "flee" | "join"; joinedCount?: number } | null> {
-  const { data: heroRow } = await params.supabase.from("heroes").select("skills").eq("id", params.heroId).maybeSingle();
-  const lvl = (() => {
-    const v = (heroRow?.skills as Record<string, string> | null)?.diplomacy;
-    return v === "expert" ? 3 : v === "advanced" ? 2 : v === "basic" ? 1 : 0;
-  })();
-  if (lvl <= 0) return null;
+}): Promise<{ outcome: "flee" | "join"; joinedCount?: number; goldCost?: number; remainder?: number } | null> {
+  void params.gameId;
+  void params.mapState;
   const army = params.neutralArmies.find((a) => a.id === params.monsterId);
-  if (!army || army.status !== "ACTIVE") return null;
+  if (!army || army.status !== "ACTIVE" || !army.stacks?.length) return null;
 
-  const fleeChance = lvl === 1 ? 0.10 : lvl === 2 ? 0.30 : 0.60;
-  const joinChance = lvl === 1 ? 0.05 : lvl === 2 ? 0.15 : 0.40;
-  const roll = Math.random();
+  const { data: heroRow } = await params.supabase
+    .from("heroes")
+    .select("attack,defense,morale,luck,skills,armies(*)")
+    .eq("id", params.heroId)
+    .maybeSingle();
+  if (!heroRow) return null;
 
-  if (roll < joinChance && army.stacks && army.stacks.length > 0) {
-    // Join : ajoute le 1er stack au héros si place dispo
-    const { data: heroArmies } = await params.supabase.from("armies").select("id,position,unit_type,count,health").eq("hero_id", params.heroId);
-    const existingStacks = (heroArmies ?? []) as Array<{ id: string; position: number; unit_type: string; count: number; health: number }>;
-    if (existingStacks.length >= 7) return null;
-    const stack = army.stacks[0];
-    const rule = UNIT_RULES[stack.unitType];
-    if (!rule) return null;
-    const existing = existingStacks.find((e) => e.unit_type === stack.unitType);
-    if (existing) {
-      await params.supabase.from("armies").update({
-        count: existing.count + stack.count,
-        health: existing.health + rule.health * stack.count,
-      }).eq("id", existing.id);
-    } else {
-      await params.supabase.from("armies").insert({
-        hero_id: params.heroId,
-        unit_type: stack.unitType,
-        count: stack.count,
-        health: rule.health * stack.count,
-        max_health: rule.health,
-        position: existingStacks.length,
-      });
+  const heroArmies = (((heroRow as { armies?: unknown[] }).armies ?? []) as Array<{
+    id: string;
+    unit_type: UnitType;
+    count: number;
+    health: number;
+    max_health: number;
+    position: number;
+  }>).map((stack) => ({
+    id: stack.id,
+    unitType: stack.unit_type,
+    count: Number(stack.count ?? 0),
+    health: Number(stack.health ?? 0),
+    maxHealth: Number(stack.max_health ?? getUnitRule(stack.unit_type).health),
+    position: Number(stack.position ?? 0),
+  }));
+  const diplomacyLevel = getDiplomacyLevel((heroRow?.skills as Record<string, string> | null)?.diplomacy);
+  const neutralStacks = army.stacks.map((stack, position) => {
+    const rule = getUnitRule(stack.unitType);
+    const count = Math.max(0, Number(stack.count ?? 0));
+    return {
+      id: `${army.id}:${position}`,
+      unitType: stack.unitType,
+      count,
+      health: rule.health * count,
+      maxHealth: rule.health,
+      position,
+    };
+  });
+
+  const heroPower = calculateArmyPower({
+    id: params.heroId,
+    attack: Number((heroRow as { attack?: number }).attack ?? 1),
+    defense: Number((heroRow as { defense?: number }).defense ?? 1),
+    morale: Number((heroRow as { morale?: number }).morale ?? 0),
+    luck: Number((heroRow as { luck?: number }).luck ?? 0),
+    armies: heroArmies,
+  });
+  const neutralPower = calculateArmyPower({ id: army.id, attack: 1, defense: 1, morale: 0, armies: neutralStacks });
+  const mood = getNeutralArmyMood(params.monsterId);
+  const alignment = getNeutralAlignmentModifier(params.playerFaction, neutralStacks);
+  const strengthRatio = heroPower / Math.max(1, neutralPower);
+  const moodBonus = NEUTRAL_MOOD_PROFILES[mood].joinModifier;
+  const joinThreshold = Math.max(1.12, 2.2 - diplomacyLevel * 0.28 - moodBonus - alignment);
+  const fleeThreshold = Math.max(1.35, 2.65 - moodBonus * 0.55 - alignment * 0.35);
+
+  if (diplomacyLevel > 0 && strengthRatio >= joinThreshold) {
+    const goldCost = getDiplomacyGoldCost(neutralStacks, diplomacyLevel, mood, alignment);
+    if (params.playerGold < goldCost) {
+      if (strengthRatio >= fleeThreshold) return markNeutralArmyAsFled(params);
+      return null;
+    }
+
+    let nextArmies = sortedStacks(heroArmies);
+    let joinedCount = 0;
+    let remainder = 0;
+    for (const stack of neutralStacks) {
+      const rule = getUnitRule(stack.unitType);
+      const result = addUnitsToStacks(nextArmies, stack.unitType, stack.count, rule.health, () => randomUUID());
+      nextArmies = result.stacks;
+      joinedCount += result.added;
+      remainder += result.remainder;
+    }
+    if (joinedCount <= 0) return null;
+    await persistHeroArmyDiff(params.supabase, params.heroId, sortedStacks(heroArmies), nextArmies);
+    if (goldCost > 0) {
+      await params.supabase.from("game_players").update({ gold: params.playerGold - goldCost }).eq("id", params.gamePlayerId);
     }
     await params.supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
     params.killedSet.add(params.monsterId);
-    return { outcome: "join", joinedCount: stack.count };
+    return { outcome: "join", joinedCount, goldCost, remainder };
   }
-  if (roll < joinChance + fleeChance) {
-    await params.supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
-    params.killedSet.add(params.monsterId);
-    return { outcome: "flee" };
-  }
+
+  if (strengthRatio >= fleeThreshold) return markNeutralArmyAsFled(params);
   return null;
+}
+
+async function markNeutralArmyAsFled(params: {
+  supabase: SupabaseAdminClient;
+  monsterId: string;
+  killedSet: Set<string>;
+  neutralArmies: Array<{ id: string; status: string }>;
+}): Promise<{ outcome: "flee" }> {
+  const army = params.neutralArmies.find((a) => a.id === params.monsterId);
+  if (army) await params.supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", army.id);
+  params.killedSet.add(params.monsterId);
+  return { outcome: "flee" };
+}
+
+const NEUTRAL_MOOD_ORDER = ["savage", "hostile", "neutral", "friendly", "compliant"] as const;
+type NeutralArmyMood = (typeof NEUTRAL_MOOD_ORDER)[number];
+
+const NEUTRAL_MOOD_PROFILES: Record<NeutralArmyMood, { joinModifier: number; costModifier: number }> = {
+  savage: { joinModifier: -0.45, costModifier: 1.35 },
+  hostile: { joinModifier: -0.2, costModifier: 1.15 },
+  neutral: { joinModifier: 0, costModifier: 1 },
+  friendly: { joinModifier: 0.35, costModifier: 0.85 },
+  compliant: { joinModifier: 0.65, costModifier: 0.65 },
+};
+
+function getDiplomacyLevel(level: string | undefined) {
+  if (level === "expert") return 3;
+  if (level === "advanced") return 2;
+  if (level === "basic") return 1;
+  return 0;
+}
+
+function getNeutralArmyMood(monsterId: string): NeutralArmyMood {
+  return NEUTRAL_MOOD_ORDER[Math.abs(hashString(monsterId)) % NEUTRAL_MOOD_ORDER.length];
+}
+
+function getNeutralAlignmentModifier(playerFaction: string | undefined, stacks: MinimalArmy[]) {
+  if (!playerFaction) return 0;
+  const dominant = [...stacks].sort((a, b) => b.count - a.count)[0];
+  if (!dominant) return 0;
+  const group = getCreature(dominant.unitType).group;
+  if (group === "neutral") return 0.08;
+  if (group === playerFaction) return 0.35;
+  if ((playerFaction === Faction.NECROPOLIS && group !== "necropolis") || (group === "necropolis" && playerFaction !== Faction.NECROPOLIS)) return -0.3;
+  return 0;
+}
+
+function getDiplomacyGoldCost(stacks: MinimalArmy[], diplomacyLevel: number, mood: NeutralArmyMood, alignment: number) {
+  const value = stacks.reduce((total, stack) => total + getUnitRule(stack.unitType).power * stack.count, 0);
+  const diplomacyModifier = diplomacyLevel === 3 ? 0.35 : diplomacyLevel === 2 ? 0.55 : 0.75;
+  const alignmentModifier = alignment > 0 ? 0.9 : alignment < 0 ? 1.15 : 1;
+  return Math.max(0, Math.ceil(value * diplomacyModifier * NEUTRAL_MOOD_PROFILES[mood].costModifier * alignmentModifier));
+}
+
+function hashString(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  return hash;
 }
 
 async function applyOwnTownVisitBonuses({

@@ -50,11 +50,11 @@ import {
   getUnitTitle,
 } from "./combatLayout";
 
-type CombatHoverAction = "move" | "melee" | "ranged" | "rangedHampered";
+type CombatHoverAction = "move" | "mêlée" | "ranged" | "rangedHampered";
 
 const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
   move: GAME_CURSORS.combat.moveWalk,
-  melee: GAME_CURSORS.combat.attack,
+  mêlée: GAME_CURSORS.combat.attack,
   ranged: GAME_CURSORS.combat.shotGood,
   rangedHampered: GAME_CURSORS.combat.shotBad,
 };
@@ -309,9 +309,9 @@ export function IsoBattlefield({
   const terrain = combat.boardState.terrain ?? [];
   const [visualUnits, setVisualUnits] = useState<CombatBoardUnit[]>(units);
   const [damagedUnitIds, setDamagedUnitIds] = useState(() => new Set<string>());
-  const [attackingUnit, setAttackingUnit] = useState<{ id: string; kind: "melee" | "ranged" } | null>(null);
+  const [attackingUnit, setAttackingUnit] = useState<{ id: string; kind: "mêlée" | "ranged" } | null>(null);
   const [attackEffect, setAttackEffect] = useState<
-    | { kind: "melee"; targetQ: number; targetR: number; key: number }
+    | { kind: "mêlée"; targetQ: number; targetR: number; key: number }
     | { kind: "ranged"; fromQ: number; fromR: number; targetQ: number; targetR: number; key: number }
     | null
   >(null);
@@ -431,9 +431,9 @@ export function IsoBattlefield({
       ? units.find((u) => u.id === enemyDamagedId) ?? previousUnits.find((u) => u.id === enemyDamagedId) ?? null
       : null;
     const actorMoved = actor ? movedIds.includes(actor.id) : false;
-    const attackKind: "melee" | "ranged" | null = actor && enemyTarget
+    const attackKind: "mêlée" | "ranged" | null = actor && enemyTarget
       ? actorMoved || !actor.ranged
-        ? "melee"
+        ? "mêlée"
         : "ranged"
       : null;
     // Actor position at the moment of impact: where it ends up after the move,
@@ -458,14 +458,14 @@ export function IsoBattlefield({
       }, attackStart + UNIT_ATTACK_ANIMATION_MS);
       attackTimeoutsRef.current.push(clearAttackTimeout);
 
-      // Impact effect: slash overlay on target for melee, projectile from actor
+      // Impact effect: slash overlay on target for mêlée, projectile from actor
       // to target for ranged. Triggered at the strike apex of the lunge.
       if (enemyTarget && actorAtImpact) {
         const effectKey = Date.now();
         const impactDelay = attackStart + UNIT_ATTACK_IMPACT_OFFSET_MS;
         const effect =
-          attackKind === "melee"
-            ? { kind: "melee" as const, targetQ: enemyTarget.q, targetR: enemyTarget.r, key: effectKey }
+          attackKind === "mêlée"
+            ? { kind: "mêlée" as const, targetQ: enemyTarget.q, targetR: enemyTarget.r, key: effectKey }
             : {
                 kind: "ranged" as const,
                 fromQ: actorAtImpact.q,
@@ -659,11 +659,11 @@ export function IsoBattlefield({
             ? "rangedHampered"
             : "ranged"
           : enemyUnit && meleeApproach
-            ? "melee"
+            ? "mêlée"
             : reachable
               ? "move"
               : null;
-      const attackable = hoverAction === "melee" || hoverAction === "ranged" || hoverAction === "rangedHampered";
+      const attackable = hoverAction === "mêlée" || hoverAction === "ranged" || hoverAction === "rangedHampered";
       const { x, y } = getIsoPosition(q, r);
       const canClick = isMyAction && !feature && Boolean(hoverAction);
 
@@ -721,7 +721,7 @@ export function IsoBattlefield({
             if (unit && (hoverAction === "ranged" || hoverAction === "rangedHampered")) {
               setPendingMove(null);
               onAction({ type: "SHOOT", targetUnitId: unit.id });
-            } else if (unit && hoverAction === "melee") {
+            } else if (unit && hoverAction === "mêlée") {
               setPendingMove(null);
               onAction({ type: "ATTACK", targetUnitId: unit.id });
             } else if (reachable && currentUnit) {
@@ -999,7 +999,7 @@ export function IsoBattlefield({
         {unitModels}
         {unitBadges}
         {attackEffect && (() => {
-          if (attackEffect.kind === "melee") {
+          if (attackEffect.kind === "mêlée") {
             const { x, y } = getIsoPosition(attackEffect.targetQ, attackEffect.targetR);
             return (
               <span
@@ -1013,7 +1013,7 @@ export function IsoBattlefield({
                   zIndex: attackEffect.targetR * 100 + 60,
                 }}
               >
-                <span className="combat-melee-slash" />
+                <span className="combat-mêlée-slash" />
               </span>
             );
           }

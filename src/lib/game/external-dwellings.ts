@@ -12,7 +12,7 @@ export const EXTERNAL_DWELLING_NAMES: Partial<Record<UnitType, string>> = {
   [UnitType.GRIFFIN]: "Tour des griffons",
   [UnitType.SWORDSMAN]: "Caserne",
   [UnitType.MONK]: "Monastere",
-  [UnitType.CAVALIER]: "Terrain d'entrainement",
+  [UnitType.CAVALIER]: "Terrain d'entraînement",
   [UnitType.ANGEL]: "Portail de gloire",
   [UnitType.CENTAUR]: "Ecuries de centaures",
   [UnitType.DWARF]: "Chaumiere des nains",

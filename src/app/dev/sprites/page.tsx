@@ -230,39 +230,39 @@ const ADVENTURE_BUILDING_DETAILS: Record<string, { label: string; description: s
 
 ADVENTURE_BUILDING_DETAILS["adventure-stables"] = {
   label: "Ecuries",
-  description: "Accorde un bonus hebdomadaire de deplacement au heros.",
+  description: "Accorde un bonus hebdomadaire de déplacement au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-temple"] = {
   label: "Temple",
-  description: "Accorde +1 Moral au heros qui le visite.",
+  description: "Accorde +1 Moral au héros qui le visite.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-fountain-of-fortune"] = {
   label: "Fontaine de fortune",
-  description: "Accorde +1 Chance au heros qui la visite.",
+  description: "Accorde +1 Chance au héros qui la visite.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-idol-of-fortune"] = {
   label: "Idole de fortune",
-  description: "Accorde +1 Moral et +1 Chance au heros qui la visite.",
+  description: "Accorde +1 Moral et +1 Chance au héros qui la visite.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-magic-well"] = {
   label: "Puits magique",
-  description: "Restaure la mana du heros une fois par semaine.",
+  description: "Restaure la mana du héros une fois par semaine.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-magic-shrine"] = {
   label: "Sanctuaire magique",
-  description: "Restaure 20 mana au heros qui le visite.",
+  description: "Restaure 20 mana au héros qui le visite.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-water-mill"] = {
-  label: "Moulin a eau",
+  label: "Moulin à eau",
   description: "Produit 1000 Or une fois par semaine pour le joueur.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-water-wheel"] = {
-  label: "Roue a eau",
+  label: "Roue à eau",
   description: "Produit 500 Or une fois par semaine pour le joueur.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-abandoned-wagon"] = {
   label: "Chariot abandonne",
-  description: "Contient une petite recompense de carte fouillable une seule fois.",
+  description: "Contient une petite récompense de carte fouillable une seule fois.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-crate"] = {
   label: "Caisse",
@@ -274,43 +274,43 @@ ADVENTURE_BUILDING_DETAILS["adventure-skeleton"] = {
 };
 ADVENTURE_BUILDING_DETAILS["adventure-obelisk"] = {
   label: "Obelisque",
-  description: "Revele une grande region autour du batiment.",
+  description: "Révèle une grande region autour du bâtiment.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-warrior-tomb"] = {
   label: "Tombe du guerrier",
-  description: "Offre Or et XP, mais retire 1 Moral au heros.",
+  description: "Offre Or et XP, mais retire 1 Moral au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-cursed-altar"] = {
   label: "Autel maudit",
-  description: "Accorde +1 Pouvoir au heros, mais retire 1 Chance.",
+  description: "Accorde +1 Pouvoir au héros, mais retire 1 Chance.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-spell-shrine-1"] = {
   label: "Sanctuaire de sort I",
-  description: "Enseigne un sort de niveau 1 au heros.",
+  description: "Enseigne un sort de niveau 1 au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-spell-shrine-2"] = {
   label: "Sanctuaire de sort II",
-  description: "Enseigne un sort de niveau 2 au heros.",
+  description: "Enseigne un sort de niveau 2 au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-spell-shrine-3"] = {
   label: "Sanctuaire de sort III",
-  description: "Enseigne un sort de niveau 3 au heros.",
+  description: "Enseigne un sort de niveau 3 au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-tree-of-knowledge"] = {
   label: "Arbre de connaissance",
   description: "Accorde 2000 XP contre 2000 Or.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-seer-hut"] = {
-  label: "Hutte d'erudit",
+  label: "Hutte d'érudit",
   description: "Accorde 1000 XP et restaure un peu de mana.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-mermaid"] = {
   label: "Sirene",
-  description: "Accorde +1 Chance au heros.",
+  description: "Accorde +1 Chance au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-buoy"] = {
-  label: "Bouee",
-  description: "Accorde +1 Moral au heros.",
+  label: "Bouée",
+  description: "Accorde +1 Moral au héros.",
 };
 ADVENTURE_BUILDING_DETAILS["adventure-flotsam"] = {
   label: "Debris flottants",
@@ -621,7 +621,7 @@ function buildTerrainTextureEntry(
   face: "top" | "SW" | "SE",
 ): SpriteEntry {
   const terrainLabel = TERRAIN_LABELS[terrain] ?? terrain;
-  const labelFace = face === "top" ? "dessus" : `cote ${face}`;
+  const labelFace = face === "top" ? "dessus" : `côte ${face}`;
   return {
     kind: "terrainTexture",
     path: face === "top" ? texture.path : getTerrainSideTexturePath(texture.path, face),
@@ -1462,7 +1462,7 @@ function SpriteLightbox({
       className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={`Apercu agrandi de ${entry.label}`}
+      aria-label={`Aperçu agrandi de ${entry.label}`}
       onClick={onClose}
     >
       <div
@@ -1706,7 +1706,7 @@ function SpritesheetsTab({ onSelect }: { onSelect: (selection: Selection) => voi
           {HERO_SHEET_ENTRIES.map((sheet, i) => (
             <DirectionalSheetCard
               key={sheet.faction}
-              alt={`Spritesheet heros ${sheet.faction}`}
+              alt={`Spritesheet héros ${sheet.faction}`}
               label={sheet.faction}
               entries={SHEET_ENTRIES}
               index={i}

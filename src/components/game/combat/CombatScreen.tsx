@@ -84,6 +84,7 @@ export default function CombatScreen() {
   const [surrenderOfferOpen, setSurrenderOfferOpen] = useState(false);
   const [surrenderOffer, setSurrenderOffer] = useState<Resources | null>(null);
   const [truceConfirmOpen, setTruceConfirmOpen] = useState(false);
+  const [retreatConfirmOpen, setRetreatConfirmOpen] = useState(false);
   const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
@@ -345,6 +346,19 @@ export default function CombatScreen() {
   const truceNeedsAck = Boolean(activeTruce && myPlayer && !activeTruce.acknowledgedPlayerIds.includes(myPlayer.id));
   const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
   const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !pendingSurrenderNegotiation && !activeTruce && !isSubmittingAction && !combatAnimationBlocked;
+  const actionUnavailableReason = activeCombat.status !== "ACTIVE"
+    ? "Le combat n'est pas actif."
+    : pendingSurrenderNegotiation
+      ? "Une négociation de reddition est déjà en cours."
+      : activeTruce
+        ? "Une trêve est déjà en cours."
+        : isSubmittingAction || combatAnimationBlocked
+          ? "Une action est en cours."
+          : !currentUnit
+            ? "Aucune unité ne peut agir maintenant."
+            : !isMyAction
+              ? "Ce n'est pas votre tour d'action."
+              : null;
   const displayedCombat = effectiveCurrentUnitId === activeCombat.currentUnitId
     ? activeCombat
     : { ...activeCombat, currentUnitId: effectiveCurrentUnitId };
@@ -417,6 +431,17 @@ export default function CombatScreen() {
   const isPrimaryPlayer = Boolean(myPlayer && (activeCombat.attackerPlayerId === myPlayer.id || activeCombat.defenderPlayerId === myPlayer.id));
   const hasUsedTruce = hasPlayerUsedTruce(activeCombat.truces, myPlayer?.id);
   const canRequestTruce = Boolean(isPrimaryPlayer && canSubmitAction && !hasUsedTruce && !activeTruce && !pendingSurrenderNegotiation);
+  const surrenderDisabledReason = actionUnavailableReason
+    ?? (!combatHasPlayerHeroesOnBothSides(activeCombat)
+      ? "Se rendre n'est possible que si chaque camp a un héros engagé."
+      : null);
+  const truceDisabledReason = activeTruce
+    ? "Une trêve est déjà en cours."
+    : hasUsedTruce
+      ? "Vous avez déjà utilisé votre trêve pour ce combat."
+      : pendingSurrenderNegotiation
+        ? "Une négociation de reddition est déjà en cours."
+        : actionUnavailableReason;
   const surrenderCost = combatHero && myPlayer
     ? computeSurrenderCostForSide(activeCombat, myPlayer.id, combatHero.skills ?? {})
     : 0;
@@ -445,7 +470,13 @@ export default function CombatScreen() {
     const submitted = await submitAction({ type: "REQUEST_TRUCE" });
     if (submitted) {
       setTruceConfirmOpen(false);
-      setCombatMessage("Treve acceptee. Le combat reprendra au prochain tour d'aventure.");
+      setCombatMessage("Trêve acceptée. Le combat reprendra au prochain tour d'aventure.");
+    }
+  };
+  const submitRetreat = async () => {
+    const submitted = await submitAction({ type: "RETREAT_COMBAT" });
+    if (submitted) {
+      setRetreatConfirmOpen(false);
     }
   };
   const acknowledgeTruce = async () => {
@@ -457,10 +488,10 @@ export default function CombatScreen() {
   };
   const spellBookHero = combatHero && devInfiniteMana ? { ...combatHero, mana: getHeroMaxMana(combatHero) } : combatHero;
   const castCombatSpell = async (spell: SpellDefinition, targetUnitId?: string) => {
-    if (!combatHero) throw new Error("Heros indisponible.");
+    if (!combatHero) throw new Error("Héros indisponible.");
     if (combatHeroHasCastSpell) {
       setPendingTargetSpell(null);
-      setCombatMessage("Ce heros a deja lance un sort ce round.");
+      setCombatMessage("Ce héros a déjà lancé un sort ce round.");
       return;
     }
     if (spellRequiresCombatTarget(spell) && !targetUnitId) {
@@ -494,7 +525,7 @@ export default function CombatScreen() {
           <div className={`mt-0.5 text-lg font-black ${goldText}`}>Round {activeCombat.round}</div>
         </div>
         <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
-          {activeTruce ? "Treve en cours" : combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
+          {activeTruce ? "Trêve en cours" : combatAnimationBlocked ? "Action en cours" : isMyAction ? "À vous de jouer" : "En attente de l'adversaire"}
         </div>
         <div className="flex items-center gap-3">
           {pendingTargetSpell && (
@@ -531,7 +562,7 @@ export default function CombatScreen() {
         )}
         {activeTruce && (
           <div className="pointer-events-auto absolute left-1/2 top-16 z-40 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-sky-400/50 bg-stone-950/94 px-4 py-2 text-sm font-bold text-sky-100 shadow-xl">
-            Treve en cours. Reprise au tour d&apos;aventure {activeTruce.pauseUntilTurn}.
+            Trêve en cours. Reprise au tour d&apos;aventure {activeTruce.pauseUntilTurn}.
           </div>
         )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
@@ -612,30 +643,34 @@ export default function CombatScreen() {
               <button
                 type="button"
                 disabled={!canRetreat}
-                onClick={() => submitAction({ type: "RETREAT_COMBAT" })}
+                onClick={() => setRetreatConfirmOpen(true)}
                 className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-900 to-red-950 px-3 py-2 font-bold text-red-100 shadow-[0_0_0_1px_rgba(252,165,165,0.18)_inset] transition hover:from-red-800 hover:to-red-900 disabled:opacity-40"
               >
                 Fuir
               </button>
-              <button
-                type="button"
-                disabled={!canSurrender}
-                onClick={openSurrenderOffer}
-                className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
-              >
-                Se rendre
-              </button>
+              <span className="block" title={surrenderDisabledReason ?? "Proposer une reddition"}>
+                <button
+                  type="button"
+                  disabled={!canSurrender}
+                  onClick={openSurrenderOffer}
+                  className="w-full rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
+                >
+                  Se rendre
+                </button>
+              </span>
             </div>
-            {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">Rancon : {surrenderCost} or</div>}
+            {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">Rançon : {surrenderCost} or</div>}
             {isPrimaryPlayer && (
-              <button
-                type="button"
-                disabled={!canRequestTruce}
-                onClick={() => setTruceConfirmOpen(true)}
-                className="mt-2 w-full rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
-              >
-                {hasUsedTruce ? "Treve deja utilisee" : "Treve"}
-              </button>
+              <span className="mt-2 block" title={truceDisabledReason ?? "Demander une trêve"}>
+                <button
+                  type="button"
+                  disabled={!canRequestTruce}
+                  onClick={() => setTruceConfirmOpen(true)}
+                  className="w-full rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
+                >
+                  Trêve
+                </button>
+              </span>
             )}
             {Boolean((activeCombat.boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects?.escapeTunnel) && myPlayer && activeCombat.defenderPlayerId === myPlayer.id && (
               <button
@@ -673,7 +708,7 @@ export default function CombatScreen() {
       {truceConfirmOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Treve</div>
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Trêve</div>
             <h2 className="mt-2 text-2xl font-bold text-sky-100">Suspendre le combat ?</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
               La treve met ce combat en pause jusqu&apos;au prochain tour d&apos;aventure. Elle est utilisable une seule fois par combat et par joueur principal. Aucun participant ne pourra jouer d&apos;action de combat pendant la pause.
@@ -685,13 +720,28 @@ export default function CombatScreen() {
           </div>
         </div>
       )}
+      {retreatConfirmOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
+          <div className="w-[min(92vw,32rem)] rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.28em] text-red-400">Fuite</div>
+            <h2 className="mt-2 text-2xl font-bold text-red-100">Quitter le combat ?</h2>
+            <p className="mt-3 text-sm leading-6 text-stone-300">
+              Votre héros va fuir immédiatement. Les créatures de ce héros seront retirées du combat et comptées comme perdues. Si votre camp n&apos;a plus aucune unité active après la fuite, l&apos;adversaire remporte le combat. Cette action est définitive.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 text-sm font-bold text-stone-200 hover:bg-stone-800" onClick={() => setRetreatConfirmOpen(false)}>Annuler</button>
+              <button type="button" className="rounded-md border border-red-400 bg-red-900 px-5 py-2 font-bold text-red-50 hover:bg-red-800" onClick={() => void submitRetreat()}>Confirmer la fuite</button>
+            </div>
+          </div>
+        </div>
+      )}
       {activeTruce && truceNeedsAck && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Treve</div>
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Trêve</div>
             <h2 className="mt-2 text-2xl font-bold text-sky-100">Combat en pause</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              Une treve a ete declaree. Le combat reprendra au prochain tour d&apos;aventure.
+              Une trêve a été déclarée. Le combat reprendra au prochain tour d&apos;aventure.
             </p>
             <div className="mt-6 flex justify-end">
               <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-5 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void acknowledgeTruce()}>OK</button>
@@ -704,7 +754,7 @@ export default function CombatScreen() {
           <div className="w-[min(92vw,34rem)] rounded-xl border border-emerald-700 bg-stone-950 p-6 text-white shadow-2xl">
             <div className="text-xs uppercase tracking-[0.28em] text-emerald-400">Reddition</div>
             <h2 className="mt-2 text-2xl font-bold text-emerald-100">Proposer une rancon</h2>
-            <p className="mt-2 text-sm text-stone-300">Rancon de base : {surrenderCost} or. Vous pouvez proposer plus, moins, ou ajouter des ressources.</p>
+            <p className="mt-2 text-sm text-stone-300">Rançon de base : {surrenderCost} or. Vous pouvez proposer plus, moins, ou ajouter des ressources.</p>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {RESOURCE_KEYS.map((key) => (
                 <label key={key} className="text-sm font-bold text-stone-200">

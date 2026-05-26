@@ -173,7 +173,7 @@ function Legend() {
 
   return (
     <div className="border border-stone-800 bg-stone-900/80 p-3">
-      <h2 className="mb-2 text-sm font-semibold text-amber-100">Legende</h2>
+      <h2 className="mb-2 text-sm font-semibold text-amber-100">Légende</h2>
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-1.5">
           {terrainItems.map(([label, color]) => (

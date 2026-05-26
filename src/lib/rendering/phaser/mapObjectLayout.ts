@@ -187,7 +187,7 @@ export function getMapObjectHoverDescription(object: MapObject): string | null {
 
   if (isExternalDwellingType(object.subtype)) {
     const unit = object.targetId ? ECONOMY_UNIT_RULES[object.targetId as keyof typeof ECONOMY_UNIT_RULES] : undefined;
-    if (!unit) return "Permet de recruter des creatures sur la carte.";
+    if (!unit) return "Permet de recruter des créatures sur la carte.";
     return `Permet de recruter ${unit.label} chaque semaine. Croissance : ${unit.growth}.`;
   }
 

@@ -348,7 +348,7 @@ export async function cancelPlayerTurnCompletion(
 
   if (turnError) throw turnError;
   if (!turn?.is_completed) {
-    return { ok: false, error: "Votre tour est deja actif." };
+    return { ok: false, error: "Votre tour est déjà actif." };
   }
 
   const { error: updateError } = await supabase

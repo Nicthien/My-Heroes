@@ -17,7 +17,7 @@ export function UnitModel({
   active: boolean;
   attackable: boolean;
   damaged?: boolean;
-  attacking?: "melee" | "ranged" | null;
+  attacking?: "mêlée" | "ranged" | null;
   lifted?: boolean;
   depthScale?: number;
 }) {

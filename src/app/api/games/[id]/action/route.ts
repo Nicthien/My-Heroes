@@ -205,7 +205,7 @@ const TREE_OF_KNOWLEDGE_COST_GOLD = 2000;
 const TREE_OF_KNOWLEDGE_EXPERIENCE = 2000;
 const SEER_HUT_EXPERIENCE = 1000;
 
-const HERO_IN_COMBAT_ERROR = "Ce heros est deja engage dans un combat.";
+const HERO_IN_COMBAT_ERROR = "Ce héros est déjà engagé dans un combat.";
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -272,7 +272,7 @@ export async function POST(
         .update({ x: destination.x, y: destination.y })
         .eq("id", hero.id);
       if (heroUpdateError) {
-        return NextResponse.json({ error: `Erreur mise a jour heros: ${heroUpdateError.message}` }, { status: 500 });
+        return NextResponse.json({ error: `Erreur mise à jour héros: ${heroUpdateError.message}` }, { status: 500 });
       }
 
       const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
@@ -308,12 +308,12 @@ export async function POST(
       turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
     );
     if (completedTurn && action.type !== "END_TURN" && action.type !== "CANCEL_END_TURN") {
-      return NextResponse.json({ error: "Vous avez deja termine votre tour" }, { status: 403 });
+      return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
     }
 
     if (action.type === "EQUIP_ARTIFACT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       const result = equipHeroArtifact(hero, String(action.artifactId ?? ""), action.slot);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -324,7 +324,7 @@ export async function POST(
 
     if (action.type === "UNEQUIP_ARTIFACT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       const result = unequipHeroArtifact(hero, action.slot);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -341,7 +341,7 @@ export async function POST(
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
       if (!canTransferArtifactsBetweenHeroes(fromHero, toHero, gamePlayer.towns)) {
-        return NextResponse.json({ error: "Les heros doivent etre adjacents ou dans le meme chateau" }, { status: 400 });
+        return NextResponse.json({ error: "Les héros doivent être adjacents ou dans le même château" }, { status: 400 });
       }
       const result = transferHeroArtifact(fromHero, toHero, String(action.artifactId ?? ""));
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -354,7 +354,7 @@ export async function POST(
 
     if (action.type === "COLLECT_ARTIFACT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const targetPosition = getActionPosition(action.targetPosition);
@@ -364,9 +364,9 @@ export async function POST(
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
       const collected = new Set<string>((mapState.collected as string[]) ?? []);
       const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[]) ?? []);
-      if (collected.has(object.id)) return NextResponse.json({ error: "Artefact deja collecte" }, { status: 400 });
+      if (collected.has(object.id)) return NextResponse.json({ error: "Artefact déjà collecté" }, { status: 400 });
       if (Number(object.guardianPower ?? 0) > 0 && !defeatedArtifacts.has(object.id)) {
-        return NextResponse.json({ error: "L'artefact est garde" }, { status: 400 });
+        return NextResponse.json({ error: "L'artefact est gardé" }, { status: 400 });
       }
       const movement = await validateAndApplyArtifactApproach({ supabase, mapData, gamePlayer, hero, path: action.path, target: targetPosition });
       if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
@@ -482,7 +482,7 @@ export async function POST(
 
       if (firstStop?.hero) {
         if (firstStop.hero.playerId === gamePlayer.id) {
-          interaction = { type: "STOP", message: "Un de vos heros bloque le chemin.", destination: lastPos };
+          interaction = { type: "STOP", message: "Un de vos héros bloque le chemin.", destination: lastPos };
         } else {
           interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos, targetPosition: stopTargetPosition };
         }
@@ -518,7 +518,7 @@ export async function POST(
         if (Number(stopObject.guardianPower ?? 0) > 0 && !defeatedArtifacts.has(stopObject.id)) {
           interaction = { type: "COMBAT", targetId: stopObject.id, targetType: "artifact", destination: lastPos, targetPosition: stopTargetPosition };
         } else {
-          interaction = { type: "STOP", message: "Artefact a portee.", destination: lastPos };
+          interaction = { type: "STOP", message: "Artefact à portée.", destination: lastPos };
         }
       } else if (tile?.object?.type === "artifact") {
         interaction = { type: "STOP", message: "Artefact atteint.", destination: lastPos };
@@ -621,16 +621,16 @@ export async function POST(
 
     if (action.type === "EMBARK_BOAT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      if (boats.some((boat) => boat.heroId === hero.id)) return NextResponse.json({ error: "Ce heros est deja embarque" }, { status: 400 });
+      if (boats.some((boat) => boat.heroId === hero.id)) return NextResponse.json({ error: "Ce héros est déjà embarqué" }, { status: 400 });
       const boat = boats.find((item) => item.id === action.boatId);
       if (!boat || boat.heroId) return NextResponse.json({ error: "Bateau indisponible" }, { status: 400 });
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const boatPosition = { x: boat.x, y: boat.y };
       const boatTile = mapData.tiles[boat.y]?.[boat.x];
       if (boatTile?.terrain !== "water") return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, boatPosition)) return NextResponse.json({ error: "Le heros doit etre adjacent au bateau" }, { status: 400 });
+      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, boatPosition)) return NextResponse.json({ error: "Le héros doit être adjacent au bateau" }, { status: 400 });
       await supabase.from("heroes").update({ x: boat.x, y: boat.y, movement: 0 }).eq("id", hero.id);
       await supabase.from("boats").update({ hero_id: hero.id, owner_player_id: gamePlayer.id }).eq("id", boat.id);
       const explored = new Set(gamePlayer.exploredTiles ?? []);
@@ -641,10 +641,10 @@ export async function POST(
 
     if (action.type === "DISEMBARK_BOAT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       const boat = boats.find((item) => item.heroId === hero.id);
-      if (!boat) return NextResponse.json({ error: "Ce heros n'est pas embarque" }, { status: 400 });
+      if (!boat) return NextResponse.json({ error: "Ce héros n'est pas embarqué" }, { status: 400 });
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const destination = getActionPosition(action.position);
       if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
@@ -662,16 +662,16 @@ export async function POST(
 
     if (action.type === "VISIT_ADVENTURE_BUILDING") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
 
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const found = findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
-      if (!found) return NextResponse.json({ error: "Batiment d'aventure introuvable" }, { status: 404 });
+      if (!found) return NextResponse.json({ error: "Bâtiment d'aventure introuvable" }, { status: 404 });
       if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
-        return NextResponse.json({ error: "Le heros doit etre sur place pour visiter ce batiment" }, { status: 400 });
+        return NextResponse.json({ error: "Le héros doit être sur place pour visiter ce bâtiment" }, { status: 400 });
       }
 
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
@@ -695,14 +695,14 @@ export async function POST(
 
     if (action.type === "CAST_ADVENTURE_SPELL") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
 
       const spell = getSpell(String(action.spellId ?? ""));
       if (!spell || spell.context !== "adventure") return NextResponse.json({ error: "Sort d'aventure invalide" }, { status: 400 });
-      if (hero.hasSpellBook === false) return NextResponse.json({ error: "Ce heros n'a pas de livre de sorts" }, { status: 400 });
+      if (hero.hasSpellBook === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
       if (!heroKnowsSpell(hero, spell.id)) return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
 
       const effectiveStats = getEffectiveHeroStatsFromValues(hero);
@@ -744,7 +744,7 @@ export async function POST(
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
       if (Number(building.guardianPower ?? 0) > 0) {
-        return NextResponse.json({ error: "Ce batiment est garde" }, { status: 400 });
+        return NextResponse.json({ error: "Ce bâtiment est gardé" }, { status: 400 });
       }
 
       const mapData = normalizeMapMovement(game.mapData as GameMap);
@@ -860,7 +860,7 @@ export async function POST(
       if (!hasShipyardBuilding(townFaction, buildings)) return NextResponse.json({ error: "Construisez d'abord le Chantier naval" }, { status: 400 });
       const mapData = normalizeMapMovement(game.mapData as GameMap);
       const destination = findTownBoatLaunchTile(mapData, { x: town.x, y: town.y }, boats.map((boat) => ({ x: boat.x, y: boat.y })));
-      if (!destination) return NextResponse.json({ error: "Aucune eau cotiere libre pour construire un bateau" }, { status: 400 });
+      if (!destination) return NextResponse.json({ error: "Aucune eau côtière libre pour construire un bateau" }, { status: 400 });
       const cost = { gold: 1000, wood: 10 };
       const resources = playerResources(gamePlayer);
       if (!canAfford(resources, cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
@@ -885,12 +885,12 @@ export async function POST(
       const building = action.building as BuildingType;
       const townFaction = ((town?.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
       const rule = getFactionBuildingRule(townFaction, building);
-      if (!town || !rule) return NextResponse.json({ error: "Batiment invalide" }, { status: 400 });
+      if (!town || !rule) return NextResponse.json({ error: "Bâtiment invalide" }, { status: 400 });
 
       const buildings = (town.buildings ?? []) as string[];
-      if (buildings.includes(building)) return NextResponse.json({ error: "Batiment deja construit" }, { status: 400 });
+      if (buildings.includes(building)) return NextResponse.json({ error: "Bâtiment déjà construit" }, { status: 400 });
       if (isShipyardBuilding(townFaction, building) && !isTownCoastalForBoats(normalizeMapMovement(game.mapData as GameMap), { x: town.x, y: town.y })) {
-        return NextResponse.json({ error: "Le Chantier naval doit etre construit dans une ville cotiere" }, { status: 400 });
+        return NextResponse.json({ error: "Le Chantier naval doit être construit dans une ville côtière" }, { status: 400 });
       }
       const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(buildings, requirement));
       if (missingRequirement) return NextResponse.json({ error: "Prérequis manquant" }, { status: 400 });
@@ -1007,9 +1007,9 @@ export async function POST(
       if (returningHeroId) {
         const returningHero = ((gamePlayer as { tavernHeroes?: Array<{ heroId?: string }> }).tavernHeroes ?? [])
           .find((hero) => hero.heroId === returningHeroId);
-        if (!returningHero) return NextResponse.json({ error: "Heros indisponible" }, { status: 400 });
+        if (!returningHero) return NextResponse.json({ error: "Héros indisponible" }, { status: 400 });
         if (gamePlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
-          return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} heros par joueur` }, { status: 400 });
+          return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} héros par joueur` }, { status: 400 });
         }
         const resources = playerResources(gamePlayer);
         if (resources.gold < HERO_RECRUIT_COST_GOLD) {
@@ -1154,18 +1154,18 @@ export async function POST(
       const upgradedUnitType = upgradeBuilding?.unlocksUnit;
       const upgradedRule = upgradedUnitType ? UNIT_RULES[upgradedUnitType] : undefined;
       if (!upgradeBuilding || !upgradedUnitType || !upgradedRule) {
-        return NextResponse.json({ error: "Cette unite ne peut pas etre amelioree ici" }, { status: 400 });
+        return NextResponse.json({ error: "Cette unité ne peut pas être améliorée ici" }, { status: 400 });
       }
       if (!(town.buildings ?? []).includes(upgradeBuilding.type)) {
-        return NextResponse.json({ error: "Batiment ameliore requis" }, { status: 400 });
+        return NextResponse.json({ error: "Bâtiment amélioré requis" }, { status: 400 });
       }
 
       const sourceHeroId = typeof action.heroId === "string" ? action.heroId : null;
       const sourceHero = sourceHeroId ? gamePlayer.heroes.find((hero) => hero.id === sourceHeroId) : null;
       if (sourceHeroId) {
-        if (!sourceHero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+        if (!sourceHero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
         if (sourceHero.x !== town.x || sourceHero.y !== town.y) {
-          return NextResponse.json({ error: "Le heros doit etre au chateau" }, { status: 400 });
+          return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
         }
         if (isHeroInActiveCombat(game.combats, sourceHero.id)) {
           return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
@@ -1204,17 +1204,17 @@ export async function POST(
 
     if (action.type === "CLAIM_CREATURE_BANK_REWARD") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
       const creatureBanks = getCreatureBankStateMap(mapState);
       const bankState = creatureBanks[String(action.bankId ?? "")];
       const pendingReward = bankState?.pendingReward as PendingCreatureBankReward | undefined;
       if (!pendingReward || bankState.claimed) {
-        return NextResponse.json({ error: "Aucune recompense de banque disponible" }, { status: 400 });
+        return NextResponse.json({ error: "Aucune récompense de banque disponible" }, { status: 400 });
       }
       if (pendingReward.playerId !== gamePlayer.id || pendingReward.heroId !== hero.id) {
-        return NextResponse.json({ error: "Cette recompense appartient a un autre heros" }, { status: 403 });
+        return NextResponse.json({ error: "Cette récompense appartient à un autre héros" }, { status: 403 });
       }
 
       const acceptedCreatures = normalizeCreatureRewardSelection(action.creatures, pendingReward.reward.creatures ?? []);
@@ -1224,7 +1224,7 @@ export async function POST(
         .filter((unitType) => !hero.armies.some((army) => army.unitType === unitType));
       const maxHeroStacks = 7;
       if (hero.armies.length + newStackTypes.length > maxHeroStacks) {
-        return NextResponse.json({ error: "Pas assez de place dans l'armee du heros" }, { status: 400 });
+        return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
       }
 
       const resources = playerResources(gamePlayer);
@@ -1341,7 +1341,7 @@ export async function POST(
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
       if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le heros doit etre au chateau pour deposer des unites" }, { status: 400 });
+        return NextResponse.json({ error: "Le héros doit être au château pour déposer des unités" }, { status: 400 });
       }
 
       const source = hero.armies.find((army) => army.unitType === unitType);
@@ -1374,7 +1374,7 @@ export async function POST(
         return NextResponse.json({ error: "Transfert de porte invalide" }, { status: 400 });
       }
       if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
-        return NextResponse.json({ error: "Le heros doit etre adjacent a la porte" }, { status: 400 });
+        return NextResponse.json({ error: "Le héros doit être adjacent à la porte" }, { status: 400 });
       }
 
       if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO") {
@@ -1410,10 +1410,10 @@ export async function POST(
         return NextResponse.json({ error: "Porte invalide" }, { status: 400 });
       }
       if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
-        return NextResponse.json({ error: "Le heros doit etre adjacent a la porte" }, { status: 400 });
+        return NextResponse.json({ error: "Le héros doit être adjacent à la porte" }, { status: 400 });
       }
       if ((gate.garrison ?? []).some((unit) => unit.count > 0)) {
-        return NextResponse.json({ error: "La porte est gardee" }, { status: 400 });
+        return NextResponse.json({ error: "La porte est gardée" }, { status: 400 });
       }
 
       await captureGate(supabase, id, gate, gamePlayer.id);
@@ -1989,7 +1989,7 @@ async function handleAdventureBuildingVisit({
   const weeklyAdventureVisits = (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {};
 
   if (!buildingType) {
-    return { type: "ADVENTURE_BUILDING", buildingType: "unknown", destination: position, message: "Batiment d'aventure visite." };
+    return { type: "ADVENTURE_BUILDING", buildingType: "unknown", destination: position, message: "Bâtiment d'aventure visité." };
   }
 
   if (
@@ -2000,7 +2000,7 @@ async function handleAdventureBuildingVisit({
       type: "ADVENTURE_BUILDING",
       buildingType,
       destination: position,
-      message: `${getAdventureBuildingLabel(buildingType)} deja visite.`,
+      message: `${getAdventureBuildingLabel(buildingType)} déjà visité.`,
       alreadyVisited: true,
     };
   }
@@ -2010,7 +2010,7 @@ async function handleAdventureBuildingVisit({
       type: "ADVENTURE_BUILDING",
       buildingType,
       destination: position,
-      message: `${getAdventureBuildingLabel(buildingType)} deja visite par ce heros.`,
+      message: `${getAdventureBuildingLabel(buildingType)} déjà visité par ce héros.`,
       alreadyVisited: true,
     };
   }
@@ -2020,7 +2020,7 @@ async function handleAdventureBuildingVisit({
       type: "ADVENTURE_BUILDING",
       buildingType,
       destination: position,
-      message: `${getAdventureBuildingLabel(buildingType)} deja fouille.`,
+      message: `${getAdventureBuildingLabel(buildingType)} déjà fouillé.`,
       alreadyVisited: true,
     };
   }
@@ -2065,10 +2065,10 @@ async function handleAdventureBuildingVisit({
 
     const label = getExternalDwellingLabel(current.unitType);
     const message = recruitCount > 0
-      ? `${label} capturee : ${recruitCount} ${unitRule.label} recrute(e)s.`
+      ? `${label} capturée : ${recruitCount} ${unitRule.label} recruté(e)s.`
       : !stackAlreadyPresent && !hasFreeStack
-      ? `${label} capturee, mais l'armee du heros est pleine.`
-      : `${label} capturee. Recrues disponibles : ${nextState.available}.`;
+      ? `${label} capturée, mais l'armée du héros est pleine.`
+      : `${label} capturée. Recrues disponibles : ${nextState.available}.`;
 
     return {
       type: "ADVENTURE_BUILDING",
@@ -2108,7 +2108,7 @@ async function handleAdventureBuildingVisit({
         gold: reward.gold,
         resources: reward.resources as Record<string, number>,
       },
-      message: "Feu de camp fouille.",
+      message: "Feu de camp fouillé.",
     };
   }
 
@@ -2159,7 +2159,7 @@ async function handleAdventureBuildingVisit({
 
     const landing = findTeleportLanding(mapData, target);
     if (!landing) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La sortie de la Stargate est bloquee." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La sortie de la Stargate est bloquée." };
     }
 
     await supabase.from("heroes").update({ x: landing.x, y: landing.y }).eq("id", hero.id);
@@ -2184,10 +2184,10 @@ async function handleAdventureBuildingVisit({
         buildingType,
         destination: position,
         buildingId: object.id,
-        message: "Arène : choisissez l'entrainement du heros.",
+        message: "Arène : choisissez l'entraînement du héros.",
         choices: [
           { value: "attack", label: "+2 Attaque" },
-          { value: "defense", label: "+2 Defense" },
+          { value: "defense", label: "+2 Défense" },
         ],
       };
     }
@@ -2196,7 +2196,7 @@ async function handleAdventureBuildingVisit({
       type: "ADVENTURE_BUILDING",
       buildingType,
       destination: position,
-      message: choice === "attack" ? "Arène visitee : +2 Attaque." : "Arène visitee : +2 Defense.",
+      message: choice === "attack" ? "Arène visitée : +2 Attaque." : "Arène visitée : +2 Défense.",
     };
   }
 
@@ -2207,15 +2207,15 @@ async function handleAdventureBuildingVisit({
         buildingType,
         destination: position,
         buildingId: object.id,
-        message: "École de guerre : choisissez l'entrainement pour 1000 Or.",
+        message: "École de guerre : choisissez l'entraînement pour 1000 Or.",
         choices: [
           { value: "attack", label: "+1 Attaque" },
-          { value: "defense", label: "+1 Defense" },
+          { value: "defense", label: "+1 Défense" },
         ],
       };
     }
     if (gamePlayer.gold < ADVENTURE_SCHOOL_COST_GOLD) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cet entrainement." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cet entraînement." };
     }
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
     await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
@@ -2223,7 +2223,7 @@ async function handleAdventureBuildingVisit({
       type: "ADVENTURE_BUILDING",
       buildingType,
       destination: position,
-      message: choice === "attack" ? "École de guerre : +1 Attaque." : "École de guerre : +1 Defense.",
+      message: choice === "attack" ? "École de guerre : +1 Attaque." : "École de guerre : +1 Défense.",
     };
   }
 
@@ -2234,7 +2234,7 @@ async function handleAdventureBuildingVisit({
         buildingType,
         destination: position,
         buildingId: object.id,
-        message: "École de magie : choisissez l'etude pour 1000 Or.",
+        message: "École de magie : choisissez l'étude pour 1000 Or.",
         choices: [
           { value: "spellPower", label: "+1 Pouvoir" },
           { value: "knowledge", label: "+1 Savoir" },
@@ -2242,7 +2242,7 @@ async function handleAdventureBuildingVisit({
       };
     }
     if (gamePlayer.gold < ADVENTURE_SCHOOL_COST_GOLD) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cette etude." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cette étude." };
     }
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
     await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
@@ -2261,7 +2261,7 @@ async function handleAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.MARLETTO_TOWER) {
     await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "defense", 1);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Tour de Marletto visitee : +1 Defense." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Tour de Marletto visitée : +1 Défense." };
   }
 
   if (buildingType === AdventureBuildingType.STAR_AXIS) {
@@ -2277,12 +2277,12 @@ async function handleAdventureBuildingVisit({
   if (buildingType === AdventureBuildingType.LEARNING_STONE) {
     await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + LEARNING_STONE_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Pierre de savoir visitee : +1000 XP." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Pierre de savoir visitée : +1000 XP." };
   }
 
   if (buildingType === AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT) {
     if ((hero.level ?? 1) < 10) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La bibliotheque exige un heros de niveau 10." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La bibliothèque exige un héros de niveau 10." };
     }
     await supabase.from("heroes").update({
       attack: (hero.attack ?? 0) + 2,
@@ -2291,7 +2291,7 @@ async function handleAdventureBuildingVisit({
       knowledge: (hero.knowledge ?? 0) + 2,
     }).eq("id", hero.id);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bibliothèque d'illumination : +2 a toutes les caracteristiques." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bibliothèque d'illumination : +2 à toutes les caractéristiques." };
   }
 
   if (buildingType === AdventureBuildingType.CARTOGRAPHER) {
@@ -2326,7 +2326,7 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${gamePlayer.id}`;
     const currentWeek = getMysticalGardenWeekKey(turnNumber);
     if (mysticalGardenVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le jardin mystique a deja fleuri cette semaine.", alreadyVisited: true };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le jardin mystique a déjà fleuri cette semaine.", alreadyVisited: true };
     }
     const rewardGems = makeRng(`${gameId}:${object.id}:${gamePlayer.id}:${currentWeek}`)() > 0.55;
     const resourceUpdate: Partial<Resources> = rewardGems
@@ -2355,11 +2355,11 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${hero.id}`;
     const currentWeek = getAdventureWeekKey(turnNumber);
     if (weeklyAdventureVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Les ecuries ont deja equipe ce heros cette semaine.", alreadyVisited: true };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Les écuries ont déjà équipé ce héros cette semaine.", alreadyVisited: true };
     }
     await supabase.from("heroes").update({ movement: hero.movement + STABLES_MOVEMENT_BONUS }).eq("id", hero.id);
     await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, weekKey, currentWeek);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Ecuries visitees : +400 deplacement cette semaine." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Ecuries visitees : +400 déplacement cette semaine." };
   }
 
   if (buildingType === AdventureBuildingType.TEMPLE) {
@@ -2369,7 +2369,7 @@ async function handleAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.FOUNTAIN_OF_FORTUNE) {
     await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { luck: Number(hero.luck ?? 0) + 1 });
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Fontaine de fortune visitee : +1 Chance." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Fontaine de fortune visitée : +1 Chance." };
   }
 
   if (buildingType === AdventureBuildingType.IDOL_OF_FORTUNE) {
@@ -2377,14 +2377,14 @@ async function handleAdventureBuildingVisit({
       morale: Number(hero.morale ?? 0) + 1,
       luck: Number(hero.luck ?? 0) + 1,
     });
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Idole de fortune visitee : +1 Moral, +1 Chance." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Idole de fortune visitée : +1 Moral, +1 Chance." };
   }
 
   if (buildingType === AdventureBuildingType.MAGIC_WELL) {
     const visitKey = `${object.id}:${hero.id}`;
     const currentDay = `day-${turnNumber}`;
     if (weeklyAdventureVisits[visitKey] === currentDay) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est deja epuise aujourd'hui.", alreadyVisited: true };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est déjà épuisé aujourd'hui.", alreadyVisited: true };
     }
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
     const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
@@ -2407,7 +2407,7 @@ async function handleAdventureBuildingVisit({
     const weekKey = `${object.id}:${gamePlayer.id}`;
     const currentWeek = getAdventureWeekKey(turnNumber);
     if (weeklyAdventureVisits[weekKey] === currentWeek) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette roue a eau a deja produit cette semaine.", alreadyVisited: true };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette roue à eau a déjà produit cette semaine.", alreadyVisited: true };
     }
     const reward = buildingType === AdventureBuildingType.WATER_MILL ? WATER_MILL_GOLD_REWARD : WATER_WHEEL_GOLD_REWARD;
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + reward });
@@ -2417,7 +2417,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       reward: { gold: reward },
-      message: buildingType === AdventureBuildingType.WATER_MILL ? "Moulin a eau : +1000 Or." : "Roue a eau : +500 Or.",
+      message: buildingType === AdventureBuildingType.WATER_MILL ? "Moulin à eau : +1000 Or." : "Roue à eau : +500 Or.",
     };
   }
 
@@ -2435,7 +2435,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       reward: rewardGold ? { gold: 500 } : { resources: { wood: 5, ore: 5 } },
-      message: rewardGold ? "Chariot abandonne fouille : +500 Or." : "Chariot abandonne fouille : +5 Bois, +5 Minerai.",
+      message: rewardGold ? "Chariot abandonne fouillé : +500 Or." : "Chariot abandonne fouillé : +5 Bois, +5 Minerai.",
     };
   }
 
@@ -2476,7 +2476,7 @@ async function handleAdventureBuildingVisit({
       buildingType,
       destination: position,
       reward: rewardGems ? { resources: { gems: 2 } } : { gold: 300 },
-      message: rewardGems ? "Squelette fouille : +2 Gemmes." : "Squelette fouille : +300 Or.",
+      message: rewardGems ? "Squelette fouillé : +2 Gemmes." : "Squelette fouillé : +300 Or.",
     };
   }
 
@@ -2529,7 +2529,7 @@ async function handleAdventureBuildingVisit({
       known_spells: knownSpellIds,
     }).eq("id", hero.id);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: `${getAdventureBuildingLabel(buildingType)} visite : ${spell.label} appris.` };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: `${getAdventureBuildingLabel(buildingType)} visité : ${spell.label} appris.` };
   }
 
   if (buildingType === AdventureBuildingType.TREE_OF_KNOWLEDGE) {
@@ -2549,7 +2549,7 @@ async function handleAdventureBuildingVisit({
     await supabase.from("heroes").update({ mana: Math.min(maxMana, currentMana + 10) }).eq("id", hero.id);
     await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + SEER_HUT_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Hutte d'erudit visitee : +1000 XP, +10 mana." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Hutte d'érudit visitée : +1000 XP, +10 mana." };
   }
 
   if (buildingType === AdventureBuildingType.MERMAID) {
@@ -2559,7 +2559,7 @@ async function handleAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.BUOY) {
     await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, { morale: Number(hero.morale ?? 0) + 1 });
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bouee visitee : +1 Moral." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Bouée visitée : +1 Moral." };
   }
 
   if (buildingType === AdventureBuildingType.FLOTSAM) {
@@ -2591,7 +2591,7 @@ async function handleAdventureBuildingVisit({
     type: "ADVENTURE_BUILDING",
     buildingType,
     destination: position,
-    message: `${getAdventureBuildingLabel(buildingType)} visite.`,
+    message: `${getAdventureBuildingLabel(buildingType)} visité.`,
   };
 }
 
@@ -3248,7 +3248,7 @@ async function applyAdventureSpell({
     if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Debarquez avant de lancer ce sort" };
     const destination = getActionPosition(target);
     if (!destination) return { ok: false, error: "Destination invalide" };
-    if (!explored.has(`${destination.x},${destination.y}`)) return { ok: false, error: "La destination doit etre visible" };
+    if (!explored.has(`${destination.x},${destination.y}`)) return { ok: false, error: "La destination doit être visible" };
     const tile = mapData.tiles[destination.y]?.[destination.x];
     if (!tile || !isTileTraversable(tile)) return { ok: false, error: "Destination infranchissable" };
     if (isOccupiedByHero(gamePlayer.heroes, hero.id, destination)) return { ok: false, error: "Destination occupee" };
@@ -3268,7 +3268,7 @@ async function applyAdventureSpell({
     const town = (townId ? gamePlayer.towns.find((item) => item.id === townId) : gamePlayer.towns[0]) ?? null;
     if (!town) return { ok: false, error: "Aucune ville alliee disponible" };
     const destination = findTownPortalLanding(mapData, { x: town.x, y: town.y }, gamePlayer.heroes, hero.id);
-    if (!destination) return { ok: false, error: "La ville cible est bloquee" };
+    if (!destination) return { ok: false, error: "La ville cible est bloquée" };
 
     await supabase.from("heroes").update({ x: destination.x, y: destination.y }).eq("id", hero.id);
     for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
@@ -3280,7 +3280,7 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "summon_boat") {
-    if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Ce heros est deja embarque" };
+    if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Ce héros est déjà embarqué" };
     const landing = findFreeAdjacentWaterTile(mapData, heroPosition, boats);
     if (!landing) return { ok: false, error: "Aucune eau adjacente libre" };
     const boat = findNearestEmptyBoat(boats, heroPosition);
@@ -3301,7 +3301,7 @@ async function applyAdventureSpell({
     const boat = targetPosition
       ? boats.find((item) => !item.heroId && item.x === targetPosition.x && item.y === targetPosition.y)
       : boats.find((item) => !item.heroId && areAdjacentOrSame(heroPosition, { x: item.x, y: item.y }));
-    if (!boat) return { ok: false, error: "Aucun bateau vide a saborder" };
+    if (!boat) return { ok: false, error: "Aucun bateau vide à saborder" };
     if (!areAdjacentOrSame(heroPosition, { x: boat.x, y: boat.y })) return { ok: false, error: "Le bateau est trop eloigne" };
     await supabase.from("boats").delete().eq("id", boat.id);
     return {
@@ -3546,7 +3546,7 @@ function unequipHeroArtifact(hero: MinimalHero, rawSlot: unknown):
   if (!slot) return { ok: false, error: "Emplacement invalide" };
   const bag = normalizeArtifactBag(hero.artifacts);
   const artifactId = bag.equipment[slot];
-  if (!artifactId) return { ok: false, error: "Aucun artefact equipe" };
+  if (!artifactId) return { ok: false, error: "Aucun artefact équipé" };
   const equipment = { ...bag.equipment };
   delete equipment[slot];
   return { ok: true, artifacts: { inventory: [...bag.inventory, artifactId], equipment } };
@@ -3567,7 +3567,7 @@ function transferHeroArtifact(fromHero: MinimalHero, toHero: MinimalHero, artifa
     };
   } else {
     const slot = ARTIFACT_SLOTS.find((candidate) => fromBag.equipment[candidate] === artifactId);
-    if (!slot) return { ok: false, error: "Artefact absent du heros source" };
+    if (!slot) return { ok: false, error: "Artefact absent du héros source" };
     const equipment = { ...fromBag.equipment };
     delete equipment[slot];
     fromArtifacts = { ...fromBag, equipment };
@@ -3601,7 +3601,7 @@ async function validateAndApplyArtifactApproach({
   target: Position;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (Math.max(Math.abs(hero.x - target.x), Math.abs(hero.y - target.y)) <= 1) return { ok: true };
-  if (!Array.isArray(path) || path.length < 1) return { ok: false, error: "Le heros doit s'arreter devant l'artefact" };
+  if (!Array.isArray(path) || path.length < 1) return { ok: false, error: "Le héros doit s'arrêter devant l'artefact" };
   const typedPath = path as Position[];
   const destination = typedPath[typedPath.length - 1];
   if (Math.max(Math.abs(destination.x - target.x), Math.abs(destination.y - target.y)) > 1) {
@@ -3644,7 +3644,7 @@ async function validateAndApplyActionPath({
     y: destination.y,
     movement: getUsableAdventureMovement(mapData, destination, hero.movement - validation.usedMovement),
   }).eq("id", hero.id);
-  if (heroUpdateError) return { ok: false, error: `Erreur mise a jour heros: ${heroUpdateError.message}` };
+  if (heroUpdateError) return { ok: false, error: `Erreur mise à jour héros: ${heroUpdateError.message}` };
 
   const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
     item.id === hero.id ? { ...hero, x: destination.x, y: destination.y } : item

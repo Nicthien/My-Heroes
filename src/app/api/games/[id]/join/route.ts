@@ -31,7 +31,7 @@ export async function POST(
     return NextResponse.json({ error: "Deja dans cette partie" }, { status: 400 });
   }
   if (game.status !== "PENDING") {
-    return NextResponse.json({ error: "La partie a deja commence" }, { status: 400 });
+    return NextResponse.json({ error: "La partie a déjà commencé" }, { status: 400 });
   }
   if (players.length >= Number(game.maxPlayers)) {
     return NextResponse.json({ error: "La partie est pleine" }, { status: 400 });

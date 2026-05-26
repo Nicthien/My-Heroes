@@ -71,7 +71,7 @@ export function getAttackProfile(params: {
 
   if (isMelee && distance > 1) {
     return {
-      actionLabel: "Hors portee",
+      actionLabel: "Hors portée",
       canStrike: false,
       damagePenalty: 0,
       penaltyReasons,
@@ -84,7 +84,7 @@ export function getAttackProfile(params: {
   if (isShot) {
     if (!actor.ranged || actor.shots <= 0 || distance <= 1 || params.actorAdjacentToEnemy) {
       return {
-        actionLabel: "Hors portee",
+        actionLabel: "Hors portée",
         canStrike: false,
         damagePenalty: 0,
         penaltyReasons,
@@ -93,11 +93,11 @@ export function getAttackProfile(params: {
         isShot,
       };
     }
-    if (distance > COMBAT_LONG_RANGE_HEXES) penaltyReasons.push("longue portee");
+    if (distance > COMBAT_LONG_RANGE_HEXES) penaltyReasons.push("longue portée");
     if (isLineBlockedByTerrain(actor, target, params.terrain ?? [])) penaltyReasons.push("obstacle");
   }
 
-  if (isMelee && actor.ranged) penaltyReasons.push("corps-a-corps");
+  if (isMelee && actor.ranged) penaltyReasons.push("corps-à-corps");
 
   const damagePenalty = penaltyReasons.length > 0 ? 0.5 : 1;
   return {

@@ -113,16 +113,17 @@ export async function POST(
     (turn) => turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
   );
   if (completedTurn) {
-    return NextResponse.json({ error: "Vous avez deja termine votre tour" }, { status: 403 });
+    return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
   }
 
   const attacker = gamePlayer.heroes.find((hero) => hero.id === body.attackerHeroId);
   if (!attacker) return NextResponse.json({ error: "Héros attaquant invalide" }, { status: 400 });
   if (isHeroInActiveCombat(game.combats, attacker.id)) {
-    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+    return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
 
   const mapData = normalizeMapMovement(game.mapData as GameMap);
+  const mapState = (game.mapState as Record<string, unknown> | undefined) ?? {};
   const gates = getEffectiveGates(dbGates, mapData);
   const defender = getDefender({
     targetId: String(body.targetId ?? ""),
@@ -142,10 +143,10 @@ export async function POST(
     ? getGateDefender(gates, String(body.targetId ?? ""), targetPosition)
     : null;
   const creatureBankDefender = !defender && !buildingDefender && !townDefender && !gateDefender && body.targetType === "creature_bank"
-    ? getCreatureBankDefender(mapData, String(body.targetId ?? ""), targetPosition)
+    ? getCreatureBankDefender(mapData, mapState, String(body.targetId ?? ""), targetPosition)
     : null;
   const artifactDefender = !defender && !buildingDefender && !townDefender && !gateDefender && !creatureBankDefender && body.targetType === "artifact"
-    ? getArtifactDefender(mapData, String(body.targetId ?? ""), targetPosition)
+    ? getArtifactDefender(mapData, mapState, String(body.targetId ?? ""), targetPosition)
     : null;
   const targetDefender = defender ?? buildingDefender ?? townDefender ?? gateDefender ?? creatureBankDefender ?? artifactDefender;
   if (!targetDefender) {
@@ -166,10 +167,10 @@ export async function POST(
   }
   const defenderOwner = targetDefender.playerId ? players.find((player) => player.id === targetDefender.playerId) : null;
   if (body.mode === "AUTO" && (body.targetType === "hero" || body.targetType === "gate") && targetDefender.playerId && !defenderOwner?.isAi) {
-    return NextResponse.json({ error: "Les combats entre joueurs doivent etre manuels" }, { status: 400 });
+    return NextResponse.json({ error: "Les combats entre joueurs doivent être manuels" }, { status: 400 });
   }
   if (targetDefender.heroId && isHeroInActiveCombat(game.combats, targetDefender.heroId)) {
-    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+    return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
   const devGodModeHeroId = typeof body.devGodModeHeroId === "string" && body.devGodModeHeroId === attacker.id
     ? attacker.id
@@ -204,7 +205,7 @@ export async function POST(
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
     }
   } else if (!areAdventurePositionsAdjacent({ x: attacker.x, y: attacker.y }, defenderPosition)) {
-    return NextResponse.json({ error: "Le heros doit s'arreter devant la cible avant le combat" }, { status: 400 });
+    return NextResponse.json({ error: "Le héros doit s'arrêter devant la cible avant le combat" }, { status: 400 });
   }
 
   if (body.targetType === "gate") {
@@ -408,6 +409,7 @@ export async function POST(
           .eq("id", targetDefender.id);
       }
     } else {
+      await persistGeneratedDefenderSurvivors(supabase, id, body.targetType, targetDefender, mapState, winnerArmies);
       await supabase.from("armies").delete().eq("hero_id", attacker.id);
       await supabase.from("heroes").delete().eq("id", attacker.id);
     }
@@ -458,6 +460,76 @@ async function persistAutoWinnerArmies(
     } else {
       await supabase.from(table).update({ count: army.count, health: army.health }).eq("id", army.id);
     }
+  }
+}
+
+async function persistGeneratedDefenderSurvivors(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  targetType: string,
+  defender: { id: string; x: number; y: number; neutralArmyId?: string | null; heroId?: string | null; playerId?: string | null },
+  mapStateValue: Record<string, unknown>,
+  armies: UnitStack[],
+) {
+  const survivors = armies
+    .filter((army) => army.count > 0)
+    .map((army, position) => ({
+      id: army.id,
+      unitType: army.unitType,
+      count: army.count,
+      health: army.health,
+      maxHealth: army.maxHealth,
+      position,
+    }));
+
+  if (targetType === "building" && !defender.neutralArmyId && !defender.heroId && !defender.playerId) {
+    const guardianPower = survivors.reduce((total, army) => total + army.count * army.maxHealth, 0);
+    await supabase
+      .from("resource_buildings")
+      .update({ guardian_power: guardianPower })
+      .eq("game_id", gameId)
+      .eq("id", defender.id);
+    return;
+  }
+
+  if (targetType === "town" && !defender.playerId) {
+    await supabase
+      .from("towns")
+      .update({ neutral_garrison: survivors })
+      .eq("game_id", gameId)
+      .eq("id", defender.id)
+      .eq("is_neutral", true);
+    return;
+  }
+
+  if (targetType === "creature_bank") {
+    const creatureBanks = (mapStateValue.creatureBanks as Record<string, object> | undefined) ?? {};
+    await supabase.from("games").update({
+      map_state: {
+        ...mapStateValue,
+        creatureBanks: {
+          ...creatureBanks,
+          [defender.id]: {
+            ...(creatureBanks[defender.id] ?? {}),
+            guardStacks: survivors,
+          },
+        },
+      },
+    }).eq("id", gameId);
+    return;
+  }
+
+  if (targetType === "artifact") {
+    const artifactGuards = (mapStateValue.artifactGuards as Record<string, UnitStack[]> | undefined) ?? {};
+    await supabase.from("games").update({
+      map_state: {
+        ...mapStateValue,
+        artifactGuards: {
+          ...artifactGuards,
+          [defender.id]: survivors,
+        },
+      },
+    }).eq("id", gameId);
   }
 }
 
@@ -617,7 +689,12 @@ function getGateDefender(
   };
 }
 
-function getArtifactDefender(mapData: GameMap, targetId: string, targetPosition?: { x?: unknown; y?: unknown }) {
+function getArtifactDefender(
+  mapData: GameMap,
+  mapState: Record<string, unknown>,
+  targetId: string,
+  targetPosition?: { x?: unknown; y?: unknown }
+) {
   const position = findMapObjectPosition(mapData, "artifact", targetId, targetPosition);
   if (!position) return null;
   const tile = mapData.tiles[position.y]?.[position.x];
@@ -626,7 +703,9 @@ function getArtifactDefender(mapData: GameMap, targetId: string, targetPosition?
   const artifact = getArtifact(object.subtype);
   const artifactClass = artifact?.class ?? (isArtifactClass(object.subtype) ? object.subtype : "minor");
   const guardianPower = Number(object.guardianPower ?? ARTIFACT_GUARDIAN_POWER[artifactClass]);
-  if (guardianPower <= 0) return null;
+  const artifactGuards = (mapState.artifactGuards as Record<string, UnitStack[]> | undefined) ?? {};
+  const guardStacks = artifactGuards[object.id];
+  if (guardianPower <= 0 && !guardStacks?.length) return null;
   return {
     id: object.id,
     playerId: null,
@@ -634,11 +713,14 @@ function getArtifactDefender(mapData: GameMap, targetId: string, targetPosition?
     neutralArmyId: null,
     attack: 1,
     defense: 1,
-    armies: createNeutralArmyStacksForTile(tile, guardianPower, object.id).map((stack) => ({
-      ...stack,
-      id: `${object.id}-guard-${stack.position}`,
-      heroId: null,
-    })),
+    armies: (guardStacks?.length ? guardStacks : createNeutralArmyStacksForTile(tile, guardianPower, object.id)).map((stack) => {
+      const stackWithMaybeId = stack as typeof stack & { id?: string };
+      return {
+        ...stack,
+        id: stackWithMaybeId.id ?? `${object.id}-guard-${stack.position}`,
+        heroId: null,
+      };
+    }),
     x: position.x,
     y: position.y,
   };
@@ -701,6 +783,7 @@ function getEffectiveGates(
 
 function getCreatureBankDefender(
   mapData: GameMap,
+  mapState: Record<string, unknown>,
   targetId: string,
   targetPosition?: { x?: unknown; y?: unknown }
 ) {
@@ -715,6 +798,8 @@ function getCreatureBankDefender(
   const object = tile?.object;
   if (!tile || object?.type !== "adventure_building" || !isCreatureBankType(object.subtype)) return null;
   if (!getCreatureBankDefinition(object.subtype)) return null;
+  const creatureBanks = (mapState.creatureBanks as Record<string, { guardStacks?: UnitStack[] }> | undefined) ?? {};
+  const guardStacks = creatureBanks[object.id]?.guardStacks;
 
   return {
     id: object.id,
@@ -723,7 +808,7 @@ function getCreatureBankDefender(
     neutralArmyId: null,
     attack: 1,
     defense: 1,
-    armies: createCreatureBankGuardStacks(object.subtype, object.id),
+    armies: guardStacks?.length ? guardStacks : createCreatureBankGuardStacks(object.subtype, object.id),
     x: tile.x,
     y: tile.y,
     bankType: object.subtype,

@@ -47,7 +47,7 @@ export default function LoginForm() {
           My Heroes
         </h1>
         <p className="text-gray-400 text-center mb-8">
-          Heroes of Might and Magic
+          Inspiré de Heroes of Might and Magic
         </p>
 
         {error && (

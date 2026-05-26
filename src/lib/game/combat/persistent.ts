@@ -415,16 +415,16 @@ function applyRolledDamage(
   immortalHeroId?: string | null
 ) {
   if (defender.heroId && defender.heroId === immortalHeroId) {
-    const side = attacker.side === "attacker" ? "Heros" : "Defenseur";
+    const side = attacker.side === "attacker" ? "Héros" : "Defenseur";
     const verb = retaliation ? "riposte" : "attaque";
     log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb}: mode dieu, aucune perte.`);
     return;
   }
   const { lost } = applyDamageToStack(defender, roll.damage);
-  const side = attacker.side === "attacker" ? "Heros" : "Defenseur";
+  const side = attacker.side === "attacker" ? "Héros" : "Defenseur";
   const verb = retaliation ? "riposte" : "attaque";
   const penalty = roll.profile.penaltyReasons.length > 0 ? ` (${roll.profile.penaltyReasons.join(", ")})` : "";
-  log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb} ${roll.profile.actionLabel}${penalty}: ${roll.damage} degats, ${lost} perte(s).`);
+  log.push(`${side} - ${getUnitRule(attacker.unitType).label} ${verb} ${roll.profile.actionLabel}${penalty}: ${roll.damage} dégâts, ${lost} perte(s).`);
 }
 
 function deferUnitToWaitPhase(turnQueue: string[], currentUnitId: string, units: CombatBoardUnit[]) {

@@ -23,18 +23,18 @@ type CombatPreviewScenario = "hero" | "mine" | "town" | "adventure";
 type CombatPreviewPhase = "start" | "mid" | "end" | "death" | "truce" | "truceAcked";
 
 const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
-  { id: "hero", label: "Heros" },
+  { id: "hero", label: "Héros" },
   { id: "mine", label: "Mine" },
   { id: "town", label: "Chateau" },
-  { id: "adventure", label: "Batiment" },
+  { id: "adventure", label: "Bâtiment" },
 ];
 const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; label: string }> = [
   { id: "start", label: "Debut" },
   { id: "mid", label: "Milieu" },
   { id: "end", label: "Fin" },
   { id: "death", label: "Mort" },
-  { id: "truce", label: "Treve" },
-  { id: "truceAcked", label: "Treve OK" },
+  { id: "truce", label: "Trêve" },
+  { id: "truceAcked", label: "Trêve OK" },
 ];
 
 function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "count" | "side" | "q" | "r">): CombatBoardUnit {

@@ -73,14 +73,14 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     });
 
     await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("adventure-music-control").getByRole("button", { name: "Reglages audio" }).click();
+    await page.getByTestId("adventure-music-control").getByRole("button", { name: "Réglages audio" }).click();
     await expect(page.getByLabel("Muet")).toBeVisible();
     await expect(page.getByLabel("Musique aventure")).toBeVisible();
     await expect(page.getByLabel("Musique combat")).toBeVisible();
     await expect(page.getByLabel("Effets")).toBeVisible();
 
     await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("combat-audio-control").getByRole("button", { name: "Reglages audio" }).click();
+    await page.getByTestId("combat-audio-control").getByRole("button", { name: "Réglages audio" }).click();
     await expect(page.getByLabel("Muet")).toBeVisible();
     await expect(page.getByLabel("Musique aventure")).toBeVisible();
     await expect(page.getByLabel("Musique combat")).toBeVisible();
@@ -100,7 +100,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await page.getByRole("button", { name: "Livre de sorts combat" }).click();
     await expect(page.getByRole("dialog", { name: "Livre de sorts - Combat" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Feu" })).toBeVisible();
-    await expect(page.getByText("Fleche magique")).toBeVisible();
+    await expect(page.getByText("Flèche magique")).toBeVisible();
   });
 
   test("town build tree modal shows construction dependencies", async ({ page }) => {

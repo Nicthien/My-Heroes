@@ -24,7 +24,7 @@ export default function CombatResultModal() {
   const borderColor = heroDied ? "border-red-700" : iWon ? "border-green-600" : "border-yellow-600";
   const tagColor = heroDied ? "text-red-400" : iWon ? "text-green-400" : "text-yellow-500";
   const titleColor = heroDied ? "text-red-100" : iWon ? "text-green-100" : "text-yellow-100";
-  const title = heroDied ? "Votre heros a peri au combat" : iWon ? "Victoire !" : "Combat termine";
+  const title = heroDied ? "Votre héros a péri au combat" : iWon ? "Victoire !" : "Combat terminé";
   const tag = heroDied ? "Defaite" : iWon ? "Victoire" : "Resultat";
   const buttonColor = heroDied ? "bg-red-800 hover:bg-red-700" : iWon ? "bg-green-800 hover:bg-green-700" : "bg-yellow-700 hover:bg-yellow-600";
 
@@ -69,7 +69,7 @@ export default function CombatResultModal() {
             setCombatResult(null);
           }}
         >
-          {bankReward ? "Recompense a recuperer" : "Retour a la carte"}
+          {bankReward ? "Récompense à récupérer" : "Retour à la carte"}
         </button>
       </div>
     </div>
@@ -124,7 +124,7 @@ function CreatureBankRewardPanel({
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setClaimError(data?.error ?? "Recompense impossible a recuperer.");
+      setClaimError(data?.error ?? "Récompense impossible à récupérer.");
       setClaiming(false);
       return;
     }
@@ -133,7 +133,7 @@ function CreatureBankRewardPanel({
 
   return (
     <div className="mt-5 rounded border border-emerald-700/70 bg-emerald-950/30 p-4">
-      <div className="text-sm font-bold text-emerald-100">Recompense : {bankReward.label}</div>
+      <div className="text-sm font-bold text-emerald-100">Récompense : {bankReward.label}</div>
       <RewardSummary reward={bankReward.reward} />
       {(bankReward.reward.creatures ?? []).length > 0 && (
         <div className="mt-3 space-y-2">
@@ -166,7 +166,7 @@ function CreatureBankRewardPanel({
         disabled={claiming}
         onClick={claimCreatureBankReward}
       >
-        {claiming ? "Recuperation..." : "Recuperer la recompense"}
+        {claiming ? "Récupération..." : "Récupérer la récompense"}
       </button>
     </div>
   );

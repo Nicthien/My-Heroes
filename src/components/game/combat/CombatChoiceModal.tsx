@@ -327,7 +327,7 @@ function getSourceLabel(targetType: PendingCombat["targetType"]) {
   if (targetType === "building") return "Gardiens estimés du lieu.";
   if (targetType === "town") return "Garnison neutre repérée.";
   if (targetType === "gate") return "Garnison de porte reperee.";
-  if (targetType === "creature_bank") return "Gardiens de banque de creatures.";
+  if (targetType === "creature_bank") return "Gardiens de banque de créatures.";
   if (targetType === "artifact") return "Gardiens de l'artefact.";
   if (targetType === "monster") return "Armée neutre observée.";
   return "Défense adverse repérée.";

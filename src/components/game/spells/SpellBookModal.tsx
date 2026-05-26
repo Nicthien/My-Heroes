@@ -178,7 +178,7 @@ export function SpellBookModal({
                   <p className="mt-2 min-h-10 text-sm leading-snug text-stone-200/85">{spell.effect}</p>
                   {spell.damage && (
                     <div className="mt-2 rounded border border-red-700/30 bg-red-950/25 px-2 py-1 text-xs text-red-100/85">
-                      Degats: {spell.damage.base[0]} + Pouvoir x {spell.damage.multiplier}
+                      Dégâts: {spell.damage.base[0]} + Pouvoir x {spell.damage.multiplier}
                     </div>
                   )}
                   <div className="mt-3 flex items-center justify-between gap-2">

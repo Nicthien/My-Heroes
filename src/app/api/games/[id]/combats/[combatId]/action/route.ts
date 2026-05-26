@@ -62,7 +62,7 @@ export async function POST(
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
   const gamePlayerId = String(gamePlayer.id);
   if (!combatInvolvesPlayer(combat, gamePlayerId)) {
-    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+    return NextResponse.json({ error: "Vous ne participez pas à ce combat" }, { status: 403 });
   }
   if (combat.status !== "ACTIVE") {
     const mapped = toCombat(combat);
@@ -70,7 +70,7 @@ export async function POST(
   }
   const { data: attackerHero, error: attackerError } = await fetchCombatHero(supabase, combat.attacker_hero_id);
   if (attackerError) return NextResponse.json({ error: attackerError.message }, { status: 500 });
-  if (!attackerHero) return NextResponse.json({ error: "Heros attaquant introuvable" }, { status: 404 });
+  if (!attackerHero) return NextResponse.json({ error: "Héros attaquant introuvable" }, { status: 404 });
 
   const { data: defenderHero, error: defenderError } = combat.defender_hero_id
     ? await fetchCombatHero(supabase, combat.defender_hero_id)
@@ -100,7 +100,7 @@ export async function POST(
 
   if (hasStaleClientState) {
     return NextResponse.json({
-      error: "Etat de combat perime",
+      error: "État de combat périmé",
       combat: toCombat(combat),
       result: combat.result ?? null,
       stale: true,
@@ -170,15 +170,15 @@ export async function POST(
       defenderHero,
       units: boardState.units ?? [],
     });
-    if (!caster) return NextResponse.json({ error: "Heros lanceur invalide" }, { status: 400 });
-    if (caster.playerId !== gamePlayerId) return NextResponse.json({ error: "Ce n'est pas votre heros" }, { status: 403 });
+    if (!caster) return NextResponse.json({ error: "Héros lanceur invalide" }, { status: 400 });
+    if (caster.playerId !== gamePlayerId) return NextResponse.json({ error: "Ce n'est pas votre héros" }, { status: 403 });
     if (hasHeroCastCombatSpell(boardState.spellCastsByRound, combat.round ?? 1, caster.heroId)) {
-      return NextResponse.json({ error: "Ce heros a deja lance un sort ce round" }, { status: 400 });
+      return NextResponse.json({ error: "Ce héros a déjà lancé un sort ce round" }, { status: 400 });
     }
 
     const spell = getSpell(String(action.spellId ?? ""));
     if (!spell || spell.context !== "combat") return NextResponse.json({ error: "Sort de combat invalide" }, { status: 400 });
-    if (caster.hero.has_spell_book === false) return NextResponse.json({ error: "Ce heros n'a pas de livre de sorts" }, { status: 400 });
+    if (caster.hero.has_spell_book === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
     if (!heroKnowsSpell({ knownSpellIds: caster.hero.known_spells ?? null }, spell.id)) {
       return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
     }
@@ -339,7 +339,7 @@ export async function POST(
     const concedingParticipant = findActiveCombatParticipant(combat, boardState.units ?? [], gamePlayerId, combat.current_unit_id);
     const concedingSide = concedingParticipant?.side ?? getPlayerCombatSide(combat, gamePlayerId);
     if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
-    if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Heros introuvable" }, { status: 400 });
+    if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Héros introuvable" }, { status: 400 });
     const concedingHeroId = concedingParticipant.heroId;
 
     if (hasHeroCastCombatSpell(boardState.spellCastsByRound, combat.round ?? 1, concedingHeroId) && (combat.round ?? 1) <= 1) {
@@ -601,13 +601,13 @@ async function requestCombatTruce(params: {
       : null;
   if (!side) return NextResponse.json({ error: "Seul un joueur principal peut demander une treve." }, { status: 403 });
   const heroId = side === "attacker" ? params.combat.attacker_hero_id : params.combat.defender_hero_id;
-  if (!heroId) return NextResponse.json({ error: "Heros principal introuvable." }, { status: 400 });
+  if (!heroId) return NextResponse.json({ error: "Héros principal introuvable." }, { status: 400 });
   if (getActiveCombatTruce(params.combat, params.gameTurnNumber)) {
-    return NextResponse.json({ error: "Une treve est deja en cours." }, { status: 400 });
+    return NextResponse.json({ error: "Une treve est déjà en cours." }, { status: 400 });
   }
   const alreadyUsed = params.combat.combat_truces?.some((truce) => truce.requested_by_player_id === params.gamePlayerId);
   if (alreadyUsed) {
-    return NextResponse.json({ error: "Vous avez deja utilise votre treve dans ce combat." }, { status: 400 });
+    return NextResponse.json({ error: "Vous avez déjà utilise votre treve dans ce combat." }, { status: 400 });
   }
 
   const { error } = await params.supabase.from("combat_truces").insert({
@@ -622,7 +622,7 @@ async function requestCombatTruce(params: {
   if (error) {
     const message = String(error.message ?? "");
     if (message.toLowerCase().includes("duplicate")) {
-      return NextResponse.json({ error: "Vous avez deja utilise votre treve dans ce combat." }, { status: 400 });
+      return NextResponse.json({ error: "Vous avez déjà utilise votre treve dans ce combat." }, { status: 400 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -646,9 +646,9 @@ async function acknowledgeCombatTruce(params: {
   const truce = params.truceId
     ? params.combat.combat_truces?.find((item) => item.id === params.truceId)
     : params.combat.combat_truces?.find((item) => item.status === "ACTIVE");
-  if (!truce) return NextResponse.json({ error: "Treve introuvable." }, { status: 404 });
+  if (!truce) return NextResponse.json({ error: "Trêve introuvable." }, { status: 404 });
   if (!combatInvolvesPlayer(params.combat, params.gamePlayerId)) {
-    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+    return NextResponse.json({ error: "Vous ne participez pas à ce combat" }, { status: 403 });
   }
   const acknowledged = normalizeAcknowledgedPlayerIds(truce.acknowledged_player_ids);
   if (!acknowledged.includes(params.gamePlayerId)) acknowledged.push(params.gamePlayerId);
@@ -685,9 +685,9 @@ async function createSurrenderNegotiation(params: {
   const concedingParticipant = findActiveCombatParticipant(params.combat, params.boardState.units ?? [], params.gamePlayerId, params.combat.current_unit_id);
   const concedingSide = concedingParticipant?.side ?? getPlayerCombatSide(params.combat, params.gamePlayerId);
   if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
-  if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Heros introuvable" }, { status: 400 });
+  if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Héros introuvable" }, { status: 400 });
   if (!combatHasPlayerHeroesOnBothSides(params.combat, params.boardState.units ?? [])) {
-    return NextResponse.json({ error: "La reddition est possible uniquement contre un heros." }, { status: 400 });
+    return NextResponse.json({ error: "La reddition est possible uniquement contre un héros." }, { status: 400 });
   }
   const targetPlayerId = concedingSide === "attacker" ? params.combat.defender_player_id : params.combat.attacker_player_id;
   if (!targetPlayerId) return NextResponse.json({ error: "Joueur adverse introuvable" }, { status: 400 });
@@ -1298,6 +1298,9 @@ async function persistResolvedCombat(
     await applyNecromancyPostCombat(supabase, combat.attacker_hero_id, combat.attacker_player_id, "attacker", before, after);
     await applyCombatXp(supabase, combat.game_id, combat.attacker_hero_id, before, after);
   } else if (winnerSide === "defender") {
+    if (!combat.defender_player_id && !combat.neutral_army_id && !combat.gate_id) {
+      await persistGeneratedNeutralDefenderSurvivorsAt(supabase, combat.game_id, combat.x, combat.y, after);
+    }
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
     if (combat.defender_hero_id && combat.defender_player_id) {
@@ -1372,6 +1375,86 @@ async function persistCombatUnitCounts(
       await supabase.from("gate_stacks").update({ count, health }).eq("id", unit.id);
     }
   }
+}
+
+async function persistGeneratedNeutralDefenderSurvivorsAt(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  x: number,
+  y: number,
+  units: CombatBoardUnit[],
+) {
+  const survivors = units
+    .filter((unit) => unit.side === "defender" && unit.count > 0)
+    .map((unit, position) => ({
+      id: unit.id,
+      unitType: unit.unitType,
+      count: unit.count,
+      health: unit.health,
+      maxHealth: unit.maxHealth,
+      position,
+    }));
+
+  const { data: town } = await supabase
+    .from("towns")
+    .select("id")
+    .eq("game_id", gameId)
+    .eq("x", x)
+    .eq("y", y)
+    .eq("is_neutral", true)
+    .maybeSingle();
+  if (town) {
+    await supabase.from("towns").update({ neutral_garrison: survivors }).eq("id", town.id);
+    return;
+  }
+
+  const { data: game } = await supabase
+    .from("games")
+    .select("map_data,map_state")
+    .eq("id", gameId)
+    .maybeSingle();
+  const mapData = game?.map_data as GameMap | undefined;
+  const object = mapData?.tiles?.[y]?.[x]?.object;
+  const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
+
+  if (object?.type === "adventure_building" && isCreatureBankType(object.subtype)) {
+    const creatureBanks = (mapState.creatureBanks as Record<string, object> | undefined) ?? {};
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        creatureBanks: {
+          ...creatureBanks,
+          [object.id]: {
+            ...(creatureBanks[object.id] ?? {}),
+            guardStacks: survivors,
+          },
+        },
+      },
+    }).eq("id", gameId);
+    return;
+  }
+
+  if (object?.type === "artifact") {
+    const artifactGuards = (mapState.artifactGuards as Record<string, typeof survivors> | undefined) ?? {};
+    await supabase.from("games").update({
+      map_state: {
+        ...mapState,
+        artifactGuards: {
+          ...artifactGuards,
+          [object.id]: survivors,
+        },
+      },
+    }).eq("id", gameId);
+    return;
+  }
+
+  const guardianPower = survivors.reduce((total, unit) => total + unit.count * unit.maxHealth, 0);
+  await supabase
+    .from("resource_buildings")
+    .update({ guardian_power: guardianPower })
+    .eq("game_id", gameId)
+    .eq("x", x)
+    .eq("y", y);
 }
 
 async function applyEagleEye(

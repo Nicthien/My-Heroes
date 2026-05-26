@@ -27,7 +27,7 @@ export async function POST(
     return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
   }
   if (game.status !== "PENDING") {
-    return NextResponse.json({ error: "La partie est deja demarree" }, { status: 400 });
+    return NextResponse.json({ error: "La partie est déjà démarrée" }, { status: 400 });
   }
   if (currentUserPlayer.turnOrder !== 0) {
     return NextResponse.json({ error: "Seul le createur peut demarrer la partie" }, { status: 403 });

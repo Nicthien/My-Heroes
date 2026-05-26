@@ -479,7 +479,7 @@ export default function DashboardPage() {
 
     const { error: authError } = await supabase.auth.updateUser(authUpdates);
     if (authError) {
-      setProfileMessage({ kind: "error", text: authError.message || "Impossible de mettre a jour le compte." });
+      setProfileMessage({ kind: "error", text: authError.message || "Impossible de mettre à jour le compte." });
       setSavingProfile(false);
       return;
     }
@@ -492,7 +492,7 @@ export default function DashboardPage() {
 
     if (!profileResponse.ok) {
       const data = await parseJsonResponse(profileResponse);
-      setProfileMessage({ kind: "error", text: data?.error || "Impossible de mettre a jour le profil." });
+      setProfileMessage({ kind: "error", text: data?.error || "Impossible de mettre à jour le profil." });
       setSavingProfile(false);
       return;
     }
@@ -503,8 +503,8 @@ export default function DashboardPage() {
     setProfileMessage({
       kind: "success",
       text: nextEmail !== (session.user.email ?? "")
-        ? "Profil mis a jour. Confirmez la nouvelle adresse mail si Supabase vous envoie un message."
-        : "Profil mis a jour.",
+        ? "Profil mis à jour. Confirmez la nouvelle adresse mail si Supabase vous envoie un message."
+        : "Profil mis à jour.",
     });
     setSavingProfile(false);
     router.refresh();
@@ -603,7 +603,7 @@ export default function DashboardPage() {
     setDeletingGameId(null);
     setDashboardMessage({
       kind: "success",
-      text: `La partie "${game.name}" a bien ete supprimee.`,
+      text: `La partie "${game.name}" a bien été supprimée.`,
     });
   };
 
@@ -1170,7 +1170,7 @@ export default function DashboardPage() {
                 Supprimer la partie
               </h2>
               <p className="text-sm leading-6 text-amber-100/85">
-                Vous allez supprimer <span className="font-black text-amber-100">{deleteTarget.name}</span>. Cette action est definitive et retirera la partie pour tous les joueurs.
+                Vous allez supprimer <span className="font-black text-amber-100">{deleteTarget.name}</span>. Cette action est définitive et retirera la partie pour tous les joueurs.
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <button
@@ -1328,7 +1328,7 @@ function RmgLegend() {
 
   return (
     <div className="border border-stone-800 bg-stone-900/80 p-3">
-      <h4 className="mb-2 text-sm font-semibold text-amber-100">Legende</h4>
+      <h4 className="mb-2 text-sm font-semibold text-amber-100">Légende</h4>
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-1.5">
           {terrainItems.map(([label, color]) => (

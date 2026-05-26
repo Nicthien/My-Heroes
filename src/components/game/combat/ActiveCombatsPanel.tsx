@@ -87,7 +87,7 @@ function CombatRow({
               : "text-amber-200/50"
           }`}
         >
-          {activeTruce ? "Treve" : isMyTurn ? "A vous de jouer" : isParticipant ? "En attente" : "Observable"}
+          {activeTruce ? "Trêve" : isMyTurn ? "À vous de jouer" : isParticipant ? "En attente" : "Observable"}
         </div>
       </button>
       <button
@@ -98,7 +98,7 @@ function CombatRow({
         }`}
         onClick={onOpen}
       >
-        {activeTruce ? "Treve" : "Ouvrir"}
+        {activeTruce ? "Trêve" : "Ouvrir"}
       </button>
     </div>
   );

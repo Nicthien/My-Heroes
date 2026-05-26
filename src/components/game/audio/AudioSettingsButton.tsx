@@ -108,9 +108,9 @@ export default function AudioSettingsButton({
         type="button"
         className={`grid ${buttonSize} shrink-0 place-items-center border ${buttonTone} shadow-inner shadow-black/40 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80`}
         onClick={() => setOpen((value) => !value)}
-        aria-label="Reglages audio"
+        aria-label="Réglages audio"
         aria-expanded={open}
-        title="Reglages audio"
+        title="Réglages audio"
       >
         {muted ? <SpeakerOffIcon className={compact ? "h-4 w-4" : "h-5 w-5"} /> : <SpeakerOnIcon className={compact ? "h-4 w-4" : "h-5 w-5"} />}
       </button>
@@ -119,7 +119,7 @@ export default function AudioSettingsButton({
         <div
           className={`absolute top-[calc(100%+0.5rem)] z-50 w-72 rounded-md border border-amber-600/60 bg-stone-950/95 p-3 text-amber-100 shadow-2xl shadow-black/70 backdrop-blur ${align === "right" ? "right-0" : "left-0"}`}
           role="dialog"
-          aria-label="Reglages audio"
+          aria-label="Réglages audio"
         >
           <label className="flex items-center gap-2 rounded border border-amber-700/35 bg-black/30 px-2 py-2 text-sm font-bold">
             <input

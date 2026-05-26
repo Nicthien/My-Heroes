@@ -178,7 +178,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
               className="mt-2 w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
               onClick={() => useGameStore.getState().selectTown(townAtHero.id)}
             >
-              Au chateau : <span className="font-black">{townAtHero.name}</span>
+              Au château : <span className="font-black">{townAtHero.name}</span>
             </button>
           )}
         </div>
@@ -201,7 +201,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Stat label="Attaque" value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
-                <Stat label="Defense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
+                <Stat label="Défense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
                 <Stat label="Pouvoir" value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
                 <Stat label="Savoir" value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
                 <Stat label="Moral" value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />

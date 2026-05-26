@@ -75,7 +75,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 3600, [[UnitType.PSYCHIC_ELEMENTAL, 20], [UnitType.MAGIC_ELEMENTAL, 16]], { experience: 1500, artifactTokens: ["major"] }),
     variant(10, 5200, [[UnitType.MAGIC_ELEMENTAL, 32], [UnitType.PHOENIX, 4]], { experience: 2200, artifactTokens: ["relic"], creatures: [{ unitType: UnitType.MAGIC_ELEMENTAL, count: 2 }] }),
   ]),
-  bandit_camp: bank("bandit_camp", "Camp de bandits", "Camp de pillards protege par des voleurs et nomades.", [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.FOREST], 1.15, [
+  bandit_camp: bank("bandit_camp", "Camp de bandits", "Camp de pillards protégé par des voleurs et nomades.", [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.FOREST], 1.15, [
     variant(30, 550, [[UnitType.ROGUE, 35]], { gold: 800, resources: { wood: 2 } }),
     variant(30, 900, [[UnitType.ROGUE, 55], [UnitType.NOMAD, 8]], { gold: 1300, resources: { wood: 3, ore: 2 } }),
     variant(30, 1450, [[UnitType.ROGUE, 80], [UnitType.NOMAD, 18]], { gold: 2200, artifactTokens: ["treasure"] }),
@@ -87,7 +87,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 2100, [[UnitType.EVIL_EYE, 38]], { gold: 2500, resources: { gems: 5 }, creatures: [{ unitType: UnitType.EVIL_EYE, count: 4 }] }),
     variant(10, 3200, [[UnitType.EVIL_EYE, 54], [UnitType.MEDUSA_QUEEN, 12]], { gold: 3500, resources: { gems: 7 }, creatures: [{ unitType: UnitType.EVIL_EYE, count: 7 }] }),
   ]),
-  black_tower: bank("black_tower", "Tour noire", "Tour noire gardee par des dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.DIRT], 0.25, [
+  black_tower: bank("black_tower", "Tour noire", "Tour noire gardée par des dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.DIRT], 0.25, [
     variant(30, 5200, [[UnitType.RED_DRAGON, 3], [UnitType.MINOTAUR_KING, 20]], { gold: 4000, artifactTokens: ["major"] }),
     variant(30, 7200, [[UnitType.RED_DRAGON, 5], [UnitType.BLACK_DRAGON, 1]], { gold: 6000, artifactTokens: ["major"] }),
     variant(30, 9400, [[UnitType.BLACK_DRAGON, 3], [UnitType.RED_DRAGON, 5]], { gold: 8000, artifactTokens: ["relic"] }),
@@ -105,13 +105,13 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 1400, [[UnitType.VAMPIRE, 18], [UnitType.LICH, 8]], { gold: 2500, artifactTokens: ["minor"] }),
     variant(10, 2300, [[UnitType.VAMPIRE_LORD, 24], [UnitType.POWER_LICH, 10]], { gold: 4000, artifactTokens: ["major"] }),
   ]),
-  cyclops_stockpile: bank("cyclops_stockpile", "Reserve de cyclopes", "Reserve fortifiee remplie de projectiles et minerais.", [TerrainType.MOUNTAIN, TerrainType.DIRT, TerrainType.SAND], 0.55, [
+  cyclops_stockpile: bank("cyclops_stockpile", "Reserve de cyclopes", "Reserve fortifiée remplie de projectiles et minerais.", [TerrainType.MOUNTAIN, TerrainType.DIRT, TerrainType.SAND], 0.55, [
     variant(30, 1800, [[UnitType.CYCLOPS, 10], [UnitType.OGRE, 35]], { resources: { ore: 12, crystals: 2 } }),
     variant(30, 2600, [[UnitType.CYCLOPS, 16], [UnitType.OGRE_MAGE, 30]], { resources: { ore: 18, crystals: 3 } }),
     variant(30, 3600, [[UnitType.CYCLOPS_KING, 16], [UnitType.THUNDERBIRD, 8]], { resources: { ore: 24, crystals: 5 }, creatures: [{ unitType: UnitType.CYCLOPS, count: 2 }] }),
     variant(10, 5200, [[UnitType.CYCLOPS_KING, 28], [UnitType.BEHEMOTH, 4]], { resources: { ore: 36, crystals: 8 }, creatures: [{ unitType: UnitType.CYCLOPS_KING, count: 3 }] }),
   ]),
-  derelict_ship: bank("derelict_ship", "Epave abandonnee", "Epave echouee gardee par un equipage hostile.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.75, [
+  derelict_ship: bank("derelict_ship", "Épave abandonnée", "Épave échouée gardée par un équipage hostile.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.75, [
     variant(30, 900, [[UnitType.PIRATE, 30]], { gold: 1200, resources: { wood: 5 } }),
     variant(30, 1500, [[UnitType.PIRATE, 40], [UnitType.CORSAIR, 15]], { gold: 2000, resources: { wood: 8 } }),
     variant(30, 2400, [[UnitType.CORSAIR, 45], [UnitType.SEA_WITCH, 10]], { gold: 3200, artifactTokens: ["minor"] }),
@@ -123,7 +123,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 1600, [[UnitType.DRAGON_FLY, 35]], { resources: { sulfur: 5 }, creatures: [{ unitType: UnitType.DRAGON_FLY, count: 5 }] }),
     variant(10, 2400, [[UnitType.DRAGON_FLY, 55], [UnitType.WYVERN, 6]], { resources: { sulfur: 8 }, creatures: [{ unitType: UnitType.DRAGON_FLY, count: 8 }] }),
   ]),
-  dragon_utopia: bank("dragon_utopia", "Utopie des dragons", "Tresor mythique protege par plusieurs dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.SNOW], 0.18, [
+  dragon_utopia: bank("dragon_utopia", "Utopie des dragons", "Tresor mythique protégé par plusieurs dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.SNOW], 0.18, [
     variant(30, 9000, [[UnitType.GREEN_DRAGON, 8], [UnitType.RED_DRAGON, 4]], { gold: 12000, resources: spreadRare(4), artifactTokens: ["major", "major"] }),
     variant(30, 12500, [[UnitType.RED_DRAGON, 8], [UnitType.GOLD_DRAGON, 4]], { gold: 20000, resources: spreadRare(6), artifactTokens: ["major", "relic"] }),
     variant(30, 16500, [[UnitType.BLACK_DRAGON, 6], [UnitType.GOLD_DRAGON, 6]], { gold: 30000, resources: spreadRare(8), artifactTokens: ["relic", "relic"] }),
@@ -135,7 +135,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 1900, [[UnitType.BATTLE_DWARF, 70]], { gold: 4000, resources: { gems: 4, crystals: 2 }, creatures: [{ unitType: UnitType.DWARF, count: 8 }] }),
     variant(10, 3000, [[UnitType.BATTLE_DWARF, 110], [UnitType.STEEL_GOLEM, 12]], { gold: 6000, resources: { gems: 6, crystals: 4 }, creatures: [{ unitType: UnitType.BATTLE_DWARF, count: 10 }] }),
   ]),
-  experimental_shop: bank("experimental_shop", "Atelier experimental", "Atelier bruyant rempli de prototypes.", [TerrainType.DIRT, TerrainType.SAND, TerrainType.MOUNTAIN], 0.7, [
+  experimental_shop: bank("experimental_shop", "Atelier expérimental", "Atelier bruyant rempli de prototypes.", [TerrainType.DIRT, TerrainType.SAND, TerrainType.MOUNTAIN], 0.7, [
     variant(30, 900, [[UnitType.MECHANIC, 35], [UnitType.ARMADILLO, 8]], { resources: { ore: 6, wood: 3 } }),
     variant(30, 1600, [[UnitType.ENGINEER, 30], [UnitType.AUTOMATON, 10]], { resources: { ore: 10, crystals: 2 }, creatures: [{ unitType: UnitType.MECHANIC, count: 5 }] }),
     variant(30, 2600, [[UnitType.SENTINEL_AUTOMATON, 18], [UnitType.GUNSLINGER, 15]], { gold: 2500, resources: { ore: 14, crystals: 4 }, creatures: [{ unitType: UnitType.AUTOMATON, count: 3 }] }),
@@ -171,13 +171,13 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 2100, [[UnitType.MEDUSA_QUEEN, 36]], { resources: { sulfur: 6, gems: 4 }, creatures: [{ unitType: UnitType.MEDUSA, count: 4 }] }),
     variant(10, 3200, [[UnitType.MEDUSA_QUEEN, 52], [UnitType.MANTICORE, 8]], { resources: { sulfur: 9, gems: 6 }, creatures: [{ unitType: UnitType.MEDUSA_QUEEN, count: 5 }] }),
   ]),
-  naga_bank: bank("naga_bank", "Banque des nagas", "Banque gardee par des nagas.", [TerrainType.SNOW, TerrainType.GRASS, TerrainType.MOUNTAIN], 0.45, [
+  naga_bank: bank("naga_bank", "Banque des nagas", "Banque gardée par des nagas.", [TerrainType.SNOW, TerrainType.GRASS, TerrainType.MOUNTAIN], 0.45, [
     variant(30, 2400, [[UnitType.NAGA, 12], [UnitType.IRON_GOLEM, 28]], { gold: 4000, resources: { gems: 2 } }),
     variant(30, 3600, [[UnitType.NAGA, 20], [UnitType.NAGA_QUEEN, 4]], { gold: 6000, resources: { gems: 4 } }),
     variant(30, 5200, [[UnitType.NAGA_QUEEN, 18], [UnitType.MASTER_GENIE, 12]], { gold: 9000, resources: { gems: 6 }, creatures: [{ unitType: UnitType.NAGA, count: 2 }] }),
     variant(10, 7600, [[UnitType.NAGA_QUEEN, 32], [UnitType.TITAN, 2]], { gold: 14000, artifactTokens: ["major"], creatures: [{ unitType: UnitType.NAGA_QUEEN, count: 2 }] }),
   ]),
-  pirate_cavern: bank("pirate_cavern", "Caverne de pirates", "Caverne cotiere remplie de butin.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.8, [
+  pirate_cavern: bank("pirate_cavern", "Caverne de pirates", "Caverne côtière remplie de butin.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.8, [
     variant(30, 850, [[UnitType.PIRATE, 28]], { gold: 1200, resources: { wood: 4 } }),
     variant(30, 1500, [[UnitType.CORSAIR, 24], [UnitType.PIRATE, 20]], { gold: 2200, resources: { wood: 6 } }),
     variant(30, 2600, [[UnitType.SEA_DOG, 30], [UnitType.SEA_WITCH, 10]], { gold: 3600, artifactTokens: ["minor"], creatures: [{ unitType: UnitType.PIRATE, count: 5 }] }),
@@ -195,13 +195,13 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 2300, [[UnitType.MUMMY, 35], [UnitType.ENCHANTER, 8]], { gold: 3200, artifactTokens: ["minor"] }),
     variant(10, 3600, [[UnitType.ENCHANTER, 22], [UnitType.DIAMOND_GOLEM, 8]], { gold: 5200, artifactTokens: ["major"] }),
   ]),
-  shipwreck: bank("shipwreck", "Epave", "Navire brise charge de tresors.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.65, [
+  shipwreck: bank("shipwreck", "Épave", "Navire brise charge de tresors.", [TerrainType.SAND, TerrainType.WATER, TerrainType.SWAMP], 0.65, [
     variant(30, 1200, [[UnitType.CREW_MATE, 55], [UnitType.PIRATE, 16]], { gold: 1800, resources: { wood: 6 } }),
     variant(30, 2200, [[UnitType.SEAMAN, 50], [UnitType.CORSAIR, 24]], { gold: 3200, resources: { wood: 9 }, artifactTokens: ["minor"] }),
     variant(30, 3600, [[UnitType.SEA_DOG, 45], [UnitType.SEA_WITCH, 18]], { gold: 5200, artifactTokens: ["major"] }),
     variant(10, 5600, [[UnitType.SEA_DOG, 70], [UnitType.NIX_WARRIOR, 8]], { gold: 9000, artifactTokens: ["relic"] }),
   ], true),
-  spit: bank("spit", "Banc de sable", "Banc de sable protege par des creatures marines.", [TerrainType.SAND, TerrainType.WATER], 0.75, [
+  spit: bank("spit", "Banc de sable", "Banc de sable protégé par des créatures marines.", [TerrainType.SAND, TerrainType.WATER], 0.75, [
     variant(30, 800, [[UnitType.NYMPH, 60], [UnitType.OCEANID, 12]], { gold: 900, resources: { gems: 1 } }),
     variant(30, 1500, [[UnitType.OCEANID, 50], [UnitType.WATER_ELEMENTAL, 14]], { gold: 1500, resources: { gems: 2 } }),
     variant(30, 2600, [[UnitType.ICE_ELEMENTAL, 36], [UnitType.SEA_WITCH, 12]], { gold: 2400, resources: { gems: 4 }, creatures: [{ unitType: UnitType.OCEANID, count: 6 }] }),

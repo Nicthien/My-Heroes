@@ -21,7 +21,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.OBSERVATORY]: {
     type: AdventureBuildingType.OBSERVATORY,
     label: "Observatoire",
-    description: "Revele le terrain autour du heros.",
+    description: "Révèle le terrain autour du héros.",
     visitMode: "once_per_player",
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.GRASS, TerrainType.SNOW],
     rarity: 0.9,
@@ -37,7 +37,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.LIGHTHOUSE]: {
     type: AdventureBuildingType.LIGHTHOUSE,
     label: "Phare",
-    description: "Signale la cote et prepare un bonus de navigation.",
+    description: "Signale la côte et prépare un bonus de navigation.",
     visitMode: "once_per_player",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW],
     rarity: 0.6,
@@ -45,7 +45,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.STARGATE]: {
     type: AdventureBuildingType.STARGATE,
     label: "Stargate",
-    description: "Teleporte le heros vers la Stargate liee.",
+    description: "Téléporte le héros vers la Stargate liée.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.35,
@@ -53,7 +53,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.EXTERNAL_DWELLING]: {
     type: AdventureBuildingType.EXTERNAL_DWELLING,
     label: "Demeure externe",
-    description: "Permet de recruter des creatures sur la carte.",
+    description: "Permet de recruter des créatures sur la carte.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP, TerrainType.MOUNTAIN],
     rarity: 0.8,
@@ -61,7 +61,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.ARENA]: {
     type: AdventureBuildingType.ARENA,
     label: "Arène",
-    description: "Permet au heros de choisir +2 Attaque ou +2 Defense.",
+    description: "Permet au héros de choisir +2 Attaque ou +2 Défense.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.MOUNTAIN],
     rarity: 0.55,
@@ -69,7 +69,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MERCENARY_CAMP]: {
     type: AdventureBuildingType.MERCENARY_CAMP,
     label: "Camp de mercenaires",
-    description: "Accorde +1 Attaque au heros.",
+    description: "Accorde +1 Attaque au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.FOREST],
     rarity: 0.9,
@@ -77,7 +77,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MARLETTO_TOWER]: {
     type: AdventureBuildingType.MARLETTO_TOWER,
     label: "Tour de Marletto",
-    description: "Accorde +1 Defense au heros.",
+    description: "Accorde +1 Défense au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.8,
@@ -85,7 +85,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.STAR_AXIS]: {
     type: AdventureBuildingType.STAR_AXIS,
     label: "Axe étoilé",
-    description: "Accorde +1 Pouvoir au heros.",
+    description: "Accorde +1 Pouvoir au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.MOUNTAIN, TerrainType.SNOW, TerrainType.LAVA],
     rarity: 0.75,
@@ -93,7 +93,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.GARDEN_OF_REVELATION]: {
     type: AdventureBuildingType.GARDEN_OF_REVELATION,
     label: "Jardin de révélation",
-    description: "Accorde +1 Savoir au heros.",
+    description: "Accorde +1 Savoir au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP],
     rarity: 0.75,
@@ -101,7 +101,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.LEARNING_STONE]: {
     type: AdventureBuildingType.LEARNING_STONE,
     label: "Pierre de savoir",
-    description: "Accorde 1000 XP au heros.",
+    description: "Accorde 1000 XP au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 1.0,
@@ -109,7 +109,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.SCHOOL_OF_WAR]: {
     type: AdventureBuildingType.SCHOOL_OF_WAR,
     label: "École de guerre",
-    description: "Permet de payer 1000 Or pour choisir +1 Attaque ou +1 Defense.",
+    description: "Permet de payer 1000 Or pour choisir +1 Attaque ou +1 Défense.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND],
     rarity: 0.45,
@@ -125,7 +125,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT]: {
     type: AdventureBuildingType.LIBRARY_OF_ENLIGHTENMENT,
     label: "Bibliothèque d'illumination",
-    description: "Accorde +2 aux quatre caracteristiques principales aux heros de niveau 10 ou plus.",
+    description: "Accorde +2 aux quatre caractéristiques principales aux héros de niveau 10 ou plus.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.25,
@@ -133,7 +133,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.CARTOGRAPHER]: {
     type: AdventureBuildingType.CARTOGRAPHER,
     label: "Cartographe",
-    description: "Permet de payer 10000 Or pour reveler toute la carte.",
+    description: "Permet de payer 10000 Or pour révéler toute la carte.",
     visitMode: "once_per_player",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW],
     rarity: 0.25,
@@ -141,7 +141,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.REDWOOD_OBSERVATORY]: {
     type: AdventureBuildingType.REDWOOD_OBSERVATORY,
     label: "Observatoire sylvestre",
-    description: "Revele une tres grande zone autour du batiment.",
+    description: "Révèle une tres grande zone autour du bâtiment.",
     visitMode: "once_per_player",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST],
     rarity: 0.5,
@@ -149,7 +149,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MYSTICAL_GARDEN]: {
     type: AdventureBuildingType.MYSTICAL_GARDEN,
     label: "Jardin mystique",
-    description: "Offre une recompense hebdomadaire en Or ou Gemmes.",
+    description: "Offre une récompense hebdomadaire en Or ou Gemmes.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP],
     rarity: 0.65,
@@ -157,7 +157,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.STABLES]: {
     type: AdventureBuildingType.STABLES,
     label: "Écuries",
-    description: "Accorde un bonus de mouvement au heros pour la semaine.",
+    description: "Accorde un bonus de mouvement au héros pour la semaine.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND],
     rarity: 0.8,
@@ -165,7 +165,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.TEMPLE]: {
     type: AdventureBuildingType.TEMPLE,
     label: "Temple",
-    description: "Accorde +1 Moral au heros.",
+    description: "Accorde +1 Moral au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.7,
@@ -173,7 +173,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.FOUNTAIN_OF_FORTUNE]: {
     type: AdventureBuildingType.FOUNTAIN_OF_FORTUNE,
     label: "Fontaine de fortune",
-    description: "Accorde +1 Chance au heros.",
+    description: "Accorde +1 Chance au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SNOW],
     rarity: 0.7,
@@ -181,7 +181,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.IDOL_OF_FORTUNE]: {
     type: AdventureBuildingType.IDOL_OF_FORTUNE,
     label: "Idole de fortune",
-    description: "Accorde +1 Moral et +1 Chance au heros.",
+    description: "Accorde +1 Moral et +1 Chance au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SWAMP, TerrainType.MOUNTAIN],
     rarity: 0.45,
@@ -189,7 +189,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MAGIC_WELL]: {
     type: AdventureBuildingType.MAGIC_WELL,
     label: "Puits magique",
-    description: "Restaure la mana du heros une fois par semaine.",
+    description: "Restaure la mana du héros une fois par semaine.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SNOW, TerrainType.SWAMP],
     rarity: 0.8,
@@ -197,7 +197,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MAGIC_SHRINE]: {
     type: AdventureBuildingType.MAGIC_SHRINE,
     label: "Sanctuaire magique",
-    description: "Restaure 20 mana au heros.",
+    description: "Restaure 20 mana au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.55,
@@ -205,7 +205,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.WATER_MILL]: {
     type: AdventureBuildingType.WATER_MILL,
     label: "Moulin à eau",
-    description: "Offre une recompense hebdomadaire en Or.",
+    description: "Offre une récompense hebdomadaire en Or.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP],
     rarity: 0.85,
@@ -213,7 +213,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.WATER_WHEEL]: {
     type: AdventureBuildingType.WATER_WHEEL,
     label: "Roue hydraulique",
-    description: "Offre une petite recompense hebdomadaire en Or.",
+    description: "Offre une petite récompense hebdomadaire en Or.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP],
     rarity: 0.8,
@@ -221,7 +221,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.ABANDONED_WAGON]: {
     type: AdventureBuildingType.ABANDONED_WAGON,
     label: "Wagon abandonné",
-    description: "Offre une recompense aleatoire, puis se vide.",
+    description: "Offre une récompense aléatoire, puis se vide.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW],
     rarity: 1.0,
@@ -245,7 +245,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.OBELISK]: {
     type: AdventureBuildingType.OBELISK,
     label: "Obélisque",
-    description: "Revele une grande zone autour du batiment.",
+    description: "Révèle une grande zone autour du bâtiment.",
     visitMode: "once_per_player",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.MOUNTAIN],
     rarity: 0.4,
@@ -253,7 +253,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.WARRIOR_TOMB]: {
     type: AdventureBuildingType.WARRIOR_TOMB,
     label: "Tombe du guerrier",
-    description: "Offre un tresor et de l'experience, mais fait perdre du Moral.",
+    description: "Offre un trésor et de l'expérience, mais fait perdre du Moral.",
     visitMode: "once",
     preferredTerrain: [TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.65,
@@ -261,7 +261,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.CURSED_ALTAR]: {
     type: AdventureBuildingType.CURSED_ALTAR,
     label: "Autel maudit",
-    description: "Accorde +1 Pouvoir au heros, mais lui retire 1 Chance.",
+    description: "Accorde +1 Pouvoir au héros, mais lui retire 1 Chance.",
     visitMode: "once",
     preferredTerrain: [TerrainType.DIRT, TerrainType.SWAMP, TerrainType.MOUNTAIN],
     rarity: 0.5,
@@ -269,7 +269,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.SPELL_SHRINE_1]: {
     type: AdventureBuildingType.SPELL_SHRINE_1,
     label: "Sanctuaire de sort I",
-    description: "Enseigne un sort de niveau 1 au heros.",
+    description: "Enseigne un sort de niveau 1 au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.7,
@@ -277,7 +277,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.SPELL_SHRINE_2]: {
     type: AdventureBuildingType.SPELL_SHRINE_2,
     label: "Sanctuaire de sort II",
-    description: "Enseigne un sort de niveau 2 au heros.",
+    description: "Enseigne un sort de niveau 2 au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.MOUNTAIN],
     rarity: 0.55,
@@ -285,7 +285,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.SPELL_SHRINE_3]: {
     type: AdventureBuildingType.SPELL_SHRINE_3,
     label: "Sanctuaire de sort III",
-    description: "Enseigne un sort de niveau 3 au heros.",
+    description: "Enseigne un sort de niveau 3 au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.SNOW, TerrainType.MOUNTAIN, TerrainType.SWAMP],
     rarity: 0.4,
@@ -300,7 +300,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   },
   [AdventureBuildingType.SEER_HUT]: {
     type: AdventureBuildingType.SEER_HUT,
-    label: "Hutte d'erudit",
+    label: "Hutte d'érudit",
     description: "Accorde 1000 XP et restaure un peu de mana.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.FOREST, TerrainType.SWAMP],
@@ -309,15 +309,15 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.MERMAID]: {
     type: AdventureBuildingType.MERMAID,
     label: "Sirene",
-    description: "Accorde +1 Chance au heros.",
+    description: "Accorde +1 Chance au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS],
     rarity: 0.55,
   },
   [AdventureBuildingType.BUOY]: {
     type: AdventureBuildingType.BUOY,
-    label: "Bouee",
-    description: "Accorde +1 Moral au heros.",
+    label: "Bouée",
+    description: "Accorde +1 Moral au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.SAND, TerrainType.GRASS, TerrainType.SWAMP],
     rarity: 0.65,
@@ -325,7 +325,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   [AdventureBuildingType.FLOTSAM]: {
     type: AdventureBuildingType.FLOTSAM,
     label: "Debris flottants",
-    description: "Contient une petite recompense de ressources.",
+    description: "Contient une petite récompense de ressources.",
     visitMode: "once",
     preferredTerrain: [TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS],
     rarity: 0.9,
@@ -350,7 +350,7 @@ export function getAdventureBuildingLabel(type: string | undefined): string {
   const creatureBankLabel = getCreatureBankLabel(type);
   if (creatureBankLabel) return creatureBankLabel;
   if (isExternalDwellingType(type)) return getExternalDwellingLabel(undefined);
-  return getAdventureBuildingRule(type)?.label ?? "Batiment d'aventure";
+  return getAdventureBuildingRule(type)?.label ?? "Bâtiment d'aventure";
 }
 
 export function createCampfireReward(rng: RNG): CampfireReward {

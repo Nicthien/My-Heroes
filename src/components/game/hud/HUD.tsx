@@ -958,7 +958,7 @@ function HUDContent() {
         <div className="mobile-hud-drawer pointer-events-auto rounded-xl">
           <div className="flex items-center justify-between border-b border-amber-700/40 px-3 py-2">
             <div className={`text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
-              {mobileDrawer === "heroes" ? "Heros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Actions"}
+              {mobileDrawer === "heroes" ? "Héros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Actions"}
             </div>
             <button
               type="button"
@@ -1317,7 +1317,7 @@ function HUDContent() {
             }`}
             onClick={() => setMobileDrawer((current) => current === item ? null : item)}
           >
-            {item === "heroes" ? "Heros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Actions"}
+            {item === "heroes" ? "Héros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Actions"}
           </button>
         ))}
         {!isPending && (

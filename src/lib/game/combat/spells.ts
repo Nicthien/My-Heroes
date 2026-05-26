@@ -98,7 +98,7 @@ export function executeCombatSpell(params: {
     const before = target.count;
     const { lost } = applyDamageToStack(target, resolution.damage);
     affected.push(target.id);
-    log.push(`${spell.label} frappe ${getUnitRule(target.unitType).label} : ${resolution.damage} degats, ${lost} perte(s).`);
+    log.push(`${spell.label} frappe ${getUnitRule(target.unitType).label} : ${resolution.damage} dégâts, ${lost} perte(s).`);
     if (before > 0 && target.count <= 0) {
       log.push(`${getUnitRule(target.unitType).label} est detruit.`);
     }

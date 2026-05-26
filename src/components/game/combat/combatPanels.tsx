@@ -274,7 +274,7 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
   const states = [
     unit.defended ? "Defend" : null,
     unit.waited ? "Attend" : null,
-    unit.hasRetaliated ? "Riposte utilisee" : null,
+    unit.hasRetaliated ? "Riposte utilisée" : null,
   ].filter(Boolean);
 
   return (
@@ -288,8 +288,8 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
           {unit.side === "attacker" ? "Attaquant" : "Defenseur"}
         </div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-300">
-          <span title={`Base ${rule.attack} + heros ${effectiveStats.heroAttack}`}>Att. {effectiveStats.attack}</span>
-          <span title={`Base ${rule.defense} + heros ${effectiveStats.heroDefense}`}>Def. {effectiveStats.defense}</span>
+          <span title={`Base ${rule.attack} + héros ${effectiveStats.heroAttack}`}>Att. {effectiveStats.attack}</span>
+          <span title={`Base ${rule.defense} + héros ${effectiveStats.heroDefense}`}>Déf. {effectiveStats.defense}</span>
           <span>Vit. {unit.speed}</span>
           <span>Deg. {unit.minDamage}-{unit.maxDamage}</span>
           <span>PV/u {unit.maxHealth}</span>

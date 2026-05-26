@@ -288,7 +288,7 @@ export default function GameMapComponent() {
 
       const currentLoadingState = useGameStore.getState();
       if (currentLoadingState.isLoading && completedLoadingNonceRef.current < currentLoadingState.loadingNonce) {
-        currentLoadingState.updateLoadingProgress(88, "Mise a jour de la carte...");
+        currentLoadingState.updateLoadingProgress(88, "Mise à jour de la carte...");
       }
 
       const reportMapLoading = (progress: number, message: string) => {
@@ -715,7 +715,7 @@ export default function GameMapComponent() {
       const amount = getCollectInteractionAmount(interaction);
       const msg = interaction.resource === "gold"
         ? `+${amount} Or trouve !`
-        : `+${amount} ${formatResourceName(interaction.resource)} collecte(e) !`;
+        : `+${amount} ${formatResourceName(interaction.resource)} collecté(e) !`;
       setCombatMessage(msg);
       return true;
     }
@@ -726,7 +726,7 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "CAPTURE_BUILDING") {
-      setCombatMessage(`Batiment capture : ${RESOURCE_BUILDING_RULES.find((rule) => rule.type === interaction.buildingType)?.label ?? "Batiment"}.`);
+      setCombatMessage(`Bâtiment capture : ${RESOURCE_BUILDING_RULES.find((rule) => rule.type === interaction.buildingType)?.label ?? "Bâtiment"}.`);
       return true;
     }
 
@@ -758,7 +758,7 @@ export default function GameMapComponent() {
       }
       if (interaction.recruited) {
         const rule = UNIT_RULES[interaction.recruited.unitType];
-        setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recrute(e)s.`);
+        setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recruté(e)s.`);
       } else if (interaction.reward) {
         const parts = [];
         if (interaction.reward.gold) parts.push(`+${interaction.reward.gold} Or`);
@@ -948,7 +948,7 @@ export default function GameMapComponent() {
       const hero = myPlayer?.heroes.find((item) => item.id === pendingAdventureSpell.heroId);
       if (!hero) {
         setPendingAdventureSpell(null);
-        setCombatMessage("Heros lanceur indisponible.");
+        setCombatMessage("Héros lanceur indisponible.");
         return;
       }
       if (!canAct) {
@@ -957,7 +957,7 @@ export default function GameMapComponent() {
       }
       if (activeCombatHeroIds.has(hero.id)) {
         setPendingAdventureSpell(null);
-        setCombatMessage("Ce heros est deja engage dans un combat.");
+        setCombatMessage("Ce héros est déjà engagé dans un combat.");
         return;
       }
 
@@ -1018,7 +1018,7 @@ export default function GameMapComponent() {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         renderer.clearHighlights();
-        setCombatMessage("Ce heros est deja engage dans un combat.");
+        setCombatMessage("Ce héros est déjà engagé dans un combat.");
         return "handled";
       }
       if (destination.x === heroSrc.position.x && destination.y === heroSrc.position.y) {
@@ -1169,7 +1169,7 @@ export default function GameMapComponent() {
       pendingMoveRef.current = null;
       pendingAttackRef.current = null;
       rendererRef.current?.clearHighlights();
-      setCombatMessage("Ce heros est deja engage dans un combat.");
+      setCombatMessage("Ce héros est déjà engagé dans un combat.");
       return true;
     };
 
@@ -1302,7 +1302,7 @@ export default function GameMapComponent() {
             if (getCombatHeroIds(combat).has(hero.id)) {
               if (isCombatOpenable) setActiveCombat(combat);
             } else {
-              setCombatMessage("Ce heros est deja engage dans un combat.");
+              setCombatMessage("Ce héros est déjà engagé dans un combat.");
             }
             return;
           }
@@ -1347,7 +1347,7 @@ export default function GameMapComponent() {
         if (isCombatOpenable) {
           setActiveCombat(combat);
         } else {
-          setCombatMessage("Selectionnez un heros pour rejoindre ce combat.");
+          setCombatMessage("Sélectionnez un héros pour rejoindre ce combat.");
         }
         return;
       }
@@ -1763,7 +1763,7 @@ export default function GameMapComponent() {
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x22d3ee);
           if (!obj.visited) {
-            setCombatMessage(`Cliquez a nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
+            setCombatMessage(`Cliquez à nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
           }
           return;
         }
@@ -1971,7 +1971,7 @@ export default function GameMapComponent() {
             });
             return;
           }
-          if (garrisonCount > 0) setCombatMessage(`Porte gardee : ${garrisonCount} unite(s).`);
+          if (garrisonCount > 0) setCombatMessage(`Porte gardée : ${garrisonCount} unité(s).`);
         }
       } else if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
@@ -2039,7 +2039,7 @@ export default function GameMapComponent() {
           targetTile?.object?.type === "wall"
             ? "Passage bloque par un mur."
             : targetTile?.object?.type === "town_footprint"
-            ? "La porte du chateau se trouve au sud."
+            ? "La porte du château se trouve au sud."
             : "Terrain infranchissable."
         );
         setTimeout(() => rendererRef.current?.clearHighlights(), 650);
@@ -2453,7 +2453,7 @@ function GateGarrisonModal({
   const activeTransferMax = activeTransferStack?.count ?? 0;
   const activeTransferCount = Math.min(Math.max(1, transferDialog?.count ?? 1), Math.max(1, activeTransferMax));
   const activeTransferLabel = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO"
-    ? hero ? `Vers : ${hero.name}` : "Vers : heros"
+    ? hero ? `Vers : ${hero.name}` : "Vers : héros"
     : "Vers : garnison";
   const activeTransferAction = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO" ? "Reprendre" : "Déposer";
 
@@ -2499,7 +2499,7 @@ function GateGarrisonModal({
       <div className="w-[min(92vw,42rem)] rounded-xl border border-amber-600 bg-stone-950 p-5 text-amber-100 shadow-2xl shadow-black">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-400/80">Porte fortifiee</div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-400/80">Porte fortifiée</div>
             <h2 className="mt-1 text-xl font-black text-amber-100">Garnison de passage</h2>
           </div>
           <button type="button" className="rounded-md border border-stone-600 px-3 py-1 text-sm text-stone-200 hover:bg-stone-800" onClick={onClose}>
@@ -2514,22 +2514,22 @@ function GateGarrisonModal({
         )}
         {isOwned && !hero && (
           <div className="mt-4 rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
-            Placez un heros allie adjacent a la porte pour modifier la garnison.
+            Placez un héros allié adjacent à la porte pour modifier la garnison.
           </div>
         )}
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <GateStackList
             title="Dans la porte"
-            empty="Aucune unite en garnison."
+            empty="Aucune unité en garnison."
             stacks={gate.garrison}
             actionLabel="Reprendre"
             disabled={!isOwned || !hero || pending}
             onTransfer={(unit) => openTransferDialog("TRANSFER_GATE_GARRISON_TO_HERO", unit)}
           />
           <GateStackList
-            title={hero ? `Avec ${hero.name}` : "Heros adjacent"}
-            empty="Aucune unite disponible."
+            title={hero ? `Avec ${hero.name}` : "Héros adjacent"}
+            empty="Aucune unité disponible."
             stacks={hero?.armies ?? []}
             actionLabel="Deposer"
             disabled={!isOwned || !hero || pending}
@@ -2617,7 +2617,7 @@ function GateStackList({
             <div key={unit.id} className="flex items-center justify-between gap-3 rounded-md border border-stone-700 bg-stone-900/80 px-3 py-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold text-amber-100">{UNIT_RULES[unit.unitType as UnitType]?.label ?? unit.unitType}</div>
-                <div className="text-xs text-amber-200/60">{unit.count} unite(s)</div>
+                <div className="text-xs text-amber-200/60">{unit.count} unité(s)</div>
               </div>
               <button
                 type="button"

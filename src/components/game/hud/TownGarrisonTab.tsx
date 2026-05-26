@@ -116,7 +116,7 @@ export function TownGarrisonTab({
                         setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
                       }}
                       aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
-                      title={upgradeOption ? `Ameliorer en ${upgradeOption.label}` : "Batiment ameliore requis"}
+                      title={upgradeOption ? `Améliorer en ${upgradeOption.label}` : "Bâtiment amélioré requis"}
                     >
                       <UpgradeUnitsIcon className="h-5 w-5" />
                     </button>
@@ -195,7 +195,7 @@ export function TownGarrisonTab({
                             setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
                           }}
                           aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
-                          title={upgradeOption ? `Ameliorer en ${upgradeOption.label}` : "Batiment ameliore requis"}
+                          title={upgradeOption ? `Améliorer en ${upgradeOption.label}` : "Bâtiment amélioré requis"}
                         >
                           <UpgradeUnitsIcon className="h-5 w-5" />
                         </button>

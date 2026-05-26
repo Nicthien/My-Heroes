@@ -111,7 +111,7 @@ export function buildConnectionsAndWalls(
     // Élargir la porte sur 1-2 tiles voisines de la frontière pour faciliter le passage
     prepareGateFrame(tiles, width, height, gate, c.wallType);
 
-    // Place la porte fortifiee sur la tile principale.
+    // Place la porte fortifiée sur la tile principale.
     tiles[gate.y][gate.x].object = {
       type: "gate",
       id: `gate-${c.from}-${c.to}-${gate.x}-${gate.y}`,

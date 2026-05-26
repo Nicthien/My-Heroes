@@ -107,8 +107,8 @@ export function TurnStatusIcon({ ended }: { ended: boolean }) {
     return (
       <span
         className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full border border-emerald-400/45 bg-emerald-950/55 text-emerald-300"
-        title="Tour termine"
-        aria-label="Tour termine"
+        title="Tour terminé"
+        aria-label="Tour terminé"
       >
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M5 12.5 L10 17 L19 7" />

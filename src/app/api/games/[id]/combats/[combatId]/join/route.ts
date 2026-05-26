@@ -44,7 +44,7 @@ export async function POST(
   }
 
   const hero = gamePlayer.heroes.find((item) => item.id === String(body.heroId));
-  if (!hero) return NextResponse.json({ error: "Heros invalide" }, { status: 400 });
+  if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
   const { data: activeCombats, error: activeCombatsError } = await supabase
     .from("combats")
@@ -53,7 +53,7 @@ export async function POST(
     .eq("status", "ACTIVE");
   if (activeCombatsError) return NextResponse.json({ error: activeCombatsError.message }, { status: 500 });
   if (isHeroInActiveCombat((activeCombats ?? []).map(toCombat), hero.id)) {
-    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+    return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
 
   const side: CombatSide = body.side === "defender" ? "defender" : "attacker";
@@ -64,7 +64,7 @@ export async function POST(
     .eq("game_id", id)
     .single();
   if (combatError) return NextResponse.json({ error: combatError.message }, { status: 500 });
-  if (combat.status !== "ACTIVE") return NextResponse.json({ error: "Ce combat est termine" }, { status: 400 });
+  if (combat.status !== "ACTIVE") return NextResponse.json({ error: "Ce combat est terminé" }, { status: 400 });
 
   const targetPlayerId = side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
   if (targetPlayerId && targetPlayerId !== gamePlayer.id) {
@@ -131,7 +131,7 @@ async function handleReinforcementDecision({
 
   const heroRow = ((requesterPlayer.heroes ?? []) as Array<Record<string, unknown>>)
     .find((hero) => hero.id === reinforcementRequest.requester_hero_id);
-  if (!heroRow) return NextResponse.json({ error: "Heros de renfort introuvable" }, { status: 400 });
+  if (!heroRow) return NextResponse.json({ error: "Héros de renfort introuvable" }, { status: 400 });
 
   const hero = { id: String(heroRow.id), armies: mapUnitStacks(heroRow.armies) };
   const { data: activeCombats, error: activeCombatsError } = await supabase
@@ -141,7 +141,7 @@ async function handleReinforcementDecision({
     .eq("status", "ACTIVE");
   if (activeCombatsError) return NextResponse.json({ error: activeCombatsError.message }, { status: 500 });
   if (isHeroInActiveCombat((activeCombats ?? []).map(toCombat), hero.id)) {
-    return NextResponse.json({ error: "Ce heros est deja engage dans un combat." }, { status: 400 });
+    return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
 
   const joinResponse = await addHeroToCombat({
@@ -193,7 +193,7 @@ async function addHeroToCombat({
     .eq("id", combatId)
     .single();
   if (combatError) return NextResponse.json({ error: combatError.message }, { status: 500 });
-  if (combatRow.status !== "ACTIVE") return NextResponse.json({ error: "Ce combat est termine" }, { status: 400 });
+  if (combatRow.status !== "ACTIVE") return NextResponse.json({ error: "Ce combat est terminé" }, { status: 400 });
 
   const boardState = (combatRow.board_state ?? { units: [], terrain: [] }) as {
     units: CombatBoardUnit[];

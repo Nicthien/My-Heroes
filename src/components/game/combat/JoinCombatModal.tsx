@@ -95,7 +95,7 @@ export default function JoinCombatModal() {
           <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">Demande de renfort</div>
           <h2 className="mt-2 text-2xl font-bold text-yellow-100">Accepter ce renfort ?</h2>
           <p className="mt-3 text-sm text-stone-300">
-            {requesterPlayer?.name ?? "Un joueur"} veut envoyer {requesterHero?.name ?? "un heros"} soutenir le camp {sideLabel}.
+            {requesterPlayer?.name ?? "Un joueur"} veut envoyer {requesterHero?.name ?? "un héros"} soutenir le camp {sideLabel}.
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button

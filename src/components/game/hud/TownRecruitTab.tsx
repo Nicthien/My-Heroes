@@ -43,7 +43,7 @@ export function TownRecruitTab({
           checked={hideMissingRecruitRequirements}
           onChange={(event) => setHideMissingRecruitRequirements(event.currentTarget.checked)}
         />
-        <span>Masquer les prerequis manquants</span>
+        <span>Masquer les prérequis manquants</span>
       </label>
       {displayedRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
         const hasDwelling = selectedTown.buildings.includes(dwelling);

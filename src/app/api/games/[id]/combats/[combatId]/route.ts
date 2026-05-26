@@ -25,7 +25,7 @@ export async function GET(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Combat introuvable" }, { status: 404 });
   if (gamePlayer.isAlive && !combatInvolvesPlayer(data, String(gamePlayer.id))) {
-    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+    return NextResponse.json({ error: "Vous ne participez pas à ce combat" }, { status: 403 });
   }
   return NextResponse.json(toCombat(data));
 }

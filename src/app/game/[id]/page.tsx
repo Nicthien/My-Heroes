@@ -61,7 +61,7 @@ export default function GamePage() {
         setGameState(cached.gameState);
         restoredCachedGame = true;
       } else {
-        beginLoading("Connexion a la partie...", 8);
+        beginLoading("Connexion à la partie...", 8);
       }
     }
 

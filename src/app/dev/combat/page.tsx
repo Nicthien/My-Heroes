@@ -20,7 +20,7 @@ import {
 
 const MOCK_USER_ID = "dev-user";
 type CombatPreviewScenario = "hero" | "mine" | "town" | "adventure";
-type CombatPreviewPhase = "start" | "mid" | "end" | "death";
+type CombatPreviewPhase = "start" | "mid" | "end" | "death" | "truce" | "truceAcked";
 
 const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
   { id: "hero", label: "Heros" },
@@ -33,6 +33,8 @@ const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; label: string }> = 
   { id: "mid", label: "Milieu" },
   { id: "end", label: "Fin" },
   { id: "death", label: "Mort" },
+  { id: "truce", label: "Treve" },
+  { id: "truceAcked", label: "Treve OK" },
 ];
 
 function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "count" | "side" | "q" | "r">): CombatBoardUnit {
@@ -234,6 +236,18 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     turnQueue: phaseTurnQueue,
     actionLog: ["Combat lance."],
     participants: [],
+    truces: phase === "truce" || phase === "truceAcked"
+      ? [{
+          id: "dev-truce",
+          combatId: "dev-combat",
+          requestedByPlayerId: "p1",
+          requestedByHeroId: "h1",
+          side: "attacker",
+          pauseUntilTurn: 2,
+          acknowledgedPlayerIds: phase === "truceAcked" ? ["p1"] : [],
+          status: "ACTIVE",
+        }]
+      : [],
     result: null,
   };
 
@@ -244,6 +258,7 @@ function getPhaseTurnQueue(fullTurnQueue: string[], phase: CombatPreviewPhase) {
   if (phase === "mid") return fullTurnQueue.slice(Math.min(2, fullTurnQueue.length));
   if (phase === "end") return fullTurnQueue.slice(-1);
   if (phase === "death") return fullTurnQueue.slice(Math.min(2, fullTurnQueue.length));
+  if (phase === "truce" || phase === "truceAcked") return fullTurnQueue;
   return fullTurnQueue;
 }
 

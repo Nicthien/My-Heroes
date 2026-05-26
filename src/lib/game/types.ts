@@ -293,6 +293,8 @@ export interface Resources {
   sulfur: number;
 }
 
+export type ResourceKey = keyof Resources;
+
 export interface HeroStats {
   attack: number;
   defense: number;
@@ -699,6 +701,47 @@ export interface CombatParticipant {
   side: CombatSide;
 }
 
+export interface CombatReinforcementRequest {
+  id: string;
+  combatId: string;
+  requesterPlayerId: string;
+  requesterHeroId: string;
+  targetPlayerId: string;
+  side: CombatSide;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt?: string | null;
+  decidedAt?: string | null;
+}
+
+export interface CombatSurrenderNegotiation {
+  id: string;
+  combatId: string;
+  surrenderingPlayerId: string;
+  surrenderingHeroId: string;
+  targetPlayerId: string;
+  side: CombatSide;
+  baseGold: number;
+  offer: Resources;
+  refusalCount: number;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "FORCED" | "CANCELLED";
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface CombatTruce {
+  id: string;
+  combatId: string;
+  requestedByPlayerId: string;
+  requestedByHeroId: string;
+  side: CombatSide;
+  pauseUntilTurn: number;
+  acknowledgedPlayerIds: string[];
+  status: "ACTIVE" | "EXPIRED" | "CANCELLED";
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface PersistentCombat {
   id: string;
   gameId: string;
@@ -729,6 +772,9 @@ export interface PersistentCombat {
   turnQueue: string[];
   actionLog: string[];
   participants?: CombatParticipant[];
+  reinforcementRequests?: CombatReinforcementRequest[];
+  surrenderNegotiations?: CombatSurrenderNegotiation[];
+  truces?: CombatTruce[];
   result?: CombatSummary | null;
   visibility?: "full" | "joinable_summary";
 }

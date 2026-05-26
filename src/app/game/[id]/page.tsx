@@ -10,6 +10,7 @@ import CombatScreen from "@/components/game/combat/CombatScreen";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
 import HUD from "@/components/game/hud/HUD";
 import { getCachedStaticGameMap, mapApiToGameState, setCachedStaticGameMap } from "@/lib/game/api";
+import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { readCachedGameState, writeCachedGameState } from "@/lib/game/local-cache";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -145,6 +146,9 @@ export default function GamePage() {
           .on("postgres_changes", { event: "*", schema: "public", table: "gate_stacks" }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, () => void syncGame())
           .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_reinforcement_requests" }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_surrender_negotiations" }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_truces" }, () => void syncGame())
           .subscribe();
 
     const interval = setInterval(syncGame, isUsingSupabaseProxy() ? 1000 : 10000);
@@ -165,6 +169,8 @@ export default function GamePage() {
       if (item.status !== "ACTIVE") return false;
       if (minimizedCombatIds.includes(item.id)) return false;
       if (item.visibility === "joinable_summary") return false;
+      const activeTruce = findActiveCombatTruce(item.truces, gameState.turnNumber);
+      if (activeTruce?.acknowledgedPlayerIds.includes(myPlayer.id)) return false;
       return item.attackerPlayerId === myPlayer.id
         || item.defenderPlayerId === myPlayer.id
         || item.participants?.some((participant) => participant.playerId === myPlayer.id);

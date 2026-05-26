@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { type GameState, type PersistentCombat, type Player, type Resources } from "@/lib/game/types";
+import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { HourglassIcon } from "./theme";
 
 const RESOURCE_ITEMS = [
@@ -132,7 +133,7 @@ function getPlayerTurnProgress(player: Player, gameState: GameState) {
 
   const baseRatio = player.turnProgressRatio ?? computeLocalTurnProgressRatio(player, gameState);
   const activeCombatCount = (gameState.activeCombats ?? []).filter((combat) =>
-    combatInvolvesPlayer(combat, player.id)
+    combatInvolvesPlayer(combat, player.id) && !findActiveCombatTruce(combat.truces, gameState.turnNumber)
   ).length;
 
   return {

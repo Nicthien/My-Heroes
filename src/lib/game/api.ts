@@ -148,6 +148,9 @@ interface ApiCombat {
   turnQueue: string[];
   actionLog: string[];
   participants?: PersistentCombat["participants"];
+  reinforcementRequests?: PersistentCombat["reinforcementRequests"];
+  surrenderNegotiations?: PersistentCombat["surrenderNegotiations"];
+  truces?: PersistentCombat["truces"];
   result?: PersistentCombat["result"];
   visibility?: PersistentCombat["visibility"];
 }
@@ -370,6 +373,9 @@ function mapActiveCombats(data: Record<string, unknown>) {
       turnQueue: combat.turnQueue,
       actionLog: combat.actionLog,
       participants: combat.participants ?? [],
+      reinforcementRequests: combat.reinforcementRequests ?? [],
+      surrenderNegotiations: combat.surrenderNegotiations ?? [],
+      truces: combat.truces ?? [],
       result: combat.result,
       visibility: combat.visibility ?? "full",
     }));

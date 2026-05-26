@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import {
+  buildConcessionBoardState,
+  findNextPrimaryParticipant,
+  getHeroCombatUnits,
+  sideHasActivePlayerUnits,
+  type CombatConcessionParticipant,
+} from "@/lib/game/combat/concession";
 import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
 import {
   executeCombatSpell,
@@ -14,7 +21,7 @@ import {
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, GameMap, UnitType } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
 import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { computeRaisedSkeletons } from "@/lib/game/combat/necromancy";
@@ -37,7 +44,7 @@ export async function POST(
   const supabase = createAdminClient();
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("status")
+    .select("status,turn_number")
     .eq("id", id)
     .single();
   if (gameError) return NextResponse.json({ error: gameError.message }, { status: 500 });
@@ -48,7 +55,7 @@ export async function POST(
 
   const { data: combat, error: fetchError } = await supabase
     .from("combats")
-    .select("*, combat_participants(*)")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
     .eq("id", combatId)
     .eq("game_id", id)
     .single();
@@ -100,10 +107,11 @@ export async function POST(
     });
   }
 
-  if (currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId && !currentActorIsAi) {
+  const bypassTurnAction = action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER" || action.type === "ACK_TRUCE";
+  if (!bypassTurnAction && currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId && !currentActorIsAi) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
-  if (!currentActor && combat.current_player_id && combat.current_player_id !== gamePlayerId) {
+  if (!bypassTurnAction && !currentActor && combat.current_player_id && combat.current_player_id !== gamePlayerId) {
     return NextResponse.json({ error: "Ce n'est pas votre tour de combat" }, { status: 403 });
   }
 
@@ -115,6 +123,43 @@ export async function POST(
     ((gamePlayer as { heroes?: Array<{ id: string }> }).heroes ?? []).some((hero) => hero.id === action.devGodModeHeroId)
       ? action.devGodModeHeroId
       : null;
+
+  if (action.type === "ACK_TRUCE") {
+    const response = await acknowledgeCombatTruce({
+      supabase,
+      combat,
+      combatId,
+      gamePlayerId,
+      truceId: typeof action.truceId === "string" ? action.truceId : null,
+    });
+    if (response) return response;
+  }
+
+  const activeTruce = getActiveCombatTruce(combat, Number(game.turn_number ?? 0));
+  if (activeTruce) {
+    return NextResponse.json({ error: "Une treve suspend le combat jusqu'au prochain tour d'aventure." }, { status: 400 });
+  }
+
+  if (
+    hasPendingSurrenderNegotiation(combat) &&
+    action.type !== "ACCEPT_SURRENDER" &&
+    action.type !== "REJECT_SURRENDER" &&
+    action.type !== "PROPOSE_SURRENDER" &&
+    action.type !== "SURRENDER_COMBAT"
+  ) {
+    return NextResponse.json({ error: "Une negociation de reddition est en cours." }, { status: 400 });
+  }
+
+  if (action.type === "REQUEST_TRUCE") {
+    const response = await requestCombatTruce({
+      supabase,
+      combat,
+      combatId,
+      gameTurnNumber: Number(game.turn_number ?? 0),
+      gamePlayerId,
+    });
+    if (response) return response;
+  }
 
   if (action.type === "CAST_COMBAT_SPELL") {
     const caster = findCombatSpellCaster({
@@ -180,7 +225,7 @@ export async function POST(
         status: result ? "RESOLVED" : combat.status,
       })
       .eq("id", combatId)
-      .select("*, combat_participants(*)")
+      .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -208,7 +253,7 @@ export async function POST(
         .from("combats")
         .update({ board_state: restBoard, action_log: [...(combat.action_log ?? []), "Phase de tactique terminée."] })
         .eq("id", combatId)
-        .select("*, combat_participants(*)")
+        .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ combat: toCombat(data), result: null });
@@ -233,7 +278,7 @@ export async function POST(
       .from("combats")
       .update({ board_state: { ...boardState, units: nextUnits } })
       .eq("id", combatId)
-      .select("*, combat_participants(*)")
+      .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ combat: toCombat(data), result: null });
@@ -255,7 +300,7 @@ export async function POST(
       .from("combats")
       .update({ board_state: boardState, action_log: [...(combat.action_log ?? []), "Tunnel d'évasion utilisé."], result, status: "RESOLVED" })
       .eq("id", combatId)
-      .select("*, combat_participants(*)")
+      .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await evaluateGameLifecycle(supabase, id);
@@ -263,79 +308,56 @@ export async function POST(
     return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
   }
 
-  if (action.type === "RETREAT_COMBAT" || action.type === "SURRENDER_COMBAT") {
-    const concedingSide = getPlayerCombatSide(combat, gamePlayerId);
-    if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
-    const winnerSide = concedingSide === "attacker" ? "defender" : "attacker";
-    const concedingHeroId = concedingSide === "attacker" ? combat.attacker_hero_id : combat.defender_hero_id;
-    const winnerPlayerId = winnerSide === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
-    const winnerHeroId = winnerSide === "attacker" ? combat.attacker_hero_id : combat.defender_hero_id;
-    if (!concedingHeroId) return NextResponse.json({ error: "Heros introuvable" }, { status: 400 });
+  if (action.type === "PROPOSE_SURRENDER" || action.type === "SURRENDER_COMBAT") {
+    const response = await createSurrenderNegotiation({
+      supabase,
+      combat,
+      boardState,
+      gamePlayer,
+      gamePlayerId,
+      combatId,
+      action,
+    });
+    if (response) return response;
+  }
 
-    const isSurrender = action.type === "SURRENDER_COMBAT";
-    if (isSurrender && (!combat.defender_hero_id || !combat.defender_player_id)) {
-      return NextResponse.json({ error: "La reddition est possible uniquement contre un heros." }, { status: 400 });
-    }
-    if (!isSurrender && hasHeroCastCombatSpell(boardState.spellCastsByRound, combat.round ?? 1, concedingHeroId) && (combat.round ?? 1) <= 1) {
+  if (action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER") {
+    const response = await resolveSurrenderNegotiation({
+      supabase,
+      id,
+      combatId,
+      combat,
+      boardState,
+      gamePlayerId,
+      decision: action.type === "ACCEPT_SURRENDER" ? "accept" : "reject",
+      negotiationId: typeof action.negotiationId === "string" ? action.negotiationId : null,
+    });
+    if (response) return response;
+  }
+
+  if (action.type === "RETREAT_COMBAT") {
+    const concedingParticipant = findActiveCombatParticipant(combat, boardState.units ?? [], gamePlayerId, combat.current_unit_id);
+    const concedingSide = concedingParticipant?.side ?? getPlayerCombatSide(combat, gamePlayerId);
+    if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
+    if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Heros introuvable" }, { status: 400 });
+    const concedingHeroId = concedingParticipant.heroId;
+
+    if (hasHeroCastCombatSpell(boardState.spellCastsByRound, combat.round ?? 1, concedingHeroId) && (combat.round ?? 1) <= 1) {
       return NextResponse.json({ error: "Impossible de fuir au premier round apres avoir lance un sort." }, { status: 400 });
     }
 
-    const surrenderHero = concedingSide === "attacker" ? attackerHero : defenderHero;
-    const surrenderCost = isSurrender
-      ? computeSurrenderGoldCost(boardState.units ?? [], concedingSide, surrenderHero?.skills ?? {})
-      : 0;
-    if (isSurrender) {
-      const resources = playerResources(gamePlayer);
-      if (resources.gold < surrenderCost) return NextResponse.json({ error: "Or insuffisant pour se rendre." }, { status: 400 });
-      await supabase.from("game_players").update({ gold: resources.gold - surrenderCost }).eq("id", gamePlayerId);
-      if (winnerPlayerId) {
-        const { data: winnerRow } = await supabase.from("game_players").select("gold").eq("id", winnerPlayerId).maybeSingle();
-        await supabase.from("game_players").update({ gold: Number(winnerRow?.gold ?? 0) + surrenderCost }).eq("id", winnerPlayerId);
-      }
-    }
-
-    const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
-    const afterUnits = isSurrender
-      ? boardState.units ?? []
-      : (boardState.units ?? []).map((unit) => unit.side === concedingSide ? { ...unit, count: 0, health: 0 } : unit);
-    const result: CombatSummary = {
-      winnerId: winnerSide,
-      winnerPlayerId,
-      attackerLosses: getSideLosses("attacker", initialUnits, afterUnits),
-      defenderLosses: getSideLosses("defender", initialUnits, afterUnits),
-      experienceGained: 0,
-      log: [
-        isSurrender
-          ? `${concedingSide === "attacker" ? "L'attaquant" : "Le defenseur"} se rend pour ${surrenderCost} or.`
-          : `${concedingSide === "attacker" ? "L'attaquant" : "Le defenseur"} fuit le combat.`,
-      ],
-    };
-    const actionLog = [...(combat.action_log ?? []), ...result.log];
-    const { data, error } = await supabase
-      .from("combats")
-      .update({
-        board_state: { ...boardState, units: afterUnits },
-        current_unit_id: null,
-        current_player_id: null,
-        action_log: actionLog,
-        result,
-        status: "RESOLVED",
-      })
-      .eq("id", combatId)
-      .select("*, combat_participants(*)")
-      .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    await persistConcededCombat(supabase, combat, initialUnits, afterUnits, {
-      concedingSide,
+    return applyCombatConcession({
+      supabase,
+      gameId: id,
+      combatId,
+      combat,
+      boardState,
+      concedingPlayerId: gamePlayerId,
       concedingHeroId,
-      winnerSide,
-      winnerHeroId: winnerHeroId ?? null,
-      preserveArmy: isSurrender,
+      concedingSide,
+      preserveArmy: false,
+      logLine: `${concedingParticipant.label} fuit le combat.`,
     });
-    await evaluateGameLifecycle(supabase, id);
-    const mapped = toCombat(data);
-    return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
   }
 
   const moraleContext = {
@@ -428,7 +450,7 @@ export async function POST(
       status: result ? "RESOLVED" : combat.status,
     })
     .eq("id", combatId)
-    .select("*, combat_participants(*)")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -452,7 +474,7 @@ function combatInvolvesPlayer(
 }
 
 function getPlayerCombatSide(
-  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string; side?: "attacker" | "defender" }> },
+  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string; side?: "attacker" | "defender" | null }> },
   playerId: string
 ): "attacker" | "defender" | null {
   if (combat.attacker_player_id === playerId) return "attacker";
@@ -460,8 +482,521 @@ function getPlayerCombatSide(
   return combat.combat_participants?.find((participant) => participant.player_id === playerId)?.side ?? null;
 }
 
-function playerResources(player: { resources?: { gold?: unknown }; gold?: unknown }) {
-  return { gold: Number(player.resources?.gold ?? player.gold ?? 0) };
+function findActiveCombatParticipant(
+  combat: {
+    attacker_player_id: string;
+    defender_player_id?: string | null;
+    attacker_hero_id: string;
+    defender_hero_id?: string | null;
+    combat_participants?: CombatConcessionParticipant[];
+  },
+  units: CombatBoardUnit[],
+  playerId: string,
+  currentUnitId?: string | null
+): { playerId: string; heroId: string; side: "attacker" | "defender"; participantId: string | null; label: string } | null {
+  const currentUnit = units.find((unit) => unit.id === currentUnitId && unit.ownerPlayerId === playerId && unit.heroId && unit.count > 0);
+  const activeUnit = currentUnit ?? units.find((unit) => unit.ownerPlayerId === playerId && unit.heroId && unit.count > 0);
+  const side = activeUnit?.side ?? getPlayerCombatSide(combat, playerId);
+  if (!side) return null;
+  const participant = combat.combat_participants?.find((item) =>
+    item.player_id === playerId &&
+    item.side === side &&
+    (!activeUnit?.heroId || item.hero_id === activeUnit.heroId)
+  );
+  const heroId = activeUnit?.heroId ??
+    (side === "attacker" && combat.attacker_player_id === playerId ? combat.attacker_hero_id : null) ??
+    (side === "defender" && combat.defender_player_id === playerId ? combat.defender_hero_id ?? null : null) ??
+    participant?.hero_id ??
+    null;
+  if (!heroId) return null;
+  return {
+    playerId,
+    heroId,
+    side,
+    participantId: participant?.id ?? activeUnit?.participantId ?? null,
+    label: side === "attacker" ? "L'attaquant" : "Le defenseur",
+  };
+}
+
+function isPrimaryCombatHero(
+  combat: { attacker_hero_id: string; defender_hero_id?: string | null },
+  side: "attacker" | "defender",
+  heroId: string
+) {
+  return side === "attacker" ? combat.attacker_hero_id === heroId : combat.defender_hero_id === heroId;
+}
+
+function combatHasPlayerHeroesOnBothSides(
+  combat: { attacker_player_id: string; defender_player_id?: string | null; defender_hero_id?: string | null },
+  units: CombatBoardUnit[]
+) {
+  const attackerHasHero = Boolean(combat.attacker_player_id) || units.some((unit) => unit.side === "attacker" && unit.ownerPlayerId && unit.heroId);
+  const defenderHasHero = Boolean(combat.defender_player_id && combat.defender_hero_id) || units.some((unit) => unit.side === "defender" && unit.ownerPlayerId && unit.heroId);
+  return attackerHasHero && defenderHasHero;
+}
+
+async function deleteConsumedCombatParticipants(
+  supabase: ReturnType<typeof createAdminClient>,
+  combatId: string,
+  participantIds: Array<string | null | undefined>
+) {
+  const ids = Array.from(new Set(participantIds.filter((id): id is string => Boolean(id))));
+  if (ids.length === 0) return;
+  await supabase.from("combat_participants").delete().eq("combat_id", combatId).in("id", ids);
+}
+
+const RESOURCE_KEYS: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
+
+type SurrenderNegotiationRow = {
+  id: string;
+  combat_id: string;
+  surrendering_player_id: string;
+  surrendering_hero_id: string;
+  target_player_id: string;
+  side: "attacker" | "defender";
+  base_gold: number;
+  offer: Partial<Resources> | null;
+  refusal_count: number;
+  status: string;
+};
+
+type CombatTruceRow = {
+  id: string;
+  combat_id: string;
+  requested_by_player_id: string;
+  requested_by_hero_id: string;
+  side: "attacker" | "defender";
+  pause_until_turn: number;
+  acknowledged_player_ids?: unknown;
+  status: string;
+};
+
+function getActiveCombatTruce(
+  combat: { combat_truces?: CombatTruceRow[] },
+  gameTurnNumber: number
+): CombatTruceRow | null {
+  return combat.combat_truces?.find((truce) =>
+    truce.status === "ACTIVE" &&
+    Number(truce.pause_until_turn ?? 0) > gameTurnNumber
+  ) ?? null;
+}
+
+async function requestCombatTruce(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  combat: {
+    attacker_player_id: string;
+    defender_player_id?: string | null;
+    attacker_hero_id: string;
+    defender_hero_id?: string | null;
+    combat_truces?: CombatTruceRow[];
+  };
+  combatId: string;
+  gameTurnNumber: number;
+  gamePlayerId: string;
+}) {
+  const side = params.combat.attacker_player_id === params.gamePlayerId
+    ? "attacker"
+    : params.combat.defender_player_id === params.gamePlayerId
+      ? "defender"
+      : null;
+  if (!side) return NextResponse.json({ error: "Seul un joueur principal peut demander une treve." }, { status: 403 });
+  const heroId = side === "attacker" ? params.combat.attacker_hero_id : params.combat.defender_hero_id;
+  if (!heroId) return NextResponse.json({ error: "Heros principal introuvable." }, { status: 400 });
+  if (getActiveCombatTruce(params.combat, params.gameTurnNumber)) {
+    return NextResponse.json({ error: "Une treve est deja en cours." }, { status: 400 });
+  }
+  const alreadyUsed = params.combat.combat_truces?.some((truce) => truce.requested_by_player_id === params.gamePlayerId);
+  if (alreadyUsed) {
+    return NextResponse.json({ error: "Vous avez deja utilise votre treve dans ce combat." }, { status: 400 });
+  }
+
+  const { error } = await params.supabase.from("combat_truces").insert({
+    combat_id: params.combatId,
+    requested_by_player_id: params.gamePlayerId,
+    requested_by_hero_id: heroId,
+    side,
+    pause_until_turn: params.gameTurnNumber + 1,
+    acknowledged_player_ids: [],
+    status: "ACTIVE",
+  });
+  if (error) {
+    const message = String(error.message ?? "");
+    if (message.toLowerCase().includes("duplicate")) {
+      return NextResponse.json({ error: "Vous avez deja utilise votre treve dans ce combat." }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  const combat = await fetchMappedCombat(params.supabase, params.combatId);
+  if (combat instanceof NextResponse) return combat;
+  return NextResponse.json({ combat, result: null });
+}
+
+async function acknowledgeCombatTruce(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  combat: {
+    combat_participants?: Array<{ player_id: string }>;
+    combat_truces?: CombatTruceRow[];
+    attacker_player_id: string;
+    defender_player_id?: string | null;
+  };
+  combatId: string;
+  gamePlayerId: string;
+  truceId: string | null;
+}) {
+  const truce = params.truceId
+    ? params.combat.combat_truces?.find((item) => item.id === params.truceId)
+    : params.combat.combat_truces?.find((item) => item.status === "ACTIVE");
+  if (!truce) return NextResponse.json({ error: "Treve introuvable." }, { status: 404 });
+  if (!combatInvolvesPlayer(params.combat, params.gamePlayerId)) {
+    return NextResponse.json({ error: "Vous ne participez pas a ce combat" }, { status: 403 });
+  }
+  const acknowledged = normalizeAcknowledgedPlayerIds(truce.acknowledged_player_ids);
+  if (!acknowledged.includes(params.gamePlayerId)) acknowledged.push(params.gamePlayerId);
+  const { error } = await params.supabase
+    .from("combat_truces")
+    .update({ acknowledged_player_ids: acknowledged, updated_at: new Date().toISOString() })
+    .eq("id", truce.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const combat = await fetchMappedCombat(params.supabase, params.combatId);
+  if (combat instanceof NextResponse) return combat;
+  return NextResponse.json({ combat, result: null });
+}
+
+function normalizeAcknowledgedPlayerIds(value: unknown) {
+  return Array.isArray(value) ? Array.from(new Set(value.map(String))) : [];
+}
+
+async function createSurrenderNegotiation(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  combat: {
+    attacker_player_id: string;
+    defender_player_id?: string | null;
+    attacker_hero_id: string;
+    defender_hero_id?: string | null;
+    current_unit_id?: string | null;
+    combat_participants?: CombatConcessionParticipant[];
+  };
+  boardState: { units?: CombatBoardUnit[]; spellCastsByRound?: Record<string, string[]> };
+  gamePlayer: { resources?: Partial<Record<keyof Resources, unknown>>; gold?: unknown; wood?: unknown; ore?: unknown; mercury?: unknown; crystals?: unknown; gems?: unknown; sulfur?: unknown };
+  gamePlayerId: string;
+  combatId: string;
+  action: Record<string, unknown>;
+}) {
+  const concedingParticipant = findActiveCombatParticipant(params.combat, params.boardState.units ?? [], params.gamePlayerId, params.combat.current_unit_id);
+  const concedingSide = concedingParticipant?.side ?? getPlayerCombatSide(params.combat, params.gamePlayerId);
+  if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
+  if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Heros introuvable" }, { status: 400 });
+  if (!combatHasPlayerHeroesOnBothSides(params.combat, params.boardState.units ?? [])) {
+    return NextResponse.json({ error: "La reddition est possible uniquement contre un heros." }, { status: 400 });
+  }
+  const targetPlayerId = concedingSide === "attacker" ? params.combat.defender_player_id : params.combat.attacker_player_id;
+  if (!targetPlayerId) return NextResponse.json({ error: "Joueur adverse introuvable" }, { status: 400 });
+
+  const { data: surrenderHero, error: surrenderHeroError } = await fetchCombatHero(params.supabase, concedingParticipant.heroId);
+  if (surrenderHeroError) return NextResponse.json({ error: surrenderHeroError.message }, { status: 500 });
+  const baseGold = computeSurrenderGoldCost(
+    getHeroCombatUnits(params.boardState.units ?? [], concedingParticipant.heroId, params.gamePlayerId),
+    concedingSide,
+    surrenderHero?.skills ?? {}
+  );
+  const offer = normalizeSurrenderOffer(params.action.offer, { gold: baseGold });
+  const resources = playerResources(params.gamePlayer);
+  if (!hasResources(resources, offer)) return NextResponse.json({ error: "Ressources insuffisantes pour cette proposition." }, { status: 400 });
+
+  const { data: existing, error: existingError } = await params.supabase
+    .from("combat_surrender_negotiations")
+    .select("*")
+    .eq("combat_id", params.combatId)
+    .eq("surrendering_hero_id", concedingParticipant.heroId)
+    .maybeSingle();
+  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+
+  const payload = {
+    combat_id: params.combatId,
+    surrendering_player_id: params.gamePlayerId,
+    surrendering_hero_id: concedingParticipant.heroId,
+    target_player_id: targetPlayerId,
+    side: concedingSide,
+    base_gold: baseGold,
+    offer,
+    status: "PENDING",
+    updated_at: new Date().toISOString(),
+    resolved_at: null,
+  };
+  const write = existing
+    ? await params.supabase.from("combat_surrender_negotiations").update(payload).eq("id", existing.id)
+    : await params.supabase.from("combat_surrender_negotiations").insert({ ...payload, refusal_count: 0 });
+  if (write.error) return NextResponse.json({ error: write.error.message }, { status: 500 });
+
+  const combat = await fetchMappedCombat(params.supabase, params.combatId);
+  if (combat instanceof NextResponse) return combat;
+  return NextResponse.json({ combat, result: null });
+}
+
+async function resolveSurrenderNegotiation(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  id: string;
+  combatId: string;
+  combat: {
+    attacker_player_id: string;
+    defender_player_id: string | null;
+    attacker_hero_id: string;
+    defender_hero_id: string | null;
+    game_id: string;
+    round?: number | null;
+    current_unit_id?: string | null;
+    action_log?: string[] | null;
+    combat_participants?: CombatConcessionParticipant[];
+  };
+  boardState: { units?: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[] };
+  gamePlayerId: string;
+  decision: "accept" | "reject";
+  negotiationId: string | null;
+}) {
+  const negotiation = await fetchPendingSurrenderNegotiation(params.supabase, params.combatId, params.negotiationId);
+  if (negotiation instanceof NextResponse) return negotiation;
+  if (negotiation.target_player_id !== params.gamePlayerId) {
+    return NextResponse.json({ error: "Seul le joueur adverse principal peut repondre." }, { status: 403 });
+  }
+
+  if (params.decision === "reject") {
+    const nextRefusalCount = Number(negotiation.refusal_count ?? 0) + 1;
+    if (nextRefusalCount < 3) {
+      const { error } = await params.supabase
+        .from("combat_surrender_negotiations")
+        .update({ refusal_count: nextRefusalCount, status: "REJECTED", updated_at: new Date().toISOString() })
+        .eq("id", negotiation.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const combat = await fetchMappedCombat(params.supabase, params.combatId);
+      if (combat instanceof NextResponse) return combat;
+      return NextResponse.json({ combat, result: null });
+    }
+
+    const forcedOffer = normalizeSurrenderOffer({ gold: negotiation.base_gold });
+    const forcedTransfer = await transferResources(params.supabase, negotiation.surrendering_player_id, negotiation.target_player_id, forcedOffer);
+    if (forcedTransfer) return forcedTransfer;
+    await params.supabase
+      .from("combat_surrender_negotiations")
+      .update({ refusal_count: nextRefusalCount, status: "FORCED", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", negotiation.id);
+    return applyCombatConcession({
+      supabase: params.supabase,
+      gameId: params.id,
+      combatId: params.combatId,
+      combat: params.combat,
+      boardState: params.boardState,
+      concedingPlayerId: negotiation.surrendering_player_id,
+      concedingHeroId: negotiation.surrendering_hero_id,
+      concedingSide: negotiation.side,
+      preserveArmy: true,
+      logLine: `${negotiation.side === "attacker" ? "L'attaquant" : "Le defenseur"} se rend pour ${negotiation.base_gold} or.`,
+    });
+  }
+
+  const offer = normalizeSurrenderOffer(negotiation.offer);
+  const transferError = await transferResources(params.supabase, negotiation.surrendering_player_id, negotiation.target_player_id, offer);
+  if (transferError) return transferError;
+  const { error } = await params.supabase
+    .from("combat_surrender_negotiations")
+    .update({ status: "ACCEPTED", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", negotiation.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return applyCombatConcession({
+    supabase: params.supabase,
+    gameId: params.id,
+    combatId: params.combatId,
+    combat: params.combat,
+    boardState: params.boardState,
+    concedingPlayerId: negotiation.surrendering_player_id,
+    concedingHeroId: negotiation.surrendering_hero_id,
+    concedingSide: negotiation.side,
+    preserveArmy: true,
+    logLine: `${negotiation.side === "attacker" ? "L'attaquant" : "Le defenseur"} se rend apres negociation.`,
+  });
+}
+
+async function applyCombatConcession(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  combatId: string;
+  combat: {
+    attacker_player_id: string;
+    defender_player_id?: string | null;
+    attacker_hero_id: string;
+    defender_hero_id?: string | null;
+    game_id: string;
+    round?: number | null;
+    current_unit_id?: string | null;
+    action_log?: string[] | null;
+    combat_participants?: CombatConcessionParticipant[];
+  };
+  boardState: { units?: CombatBoardUnit[]; initialUnits?: CombatBoardUnit[] };
+  concedingPlayerId: string;
+  concedingHeroId: string;
+  concedingSide: "attacker" | "defender";
+  preserveArmy: boolean;
+  logLine: string;
+}) {
+  const winnerSide = params.concedingSide === "attacker" ? "defender" : "attacker";
+  const initialUnits = params.boardState.initialUnits ?? params.boardState.units ?? [];
+  const beforeUnits = params.boardState.units ?? [];
+  const concessionBoard = buildConcessionBoardState({
+    units: beforeUnits,
+    heroId: params.concedingHeroId,
+    playerId: params.concedingPlayerId,
+    round: params.combat.round ?? 1,
+    currentUnitId: params.combat.current_unit_id,
+  });
+  const boardAfterUnits = concessionBoard.units;
+  const persistenceAfterUnits = params.preserveArmy ? beforeUnits : boardAfterUnits;
+  const activeConcedingSide = sideHasActivePlayerUnits(boardAfterUnits, params.concedingSide);
+  const promoted = isPrimaryCombatHero(params.combat, params.concedingSide, params.concedingHeroId) && activeConcedingSide
+    ? findNextPrimaryParticipant(params.combat.combat_participants ?? [], boardAfterUnits, params.concedingSide)
+    : null;
+  const nextAttackerPlayerId = promoted && params.concedingSide === "attacker" ? promoted.player_id : params.combat.attacker_player_id;
+  const nextAttackerHeroId = promoted && params.concedingSide === "attacker" ? promoted.hero_id : params.combat.attacker_hero_id;
+  const nextDefenderPlayerId = promoted && params.concedingSide === "defender" ? promoted.player_id : params.combat.defender_player_id ?? null;
+  const nextDefenderHeroId = promoted && params.concedingSide === "defender" ? promoted.hero_id : params.combat.defender_hero_id ?? null;
+  const winnerPlayerId = winnerSide === "attacker" ? nextAttackerPlayerId : nextDefenderPlayerId;
+  const winnerHeroId = winnerSide === "attacker" ? nextAttackerHeroId : nextDefenderHeroId;
+  const combatResolved = !activeConcedingSide;
+  const result: CombatSummary | null = combatResolved ? {
+    winnerId: winnerSide,
+    winnerPlayerId,
+    attackerLosses: getSideLosses("attacker", initialUnits, persistenceAfterUnits),
+    defenderLosses: getSideLosses("defender", initialUnits, persistenceAfterUnits),
+    experienceGained: 0,
+    log: [params.logLine],
+  } : null;
+  const { error } = await params.supabase
+    .from("combats")
+    .update({
+      attacker_player_id: nextAttackerPlayerId,
+      attacker_hero_id: nextAttackerHeroId,
+      defender_player_id: nextDefenderPlayerId,
+      defender_hero_id: nextDefenderHeroId,
+      board_state: { ...params.boardState, units: boardAfterUnits },
+      turn_queue: combatResolved ? [] : concessionBoard.turnQueue,
+      current_unit_id: combatResolved ? null : concessionBoard.currentUnitId,
+      current_player_id: combatResolved ? null : concessionBoard.currentPlayerId,
+      action_log: [...(params.combat.action_log ?? []), params.logLine],
+      result,
+      status: combatResolved ? "RESOLVED" : "ACTIVE",
+    })
+    .eq("id", params.combatId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await persistConcededCombat(params.supabase, {
+    game_id: params.combat.game_id,
+    attacker_player_id: params.combat.attacker_player_id,
+    defender_player_id: params.combat.defender_player_id ?? null,
+    attacker_hero_id: params.combat.attacker_hero_id,
+    defender_hero_id: params.combat.defender_hero_id ?? null,
+  }, initialUnits, persistenceAfterUnits, {
+    concedingSide: params.concedingSide,
+    concedingHeroId: params.concedingHeroId,
+    winnerSide,
+    winnerHeroId: combatResolved ? winnerHeroId ?? null : null,
+    preserveArmy: params.preserveArmy,
+  });
+  await deleteConsumedCombatParticipants(params.supabase, params.combatId, [
+    params.combat.combat_participants?.find((participant) => participant.hero_id === params.concedingHeroId)?.id,
+    promoted?.id,
+  ]);
+  await evaluateGameLifecycle(params.supabase, params.gameId);
+  const combat = await fetchMappedCombat(params.supabase, params.combatId);
+  if (combat instanceof NextResponse) return combat;
+  return NextResponse.json({ combat, result: combat.result ?? null });
+}
+
+async function fetchPendingSurrenderNegotiation(
+  supabase: ReturnType<typeof createAdminClient>,
+  combatId: string,
+  negotiationId: string | null
+): Promise<SurrenderNegotiationRow | NextResponse> {
+  const query = supabase
+    .from("combat_surrender_negotiations")
+    .select("*")
+    .eq("combat_id", combatId)
+    .eq("status", "PENDING");
+  const { data, error } = negotiationId
+    ? await query.eq("id", negotiationId).single()
+    : await query.limit(1).single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  return data as SurrenderNegotiationRow;
+}
+
+async function fetchMappedCombat(supabase: ReturnType<typeof createAdminClient>, combatId: string) {
+  const { data, error } = await supabase
+    .from("combats")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
+    .eq("id", combatId)
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return toCombat(data);
+}
+
+function hasPendingSurrenderNegotiation(combat: { combat_surrender_negotiations?: Array<{ status?: string }> }) {
+  return Boolean(combat.combat_surrender_negotiations?.some((negotiation) => negotiation.status === "PENDING"));
+}
+
+function normalizeSurrenderOffer(value: unknown, defaults: Partial<Resources> = {}): Resources {
+  const raw = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof Resources, unknown>>;
+  return RESOURCE_KEYS.reduce((offer, key) => {
+    const nextValue = Number(raw[key] ?? defaults[key] ?? 0);
+    offer[key] = Number.isFinite(nextValue) ? Math.max(0, Math.floor(nextValue)) : 0;
+    return offer;
+  }, {} as Resources);
+}
+
+function playerResources(player: { resources?: Partial<Record<keyof Resources, unknown>>; gold?: unknown; wood?: unknown; ore?: unknown; mercury?: unknown; crystals?: unknown; gems?: unknown; sulfur?: unknown }) {
+  const source = player.resources ?? player;
+  return RESOURCE_KEYS.reduce((resources, key) => {
+    resources[key] = Number(source[key] ?? 0);
+    return resources;
+  }, {} as Resources);
+}
+
+function hasResources(resources: Resources, cost: Resources) {
+  return RESOURCE_KEYS.every((key) => resources[key] >= cost[key]);
+}
+
+async function transferResources(
+  supabase: ReturnType<typeof createAdminClient>,
+  fromPlayerId: string,
+  toPlayerId: string,
+  offer: Resources
+): Promise<NextResponse | null> {
+  const { data: fromRow, error: fromError } = await supabase
+    .from("game_players")
+    .select("gold,wood,ore,mercury,crystals,gems,sulfur")
+    .eq("id", fromPlayerId)
+    .single();
+  if (fromError) return NextResponse.json({ error: fromError.message }, { status: 500 });
+  const fromResources = playerResources(fromRow);
+  if (!hasResources(fromResources, offer)) return NextResponse.json({ error: "Ressources insuffisantes pour honorer cette reddition." }, { status: 400 });
+
+  const { data: toRow, error: toError } = await supabase
+    .from("game_players")
+    .select("gold,wood,ore,mercury,crystals,gems,sulfur")
+    .eq("id", toPlayerId)
+    .single();
+  if (toError) return NextResponse.json({ error: toError.message }, { status: 500 });
+  const toResources = playerResources(toRow);
+  const fromUpdate = RESOURCE_KEYS.reduce((update, key) => {
+    update[key] = fromResources[key] - offer[key];
+    return update;
+  }, {} as Resources);
+  const toUpdate = RESOURCE_KEYS.reduce((update, key) => {
+    update[key] = toResources[key] + offer[key];
+    return update;
+  }, {} as Resources);
+
+  const { error: updateFromError } = await supabase.from("game_players").update(fromUpdate).eq("id", fromPlayerId);
+  if (updateFromError) return NextResponse.json({ error: updateFromError.message }, { status: 500 });
+  const { error: updateToError } = await supabase.from("game_players").update(toUpdate).eq("id", toPlayerId);
+  if (updateToError) return NextResponse.json({ error: updateToError.message }, { status: 500 });
+  return null;
 }
 
 async function isAiGamePlayer(supabase: ReturnType<typeof createAdminClient>, gameId: string, playerId: string) {

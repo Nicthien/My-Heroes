@@ -224,6 +224,50 @@ create table public.combat_participants (
   unique (combat_id, hero_id)
 );
 
+create table public.combat_reinforcement_requests (
+  id uuid primary key default gen_random_uuid(),
+  combat_id uuid not null references public.combats(id) on delete cascade,
+  requester_player_id uuid not null references public.game_players(id) on delete cascade,
+  requester_hero_id uuid not null references public.heroes(id) on delete cascade,
+  target_player_id uuid not null references public.game_players(id) on delete cascade,
+  side text not null,
+  status text not null default 'PENDING',
+  created_at timestamptz not null default now(),
+  decided_at timestamptz,
+  unique (combat_id, requester_hero_id)
+);
+
+create table public.combat_surrender_negotiations (
+  id uuid primary key default gen_random_uuid(),
+  combat_id uuid not null references public.combats(id) on delete cascade,
+  surrendering_player_id uuid not null references public.game_players(id) on delete cascade,
+  surrendering_hero_id uuid not null references public.heroes(id) on delete cascade,
+  target_player_id uuid not null references public.game_players(id) on delete cascade,
+  side text not null,
+  base_gold integer not null default 0,
+  offer jsonb not null default '{"gold":0,"wood":0,"ore":0,"mercury":0,"crystals":0,"gems":0,"sulfur":0}'::jsonb,
+  refusal_count integer not null default 0,
+  status text not null default 'PENDING',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  unique (combat_id, surrendering_hero_id)
+);
+
+create table public.combat_truces (
+  id uuid primary key default gen_random_uuid(),
+  combat_id uuid not null references public.combats(id) on delete cascade,
+  requested_by_player_id uuid not null references public.game_players(id) on delete cascade,
+  requested_by_hero_id uuid not null references public.heroes(id) on delete cascade,
+  side text not null,
+  pause_until_turn integer not null,
+  acknowledged_player_ids jsonb not null default '[]',
+  status text not null default 'ACTIVE',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (combat_id, requested_by_player_id)
+);
+
 alter publication supabase_realtime add table public.games;
 alter publication supabase_realtime add table public.game_players;
 alter publication supabase_realtime add table public.heroes;
@@ -234,6 +278,9 @@ alter publication supabase_realtime add table public.gate_stacks;
 alter publication supabase_realtime add table public.boats;
 alter publication supabase_realtime add table public.combats;
 alter publication supabase_realtime add table public.combat_participants;
+alter publication supabase_realtime add table public.combat_reinforcement_requests;
+alter publication supabase_realtime add table public.combat_surrender_negotiations;
+alter publication supabase_realtime add table public.combat_truces;
 
 alter table public.profiles enable row level security;
 create policy "profiles readable by authenticated users" on public.profiles for select to authenticated using (true);

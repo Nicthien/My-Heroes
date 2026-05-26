@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
-import { PersistentCombat } from "@/lib/game/types";
+import { PersistentCombat, Resources } from "@/lib/game/types";
 import { computeSurrenderGoldCost } from "@/lib/game/combat/surrender";
+import { findActiveCombatTruce, hasPlayerUsedTruce } from "@/lib/game/combat/truce";
 import { getHeroMaxMana, spellRequiresCombatTarget, type SpellDefinition } from "@/lib/game/spells";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { getCombatSpellRoundKey } from "@/lib/game/combat/spells";
@@ -27,14 +28,38 @@ import {
 
 import { IsoBattlefield } from "./IsoBattlefield";
 
+const RESOURCE_KEYS: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
+const RESOURCE_LABELS: Record<keyof Resources, string> = {
+  gold: "Or",
+  wood: "Bois",
+  ore: "Minerai",
+  mercury: "Mercure",
+  crystals: "Cristaux",
+  gems: "Gemmes",
+  sulfur: "Soufre",
+};
+
 function computeSurrenderCostForSide(
   combat: PersistentCombat,
   playerId: string,
   skills: Partial<Record<string, "basic" | "advanced" | "expert">>
 ) {
-  const side = combat.attackerPlayerId === playerId ? "attacker" : combat.defenderPlayerId === playerId ? "defender" : null;
+  const playerUnit = combat.boardState.units.find((unit) => unit.ownerPlayerId === playerId && unit.heroId && unit.count > 0);
+  const side = playerUnit?.side ?? (combat.attackerPlayerId === playerId ? "attacker" : combat.defenderPlayerId === playerId ? "defender" : combat.participants?.find((participant) => participant.playerId === playerId)?.side ?? null);
   if (!side) return 0;
-  return computeSurrenderGoldCost(combat.boardState.units, side, skills);
+  const heroId = playerUnit?.heroId ??
+    (side === "attacker" && combat.attackerPlayerId === playerId ? combat.attackerHeroId : null) ??
+    (side === "defender" && combat.defenderPlayerId === playerId ? combat.defenderHeroId : null) ??
+    combat.participants?.find((participant) => participant.playerId === playerId && participant.side === side)?.heroId ??
+    null;
+  const units = combat.boardState.units.filter((unit) => unit.heroId === heroId || (unit.ownerPlayerId === playerId && !unit.heroId));
+  return computeSurrenderGoldCost(units, side, skills);
+}
+
+function combatHasPlayerHeroesOnBothSides(combat: PersistentCombat) {
+  const attackerHasHero = Boolean(combat.attackerPlayerId) || combat.boardState.units.some((unit) => unit.side === "attacker" && unit.ownerPlayerId && unit.heroId);
+  const defenderHasHero = Boolean(combat.defenderPlayerId && combat.defenderHeroId) || combat.boardState.units.some((unit) => unit.side === "defender" && unit.ownerPlayerId && unit.heroId);
+  return attackerHasHero && defenderHasHero;
 }
 
 export default function CombatScreen() {
@@ -56,6 +81,9 @@ export default function CombatScreen() {
   const [displayedCurrentUnitId, setDisplayedCurrentUnitId] = useState<string | null>(null);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const [spellBookOpen, setSpellBookOpen] = useState(false);
+  const [surrenderOfferOpen, setSurrenderOfferOpen] = useState(false);
+  const [surrenderOffer, setSurrenderOffer] = useState<Resources | null>(null);
+  const [truceConfirmOpen, setTruceConfirmOpen] = useState(false);
   const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
@@ -244,6 +272,7 @@ export default function CombatScreen() {
       : null;
     const isAutomatedActor = Boolean(currentActor && (currentActor.ownerPlayerId === null || currentActorPlayer?.isAi));
     if (!isAutomatedActor) return;
+    if (findActiveCombatTruce(activeCombat.truces, gameState.turnNumber)) return;
 
     const actionKey = [
       activeCombat.id,
@@ -311,14 +340,18 @@ export default function CombatScreen() {
   const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
   const inspectedUnit = units.find((unit) => unit.id === inspectedUnitId) ?? null;
   const currentPlayerId = getCurrentCombatPlayerId(activeCombat.boardState, effectiveCurrentUnitId, activeCombat.currentPlayerId);
+  const pendingSurrenderNegotiation = activeCombat.surrenderNegotiations?.find((negotiation) => negotiation.status === "PENDING") ?? null;
+  const activeTruce = findActiveCombatTruce(activeCombat.truces, gameState.turnNumber);
+  const truceNeedsAck = Boolean(activeTruce && myPlayer && !activeTruce.acknowledgedPlayerIds.includes(myPlayer.id));
   const isMyAction = Boolean(myPlayer && currentPlayerId === myPlayer.id);
-  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !isSubmittingAction && !combatAnimationBlocked;
+  const canSubmitAction = isMyAction && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !pendingSurrenderNegotiation && !activeTruce && !isSubmittingAction && !combatAnimationBlocked;
   const displayedCombat = effectiveCurrentUnitId === activeCombat.currentUnitId
     ? activeCombat
     : { ...activeCombat, currentUnitId: effectiveCurrentUnitId };
 
   const submitAction = async (action: Record<string, unknown>) => {
-    if (!canSubmitAction || isSubmittingActionRef.current) return false;
+    const canBypassTurn = action.type === "ACCEPT_SURRENDER" || action.type === "REJECT_SURRENDER" || action.type === "ACK_TRUCE";
+    if ((!canSubmitAction && !canBypassTurn) || isSubmittingActionRef.current) return false;
 
     const submissionToken = ++actionSubmissionTokenRef.current;
     isSubmittingActionRef.current = true;
@@ -362,18 +395,66 @@ export default function CombatScreen() {
     }
   };
 
-  const combatHero = myPlayer?.heroes.find((hero) =>
-    hero.id === activeCombat.attackerHeroId || hero.id === activeCombat.defenderHeroId
-  ) ?? null;
+  const myActiveCombatUnit = myPlayer
+    ? units.find((unit) => unit.ownerPlayerId === myPlayer.id && unit.heroId && unit.count > 0)
+    : null;
+  const myPrimaryCombatHeroId = myPlayer?.id === activeCombat.attackerPlayerId
+    ? activeCombat.attackerHeroId
+    : myPlayer?.id === activeCombat.defenderPlayerId
+      ? activeCombat.defenderHeroId
+      : null;
+  const myParticipantHeroId = myPlayer
+    ? activeCombat.participants?.find((participant) => participant.playerId === myPlayer.id)?.heroId
+    : null;
+  const combatHeroId = myActiveCombatUnit?.heroId ?? myPrimaryCombatHeroId ?? myParticipantHeroId ?? null;
+  const combatHero = myPlayer?.heroes.find((hero) => hero.id === combatHeroId) ?? null;
   const combatHeroHasCastSpell = Boolean(
     combatHero && activeCombat.boardState.spellCastsByRound?.[getCombatSpellRoundKey(activeCombat.round)]?.includes(combatHero.id)
   );
   const canCastHeroSpell = canSubmitAction && !combatHeroHasCastSpell;
   const canRetreat = canSubmitAction && !(activeCombat.round <= 1 && combatHeroHasCastSpell);
-  const canSurrender = canSubmitAction && Boolean(activeCombat.defenderHeroId && activeCombat.defenderPlayerId);
+  const canSurrender = canSubmitAction && combatHasPlayerHeroesOnBothSides(activeCombat);
+  const isPrimaryPlayer = Boolean(myPlayer && (activeCombat.attackerPlayerId === myPlayer.id || activeCombat.defenderPlayerId === myPlayer.id));
+  const hasUsedTruce = hasPlayerUsedTruce(activeCombat.truces, myPlayer?.id);
+  const canRequestTruce = Boolean(isPrimaryPlayer && canSubmitAction && !hasUsedTruce && !activeTruce && !pendingSurrenderNegotiation);
   const surrenderCost = combatHero && myPlayer
     ? computeSurrenderCostForSide(activeCombat, myPlayer.id, combatHero.skills ?? {})
     : 0;
+  const openSurrenderOffer = () => {
+    if (!myPlayer) return;
+    setSurrenderOffer({
+      gold: Math.min(myPlayer.resources.gold, surrenderCost),
+      wood: 0,
+      ore: 0,
+      mercury: 0,
+      crystals: 0,
+      gems: 0,
+      sulfur: 0,
+    });
+    setSurrenderOfferOpen(true);
+  };
+  const submitSurrenderOffer = async () => {
+    if (!surrenderOffer) return;
+    const submitted = await submitAction({ type: "PROPOSE_SURRENDER", offer: surrenderOffer });
+    if (submitted) {
+      setSurrenderOfferOpen(false);
+      setCombatMessage("Proposition de reddition envoyee.");
+    }
+  };
+  const submitTruceRequest = async () => {
+    const submitted = await submitAction({ type: "REQUEST_TRUCE" });
+    if (submitted) {
+      setTruceConfirmOpen(false);
+      setCombatMessage("Treve acceptee. Le combat reprendra au prochain tour d'aventure.");
+    }
+  };
+  const acknowledgeTruce = async () => {
+    if (!activeTruce) return;
+    const submitted = await submitAction({ type: "ACK_TRUCE", truceId: activeTruce.id });
+    if (submitted) {
+      setActiveCombat(null);
+    }
+  };
   const spellBookHero = combatHero && devInfiniteMana ? { ...combatHero, mana: getHeroMaxMana(combatHero) } : combatHero;
   const castCombatSpell = async (spell: SpellDefinition, targetUnitId?: string) => {
     if (!combatHero) throw new Error("Heros indisponible.");
@@ -413,7 +494,7 @@ export default function CombatScreen() {
           <div className={`mt-0.5 text-lg font-black ${goldText}`}>Round {activeCombat.round}</div>
         </div>
         <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
-          {combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
+          {activeTruce ? "Treve en cours" : combatAnimationBlocked ? "Action en cours" : isMyAction ? "A vous de jouer" : "En attente de l'adversaire"}
         </div>
         <div className="flex items-center gap-3">
           {pendingTargetSpell && (
@@ -441,6 +522,16 @@ export default function CombatScreen() {
           <div className="pointer-events-auto absolute left-1/2 top-4 z-40 flex max-w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-amber-500/50 bg-stone-950/92 px-4 py-2 text-sm font-bold text-amber-100 shadow-xl">
             <span>{combatMessage}</span>
             <button type="button" onClick={() => setCombatMessage(null)} className="text-amber-300/70 hover:text-amber-100">x</button>
+          </div>
+        )}
+        {pendingSurrenderNegotiation && (
+          <div className="pointer-events-auto absolute left-1/2 top-16 z-40 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-emerald-400/50 bg-stone-950/94 px-4 py-2 text-sm font-bold text-emerald-100 shadow-xl">
+            Negociation de reddition en cours.
+          </div>
+        )}
+        {activeTruce && (
+          <div className="pointer-events-auto absolute left-1/2 top-16 z-40 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-sky-400/50 bg-stone-950/94 px-4 py-2 text-sm font-bold text-sky-100 shadow-xl">
+            Treve en cours. Reprise au tour d&apos;aventure {activeTruce.pauseUntilTurn}.
           </div>
         )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
@@ -528,14 +619,24 @@ export default function CombatScreen() {
               </button>
               <button
                 type="button"
-                disabled={!canSurrender || (myPlayer?.resources.gold ?? 0) < surrenderCost}
-                onClick={() => submitAction({ type: "SURRENDER_COMBAT" })}
+                disabled={!canSurrender}
+                onClick={openSurrenderOffer}
                 className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
               >
                 Se rendre
               </button>
             </div>
             {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">Rancon : {surrenderCost} or</div>}
+            {isPrimaryPlayer && (
+              <button
+                type="button"
+                disabled={!canRequestTruce}
+                onClick={() => setTruceConfirmOpen(true)}
+                className="mt-2 w-full rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
+              >
+                {hasUsedTruce ? "Treve deja utilisee" : "Treve"}
+              </button>
+            )}
             {Boolean((activeCombat.boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects?.escapeTunnel) && myPlayer && activeCombat.defenderPlayerId === myPlayer.id && (
               <button
                 type="button"
@@ -568,6 +669,88 @@ export default function CombatScreen() {
           onClose={() => setSpellBookOpen(false)}
           onCast={(spell) => castCombatSpell(spell)}
         />
+      )}
+      {truceConfirmOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
+          <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Treve</div>
+            <h2 className="mt-2 text-2xl font-bold text-sky-100">Suspendre le combat ?</h2>
+            <p className="mt-3 text-sm leading-6 text-stone-300">
+              La treve met ce combat en pause jusqu&apos;au prochain tour d&apos;aventure. Elle est utilisable une seule fois par combat et par joueur principal. Aucun participant ne pourra jouer d&apos;action de combat pendant la pause.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setTruceConfirmOpen(false)}>Annuler</button>
+              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-4 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void submitTruceRequest()}>Accepter</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {activeTruce && truceNeedsAck && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
+          <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Treve</div>
+            <h2 className="mt-2 text-2xl font-bold text-sky-100">Combat en pause</h2>
+            <p className="mt-3 text-sm leading-6 text-stone-300">
+              Une treve a ete declaree. Le combat reprendra au prochain tour d&apos;aventure.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-5 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void acknowledgeTruce()}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {surrenderOfferOpen && myPlayer && surrenderOffer && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
+          <div className="w-[min(92vw,34rem)] rounded-xl border border-emerald-700 bg-stone-950 p-6 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.28em] text-emerald-400">Reddition</div>
+            <h2 className="mt-2 text-2xl font-bold text-emerald-100">Proposer une rancon</h2>
+            <p className="mt-2 text-sm text-stone-300">Rancon de base : {surrenderCost} or. Vous pouvez proposer plus, moins, ou ajouter des ressources.</p>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {RESOURCE_KEYS.map((key) => (
+                <label key={key} className="text-sm font-bold text-stone-200">
+                  {RESOURCE_LABELS[key]}
+                  <input
+                    type="number"
+                    min={0}
+                    max={myPlayer.resources[key]}
+                    value={surrenderOffer[key]}
+                    onChange={(event) => {
+                      const value = Math.max(0, Math.min(myPlayer.resources[key], Math.floor(Number(event.target.value) || 0)));
+                      setSurrenderOffer({ ...surrenderOffer, [key]: value });
+                    }}
+                    className="mt-1 w-full rounded-md border border-emerald-700/60 bg-black/40 px-3 py-2 text-emerald-50 outline-none focus:border-emerald-300"
+                  />
+                  <span className="mt-0.5 block text-[11px] font-normal text-stone-500">Disponible : {myPlayer.resources[key]}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setSurrenderOfferOpen(false)}>Annuler</button>
+              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-2 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitSurrenderOffer()}>Proposer</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingSurrenderNegotiation && myPlayer?.id === pendingSurrenderNegotiation.targetPlayerId && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
+          <div className="w-[min(92vw,34rem)] rounded-xl border border-amber-700 bg-stone-950 p-6 text-white shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.28em] text-amber-400">Negociation</div>
+            <h2 className="mt-2 text-2xl font-bold text-amber-100">Accepter la reddition ?</h2>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              {RESOURCE_KEYS.filter((key) => pendingSurrenderNegotiation.offer[key] > 0).map((key) => (
+                <div key={key} className="rounded-md border border-amber-800/60 bg-black/30 px-3 py-2">
+                  <div className="text-stone-400">{RESOURCE_LABELS[key]}</div>
+                  <div className="font-black text-amber-100">{pendingSurrenderNegotiation.offer[key]}</div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-sm text-stone-300">Refus restants avant reddition forcee : {Math.max(0, 3 - pendingSurrenderNegotiation.refusalCount)}</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-3 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitAction({ type: "ACCEPT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>Accepter</button>
+              <button type="button" className="rounded-md border border-red-400 bg-red-950 px-4 py-3 font-bold text-red-100 hover:bg-red-900" onClick={() => void submitAction({ type: "REJECT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>Refuser</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

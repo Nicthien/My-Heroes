@@ -251,6 +251,9 @@ export function mapCombat(combat: Record<string, unknown>): PersistentCombat {
     turnQueue: combat.turnQueue as string[],
     actionLog: combat.actionLog as string[],
     participants: (combat.participants as PersistentCombat["participants"]) ?? [],
+    reinforcementRequests: (combat.reinforcementRequests as PersistentCombat["reinforcementRequests"]) ?? [],
+    surrenderNegotiations: (combat.surrenderNegotiations as PersistentCombat["surrenderNegotiations"]) ?? [],
+    truces: (combat.truces as PersistentCombat["truces"]) ?? [],
     result: combat.result as PersistentCombat["result"],
     visibility: (combat.visibility as PersistentCombat["visibility"]) ?? "full",
   };

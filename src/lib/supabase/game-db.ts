@@ -3,7 +3,7 @@ import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
 import { MINIMUM_ADVENTURE_STEP_COST, getDailyAdventureMovement } from "@/lib/game/engine";
 import { normalizeArtifactBag } from "@/lib/game/artifacts";
 import { HERO_ROSTER } from "@/lib/game/heroes";
-import { type CombatBoardUnit, UnitType } from "@/lib/game/types";
+import { type CombatBoardUnit, type Resources, UnitType } from "@/lib/game/types";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 type DbRow = Record<string, unknown>;
@@ -279,6 +279,14 @@ export function toCombat(row: DbRow) {
     actionLog: row.action_log ?? [],
     result: row.result,
     participants: rows(row.combat_participants ?? row.participants).map(toCombatParticipant),
+    reinforcementRequests: rows(row.combat_reinforcement_requests ?? row.reinforcement_requests)
+      .map(toCombatReinforcementRequest)
+      .filter((request) => request.status === "PENDING"),
+    surrenderNegotiations: rows(row.combat_surrender_negotiations ?? row.surrender_negotiations)
+      .map(toCombatSurrenderNegotiation)
+      .filter((negotiation) => negotiation.status === "PENDING"),
+    truces: rows(row.combat_truces ?? row.truces)
+      .map(toCombatTruce),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -292,6 +300,68 @@ export function toCombatParticipant(row: DbRow) {
     heroId: row.hero_id,
     side: row.side,
     joinedAt: row.joined_at,
+  };
+}
+
+export function toCombatReinforcementRequest(row: DbRow) {
+  return {
+    id: row.id,
+    combatId: row.combat_id,
+    requesterPlayerId: row.requester_player_id,
+    requesterHeroId: row.requester_hero_id,
+    targetPlayerId: row.target_player_id,
+    side: row.side,
+    status: row.status,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
+  };
+}
+
+export function toCombatSurrenderNegotiation(row: DbRow) {
+  return {
+    id: row.id,
+    combatId: row.combat_id,
+    surrenderingPlayerId: row.surrendering_player_id,
+    surrenderingHeroId: row.surrendering_hero_id,
+    targetPlayerId: row.target_player_id,
+    side: row.side,
+    baseGold: Number(row.base_gold ?? 0),
+    offer: normalizeResources(row.offer),
+    refusalCount: Number(row.refusal_count ?? 0),
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at,
+  };
+}
+
+export function toCombatTruce(row: DbRow) {
+  return {
+    id: row.id,
+    combatId: row.combat_id,
+    requestedByPlayerId: row.requested_by_player_id,
+    requestedByHeroId: row.requested_by_hero_id,
+    side: row.side,
+    pauseUntilTurn: Number(row.pause_until_turn ?? 0),
+    acknowledgedPlayerIds: Array.isArray(row.acknowledged_player_ids)
+      ? row.acknowledged_player_ids.map(String)
+      : [],
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeResources(value: unknown): Resources {
+  const resources = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof Resources, unknown>>;
+  return {
+    gold: Math.max(0, Number(resources.gold ?? 0)),
+    wood: Math.max(0, Number(resources.wood ?? 0)),
+    ore: Math.max(0, Number(resources.ore ?? 0)),
+    mercury: Math.max(0, Number(resources.mercury ?? 0)),
+    crystals: Math.max(0, Number(resources.crystals ?? 0)),
+    gems: Math.max(0, Number(resources.gems ?? 0)),
+    sulfur: Math.max(0, Number(resources.sulfur ?? 0)),
   };
 }
 
@@ -318,48 +388,43 @@ export async function getGamePlayer(supabase: SupabaseAdmin, gameId: string, use
 }
 
 export async function getGameWithRelations(supabase: SupabaseAdmin, id: string) {
-  const { data, error } = await supabase
-    .from("games")
-    .select(gameRelationsSelect(true))
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error && isMissingOptionalGameSchemaError(error)) {
-    const fallback = await supabase
-      .from("games")
-      .select(gameRelationsSelect(false))
-      .eq("id", id)
-      .maybeSingle();
-    if (fallback.error) throw fallback.error;
-    return fallback.data ? toGame(fallback.data as unknown as DbRow) : null;
-  }
-
-  if (error) throw error;
-  return data ? toGame(data as unknown as DbRow) : null;
+  return getGameWithOptionalRelations(supabase, id, gameRelationsSelect);
 }
 
 export async function getGameSyncWithRelations(supabase: SupabaseAdmin, id: string) {
-  const { data, error } = await supabase
-    .from("games")
-    .select(gameSyncRelationsSelect(true))
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error && isMissingOptionalGameSchemaError(error)) {
-    const fallback = await supabase
-      .from("games")
-      .select(gameSyncRelationsSelect(false))
-      .eq("id", id)
-      .maybeSingle();
-    if (fallback.error) throw fallback.error;
-    return fallback.data ? toGame(fallback.data as unknown as DbRow) : null;
-  }
-
-  if (error) throw error;
-  return data ? toGame(data as unknown as DbRow) : null;
+  return getGameWithOptionalRelations(supabase, id, gameSyncRelationsSelect);
 }
 
-function gameRelationsSelect(includeGates: boolean) {
+async function getGameWithOptionalRelations(
+  supabase: SupabaseAdmin,
+  id: string,
+  buildSelect: (includeGates: boolean, includeReinforcementRequests: boolean) => string,
+) {
+  const attempts = [
+    { includeGates: true, includeReinforcementRequests: true },
+    { includeGates: false, includeReinforcementRequests: true },
+    { includeGates: true, includeReinforcementRequests: false },
+    { includeGates: false, includeReinforcementRequests: false },
+  ];
+
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    const { data, error } = await supabase
+      .from("games")
+      .select(buildSelect(attempt.includeGates, attempt.includeReinforcementRequests))
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!error) return data ? toGame(data as unknown as DbRow) : null;
+    lastError = error;
+    if (!isMissingOptionalGameSchemaError(error)) throw error;
+  }
+
+  throw lastError;
+}
+
+function gameRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean) {
+  const combatRelations = buildCombatRelationsSelect(includeReinforcementRequests);
   return `
     *,
     game_players!game_players_game_id_fkey(
@@ -370,13 +435,14 @@ function gameRelationsSelect(includeGates: boolean) {
       resource_buildings(*)
     ),
     turns(*),
-    combats(*, combat_participants(*)),
+    ${combatRelations},
     neutral_armies(*, neutral_army_stacks(*))
     ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
   `;
 }
 
-function gameSyncRelationsSelect(includeGates: boolean) {
+function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean) {
+  const combatRelations = buildCombatRelationsSelect(includeReinforcementRequests);
   return `
     id,
     status,
@@ -396,7 +462,7 @@ function gameSyncRelationsSelect(includeGates: boolean) {
       resource_buildings(*)
     ),
     turns(*),
-    combats(*, combat_participants(*)),
+    ${combatRelations},
     neutral_armies(*, neutral_army_stacks(*))
     ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
   `;
@@ -404,7 +470,19 @@ function gameSyncRelationsSelect(includeGates: boolean) {
 
 function isMissingOptionalGameSchemaError(error: { code?: string; message?: string; details?: string | null }) {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("gates") || text.includes("gate_stacks") || text.includes("gate_id") || text.includes("boats");
+  return text.includes("gates") ||
+    text.includes("gate_stacks") ||
+    text.includes("gate_id") ||
+    text.includes("boats") ||
+    text.includes("combat_reinforcement_requests") ||
+    text.includes("combat_surrender_negotiations") ||
+    text.includes("combat_truces");
+}
+
+function buildCombatRelationsSelect(includeNegotiationTables: boolean) {
+  return includeNegotiationTables
+    ? "combats(*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*))"
+    : "combats(*, combat_participants(*))";
 }
 
 export async function getGameRow(supabase: SupabaseAdmin, id: string) {

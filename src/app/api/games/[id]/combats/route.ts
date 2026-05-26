@@ -43,7 +43,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("combats")
-    .select("*, combat_participants(*)")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
     .eq("game_id", id)
     .eq("status", "ACTIVE")
     .order("created_at", { ascending: false });
@@ -367,7 +367,7 @@ export async function POST(
       action_log: result ? ["Combat automatique.", ...result.log] : ["Combat lance."],
       result,
     })
-    .select("*, combat_participants(*)")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

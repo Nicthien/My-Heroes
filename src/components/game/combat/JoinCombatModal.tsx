@@ -15,6 +15,29 @@ export default function JoinCombatModal() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const autoJoinRef = useRef<string | null>(null);
 
+  const decideRequest = useCallback(async (requestId: string, decision: "accept" | "reject") => {
+    if (!gameState) return;
+    const combat = gameState.activeCombats?.find((item) =>
+      item.reinforcementRequests?.some((request) => request.id === requestId)
+    );
+    if (!combat) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/combats/${combat.id}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId, decision }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      setCombatMessage(data?.error ?? "Impossible de traiter cette demande de renfort.");
+      return;
+    }
+    const combatPayload = data?.combat ?? data;
+    if (combatPayload) setActiveCombat(mapCombat(combatPayload));
+    setCombatMessage(decision === "accept" ? "Renfort accepte." : "Renfort refuse.");
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id);
+    if (refreshed) setGameState(refreshed);
+  }, [gameState, session?.user?.id, setActiveCombat, setCombatMessage, setGameState]);
+
   const join = useCallback(async (side: "attacker" | "defender") => {
     if (!gameState || !pendingJoinCombat) return;
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/combats/${pendingJoinCombat.combatId}/join`, {
@@ -29,6 +52,13 @@ export default function JoinCombatModal() {
       return;
     }
     const data = await response.json();
+    if (data.pending) {
+      setCombatMessage(data.message ?? "Demande de renfort envoyee.");
+      setPendingJoinCombat(null);
+      const refreshed = await refreshGameState(gameState.id, session?.user?.id);
+      if (refreshed) setGameState(refreshed);
+      return;
+    }
     const combatPayload = data.combat ?? data;
     if (combatPayload) setActiveCombat(mapCombat(combatPayload));
     setPendingJoinCombat(null);
@@ -45,7 +75,48 @@ export default function JoinCombatModal() {
     void join(pendingJoinCombat.side);
   }, [pendingJoinCombat, join]);
 
-  if (!gameState || !pendingJoinCombat) return null;
+  if (!gameState) return null;
+
+  const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
+  const pendingApproval = myPlayer
+    ? (gameState.activeCombats ?? [])
+      .flatMap((combat) => (combat.reinforcementRequests ?? []).map((request) => ({ combat, request })))
+      .find(({ request }) => request.targetPlayerId === myPlayer.id && request.status === "PENDING")
+    : null;
+
+  if (!pendingJoinCombat && pendingApproval) {
+    const requesterPlayer = gameState.players.find((player) => player.id === pendingApproval.request.requesterPlayerId);
+    const requesterHero = requesterPlayer?.heroes.find((hero) => hero.id === pendingApproval.request.requesterHeroId);
+    const sideLabel = pendingApproval.request.side === "attacker" ? "attaquant" : "defenseur";
+
+    return (
+      <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
+        <div className="w-[min(92vw,32rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 text-white shadow-2xl">
+          <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">Demande de renfort</div>
+          <h2 className="mt-2 text-2xl font-bold text-yellow-100">Accepter ce renfort ?</h2>
+          <p className="mt-3 text-sm text-stone-300">
+            {requesterPlayer?.name ?? "Un joueur"} veut envoyer {requesterHero?.name ?? "un heros"} soutenir le camp {sideLabel}.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button
+              className="rounded-lg border border-emerald-500 bg-emerald-950/80 p-4 font-bold text-emerald-100 hover:bg-emerald-900"
+              onClick={() => void decideRequest(pendingApproval.request.id, "accept")}
+            >
+              Accepter
+            </button>
+            <button
+              className="rounded-lg border border-red-500 bg-red-950/80 p-4 font-bold text-red-100 hover:bg-red-900"
+              onClick={() => void decideRequest(pendingApproval.request.id, "reject")}
+            >
+              Refuser
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!pendingJoinCombat) return null;
 
   if (pendingJoinCombat.side) return null;
 
@@ -104,6 +175,8 @@ function mapCombat(combat: Record<string, unknown>) {
     turnQueue: combat.turnQueue as string[],
     actionLog: combat.actionLog as string[],
     participants: (combat.participants as never[]) ?? [],
+    reinforcementRequests: (combat.reinforcementRequests as never[]) ?? [],
+    surrenderNegotiations: (combat.surrenderNegotiations as never[]) ?? [],
     result: combat.result as never,
     visibility: (combat.visibility as "full" | "joinable_summary" | undefined) ?? "full",
   };

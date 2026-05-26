@@ -2,6 +2,7 @@
 
 import { useSession } from "@/lib/auth/client";
 import { getCurrentCombatPlayerId } from "@/lib/game/combat/persistent";
+import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { PersistentCombat } from "@/lib/game/types";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -33,6 +34,7 @@ export default function ActiveCombatsPanel() {
         <CombatRow
           key={combat.id}
           combat={combat}
+          turnNumber={gameState?.turnNumber ?? 0}
           myPlayerId={myPlayer?.id}
           onOpen={() => restoreCombat(combat)}
           onFocus={() => focusTile(combat.position.x, combat.position.y)}
@@ -44,11 +46,13 @@ export default function ActiveCombatsPanel() {
 
 function CombatRow({
   combat,
+  turnNumber,
   myPlayerId,
   onOpen,
   onFocus,
 }: {
   combat: PersistentCombat;
+  turnNumber: number;
   myPlayerId?: string;
   onOpen: () => void;
   onFocus: () => void;
@@ -61,6 +65,7 @@ function CombatRow({
   );
   const currentPlayerId = getCurrentCombatPlayerId(combat.boardState, combat.currentUnitId, combat.currentPlayerId);
   const isMyTurn = currentPlayerId === myPlayerId;
+  const activeTruce = findActiveCombatTruce(combat.truces, turnNumber);
 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-amber-700/20 bg-black/30 px-2 py-1.5 transition hover:border-amber-500/50 hover:bg-amber-900/15">
@@ -73,21 +78,27 @@ function CombatRow({
         </div>
         <div
           className={`truncate text-[11px] uppercase tracking-wider ${
-            isMyTurn
+            activeTruce
+              ? "text-sky-300"
+              : isMyTurn
               ? "text-emerald-300"
               : isParticipant
               ? "text-amber-200/70"
               : "text-amber-200/50"
           }`}
         >
-          {isMyTurn ? "À vous de jouer" : isParticipant ? "En attente" : "Observable"}
+          {activeTruce ? "Treve" : isMyTurn ? "A vous de jouer" : isParticipant ? "En attente" : "Observable"}
         </div>
       </button>
       <button
-        className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700"
+        className={`rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wider shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition ${
+          activeTruce
+            ? "cursor-default border-sky-400/60 bg-gradient-to-b from-sky-800 to-sky-950 text-sky-50"
+            : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 hover:from-amber-500 hover:to-amber-700"
+        }`}
         onClick={onOpen}
       >
-        Ouvrir
+        {activeTruce ? "Treve" : "Ouvrir"}
       </button>
     </div>
   );

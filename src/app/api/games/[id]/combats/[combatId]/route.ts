@@ -17,7 +17,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("combats")
-    .select("*, combat_participants(*)")
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
     .eq("id", combatId)
     .eq("game_id", id)
     .maybeSingle();

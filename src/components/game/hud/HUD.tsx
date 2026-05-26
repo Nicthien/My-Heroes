@@ -37,6 +37,7 @@ import {
   removeUnitsFromLocalStackList,
 } from "./recruitHelpers";
 import { useRouter } from "next/navigation";
+import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { useResponsiveGameLayout } from "@/lib/ui/useResponsiveGameLayout";
 import { Faction, BuildingType, UnitType, type Hero } from "@/lib/game/types";
@@ -108,7 +109,9 @@ function HUDContent() {
   );
   const isPending = gameState.status === "PENDING";
   const hasActiveCombats = (gameState.activeCombats ?? []).some((combat) =>
-    myPlayer ? combatInvolvesPlayer(combat, myPlayer.id) : false
+    myPlayer
+      ? combatInvolvesPlayer(combat, myPlayer.id) && !findActiveCombatTruce(combat.truces, gameState.turnNumber)
+      : false
   );
   const canAct = Boolean(
     myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn

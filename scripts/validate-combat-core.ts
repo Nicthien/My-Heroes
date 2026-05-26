@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
+import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUnits, sideHasActivePlayerUnits } from "../src/lib/game/combat/concession";
 import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
+import { computeSurrenderGoldCost } from "../src/lib/game/combat/surrender";
 import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
+import { findActiveCombatTruce, hasPlayerUsedTruce } from "../src/lib/game/combat/truce";
 import {
   applyDamageToStack,
   calculateCombatDamageRange,
@@ -10,7 +13,7 @@ import {
 } from "../src/lib/game/combat/rules";
 import { getTownWeeklyGrowth } from "../src/lib/game/economy";
 import { SPELLS_BY_ID, calculateSpellDamage, getHeroMaxMana } from "../src/lib/game/spells";
-import { BuildingType, CombatBoardUnit, Faction, UnitType } from "../src/lib/game/types";
+import { BuildingType, CombatBoardUnit, CombatTruce, Faction, UnitType } from "../src/lib/game/types";
 
 function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "side" | "q" | "r">): CombatBoardUnit {
   const count = params.count ?? 10;
@@ -360,7 +363,98 @@ function testCombatSpellOncePerRoundAndDamage() {
 
   const marked = markHeroCombatSpellCast(undefined, 1, "h1");
   assert.equal(hasHeroCastCombatSpell(marked, 1, "h1"), true);
+  assert.equal(hasHeroCastCombatSpell(marked, 1, "h2"), false);
   assert.equal(hasHeroCastCombatSpell(marked, 2, "h1"), false);
+}
+
+function testCombatTruceLifecycle() {
+  const truces: CombatTruce[] = [{
+    id: "truce-1",
+    combatId: "combat-1",
+    requestedByPlayerId: "p1",
+    requestedByHeroId: "h1",
+    side: "attacker",
+    pauseUntilTurn: 3,
+    acknowledgedPlayerIds: ["p1"],
+    status: "ACTIVE",
+  }];
+
+  assert.equal(findActiveCombatTruce(truces, 2)?.id, "truce-1");
+  assert.equal(findActiveCombatTruce(truces, 3), null);
+  assert.equal(hasPlayerUsedTruce(truces, "p1"), true);
+  assert.equal(hasPlayerUsedTruce(truces, "p2"), false);
+}
+
+function testIndividualConcessionOnlyRemovesCurrentHero() {
+  const units = [
+    unit({ id: "main", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, ownerPlayerId: "p1", heroId: "h-main" }),
+    unit({ id: "reinforcement", unitType: UnitType.ARCHER, side: "attacker", q: 0, r: 2, ownerPlayerId: "p3", heroId: "h-reinforcement" }),
+    unit({ id: "defender", unitType: UnitType.PIKEMAN, side: "defender", q: 8, r: 1, ownerPlayerId: "p2", heroId: "h-defender" }),
+  ];
+  const concession = buildConcessionBoardState({
+    units,
+    heroId: "h-reinforcement",
+    playerId: "p3",
+    round: 1,
+    currentUnitId: "reinforcement",
+  });
+
+  assert.equal(concession.units.find((item) => item.id === "reinforcement")?.count, 0);
+  assert.equal(concession.units.find((item) => item.id === "main")?.count, 10);
+  assert.equal(sideHasActivePlayerUnits(concession.units, "attacker"), true);
+  assert.ok(!concession.turnQueue.includes("reinforcement"));
+}
+
+function testPrimaryConcessionPromotesFirstReinforcement() {
+  const units = [
+    unit({ id: "main", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, ownerPlayerId: "p1", heroId: "h-main" }),
+    unit({ id: "late", unitType: UnitType.PIKEMAN, side: "attacker", q: 0, r: 2, ownerPlayerId: "p4", heroId: "h-late" }),
+    unit({ id: "early", unitType: UnitType.PIKEMAN, side: "attacker", q: 0, r: 3, ownerPlayerId: "p3", heroId: "h-early" }),
+  ];
+  const afterMainLeaves = buildConcessionBoardState({
+    units,
+    heroId: "h-main",
+    playerId: "p1",
+    round: 1,
+    currentUnitId: "main",
+  });
+  const promoted = findNextPrimaryParticipant([
+    { id: "late-participant", player_id: "p4", hero_id: "h-late", side: "attacker", joined_at: "2026-01-01T00:02:00Z" },
+    { id: "early-participant", player_id: "p3", hero_id: "h-early", side: "attacker", joined_at: "2026-01-01T00:01:00Z" },
+  ], afterMainLeaves.units, "attacker");
+
+  assert.equal(promoted?.id, "early-participant");
+  assert.equal(promoted?.player_id, "p3");
+}
+
+function testIndividualSurrenderCostUsesOnlyCurrentHeroUnits() {
+  const units = [
+    unit({ id: "main", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, ownerPlayerId: "p1", heroId: "h-main", count: 20 }),
+    unit({ id: "reinforcement", unitType: UnitType.ARCHER, side: "attacker", q: 0, r: 2, ownerPlayerId: "p3", heroId: "h-reinforcement", count: 5 }),
+  ];
+  const reinforcementUnits = getHeroCombatUnits(units, "h-reinforcement", "p3");
+  const reinforcementCost = computeSurrenderGoldCost(reinforcementUnits, "attacker");
+  const wholeSideCost = computeSurrenderGoldCost(units, "attacker");
+
+  assert.ok(reinforcementCost > 0);
+  assert.ok(reinforcementCost < wholeSideCost);
+}
+
+function testLastPlayerConcessionLeavesNoActiveSide() {
+  const units = [
+    unit({ id: "only-attacker", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, ownerPlayerId: "p1", heroId: "h-main" }),
+    unit({ id: "defender", unitType: UnitType.PIKEMAN, side: "defender", q: 8, r: 1, ownerPlayerId: "p2", heroId: "h-defender" }),
+  ];
+  const concession = buildConcessionBoardState({
+    units,
+    heroId: "h-main",
+    playerId: "p1",
+    round: 1,
+    currentUnitId: "only-attacker",
+  });
+
+  assert.equal(sideHasActivePlayerUnits(concession.units, "attacker"), false);
+  assert.equal(sideHasActivePlayerUnits(concession.units, "defender"), true);
 }
 
 function testCombatSpellImmunityAndMitigation() {
@@ -433,6 +527,7 @@ function testUpgradedDwellingsKeepBaseGrowth() {
 }
 
 testInitiativeOrder();
+testCombatTruceLifecycle();
 testWaitAndDefendTiming();
 testDamageFormulaCapsAndPartials();
 testRetaliationOnce();
@@ -443,6 +538,10 @@ testRangedShotAndMoveMeleeAttack();
 testMoveDoesNotAttack();
 testSpellDamageAndMana();
 testCombatSpellOncePerRoundAndDamage();
+testIndividualConcessionOnlyRemovesCurrentHero();
+testPrimaryConcessionPromotesFirstReinforcement();
+testIndividualSurrenderCostUsesOnlyCurrentHeroUnits();
+testLastPlayerConcessionLeavesNoActiveSide();
 testCombatSpellImmunityAndMitigation();
 testAutoResolveIsNotEasierAtEqualPower();
 testCombatBoardNormalizesStackStats();

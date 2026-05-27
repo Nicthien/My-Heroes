@@ -36,6 +36,7 @@ interface GameStore {
   devTeleportArmed: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
+  adminObserverMode: boolean;
 
   setGameState: (state: GameState) => void;
   setMovePending: (pending: boolean) => void;
@@ -61,6 +62,7 @@ interface GameStore {
   setDevGodMode: (enabled: boolean) => void;
   setDevInfiniteMana: (enabled: boolean) => void;
   setDevTeleportArmed: (armed: boolean) => void;
+  setAdminObserverMode: (enabled: boolean) => void;
   resetGame: () => void;
 }
 
@@ -93,6 +95,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   devTeleportArmed: false,
   cameraTarget: null,
   zoomRequest: null,
+  adminObserverMode: false,
 
   setGameState: (state) => set((prev) => {
     const syncedCombat = prev.activeCombat
@@ -175,6 +178,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setDevGodMode: (enabled) => set({ devGodMode: enabled }),
   setDevInfiniteMana: (enabled) => set({ devInfiniteMana: enabled }),
   setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
+  setAdminObserverMode: (enabled) => set({ adminObserverMode: enabled }),
 
   resetGame: () =>
     set({
@@ -202,5 +206,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       devTeleportArmed: false,
       cameraTarget: null,
       zoomRequest: null,
+      adminObserverMode: false,
     }),
 }));

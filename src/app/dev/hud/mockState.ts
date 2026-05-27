@@ -3,6 +3,7 @@ import {
   Faction,
   GameState,
   HeroClass,
+  MapTile,
   ResourceBuildingType,
   TerrainType,
   UnitType,
@@ -11,16 +12,32 @@ import {
 export const MOCK_USER_ID = "dev-user";
 
 export function buildMockState(): GameState {
-  const tiles = Array.from({ length: 20 }, (_, y) =>
+  const tiles: MapTile[][] = Array.from({ length: 20 }, (_, y) =>
     Array.from({ length: 20 }, (_, x) => ({
       x,
       y,
-      terrain: TerrainType.GRASS,
+      terrain: x < 12 ? TerrainType.GRASS : TerrainType.DIRT,
       elevation: 0,
       isPassable: true,
       movementCost: 1,
+      zoneId: x < 12 ? 0 : 1,
     }))
   );
+
+  tiles[7][9].object = {
+    type: "gate",
+    id: "gate-dev-neutral",
+    ownerId: null,
+    guardianPower: 0,
+  };
+  tiles[15][16].object = {
+    type: "adventure_building",
+    id: "dwelling-dev-p2",
+    subtype: "external_dwelling",
+    ownerId: "p2",
+    targetId: UnitType.GOG,
+    amount: 8,
+  };
 
   return {
     id: "dev-game",
@@ -38,7 +55,82 @@ export function buildMockState(): GameState {
     },
     currentTurnPlayerId: "p1",
     activeCombats: [],
-    map: { width: 20, height: 20, tiles },
+    actionLog: [
+      {
+        id: "log-dev-3",
+        gameId: "dev-game",
+        gamePlayerId: "p2",
+        actorKind: "player",
+        turnNumber: 5,
+        actionType: "END_TURN",
+        category: "turn",
+        summary: "Adversaire termine son tour.",
+        details: { action: { type: "END_TURN" } },
+        createdAt: new Date("2026-05-28T10:03:00Z").toISOString(),
+      },
+      {
+        id: "log-dev-2",
+        gameId: "dev-game",
+        gamePlayerId: "p1",
+        actorKind: "player",
+        turnNumber: 5,
+        actionType: "MOVE_HERO",
+        category: "movement",
+        summary: "Leon Sticky-Fingers déplace un héros.",
+        details: { action: { type: "MOVE_HERO", heroId: "h1", path: [{ x: 5, y: 5 }, { x: 6, y: 5 }] } },
+        createdAt: new Date("2026-05-28T10:02:00Z").toISOString(),
+      },
+      {
+        id: "log-dev-1",
+        gameId: "dev-game",
+        gamePlayerId: "p1",
+        actorKind: "player",
+        turnNumber: 5,
+        actionType: "BUILD",
+        category: "economy",
+        summary: "Leon Sticky-Fingers construit un bâtiment.",
+        details: { action: { type: "BUILD", townId: "t1", building: "market" } },
+        createdAt: new Date("2026-05-28T10:01:00Z").toISOString(),
+      },
+    ],
+    gates: [
+      {
+        id: "gate-dev-neutral",
+        position: { x: 9, y: 7 },
+        ownerId: null,
+        guardianPower: 0,
+        garrison: [],
+      },
+    ],
+    map: {
+      width: 20,
+      height: 20,
+      tiles,
+      zones: [
+        {
+          id: 0,
+          templateZoneId: "dev-west",
+          type: "player",
+          ownerIndex: 0,
+          centerX: 6,
+          centerY: 10,
+          baseTerrain: TerrainType.GRASS,
+          value: 3000,
+          hasTown: true,
+        },
+        {
+          id: 1,
+          templateZoneId: "dev-east",
+          type: "player",
+          ownerIndex: 1,
+          centerX: 16,
+          centerY: 10,
+          baseTerrain: TerrainType.DIRT,
+          value: 3000,
+          hasTown: false,
+        },
+      ],
+    },
     players: [
       {
         id: "p1",
@@ -136,7 +228,9 @@ export function buildMockState(): GameState {
         resources: { gold: 8000, wood: 10, ore: 10, mercury: 5, crystals: 5, gems: 5, sulfur: 5 },
         heroes: [],
         towns: [],
-        resourceBuildings: [],
+        resourceBuildings: [
+          { id: "rb4", type: ResourceBuildingType.SULFUR_DUNE, position: { x: 15, y: 12 }, ownerId: "p2", guardianPower: 0 },
+        ],
         isAlive: true,
         turnOrder: 1,
         exploredTiles: [],

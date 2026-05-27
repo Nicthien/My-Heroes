@@ -8,6 +8,7 @@
     "dev:supabase": "supabase start",
     "dev:stop": "supabase stop",
     "db:reset": "supabase db reset",
+    "admin:ensure": "node scripts/ensure-admin.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "node scripts/validate-text-encoding.mjs && node scripts/validate-visual-assets.mjs && eslint",
@@ -24,6 +25,7 @@
     "validate:visual-assets": "node scripts/validate-visual-assets.mjs",
     "validate:text-encoding": "node scripts/validate-text-encoding.mjs",
     "validate:rmg": "tsx scripts/validate-rmg.ts",
+    "validate:ai": "tsx scripts/validate-ai.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs",
     "test:e2e": "playwright test"
   },

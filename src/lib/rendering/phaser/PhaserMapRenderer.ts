@@ -49,6 +49,7 @@ import {
 } from "@/lib/rendering/phaser/fogConstants";
 import {
   CAMERA_ZOOM_STEP,
+  FOG_DRIFT_MAX_TILE_COUNT,
   HOVER_LABEL_LINGER_MS,
   HOVER_LABEL_SAMPLE_MS,
   LAVA_TEXTURE_PREFIX,
@@ -262,6 +263,7 @@ class PhaserMapScene extends Phaser.Scene {
   private lastTerrainSignature: string | null = null;
   private lastObjectSignature: string | null = null;
   private objectTilePositions: Array<{ x: number; y: number }> = [];
+  private followedHeroId: string | null = null;
 
   constructor() {
     super("MapScene");
@@ -351,6 +353,8 @@ class PhaserMapScene extends Phaser.Scene {
     this.map = map;
     if (this.loadMissingMapTextures(map)) return;
 
+    this.updateFogDriftTweens(map);
+
     // Two-tier guard against the 1 Hz polling refresh:
     // - terrainSig captures the static layer (dimensions/terrain/decor/road)
     //   that never changes after map gen. If it matches, we skip the very
@@ -375,8 +379,6 @@ class PhaserMapScene extends Phaser.Scene {
 
     this.lastTerrainSignature = terrainSig;
     this.lastObjectSignature = objectSig;
-
-    this.updateFogDriftTweens(map);
 
     this.fogPlaneDepth = getMaxTileDepth(map) + FOG_PLANE_CLEARANCE;
     this.waterShimmerFrames = [];
@@ -582,10 +584,10 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   // Lissajous drift on the fog layer to fake clouds moving with wind. Disabled
-  // on large maps because the per-frame container transform forces a re-composite
-  // of many fog RenderTexture chunks and was costing 3-8 fps on XL.
+  // only when the mobile HUD/layout is active; touch-capable desktop browsers
+  // must keep the drift.
   private updateFogDriftTweens(map: GameMap) {
-    const wantsDrift = map.width * map.height <= 6400;
+    const wantsDrift = map.width * map.height <= FOG_DRIFT_MAX_TILE_COUNT && !this.shouldDisableFogDriftForDevice();
     const hasDrift = this.fogDriftTweens.length > 0;
     if (wantsDrift === hasDrift) return;
 
@@ -599,8 +601,8 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogDriftTweens.push(
       this.tweens.add({
         targets: this.fogLayer,
-        x: { from: -3, to: 3 },
-        duration: 9000,
+        x: { from: -18, to: 18 },
+        duration: 48000,
         yoyo: true,
         repeat: -1,
         ease: "Sine.inOut",
@@ -609,13 +611,18 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogDriftTweens.push(
       this.tweens.add({
         targets: this.fogLayer,
-        y: { from: -2, to: 2 },
-        duration: 7000,
+        y: { from: -12, to: 12 },
+        duration: 36000,
         yoyo: true,
         repeat: -1,
         ease: "Sine.inOut",
       })
     );
+  }
+
+  private shouldDisableFogDriftForDevice() {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia?.("(max-width: 767px), (hover: none) and (pointer: coarse)").matches ?? false;
   }
 
   private renderWaterShimmer(map: GameMap) {
@@ -1061,9 +1068,27 @@ class PhaserMapScene extends Phaser.Scene {
 
   centerOnTile(x: number, y: number) {
     const iso = cartToIso(x, y);
+    this.centerOnWorldPoint(iso.x, iso.y);
+  }
+
+  followHero(heroId: string | null) {
+    this.followedHeroId = heroId;
+    if (!heroId) return;
+
+    const renderedHero = this.renderedHeroes.get(heroId);
+    if (renderedHero) {
+      const point = this.getRenderedHeroCameraPoint(renderedHero);
+      this.centerOnWorldPoint(point.x, point.y);
+      return;
+    }
+
+    const object = this.objects.find((item) => item.id === heroId && (item.type === "hero" || item.type === "boat"));
+    if (object) this.centerOnTile(object.x, object.y);
+  }
+
+  private centerOnWorldPoint(x: number, y: number) {
     const camera = this.cameras.main;
-    camera.scrollX = iso.x - camera.width / 2;
-    camera.scrollY = iso.y - camera.height / 2;
+    camera.centerOn(x, y);
   }
 
   panCamera(dx: number, dy: number) {
@@ -1074,16 +1099,20 @@ class PhaserMapScene extends Phaser.Scene {
 
   zoomCamera(direction: number, screenX = this.cameras.main.width / 2, screenY = this.cameras.main.height / 2) {
     const camera = this.cameras.main;
-    const before = camera.getWorldPoint(screenX, screenY);
+    const currentZoom = camera.zoom;
     const factor = direction > 0 ? CAMERA_ZOOM_STEP : 1 / CAMERA_ZOOM_STEP;
-    const nextZoom = Phaser.Math.Clamp(camera.zoom * factor, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+    const nextZoom = Phaser.Math.Clamp(currentZoom * factor, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
 
-    if (nextZoom === camera.zoom) return;
+    if (nextZoom === currentZoom) return;
+
+    const originX = camera.width * 0.5;
+    const originY = camera.height * 0.5;
+    const anchorWorldX = camera.scrollX + originX + (screenX - originX) / currentZoom;
+    const anchorWorldY = camera.scrollY + originY + (screenY - originY) / currentZoom;
 
     camera.setZoom(nextZoom);
-    const after = camera.getWorldPoint(screenX, screenY);
-    camera.scrollX += before.x - after.x;
-    camera.scrollY += before.y - after.y;
+    camera.scrollX = anchorWorldX - originX - (screenX - originX) / nextZoom;
+    camera.scrollY = anchorWorldY - originY - (screenY - originY) / nextZoom;
   }
 
   getTileAtScreen(screenX: number, screenY: number): Position | null {
@@ -2503,7 +2532,7 @@ class PhaserMapScene extends Phaser.Scene {
         }
         this.playMovementSound(this.getMovementSoundKind(fromWater, toWater));
         this.playHeroAnimation(renderedHero, "walk");
-        this.updateRenderedHeroPosition(renderedHero, start.x, start.y);
+        this.updateRenderedHeroPosition(renderedHero, start.x, start.y, true);
 
         this.tweens.add({
           targets: tweenState,
@@ -2513,14 +2542,14 @@ class PhaserMapScene extends Phaser.Scene {
           ease: "Sine.easeInOut",
           onUpdate: () => {
             if (!this.isRenderedHeroUsable(renderedHero)) return;
-            this.updateRenderedHeroPosition(renderedHero, tweenState.x, tweenState.y);
+            this.updateRenderedHeroPosition(renderedHero, tweenState.x, tweenState.y, true);
           },
           onComplete: () => {
             if (!this.isRenderedHeroUsable(renderedHero) || this.renderedHeroes.get(heroId) !== renderedHero) {
               resolve();
               return;
             }
-            this.updateRenderedHeroPosition(renderedHero, end.x, end.y);
+            this.updateRenderedHeroPosition(renderedHero, end.x, end.y, true);
             if (!toWater && fromWater) {
               this.setRenderedHeroSurface(renderedHero, false, "walk");
             }
@@ -2554,7 +2583,7 @@ class PhaserMapScene extends Phaser.Scene {
     renderedHero.sprite.scaleY = previousScaleY;
     renderedHero.animation.baseScaleX = targetScaleX;
     renderedHero.animation.baseScaleY = targetScaleY;
-    this.updateRenderedHeroPosition(renderedHero, x, y);
+    this.updateRenderedHeroPosition(renderedHero, x, y, true);
 
     return new Promise<void>((resolve) => {
       this.tweens.add({
@@ -2566,6 +2595,14 @@ class PhaserMapScene extends Phaser.Scene {
         onComplete: () => resolve(),
       });
     });
+  }
+
+  private getRenderedHeroCameraPoint(renderedHero: RenderedHeroObject) {
+    const origin = getOriginForObject(renderedHero.object);
+    return {
+      x: renderedHero.sprite.x,
+      y: renderedHero.sprite.y + renderedHero.sprite.displayHeight * (0.5 - origin.originY),
+    };
   }
 
   private getObjectRenderPoint(position: Position, offsetY: number) {
@@ -2610,7 +2647,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
   }
 
-  private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number) {
+  private updateRenderedHeroPosition(renderedHero: RenderedHeroObject, x: number, y: number, followCamera = false) {
     if (!this.isRenderedHeroUsable(renderedHero)) return;
 
     renderedHero.sprite.x = x;
@@ -2618,6 +2655,10 @@ class PhaserMapScene extends Phaser.Scene {
     renderedHero.animation.baseY = y;
     renderedHero.banner.setPosition(x - renderedHero.baseX, y - renderedHero.baseY);
     renderedHero.banner.setDepth(y + 3);
+    if (followCamera && this.followedHeroId === renderedHero.object.id) {
+      const point = this.getRenderedHeroCameraPoint(renderedHero);
+      this.centerOnWorldPoint(point.x, point.y);
+    }
     this.objectLayerSortDirty = true;
   }
 
@@ -2888,13 +2929,15 @@ class PhaserMapScene extends Phaser.Scene {
     if (tile && mapObject) {
       if (this.visibleTiles && !this.visibleTiles.has(`${tile.x},${tile.y}`)) return null;
 
-      const text = getMapObjectHoverText(mapObject);
+      const dataObject = this.objectsByTile.get(`${tile.x},${tile.y}`)?.find((o) => o.id === mapObject.id);
+      const text = mapObject.type === "adventure_building" && dataObject
+        ? (dataObject.description ? `${dataObject.name}\n${dataObject.description}` : dataObject.name)
+        : getMapObjectHoverText(mapObject);
       if (text) {
         const iso = cartToIso(tile.x, tile.y);
         const surfaceY = this.getSurfaceY(tile.x, tile.y);
-        const dataObject = this.objectsByTile.get(`${tile.x},${tile.y}`)?.find((o) => o.id === mapObject.id);
         return {
-          key: `map:${mapObject.id}`,
+          key: `map:${mapObject.id}:${text}`,
           text,
           x: iso.x,
           y: getMapObjectHoverY(mapObject, surfaceY),
@@ -2915,7 +2958,7 @@ class PhaserMapScene extends Phaser.Scene {
       const iso = cartToIso(object.x, object.y);
       const text = object.description ? `${object.name}\n${object.description}` : object.name;
       return {
-        key: `object:${object.id}`,
+        key: `object:${object.id}:${text}`,
         text,
         x: iso.x + (object.renderOffsetX ?? 0),
         y: bounds.top - 8,
@@ -3542,6 +3585,10 @@ export class PhaserMapRenderer implements MapRenderer {
 
   clearReachable() {
     if (this.isReady()) this.scene?.clearReachable();
+  }
+
+  followHero(heroId: string | null) {
+    if (this.isReady()) this.scene?.followHero(heroId);
   }
 
   centerOnTile(x: number, y: number) {

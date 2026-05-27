@@ -1,20 +1,37 @@
 "use client";
 
 import { useEffect } from "react";
+import AdminObserverPanel from "@/components/game/admin/AdminObserverPanel";
 import HUD from "@/components/game/hud/HUD";
 import { AuthContext } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { buildMockState, mockAuthValue } from "./mockState";
 
 export default function DevHudPage() {
+  const adminObserverMode = useGameStore((state) => state.adminObserverMode);
+
   useEffect(() => {
     const mockState = buildMockState();
     const params = new URLSearchParams(window.location.search);
+    const adminObserver = params.get("admin") === "1";
+    const gameState = adminObserver
+      ? {
+          ...mockState,
+          players: mockState.players.map((player) => ({
+            ...player,
+            userId: player.userId === mockAuthValue.data.user.id ? "observed-user" : player.userId,
+          })),
+        }
+      : mockState;
+    useGameStore.getState().setAdminObserverMode(adminObserver);
     useGameStore.getState().setGameState({
-      ...mockState,
-      status: params.get("status") === "pending" ? "PENDING" : mockState.status,
+      ...gameState,
+      status: params.get("status") === "pending" ? "PENDING" : gameState.status,
     });
     useGameStore.getState().selectHero("h1");
+    return () => {
+      useGameStore.getState().setAdminObserverMode(false);
+    };
   }, []);
 
   return (
@@ -30,6 +47,7 @@ export default function DevHudPage() {
           }}
         />
         <HUD />
+        {adminObserverMode && <AdminObserverPanel />}
       </div>
     </AuthContext.Provider>
   );

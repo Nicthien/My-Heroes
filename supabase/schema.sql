@@ -7,9 +7,13 @@ create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique,
   name text unique,
+  role text not null default 'user',
+  must_change_password boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index profiles_name_lower_unique on public.profiles (lower(name)) where name is not null;
 
 create type public.game_status as enum ('PENDING', 'ACTIVE', 'COMPLETED', 'ABANDONED');
 
@@ -27,6 +31,7 @@ create table public.games (
   game_config jsonb not null default '{}',
   map_state jsonb not null default '{}',
   ai_runner_locked_at timestamptz,
+  created_by_user_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -51,6 +56,7 @@ create table public.game_players (
   is_alive boolean not null default true,
   turn_order integer not null,
   explored_tiles jsonb not null default '[]',
+  created_at timestamptz not null default now(),
   unique (game_id, user_id)
 );
 
@@ -189,6 +195,22 @@ create table public.turns (
   is_completed boolean not null default false,
   unique (game_id, game_player_id, turn_number)
 );
+
+create table public.game_action_logs (
+  id uuid primary key default gen_random_uuid(),
+  game_id uuid not null references public.games(id) on delete cascade,
+  game_player_id uuid references public.game_players(id) on delete set null,
+  actor_kind text not null check (actor_kind in ('player', 'ai', 'system')),
+  turn_number integer not null,
+  action_type text not null,
+  category text not null,
+  summary text not null,
+  details jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+
+create index game_action_logs_game_turn_created_idx
+  on public.game_action_logs (game_id, turn_number desc, created_at desc);
 
 create table public.combats (
   id uuid primary key default gen_random_uuid(),

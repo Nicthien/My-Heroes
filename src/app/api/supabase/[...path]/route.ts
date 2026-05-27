@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const SUPABASE_INTERNAL_URL = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-if (!SUPABASE_INTERNAL_URL) {
-  throw new Error("Supabase internal URL is not configured. Set SUPABASE_INTERNAL_URL in .env.");
-}
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 async function proxyRequest(request: NextRequest, path: string[] = []) {
-  const targetOrigin = SUPABASE_INTERNAL_URL!.replace(/\/+$/, "");
+  const internalUrl = getSupabaseInternalUrl();
+  if (!internalUrl) {
+    return NextResponse.json(
+      { error: "Supabase internal URL is not configured. Set SUPABASE_INTERNAL_URL in .env." },
+      { status: 500 },
+    );
+  }
+
+  const targetOrigin = internalUrl.replace(/\/+$/, "");
   const targetPath = path.length ? `/${path.join("/")}` : "";
   const targetUrl = `${targetOrigin}${targetPath}${request.nextUrl.search}`;
 
@@ -46,6 +50,29 @@ async function proxyRequest(request: NextRequest, path: string[] = []) {
     status: response.status,
     headers: responseHeaders,
   });
+}
+
+function getSupabaseInternalUrl() {
+  return readDotEnvValue("SUPABASE_INTERNAL_URL") || process.env.SUPABASE_INTERNAL_URL || readDotEnvValue("NEXT_PUBLIC_SUPABASE_URL") || process.env.NEXT_PUBLIC_SUPABASE_URL;
+}
+
+function readDotEnvValue(name: string) {
+  const envPath = resolve(process.cwd(), ".env");
+  if (!existsSync(envPath)) return undefined;
+
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = /^([^=]+)=(.*)$/.exec(trimmed);
+    if (!match || match[1].trim() !== name) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return value;
+  }
+
+  return undefined;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {

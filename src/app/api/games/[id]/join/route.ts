@@ -11,6 +11,9 @@ export async function POST(
 ) {
   const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
+  if (user.role === "admin") {
+    return NextResponse.json({ error: "Un administrateur peut observer les parties, mais ne peut pas les rejoindre comme joueur." }, { status: 403 });
+  }
 
   const { id } = await params;
   const body = await request.json();

@@ -154,6 +154,8 @@ export default function GameMapComponent() {
   const cameraTarget = useGameStore((state) => state.cameraTarget);
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
+  const adminObserverMode = useGameStore((state) => state.adminObserverMode);
+  const revealMap = devRevealMap || adminObserverMode;
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
@@ -165,11 +167,11 @@ export default function GameMapComponent() {
     [gameState?.activeCombats]
   );
   const selectedHeroReachableTileKeys = useMemo(() => {
-    if (!gameState || devRevealMap || !selectedHeroId) return null;
+    if (!gameState || revealMap || !selectedHeroId) return null;
     const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
     if (!hero || activeCombatHeroIds.has(hero.id)) return null;
     return computeReachableTiles(gameState.map, hero.position, hero.movement);
-  }, [activeCombatHeroIds, devRevealMap, gameState, selectedHeroId]);
+  }, [activeCombatHeroIds, revealMap, gameState, selectedHeroId]);
   const selectedHeroReachableTiles = useMemo(() => {
     if (!selectedHeroReachableTileKeys) return [];
     return Array.from(selectedHeroReachableTileKeys).map((key) => {
@@ -321,12 +323,12 @@ export default function GameMapComponent() {
         lastFogVisibleRef.current = null;
         lastFogExploredRef.current = null;
       }
-      renderer.setObjects(buildObjects(gameState, currentPlayer, devRevealMap, selectedHeroId));
+      renderer.setObjects(buildObjects(gameState, currentPlayer, revealMap, selectedHeroId));
       reportMapLoading(95, "Calcul de la visibilite...");
 
       let visibleTiles: Set<string>;
       let exploredTiles: Set<string>;
-      if (activeCombat || devRevealMap || currentPlayer?.isAlive === false) {
+      if (activeCombat || revealMap || currentPlayer?.isAlive === false) {
         const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
         visibleTiles = allTiles;
         exploredTiles = allTiles;
@@ -370,12 +372,12 @@ export default function GameMapComponent() {
       }
 
       if (!didInitialCenter.current) {
-        const firstTown = currentPlayer?.towns[0];
-        const firstHero = currentPlayer?.heroes[0];
+        const firstTown = currentPlayer?.towns[0] ?? (adminObserverMode ? gameState.players.flatMap((player) => player.towns)[0] : undefined);
+        const firstHero = currentPlayer?.heroes[0] ?? (adminObserverMode ? gameState.players.flatMap((player) => player.heroes)[0] : undefined);
         const centerTarget = gameState.status === "PENDING" ? firstTown : firstHero;
         if (centerTarget) {
           renderer.centerOnTile(centerTarget.position.x, centerTarget.position.y);
-          if (gameState.status !== "PENDING" && firstHero && currentPlayer?.isAlive !== false) {
+          if (!adminObserverMode && gameState.status !== "PENDING" && firstHero && currentPlayer?.isAlive !== false) {
             useGameStore.getState().selectHero(firstHero.id);
           }
         }
@@ -398,11 +400,11 @@ export default function GameMapComponent() {
         }, 150);
       }
     });
-  }, [gameState, session?.user?.id, activeCombat, rendererReadyVersion, devRevealMap, selectedHeroId]);
+  }, [adminObserverMode, gameState, session?.user?.id, activeCombat, rendererReadyVersion, revealMap, selectedHeroId]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;
-    if (devRevealMap) {
+    if (revealMap) {
       rendererRef.current.clearReachable();
       return;
     }
@@ -424,14 +426,16 @@ export default function GameMapComponent() {
     rendererRef.current.highlightTiles(selectedHeroReachableTiles, REACHABLE_TILE_COLOR, REACHABLE_TILE_ALPHA);
 
     if (lastCenteredHeroIdRef.current !== selectedHeroId) {
-      rendererRef.current.centerOnTile(hero.position.x, hero.position.y);
+      rendererRef.current.followHero(selectedHeroId);
       lastCenteredHeroIdRef.current = selectedHeroId;
     }
-  }, [selectedHeroId, gameState, rendererReadyVersion, devRevealMap, activeCombatHeroIds, selectedHeroReachableTiles]);
+  }, [selectedHeroId, gameState, rendererReadyVersion, revealMap, activeCombatHeroIds, selectedHeroReachableTiles]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
-    if (!renderer?.isReady() || selectedHeroId) return;
+    if (!renderer?.isReady()) return;
+    renderer.followHero(selectedHeroId);
+    if (selectedHeroId) return;
 
     pendingMoveRef.current = null;
     pendingAttackRef.current = null;
@@ -451,7 +455,11 @@ export default function GameMapComponent() {
     if (!zoomRequest) return;
     const renderer = rendererRef.current;
     if (!renderer?.isReady()) return;
+    const state = useGameStore.getState();
     renderer.zoomCamera(zoomRequest.direction);
+    if (state.selectedHeroId) {
+      renderer.followHero(state.selectedHeroId);
+    }
   }, [zoomRequest, rendererReadyVersion]);
 
   useEffect(() => {
@@ -482,7 +490,7 @@ export default function GameMapComponent() {
   }, [gameState?.status, rendererReadyVersion]);
 
   useEffect(() => {
-    if (!gameState || gameState.status !== "ACTIVE") {
+    if (adminObserverMode || !gameState || gameState.status !== "ACTIVE") {
       didAutoSelectActiveHero.current = false;
       autoSelectGameIdRef.current = null;
       return;
@@ -511,7 +519,7 @@ export default function GameMapComponent() {
     didAutoSelectActiveHero.current = true;
     selectHero(firstHero.id);
     rendererRef.current?.centerOnTile(firstHero.position.x, firstHero.position.y);
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion, activeCombatHeroIds]);
+  }, [adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, session?.user?.id, rendererReadyVersion, activeCombatHeroIds]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2 || e.button === 1) {
@@ -1288,6 +1296,21 @@ export default function GameMapComponent() {
       if (!selectedObject) return;
 
       const obj = selectedObject;
+      if (adminObserverMode && obj.type === "hero") {
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current?.clearHighlights();
+        selectHero(obj.id);
+        return;
+      }
+      if (adminObserverMode && obj.type === "town") {
+        pendingMoveRef.current = null;
+        pendingAttackRef.current = null;
+        rendererRef.current?.clearHighlights();
+        selectTown(obj.id);
+        return;
+      }
+
       if (obj.type === "combat") {
         const combat = gameState.activeCombats?.find((item) => item.id === obj.id);
         if (!combat) return;
@@ -2334,7 +2357,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
+  }, [adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div

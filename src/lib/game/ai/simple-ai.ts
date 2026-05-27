@@ -1,79 +1,141 @@
+import { randomUUID } from "crypto";
 import { addVisit, createCampfireReward } from "@/lib/game/adventure-buildings";
+import { addUnitsToStacks, sortedStacks } from "@/lib/game/army-stacks";
 import { computeVisibleTiles, getAdventurePathCost, getPlayerVisionCenters, getUsableAdventureMovement, isTileTraversable, MINIMUM_ADVENTURE_STEP_COST } from "@/lib/game/engine";
 import { makeRng } from "@/lib/game/engine/rng";
+import { UNIT_RULES, tierForUnit, type ResourceCost } from "@/lib/game/economy";
+import { createExternalDwellingState, isExternalDwellingType, normalizeExternalDwellingState, type ExternalDwellingStateMap } from "@/lib/game/external-dwellings";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
+import { recordGameAction } from "@/lib/game/server/action-log";
 import { AdventureBuildingType, GameMap, Position, Resources, UnitStack } from "@/lib/game/types";
 import { SPELLS } from "@/lib/game/spells";
+import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { buildAiContext, getResourcePileAmount, playerResources } from "./context";
-import { calculateHeroPower, calculateStacksPower, createBuildingGuardStacks, resolveAiAutoCombat } from "./combat";
+import { canAiWinAutoCombat, createBuildingGuardStacks, resolveAiAutoCombat } from "./combat";
 import { runAiEconomy } from "./economy";
+import { runAiCombatTurns } from "./combat-runner";
 import { assignHeroRole } from "./roles";
 import { chooseAiObjective } from "./utility";
+import { saveAiMemory } from "./strategy/memory";
+import { pickChampion } from "./strategy/champion";
+import { executeArmyTransfers, pickupNearbyGarrisonForHero } from "./strategy/army-transfers";
+import { selectPrimaryEnemy } from "./strategy/enemy";
+import { updateMultiTurnPlans } from "./strategy/planner";
+import { maybeRecruitHero } from "./strategy/recruit-hero";
+import { consumePendingSkillChoices } from "./strategy/skill-choice";
 import type { AiContext, AiDecision, AiGame, AiHero, AiObjective, AiPlayer } from "./types";
 
 const AI_TURN_START_DELAY_MS = 500;
 const AI_MOVE_DELAY_MS = 450;
 const AI_TURN_END_DELAY_MS = 2300;
+const AI_RUNNER_LOCK_STALE_MS = 45_000;
 const MAX_HERO_OBJECTIVES_PER_TURN = 16;
 
 export async function runAiTurnsUntilHuman(supabase: SupabaseAdmin, gameId: string) {
   if (!(await acquireAiRunnerLock(supabase, gameId))) return;
 
   try {
-    const initialGame = await getGameWithRelations(supabase, gameId);
-    const maxSteps = Math.max(2, Number(initialGame?.maxPlayers ?? 0) + 2);
-
-    for (let step = 0; step < maxSteps; step++) {
-      const game = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
-      if (!game || game.status !== "ACTIVE" || !game.currentTurnPlayerId) return;
-
-      const currentPlayer = game.players.find((player) => player.id === game.currentTurnPlayerId && player.isAlive);
-      if (!currentPlayer?.isAi) return;
-
-      await sleep(AI_TURN_START_DELAY_MS);
-      const latestGame = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
-      if (!latestGame || latestGame.status !== "ACTIVE" || latestGame.currentTurnPlayerId !== currentPlayer.id) return;
-      const latestPlayer = latestGame.players.find((player) => player.id === currentPlayer.id && player.isAlive);
-      if (!latestPlayer?.isAi) return;
-
-      await runUtilityAiTurn(supabase, latestGame, latestPlayer);
-      await sleep(AI_TURN_END_DELAY_MS);
-      const gameBeforeEnd = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
-      if (!gameBeforeEnd || gameBeforeEnd.status !== "ACTIVE" || gameBeforeEnd.currentTurnPlayerId !== latestPlayer.id) return;
-
-      await completePlayerTurn(supabase, gameBeforeEnd.id, Number(gameBeforeEnd.turnNumber), latestPlayer.id);
-    }
+    await runAiTurnsUntilHumanWithLock(supabase, gameId);
   } finally {
     await supabase.from("games").update({ ai_runner_locked_at: null }).eq("id", gameId);
   }
 }
 
+export async function resumeAiActivityUntilHuman(supabase: SupabaseAdmin, gameId: string) {
+  if (!(await acquireAiRunnerLock(supabase, gameId))) return;
+
+  try {
+    await runActiveAiCombats(supabase, gameId);
+    await runAiTurnsUntilHumanWithLock(supabase, gameId);
+  } finally {
+    await supabase.from("games").update({ ai_runner_locked_at: null }).eq("id", gameId);
+  }
+}
+
+async function runAiTurnsUntilHumanWithLock(supabase: SupabaseAdmin, gameId: string) {
+  const initialGame = await getGameWithRelations(supabase, gameId);
+  const maxSteps = Math.max(2, Number(initialGame?.maxPlayers ?? 0) + 2);
+
+  for (let step = 0; step < maxSteps; step++) {
+    const game = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
+    if (!game || game.status !== "ACTIVE" || !game.currentTurnPlayerId) return;
+
+    const currentPlayer = game.players.find((player) => player.id === game.currentTurnPlayerId && player.isAlive);
+    if (!isRunnableAiPlayer(currentPlayer)) return;
+
+    await sleep(AI_TURN_START_DELAY_MS);
+    await runActiveAiCombats(supabase, gameId);
+    const latestGame = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
+    if (!latestGame || latestGame.status !== "ACTIVE" || latestGame.currentTurnPlayerId !== currentPlayer.id) return;
+    const latestPlayer = latestGame.players.find((player) => player.id === currentPlayer.id && player.isAlive);
+    if (!isRunnableAiPlayer(latestPlayer)) return;
+
+    await logAiAction(supabase, latestGame, latestPlayer, "AI_TURN_START", "turn", `${latestPlayer.aiName || "IA"} commence son tour.`);
+    await runUtilityAiTurn(supabase, latestGame, latestPlayer);
+    await runActiveAiCombats(supabase, gameId);
+    await sleep(AI_TURN_END_DELAY_MS);
+    const gameBeforeEnd = await getGameWithRelations(supabase, gameId) as unknown as AiGame | null;
+    if (!gameBeforeEnd || gameBeforeEnd.status !== "ACTIVE" || gameBeforeEnd.currentTurnPlayerId !== latestPlayer.id) return;
+
+    await completePlayerTurn(supabase, gameBeforeEnd.id, Number(gameBeforeEnd.turnNumber), latestPlayer.id);
+    await logAiAction(supabase, gameBeforeEnd, latestPlayer, "END_TURN", "turn", `${latestPlayer.aiName || "IA"} termine son tour.`);
+  }
+}
+
+function isRunnableAiPlayer(player: AiPlayer | undefined): player is AiPlayer {
+  return Boolean(player && (player.isAi || player.aiName));
+}
+
+async function runActiveAiCombats(supabase: SupabaseAdmin, gameId: string) {
+  const { data: combats, error } = await supabase
+    .from("combats")
+    .select("id")
+    .eq("game_id", gameId)
+    .eq("status", "ACTIVE");
+  if (error) throw error;
+
+  for (const combat of combats ?? []) {
+    if (typeof combat.id !== "string") continue;
+    await runAiCombatTurns(supabase, gameId, combat.id);
+  }
+}
+
 async function acquireAiRunnerLock(supabase: SupabaseAdmin, gameId: string) {
-  const { data: game, error: fetchError } = await supabase
-    .from("games")
-    .select("ai_runner_locked_at")
-    .eq("id", gameId)
-    .maybeSingle();
-  if (fetchError) throw fetchError;
-
-  const lockedAt = game?.ai_runner_locked_at ? Date.parse(String(game.ai_runner_locked_at)) : 0;
-  if (lockedAt && Date.now() - lockedAt < 2 * 60 * 1000) return false;
-
-  const { error } = await supabase
+  const staleBefore = new Date(Date.now() - AI_RUNNER_LOCK_STALE_MS).toISOString();
+  const { data, error } = await supabase
     .from("games")
     .update({ ai_runner_locked_at: new Date().toISOString() })
     .eq("id", gameId)
+    .or(`ai_runner_locked_at.is.null,ai_runner_locked_at.lt.${staleBefore}`)
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
-  return true;
+  return Boolean(data);
 }
 
 async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: AiPlayer) {
-  await runAiEconomy(supabase, game, player);
+  const initialContext = buildAiContext(game, player);
+  const turnNumber = Number(game.turnNumber ?? 1);
+  // Désigne / met à jour le champion dans la mémoire avant tout le reste.
+  initialContext.memory.championHeroId = pickChampion(initialContext, initialContext.memory);
+  // Choisit / met à jour l'ennemi principal.
+  const nextPrimary = selectPrimaryEnemy(initialContext, initialContext.memory);
+  if (nextPrimary !== initialContext.memory.primaryEnemyId) {
+    initialContext.memory.primaryEnemyId = nextPrimary;
+    initialContext.memory.primaryEnemyRefreshedAtTurn = turnNumber;
+  }
+  // Met à jour les plans multi-tours.
+  initialContext.memory.multiTurnPlans = updateMultiTurnPlans(initialContext, initialContext.memory);
+
+  await runAiEconomy(supabase, game, player, initialContext);
+  await maybeRecruitHero(supabase, initialContext);
+  await consumePendingSkillChoices(supabase, initialContext);
+  // Transferts d'armée : héros secondaires adjacents au champion lui donnent leurs piles ;
+  // si posture DEFEND, ils déposent en garnison d'une ville propre adjacente.
+  await executeArmyTransfers(supabase, initialContext, initialContext.memory.championHeroId);
 
   let freshGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
   let freshPlayer = freshGame?.players.find((item) => item.id === player.id);
@@ -82,7 +144,16 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
   const heroIds = [...(freshPlayer.heroes ?? [])]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((hero) => hero.id);
+  if (heroIds.length === 0) {
+    await logAiAction(supabase, game, player, "AI_NO_HEROES", "turn", `${player.aiName || "IA"} n'a aucun heros actif.`);
+  }
 
+  let lastContext: AiContext | null = initialContext;
+  let actionCount = 0;
+  let idleCount = 0;
+  const championOverride = initialContext.memory.championHeroId;
+  const primaryEnemyOverride = initialContext.memory.primaryEnemyId;
+  const plansOverride = initialContext.memory.multiTurnPlans;
   for (let heroIndex = 0; heroIndex < heroIds.length; heroIndex++) {
     for (let step = 0; step < MAX_HERO_OBJECTIVES_PER_TURN; step++) {
       freshGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
@@ -92,16 +163,61 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
       if (isHeroInActiveCombat(freshGame, hero.id)) break;
 
       const context = buildAiContext(freshGame, freshPlayer);
+      // Conserve les directives stratégiques durant tout le tour, même si la mémoire n'a pas encore été persistée.
+      if (championOverride && (freshPlayer.heroes ?? []).some((h) => h.id === championOverride)) {
+        context.memory.championHeroId = championOverride;
+      }
+      context.memory.primaryEnemyId = primaryEnemyOverride;
+      context.memory.multiTurnPlans = plansOverride;
+      lastContext = context;
       const role = assignHeroRole(context, hero, heroIndex);
       const score = chooseAiObjective(context, hero, role);
-      if (!score) break;
+      if (!score) {
+        idleCount++;
+        await logAiAction(supabase, context.game, context.player, "AI_NO_OBJECTIVE", "strategy", `${context.player.aiName || "IA"} ne trouve pas d'objectif utile.`, {
+          heroId: hero.id,
+          role,
+          movement: hero.movement,
+        });
+        break;
+      }
 
       const decision: AiDecision = { heroId: hero.id, role, score };
       const result = await applyAiDecision(supabase, context, hero, decision);
-      if (!result.moved || result.heroRemoved) break;
+      if (!result.moved) {
+        idleCount++;
+        break;
+      }
+      actionCount++;
+      if (result.heroRemoved) break;
       await sleep(AI_MOVE_DELAY_MS);
     }
   }
+
+  if (lastContext) {
+    const finalGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
+    const finalMapState = (finalGame?.mapState as Record<string, unknown> | undefined) ?? lastContext.mapState;
+    const updatedMemory = {
+      ...lastContext.memory,
+      championHeroId: championOverride ?? lastContext.memory.championHeroId,
+      primaryEnemyId: primaryEnemyOverride ?? lastContext.memory.primaryEnemyId,
+      multiTurnPlans: plansOverride,
+      lastTurn: Number(game.turnNumber ?? 0),
+    };
+    await saveAiMemory(supabase, game.id, player.id, updatedMemory, finalMapState);
+    const savedGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
+    const savedPlayer = savedGame?.players.find((item) => item.id === player.id);
+    if (savedGame && savedPlayer) {
+      const skillContext = buildAiContext(savedGame, savedPlayer);
+      skillContext.memory = updatedMemory;
+      await consumePendingSkillChoices(supabase, skillContext);
+    }
+  }
+  await logAiAction(supabase, game, player, "AI_TURN_SUMMARY", "turn", `${player.aiName || "IA"} termine ses decisions.`, {
+    actionCount,
+    idleCount,
+    heroCount: heroIds.length,
+  });
 }
 
 async function applyAiDecision(
@@ -112,12 +228,35 @@ async function applyAiDecision(
 ): Promise<{ moved: boolean; heroRemoved?: boolean }> {
   const objective = decision.score.objective;
   const movement = await moveHeroToObjective(supabase, context, hero, objective);
-  if (!movement.moved) return { moved: false };
+  if (!movement.moved) {
+    await logAiAction(supabase, context.game, context.player, "AI_MOVE_BLOCKED", "movement", `${context.player.aiName || "IA"} ne peut pas rejoindre son objectif.`, {
+      heroId: hero.id,
+      objectiveType: objective.type,
+      targetId: objective.id,
+      destination: objective.position,
+    });
+    return { moved: false };
+  }
+  await logAiAction(supabase, context.game, context.player, "MOVE_HERO", "movement", `${context.player.aiName || "IA"} deplace un heros.`,
+  {
+    heroId: hero.id,
+    destination: objective.position,
+    objectiveType: objective.type,
+  });
 
   if (objective.type === "resource") {
     await collectResource(supabase, context, objective);
+    await logAiAction(supabase, context.game, context.player, "COLLECT_RESOURCE", "adventure", `${context.player.aiName || "IA"} collecte des ressources.`, {
+      objectId: objective.id,
+      position: objective.position,
+    });
   } else if (objective.type === "adventure_building") {
     await visitAdventureBuilding(supabase, context, hero, objective);
+    await logAiAction(supabase, context.game, context.player, "VISIT_ADVENTURE_BUILDING", "adventure", `${context.player.aiName || "IA"} visite un lieu d'aventure.`, {
+      objectId: objective.id,
+      position: objective.position,
+      subtype: objective.object?.subtype,
+    });
   } else if (objective.type === "resource_building") {
     return captureOrFightResourceBuilding(supabase, context, movement.hero, objective);
   } else if (objective.type === "neutral_army") {
@@ -128,9 +267,78 @@ async function applyAiDecision(
     return fightEnemyHero(supabase, context, movement.hero, objective);
   } else if (objective.type === "neutral_town") {
     return captureOrFightNeutralTown(supabase, context, movement.hero, objective);
+  } else if (objective.type === "enemy_town") {
+    return fightEnemyTown(supabase, context, movement.hero, objective);
+  } else if (objective.type === "pickup_garrison") {
+    await pickupNearbyGarrisonForHero(supabase, context, movement.hero, objective.targetTownId);
+    await logAiAction(supabase, context.game, context.player, "AI_PICKUP_GARRISON", "recruitment", `${context.player.aiName || "IA"} recupere une garnison.`, {
+      heroId: hero.id,
+      targetTownId: objective.targetTownId,
+    });
+    return { moved: true };
+  } else if (objective.type === "defend_town" || objective.type === "plan_waypoint") {
+    await pickupNearbyGarrisonForHero(supabase, context, movement.hero);
+    await logAiAction(supabase, context.game, context.player, objective.type === "defend_town" ? "AI_DEFEND_TOWN" : "AI_PLAN_WAYPOINT", "strategy", `${context.player.aiName || "IA"} repositionne un heros.`, {
+      heroId: hero.id,
+      objectiveType: objective.type,
+      destination: objective.position,
+    });
+    // Le mouvement seul suffit : le héros se rapproche de l'objectif.
+    return { moved: true };
   }
 
   return { moved: true };
+}
+
+async function fightEnemyTown(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean; heroRemoved?: boolean }> {
+  const targetPlayer = context.game.players.find((p) => p.id === objective.targetPlayerId);
+  const town = (targetPlayer?.towns ?? []).find((t) => t.id === objective.targetTownId || (t.x === objective.position.x && t.y === objective.position.y));
+  if (!town) return { moved: true };
+  const garrison = town.garrison ?? [];
+  if (garrison.length === 0) {
+    await captureEnemyTown(supabase, town.id, context.player.id);
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_TOWN", "capture", `${context.player.aiName || "IA"} capture un chateau.`, {
+      townId: town.id,
+      targetPlayerId: objective.targetPlayerId,
+    });
+    return { moved: true };
+  }
+  const defender = {
+    id: town.id,
+    attack: 1,
+    defense: 1,
+    armies: garrison,
+  };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
+
+  const result = await resolveAiAutoCombat({
+    supabase,
+    gameId: context.game.id,
+    attacker: hero,
+    defender,
+    experience: 400,
+    onAttackerWon: async () => captureEnemyTown(supabase, town.id, context.player.id),
+  });
+  await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
+  return { moved: true, heroRemoved: !result.attackerWon };
+}
+
+async function captureEnemyTown(supabase: SupabaseAdmin, townId: string, playerId: string) {
+  await supabase.from("towns").update({
+    game_player_id: playerId,
+    is_neutral: false,
+    neutral_garrison: [],
+  }).eq("id", townId);
 }
 
 async function moveHeroToObjective(
@@ -241,6 +449,11 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
     }
   }
 
+  if (isExternalDwellingType(buildingType)) {
+    await visitExternalDwelling(supabase, context, hero, object);
+    return;
+  }
+
   if (buildingType === AdventureBuildingType.MERCENARY_CAMP || buildingType === AdventureBuildingType.ARENA || buildingType === AdventureBuildingType.SCHOOL_OF_WAR) {
     const costPaid = buildingType === AdventureBuildingType.SCHOOL_OF_WAR;
     if (!costPaid || context.player.gold >= 1000) {
@@ -274,7 +487,7 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   }
 
   if (buildingType === AdventureBuildingType.LEARNING_STONE) {
-    await supabase.from("heroes").update({ experience: Number(hero.experience ?? 0) + 1000 }).eq("id", hero.id);
+    await grantAiHeroExperience(supabase, context, hero, 1000);
     await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
     return;
   }
@@ -385,10 +598,8 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
 
   if (buildingType === AdventureBuildingType.WARRIOR_TOMB && !context.visitedAdventureBuildings.has(object.id)) {
     await supabase.from("game_players").update({ gold: context.player.gold + 700 }).eq("id", context.player.id);
-    await supabase.from("heroes").update({
-      experience: Number(hero.experience ?? 0) + 750,
-      morale: Number(hero.morale ?? 0) - 1,
-    }).eq("id", hero.id);
+    await supabase.from("heroes").update({ morale: Number(hero.morale ?? 0) - 1 }).eq("id", hero.id);
+    await grantAiHeroExperience(supabase, context, hero, 750);
     await markAiVisitedAdventureBuilding(supabase, context, object.id);
     return;
   }
@@ -420,7 +631,7 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   if (buildingType === AdventureBuildingType.TREE_OF_KNOWLEDGE) {
     if (context.player.gold >= 2000) {
       await supabase.from("game_players").update({ gold: context.player.gold - 2000 }).eq("id", context.player.id);
-      await supabase.from("heroes").update({ experience: Number(hero.experience ?? 0) + 2000 }).eq("id", hero.id);
+      await grantAiHeroExperience(supabase, context, hero, 2000);
       await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
     }
     return;
@@ -429,10 +640,8 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   if (buildingType === AdventureBuildingType.SEER_HUT) {
     const maxMana = Math.max(0, Number(hero.knowledge ?? 0) * 10);
     const currentMana = Number.isFinite(hero.mana) ? Number(hero.mana) : maxMana;
-    await supabase.from("heroes").update({
-      experience: Number(hero.experience ?? 0) + 1000,
-      mana: Math.min(maxMana, currentMana + 10),
-    }).eq("id", hero.id);
+    await supabase.from("heroes").update({ mana: Math.min(maxMana, currentMana + 10) }).eq("id", hero.id);
+    await grantAiHeroExperience(supabase, context, hero, 1000);
     await markAiHeroAdventureVisit(supabase, context, hero.id, object.id);
     return;
   }
@@ -489,6 +698,17 @@ async function markAiHeroAdventureVisit(
   }).eq("id", context.game.id);
 }
 
+async function grantAiHeroExperience(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  amount: number,
+) {
+  const nextExperience = Number(hero.experience ?? 0) + amount;
+  await applyHeroExperienceGain(supabase, context.game.id, hero.id, nextExperience);
+  hero.experience = nextExperience;
+}
+
 async function markAiWeeklyAdventureVisit(
   supabase: SupabaseAdmin,
   context: AiContext,
@@ -519,6 +739,111 @@ async function markAiVisitedAdventureBuilding(
   }).eq("id", context.game.id);
 }
 
+async function visitExternalDwelling(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  object: NonNullable<AiObjective["object"]>,
+) {
+  const externalDwellings = ((context.mapState.externalDwellings as ExternalDwellingStateMap | undefined) ?? {});
+  const current = normalizeExternalDwellingState(object, externalDwellings[object.id]) ?? createExternalDwellingState(object);
+  if (!current || current.available <= 0) return;
+
+  const unitRule = UNIT_RULES[current.unitType];
+  if (!unitRule) return;
+  const recruitCost: ResourceCost = tierForUnit(current.unitType)?.tier === 0 ? {} : unitRule.cost;
+  const resources = playerResources(context.player);
+  const affordable = getAffordableCount(resources, recruitCost, current.available);
+  if (affordable <= 0) return;
+
+  const capacity = addUnitsToStacks(
+    sortedStacks(hero.armies),
+    current.unitType,
+    affordable,
+    unitRule.health,
+    () => randomUUID(),
+  );
+  if (capacity.added <= 0) return;
+
+  await persistAiHeroArmyStacks(supabase, hero.id, hero.armies, capacity.stacks);
+  const nextResources = subtractCost(resources, multiplyCost(recruitCost, capacity.added));
+  await supabase.from("game_players").update(nextResources).eq("id", context.player.id);
+
+  const nextState = {
+    ...current,
+    ownerId: context.player.id,
+    available: Math.max(0, current.available - capacity.added),
+  };
+  await supabase.from("games").update({
+    map_state: {
+      ...context.mapState,
+      externalDwellings: {
+        ...externalDwellings,
+        [object.id]: nextState,
+      },
+    },
+  }).eq("id", context.game.id);
+}
+
+async function persistAiHeroArmyStacks(
+  supabase: SupabaseAdmin,
+  heroId: string,
+  previousStacks: UnitStack[],
+  nextStacks: UnitStack[],
+) {
+  const previousIds = new Set(previousStacks.map((stack) => stack.id));
+  for (const stack of nextStacks) {
+    if (previousIds.has(stack.id)) {
+      await supabase.from("armies").update({
+        count: stack.count,
+        health: stack.health,
+        max_health: stack.maxHealth,
+        position: stack.position,
+      }).eq("id", stack.id).eq("hero_id", heroId);
+      continue;
+    }
+
+    await supabase.from("armies").insert({
+      id: stack.id,
+      hero_id: heroId,
+      unit_type: stack.unitType,
+      count: stack.count,
+      health: stack.health,
+      max_health: stack.maxHealth,
+      position: stack.position,
+    });
+  }
+}
+
+function getAffordableCount(resources: Resources, cost: ResourceCost, available: number) {
+  let limit = Math.max(0, Math.floor(available));
+  for (const [resource, amount] of Object.entries(cost)) {
+    const unitCost = Number(amount ?? 0);
+    if (unitCost <= 0) continue;
+    const owned = Number(resources[resource as keyof Resources] ?? 0);
+    limit = Math.min(limit, Math.floor(owned / unitCost));
+  }
+  return Math.max(0, limit);
+}
+
+function multiplyCost(cost: ResourceCost, count: number): ResourceCost {
+  return Object.fromEntries(
+    Object.entries(cost).map(([resource, amount]) => [resource, (amount ?? 0) * count])
+  ) as ResourceCost;
+}
+
+function subtractCost(resources: Resources, cost: ResourceCost): Resources {
+  return {
+    gold: Math.max(0, resources.gold - Number(cost.gold ?? 0)),
+    wood: Math.max(0, resources.wood - Number(cost.wood ?? 0)),
+    ore: Math.max(0, resources.ore - Number(cost.ore ?? 0)),
+    mercury: Math.max(0, resources.mercury - Number(cost.mercury ?? 0)),
+    crystals: Math.max(0, resources.crystals - Number(cost.crystals ?? 0)),
+    gems: Math.max(0, resources.gems - Number(cost.gems ?? 0)),
+    sulfur: Math.max(0, resources.sulfur - Number(cost.sulfur ?? 0)),
+  };
+}
+
 function getAdventureWeekKey(turnNumber: number) {
   return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
 }
@@ -545,9 +870,13 @@ async function captureOrFightResourceBuilding(
   hero: AiHero,
   objective: AiObjective,
 ): Promise<{ moved: boolean; heroRemoved?: boolean }> {
-  const guardianPower = Number(objective.targetPower ?? 0);
+  const guardianPower = Number(objective.guardianPower ?? objective.targetPower ?? 0);
   if (guardianPower <= 0) {
     await captureResourceBuilding(supabase, context, objective);
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_BUILDING", "capture", `${context.player.aiName || "IA"} capture une mine.`, {
+      buildingId: objective.id,
+      position: objective.position,
+    });
     return { moved: true };
   }
 
@@ -557,14 +886,21 @@ async function captureOrFightResourceBuilding(
     defense: 1,
     armies: createBuildingGuardStacks(objective.id, guardianPower),
   };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
   const result = await resolveAiAutoCombat({
     supabase,
+    gameId: context.game.id,
     attacker: hero,
     defender,
     experience: 150,
     onAttackerWon: async () => captureResourceBuilding(supabase, context, objective),
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
   return { moved: true, heroRemoved: !result.attackerWon };
 }
 
@@ -593,18 +929,26 @@ async function captureOrFightGate(
   const garrison = gate.garrison ?? [];
   if (garrison.length === 0) {
     await captureGate(supabase, context.game.id, gate.id, context.player.id);
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_GATE", "capture", `${context.player.aiName || "IA"} capture une porte.`, {
+      gateId: gate.id,
+      position: objective.position,
+    });
     return { moved: true };
   }
 
+  const defender = {
+    id: gate.id,
+    attack: 1,
+    defense: 1,
+    armies: garrison,
+  };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
+
   const result = await resolveAiAutoCombat({
     supabase,
+    gameId: context.game.id,
     attacker: hero,
-    defender: {
-      id: gate.id,
-      attack: 1,
-      defense: 1,
-      armies: garrison,
-    },
+    defender,
     experience: 150,
     onAttackerWon: async () => {
       await captureGate(supabase, context.game.id, gate.id, context.player.id);
@@ -612,6 +956,11 @@ async function captureOrFightGate(
     },
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
   return { moved: true, heroRemoved: !result.attackerWon };
 }
 
@@ -633,16 +982,18 @@ async function fightNeutralArmy(
     item.id === objective.id ||
     (item.x === objective.position.x && item.y === objective.position.y)
   );
-  const stacks = army?.stacks ?? createBuildingGuardStacks(objective.id, objective.targetPower);
+  const stacks = army?.stacks ?? createBuildingGuardStacks(objective.id, objective.guardianPower ?? objective.targetPower);
   const defender = {
     id: army?.id ?? objective.id,
     attack: 1,
     defense: 1,
     armies: stacks,
   };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
 
   const result = await resolveAiAutoCombat({
     supabase,
+    gameId: context.game.id,
     attacker: hero,
     defender,
     onAttackerWon: async () => {
@@ -658,6 +1009,11 @@ async function fightNeutralArmy(
     },
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
   return { moved: true, heroRemoved: !result.attackerWon };
 }
 
@@ -671,21 +1027,32 @@ async function fightEnemyHero(
   const defenderHero = defenderPlayer?.heroes.find((item) => item.id === objective.targetHeroId);
   if (!defenderHero) return { moved: true };
 
+  const defender = {
+    id: defenderHero.id,
+    attack: defenderHero.attack,
+    defense: defenderHero.defense,
+    morale: defenderHero.morale,
+    luck: defenderHero.luck,
+    armies: defenderHero.armies,
+  };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
+
   const result = await resolveAiAutoCombat({
     supabase,
+    gameId: context.game.id,
     attacker: hero,
-    defender: {
-      id: defenderHero.id,
-      attack: defenderHero.attack,
-      defense: defenderHero.defense,
-      armies: defenderHero.armies,
-    },
+    defender,
     onAttackerWon: async () => {
       await supabase.from("armies").delete().eq("hero_id", defenderHero.id);
       await supabase.from("heroes").delete().eq("id", defenderHero.id);
     },
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
   return { moved: true, heroRemoved: !result.attackerWon };
 }
 
@@ -701,25 +1068,35 @@ async function captureOrFightNeutralTown(
   const garrison = (town.neutral_garrison ?? []) as UnitStack[];
   if (garrison.length === 0) {
     await captureNeutralTown(supabase, town.id, context.player.id);
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_TOWN", "capture", `${context.player.aiName || "IA"} capture un chateau neutre.`, {
+      townId: town.id,
+      position: objective.position,
+    });
     return { moved: true };
   }
 
-  const targetPower = calculateStacksPower(garrison);
-  if (calculateHeroPower(hero) < targetPower * context.profile.neutralPowerRatio) return { moved: true };
+  const defender = {
+    id: town.id,
+    attack: 1,
+    defense: 1,
+    armies: garrison,
+  };
+  if (!canAiWinAutoCombat(hero, defender)) return { moved: false };
 
   const result = await resolveAiAutoCombat({
     supabase,
+    gameId: context.game.id,
     attacker: hero,
-    defender: {
-      id: town.id,
-      attack: 1,
-      defense: 1,
-      armies: garrison,
-    },
+    defender,
     experience: 250,
     onAttackerWon: async () => captureNeutralTown(supabase, town.id, context.player.id),
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
+    targetType: objective.type,
+    targetId: objective.id,
+    attackerWon: result.attackerWon,
+  });
   return { moved: true, heroRemoved: !result.attackerWon };
 }
 
@@ -800,6 +1177,27 @@ function isHeroInActiveCombat(game: AiGame, heroId: string) {
     if (combat.status !== "ACTIVE") return false;
     if (combat.attackerHeroId === heroId || combat.defenderHeroId === heroId) return true;
     return (combat.participants ?? []).some((participant) => participant.heroId === heroId);
+  });
+}
+
+async function logAiAction(
+  supabase: SupabaseAdmin,
+  game: { id: string; turnNumber?: unknown },
+  player: { id: string; aiName?: string | null },
+  actionType: string,
+  category: string,
+  summary: string,
+  details: Record<string, unknown> = {},
+) {
+  await recordGameAction(supabase, {
+    gameId: game.id,
+    gamePlayerId: player.id,
+    actorKind: "ai",
+    turnNumber: Number(game.turnNumber ?? 0),
+    actionType,
+    category,
+    summary,
+    details,
   });
 }
 

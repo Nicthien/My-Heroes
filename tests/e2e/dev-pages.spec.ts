@@ -22,6 +22,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/hud",          expect: { selector: "body",   description: "HUD preview body" } },
   { path: "/dev/hud-build",    expect: { selector: "body",   description: "HUD build preview body" } },
   { path: "/dev/combat",       expect: { selector: "body",   description: "Combat preview body" } },
+  { path: "/dev/admin-observer", expect: { selector: "[data-testid='admin-observer-panel']", description: "Admin observer panel" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
   { path: "/dev/rmg",          expect: { selector: "body",   description: "RMG preview body" } },
@@ -103,6 +104,83 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     expect(Math.abs(panelCenterY - 360)).toBeLessThanOrEqual(8);
   });
 
+  test("admin observer can start an empty pending lobby from the center panel", async ({ page }) => {
+    await page.goto("/dev/hud?status=pending&admin=1", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("pending-lobby-panel")).toBeVisible();
+    await expect(page.getByTestId("start-game")).toBeVisible();
+    await expect(page.getByText(/En attente que/i)).toHaveCount(0);
+  });
+
+  test("admin observer sees the minimap without being a player", async ({ page }) => {
+    await page.goto("/dev/hud?admin=1", { waitUntil: "domcontentloaded" });
+
+    await expect(page.locator('[aria-label^="Images par seconde:"]').first()).toBeVisible();
+    await expect(page.getByLabel("Mini carte").first()).toBeVisible();
+    await expect(page.getByText("Exploration : 100%").first()).toBeVisible();
+    await expect(page.getByText("Observation", { exact: true })).toHaveCount(1);
+    await expect(page.getByTestId("end-turn")).toHaveCount(0);
+    await expect(page.getByTestId("end-turn-mobile")).toHaveCount(0);
+  });
+
+  test("admin observer opens a hero sheet from the admin panel", async ({ page }) => {
+    await page.goto("/dev/hud?admin=1", { waitUntil: "domcontentloaded" });
+
+    await page.getByTestId("admin-observer-panel").getByRole("button", { name: /Aldric Niv\. 2/ }).click();
+
+    await expect(page.getByText("Niveau 2 - XP 200")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Livre de sorts" })).toHaveCount(0);
+  });
+
+  test("minimap control overlay can be toggled", async ({ page }) => {
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByLabel("Mini carte").first()).toBeVisible();
+    await expect(page.locator('[data-testid="minimap-control-overlay"]').first()).toBeVisible();
+
+    await page.getByTestId("minimap-control-toggle").first().click();
+    await expect(page.locator('[data-testid="minimap-control-overlay"]')).toHaveCount(0);
+
+    await page.getByTestId("minimap-control-toggle").first().click();
+    await expect(page.locator('[data-testid="minimap-control-overlay"]').first()).toBeVisible();
+  });
+
+  test("admin minimap shows fully controlled explored zones", async ({ page }) => {
+    await page.goto("/dev/hud?admin=1", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByLabel("Mini carte").first()).toBeVisible();
+    await expect(page.locator('[data-testid="minimap-control-overlay"][opacity="0.9"]').first()).toBeVisible();
+  });
+
+  test("admin observer overlay groups map positions by player", async ({ page }) => {
+    await page.goto("/dev/admin-observer?status=pending", { waitUntil: "domcontentloaded" });
+
+    const panel = page.getByTestId("admin-observer-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText("Observation admin")).toBeVisible();
+    await expect(panel.getByText("Leon Sticky-Fingers")).toBeVisible();
+    await expect(panel.getByText("Heros (2)")).toBeVisible();
+    await expect(panel.getByText("Chateaux (1)")).toBeVisible();
+    await expect(panel.getByText("Mines (3)")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Demarrer" })).toHaveCount(0);
+  });
+
+  test("admin observer can collapse players and inspect the journal", async ({ page }) => {
+    await page.goto("/dev/admin-observer", { waitUntil: "domcontentloaded" });
+
+    const panel = page.getByTestId("admin-observer-panel");
+    await panel.getByRole("button", { name: /Reduire Leon Sticky-Fingers/ }).click();
+    await expect(panel.getByText("Heros (2)")).toHaveCount(0);
+
+    await panel.getByRole("button", { name: "Journal" }).click();
+    await expect(panel.getByText("Leon Sticky-Fingers déplace un héros.")).toBeVisible();
+    await expect(panel.getByText("actionType")).toHaveCount(0);
+
+    await panel.getByRole("button", { name: "Details" }).click();
+    await expect(panel.getByText("actionType").first()).toBeVisible();
+    await expect(panel.getByText("MOVE_HERO")).toBeVisible();
+  });
+
   test("mobile HUD drawer filters heroes, towns, and actions", async ({ browser }) => {
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -114,17 +192,17 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
       await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
       const drawer = page.getByTestId("mobile-hud-drawer");
 
-      await page.getByTestId("mobile-nav-heroes").click({ force: true });
+      await page.getByTestId("mobile-nav-heroes").dispatchEvent("click");
       await expect(drawer.getByText("Héros (2)")).toBeVisible();
       await expect(drawer.getByText("Châteaux (1)")).toHaveCount(0);
       await expect(drawer.getByText("Mines (3)")).toHaveCount(0);
 
-      await page.getByTestId("mobile-nav-towns").click({ force: true });
+      await page.getByTestId("mobile-nav-towns").dispatchEvent("click");
       await expect(drawer.getByText("Châteaux (1)")).toBeVisible();
       await expect(drawer.getByText("Héros (2)")).toHaveCount(0);
       await expect(drawer.getByText("Mines (3)")).toHaveCount(0);
 
-      await page.getByTestId("mobile-nav-actions").click({ force: true });
+      await page.getByTestId("mobile-nav-actions").dispatchEvent("click");
       await expect(drawer.getByText("Mines (3)")).toBeVisible();
       await expect(drawer.getByText("Héros (2)")).toHaveCount(0);
       await expect(drawer.getByText("Châteaux (1)")).toHaveCount(0);

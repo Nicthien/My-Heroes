@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
 import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import JoinCombatModal from "@/components/game/combat/JoinCombatModal";
+import AdminObserverPanel from "@/components/game/admin/AdminObserverPanel";
 import HUD from "@/components/game/hud/HUD";
 import { getCachedStaticGameMap, mapApiToGameState, setCachedStaticGameMap } from "@/lib/game/api";
 import { findActiveCombatTruce } from "@/lib/game/combat/truce";
@@ -28,9 +29,12 @@ function clampProgress(progress: number) {
 export default function GamePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const gameId = params?.id as string;
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const adminRequested = searchParams.get("admin") === "1";
+  const adminObserverMode = session?.user?.role === "admin" && adminRequested;
   const setGameState = useGameStore((state) => state.setGameState);
   const isLoading = useGameStore((state) => state.isLoading);
   const loadingMessage = useGameStore((state) => state.loadingMessage);
@@ -45,8 +49,13 @@ export default function GamePage() {
   const setLoading = useGameStore((state) => state.setLoading);
   const [error, setError] = useState("");
   const loadRequestIdRef = useRef(0);
+  const syncInFlightRef = useRef(false);
+  const nextSyncAllowedAtRef = useRef(0);
+  const syncFailureCountRef = useRef(0);
 
   useEffect(() => {
+    useGameStore.getState().setAdminObserverMode(adminObserverMode);
+    const revealMap = devRevealMap || adminObserverMode;
     const supabase = createClient();
     let cancelled = false;
     const hasExistingGame = useGameStore.getState().gameState?.id === gameId;
@@ -54,7 +63,8 @@ export default function GamePage() {
 
     if (!hasExistingGame) {
       useGameStore.getState().resetGame();
-      const cached = readCachedGameState(gameId, userId, { revealMap: devRevealMap });
+      useGameStore.getState().setAdminObserverMode(adminObserverMode);
+      const cached = readCachedGameState(gameId, userId, { revealMap });
       if (cached) {
         beginLoading("Restauration de la partie locale...", 24);
         setCachedStaticGameMap(gameId, cached.staticMap);
@@ -73,7 +83,7 @@ export default function GamePage() {
 
       try {
         useGameStore.getState().updateLoadingProgress(18, "Synchronisation de la partie...");
-        const res = await fetchWithSupabaseAuth(`/api/games/${gameId}`, { cache: "no-store" });
+        const res = await fetchWithSupabaseAuth(`/api/games/${gameId}${adminRequested ? "?admin=1&resumeAi=1" : ""}`, { cache: "no-store" });
         if (cancelled || requestId !== loadRequestIdRef.current) return;
 
         if (res.ok) {
@@ -87,10 +97,12 @@ export default function GamePage() {
           }
 
           useGameStore.getState().updateLoadingProgress(62, "Preparation de la partie...");
-          const nextGameState = mapApiToGameState(data, userId, { revealMap: devRevealMap });
+          const responseIsAdminObserver = data.viewerMode === "admin";
+          useGameStore.getState().setAdminObserverMode(responseIsAdminObserver);
+          const nextGameState = mapApiToGameState(data, userId, { revealMap: devRevealMap || responseIsAdminObserver });
           if (nextGameState.id === gameId) {
             setGameState(nextGameState);
-            writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap });
+            writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap || responseIsAdminObserver });
             useGameStore.getState().updateLoadingProgress(72, "Initialisation du rendu...");
           }
         } else {
@@ -107,28 +119,49 @@ export default function GamePage() {
       }
     };
 
-    const syncGame = async () => {
+    const syncGame = async (resumeAi = false) => {
       if (!gameId) return;
       if (useGameStore.getState().isMovePending) return;
-
-      const requestId = ++loadRequestIdRef.current;
+      if (syncInFlightRef.current) return;
+      if (Date.now() < nextSyncAllowedAtRef.current) return;
 
       try {
-        const nextGameState = await refreshGameState(gameId, userId, { revealMap: devRevealMap });
-        if (cancelled || requestId !== loadRequestIdRef.current || !nextGameState) return;
+        syncInFlightRef.current = true;
+        const nextGameState = await refreshGameState(gameId, userId, { revealMap, adminObserver: adminRequested, resumeAi });
+        if (cancelled || !nextGameState) {
+          syncFailureCountRef.current += 1;
+          nextSyncAllowedAtRef.current = Date.now() + Math.min(30_000, 2_000 * syncFailureCountRef.current);
+          return;
+        }
+        syncFailureCountRef.current = 0;
+        nextSyncAllowedAtRef.current = 0;
         if (nextGameState.id === gameId) {
           setGameState(nextGameState);
-          writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap });
+          writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap });
         }
       } catch {
+        syncFailureCountRef.current += 1;
+        nextSyncAllowedAtRef.current = Date.now() + Math.min(30_000, 2_000 * syncFailureCountRef.current);
         if (!cancelled && !useGameStore.getState().gameState) {
           setError("Erreur de chargement");
         }
+      } finally {
+        syncInFlightRef.current = false;
       }
     };
 
+    const shouldResumeAdminAi = () => {
+      if (!adminObserverMode) return false;
+      const currentState = useGameStore.getState().gameState;
+      if (!currentState || currentState.id !== gameId) return true;
+      if (currentState.status !== "ACTIVE") return false;
+      const currentPlayer = currentState.players.find((player) => player.id === currentState.currentTurnPlayerId);
+      const hasActiveCombat = (currentState.activeCombats ?? []).some((combat) => combat.status === "ACTIVE");
+      return Boolean(currentPlayer?.isAi || hasActiveCombat);
+    };
+
     if (hasExistingGame || restoredCachedGame) {
-      void syncGame();
+      void syncGame(shouldResumeAdminAi());
     } else {
       void bootstrapGame();
     }
@@ -136,32 +169,34 @@ export default function GamePage() {
       ? null
       : supabase
           .channel(`game:${gameId}`)
-          .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "gates", filter: `game_id=eq.${gameId}` }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "gate_stacks" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_reinforcement_requests" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_surrender_negotiations" }, () => void syncGame())
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_truces" }, () => void syncGame())
+          .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "gates", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "gate_stacks" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_reinforcement_requests" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_surrender_negotiations" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "combat_truces" }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "game_action_logs", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
           .subscribe();
 
-    const interval = setInterval(syncGame, isUsingSupabaseProxy() ? 1000 : 10000);
+    const interval = setInterval(() => void syncGame(shouldResumeAdminAi()), adminObserverMode ? 3000 : isUsingSupabaseProxy() ? 5000 : 10000);
     return () => {
       cancelled = true;
       clearInterval(interval);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [beginLoading, devRevealMap, gameId, setGameState, setLoading, userId]);
+  }, [adminObserverMode, adminRequested, beginLoading, devRevealMap, gameId, setGameState, setLoading, userId]);
 
   useEffect(() => {
     if (!gameState || activeCombat || lastCombatResult) return;
 
+    if (adminObserverMode) return;
     const myPlayer = gameState.players.find((player) => player.userId === userId);
     if (!myPlayer) return;
 
@@ -177,7 +212,7 @@ export default function GamePage() {
     });
 
     if (combat) setActiveCombat(combat);
-  }, [gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat, lastCombatResult]);
+  }, [adminObserverMode, gameState, userId, activeCombat, minimizedCombatIds, setActiveCombat, lastCombatResult]);
 
   if (error) {
     const handleBack = () => {
@@ -213,6 +248,12 @@ export default function GamePage() {
         <>
           <GameMapComponent />
           <HUD />
+          {adminObserverMode && (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-[70] -translate-x-1/2 rounded-md border border-cyan-300/50 bg-slate-950/80 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-100 shadow-2xl shadow-black/50">
+              Mode observation
+            </div>
+          )}
+          <AdminObserverPanel />
           <CombatChoiceModal />
           <JoinCombatModal />
           <CombatResultModal />

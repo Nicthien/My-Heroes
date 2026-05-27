@@ -7,10 +7,13 @@ export async function getCurrentUser(request?: Request) {
   const { data, error } = await supabase.auth.getUser();
 
   if (!error && data.user) {
+    const profile = await getUserProfile(data.user.id);
     return {
       id: data.user.id,
       email: data.user.email ?? null,
-      name: (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? null,
+      name: profile?.name ?? (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? null,
+      role: profile?.role ?? "user",
+      mustChangePassword: profile?.must_change_password ?? false,
     };
   }
 
@@ -25,10 +28,13 @@ export async function getCurrentUser(request?: Request) {
 
   if (tokenError || !tokenData.user) return null;
 
+  const profile = await getUserProfile(tokenData.user.id);
   return {
     id: tokenData.user.id,
     email: tokenData.user.email ?? null,
-    name: (tokenData.user.user_metadata?.name as string | undefined) ?? tokenData.user.email ?? null,
+    name: profile?.name ?? (tokenData.user.user_metadata?.name as string | undefined) ?? tokenData.user.email ?? null,
+    role: profile?.role ?? "user",
+    mustChangePassword: profile?.must_change_password ?? false,
   };
 }
 
@@ -47,4 +53,28 @@ export async function requireCurrentUser(request?: Request) {
   }
 
   return { user, response: null };
+}
+
+export async function requireAdminUser(request?: Request) {
+  const { user, response } = await requireCurrentUser(request);
+  if (!user) return { user, response };
+  if (user.role !== "admin") {
+    return {
+      user: null,
+      response: NextResponse.json({ error: "Acces administrateur requis" }, { status: 403 }),
+    };
+  }
+
+  return { user, response: null };
+}
+
+async function getUserProfile(userId: string) {
+  const adminSupabase = createAdminClient();
+  const { data } = await adminSupabase
+    .from("profiles")
+    .select("name,role,must_change_password")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return data as { name: string | null; role: string | null; must_change_password: boolean | null } | null;
 }

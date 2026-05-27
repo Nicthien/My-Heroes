@@ -15,6 +15,9 @@ export const TERRAIN_TEXTURE_WIDTH = 80;
 export const TERRAIN_TEXTURE_HEIGHT = 56;
 export const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
 
+// Fog animation
+export const FOG_DRIFT_MAX_TILE_COUNT = 144 * 144;
+
 // Hover label sampling
 export const HOVER_LABEL_SAMPLE_MS = 40;
 export const HOVER_LABEL_LINGER_MS = 5000;

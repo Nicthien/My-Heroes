@@ -27,7 +27,7 @@ import { goldDivider, ornateFramePolished } from "./theme";
 
 type HeroTab = "profile" | "army" | "artifacts" | "skills";
 
-export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town | undefined }) {
+export function HeroPanel({ hero, townAtHero, readOnly = false }: { hero: Hero; townAtHero: Town | undefined; readOnly?: boolean }) {
   const { data: session } = useSession();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<HeroTab>("profile");
@@ -124,22 +124,19 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
     <>
       <CollapsiblePanel
         title={hero.name}
-        className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+        className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
         bodyClassName="flex min-h-0 flex-1 flex-col"
         right={
-          <div className="flex items-center gap-2">
-            <SpellBookButton onClick={() => setSpellBookOpen(true)} />
-            <button
-              className="rounded text-amber-300/60 transition hover:text-amber-100"
-              onClick={(event) => {
-                event.stopPropagation();
-                useGameStore.getState().selectHero(null);
-              }}
-              aria-label="Fermer"
-            >
-              x
-            </button>
-          </div>
+          <button
+            className="rounded text-amber-300/60 transition hover:text-amber-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              useGameStore.getState().selectHero(null);
+            }}
+            aria-label="Fermer"
+          >
+            x
+          </button>
         }
       >
         <div className="border-b border-amber-700/30 px-4 py-3">
@@ -159,7 +156,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
               )}
             </div>
           )}
-          {(hero.pendingSkillChoices?.length ?? 0) > 0 && (
+          {!readOnly && (hero.pendingSkillChoices?.length ?? 0) > 0 && (
             <PendingSkillChoiceBlock
               hero={hero}
               onPicked={async (level, skillId) => {
@@ -178,7 +175,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
               }}
             />
           )}
-          {pendingAdventureSpell?.heroId === hero.id && (
+          {!readOnly && pendingAdventureSpell?.heroId === hero.id && (
             <button
               type="button"
               onClick={() => {
@@ -212,6 +209,11 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
               onClick={() => setActiveTab(tab.id)}
             />
           ))}
+          {!readOnly && (
+            <div className="ml-auto shrink-0">
+              <SpellBookButton onClick={() => setSpellBookOpen(true)} />
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
@@ -235,11 +237,12 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
 
           {activeTab === "skills" && <HeroSkillsPanel hero={hero} />}
 
-          {activeTab === "army" && <HeroArmyPanel hero={hero} onAction={performHeroStackAction} />}
+          {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} />}
 
           {activeTab === "artifacts" && (
             <ArtifactPanel
               hero={hero}
+              readOnly={readOnly}
               eligibleTransferHeroes={eligibleTransferHeroes}
               onEquip={(artifactId, slot) => performArtifactAction({ type: "EQUIP_ARTIFACT", heroId: hero.id, artifactId, slot })}
               onUnequip={(slot) => performArtifactAction({ type: "UNEQUIP_ARTIFACT", heroId: hero.id, slot })}
@@ -252,7 +255,7 @@ export function HeroPanel({ hero, townAtHero }: { hero: Hero; townAtHero: Town |
           <MovementGauge movement={hero.movement} maxMovement={hero.maxMovement} />
         </div>
       </CollapsiblePanel>
-      {spellBookOpen && (
+      {!readOnly && spellBookOpen && (
         <SpellBookModal
           hero={displayHero}
           context="adventure"
@@ -425,13 +428,13 @@ function HeroTabIcon({ tab }: { tab: HeroTab }) {
   }
 }
 
-function HeroArmyPanel({ hero, onAction }: { hero: Hero; onAction: (body: Record<string, unknown>) => Promise<void> }) {
+function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
   const [selectedStackId, setSelectedStackId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState(1);
   const sortedArmies = [...hero.armies].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   const selected = sortedArmies.find((stack) => stack.id === selectedStackId) ?? null;
   const splitMax = selected ? Math.max(1, selected.count - 1) : 1;
-  const canSplit = Boolean(selected && selected.count > 1 && sortedArmies.length < HERO_ARMY_STACK_LIMIT);
+  const canSplit = Boolean(!readOnly && selected && selected.count > 1 && sortedArmies.length < HERO_ARMY_STACK_LIMIT);
 
   async function mergeInto(target: UnitStack) {
     if (!selected || selected.id === target.id || selected.unitType !== target.unitType) return;
@@ -502,6 +505,7 @@ function HeroArmyPanel({ hero, onAction }: { hero: Hero; onAction: (body: Record
             <button
               key={unit.id}
               type="button"
+              disabled={readOnly}
               onClick={() => {
                 if (mergeTarget) void mergeInto(unit);
                 else setSelectedStackId(selectedUnit ? null : unit.id);
@@ -509,9 +513,9 @@ function HeroArmyPanel({ hero, onAction }: { hero: Hero; onAction: (body: Record
               className={`grid min-h-[4.75rem] min-w-0 grid-cols-[2.75rem_1fr] items-center gap-2 rounded-md border px-2 py-2 text-left transition ${
                 selectedUnit
                   ? "border-amber-200 bg-amber-900/65 text-amber-50"
-                  : mergeTarget
+                : mergeTarget
                   ? "border-emerald-300/75 bg-emerald-950/55 text-emerald-100 hover:bg-emerald-900/60"
-                  : "border-amber-700/40 bg-black/50 text-amber-100 hover:border-amber-400/70"
+                  : `border-amber-700/40 bg-black/50 text-amber-100 ${readOnly ? "cursor-default" : "hover:border-amber-400/70"}`
               }`}
               title={`${unitTypeLabel(unit.unitType)} x ${unit.count}`}
             >
@@ -535,12 +539,14 @@ function HeroArmyPanel({ hero, onAction }: { hero: Hero; onAction: (body: Record
 
 function ArtifactPanel({
   hero,
+  readOnly,
   eligibleTransferHeroes,
   onEquip,
   onUnequip,
   onTransfer,
 }: {
   hero: Hero;
+  readOnly?: boolean;
   eligibleTransferHeroes: Hero[];
   onEquip: (artifactId: string, slot?: ArtifactSlot) => void;
   onUnequip: (slot: ArtifactSlot) => void;
@@ -566,7 +572,7 @@ function ArtifactPanel({
                   : "border-amber-900/45 bg-black/30 text-amber-200/45 hover:border-amber-700/65"
               }`}
               title={artifact ? artifactTooltip(artifact.id) : slotLabel(slot)}
-              onClick={() => artifactId && onUnequip(slot)}
+              onClick={() => artifactId && !readOnly && onUnequip(slot)}
             >
               <span className="block w-full truncate font-bold uppercase tracking-normal text-amber-300/75">{slotLabel(slot)}</span>
               {artifact ? (
@@ -592,10 +598,10 @@ function ArtifactPanel({
             <div key={`${artifactId}-${index}`} className="flex items-center gap-1 rounded-md border border-amber-700/35 bg-black/45 px-2 py-1 text-xs">
               <ArtifactIcon artifactId={artifactId} size="row" />
               <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId)}>{artifact.name}</span>
-              <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
+              {!readOnly && <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
                 Éq.
-              </button>
-              {transferTargetId && (
+              </button>}
+              {!readOnly && transferTargetId && (
                 <button type="button" className="rounded border border-sky-500/40 px-2 py-0.5 font-bold text-sky-200" onClick={() => onTransfer(artifactId, transferTargetId)}>
                   Don
                 </button>

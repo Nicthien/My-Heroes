@@ -3,16 +3,19 @@ import {
   autoResolveCombat,
   applyLossesToWinnerArmies,
 } from "@/lib/game/combat/autoResolve";
+import { getUnitRule } from "@/lib/game/units";
 import { UnitType, type UnitStack } from "@/lib/game/types";
+import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 import type { AiHero } from "./types";
 
-export function calculateHeroPower(hero: Pick<AiHero, "id" | "armies" | "attack" | "defense" | "morale">) {
+export function calculateHeroPower(hero: Pick<AiHero, "id" | "armies" | "attack" | "defense" | "morale" | "luck">) {
   return calculateArmyPower({
     id: hero.id,
     attack: Number(hero.attack ?? 1),
     defense: Number(hero.defense ?? 1),
     morale: Number(hero.morale ?? 0),
+    luck: Number(hero.luck ?? 0),
     armies: hero.armies,
   });
 }
@@ -27,6 +30,38 @@ export function calculateStacksPower(stacks: UnitStack[] | undefined | null, att
   });
 }
 
+export function canAiWinAutoCombat(
+  attacker: Pick<AiHero, "id" | "armies" | "attack" | "defense" | "morale" | "luck">,
+  defender: {
+    id: string;
+    attack?: number;
+    defense?: number;
+    morale?: number;
+    luck?: number;
+    armies: UnitStack[];
+  },
+) {
+  const result = autoResolveCombat(
+    {
+      id: attacker.id,
+      attack: Number(attacker.attack ?? 1),
+      defense: Number(attacker.defense ?? 1),
+      morale: Number(attacker.morale ?? 0),
+      luck: Number(attacker.luck ?? 0),
+      armies: attacker.armies,
+    },
+    {
+      id: defender.id,
+      attack: Number(defender.attack ?? 1),
+      defense: Number(defender.defense ?? 1),
+      morale: Number(defender.morale ?? 0),
+      luck: Number(defender.luck ?? 0),
+      armies: defender.armies,
+    },
+  );
+  return result.winnerHeroId === attacker.id;
+}
+
 export function shouldAttackNeutral(hero: AiHero, defenderPower: number, requiredRatio: number) {
   return calculateHeroPower(hero) >= Math.max(1, defenderPower) * requiredRatio;
 }
@@ -37,18 +72,21 @@ export function shouldAttackHuman(hero: AiHero, defenderPower: number, requiredR
 
 export async function resolveAiAutoCombat({
   supabase,
+  gameId,
   attacker,
   defender,
   onAttackerWon,
   experience = 500,
 }: {
   supabase: SupabaseAdmin;
+  gameId: string;
   attacker: AiHero;
   defender: {
     id: string;
     attack?: number;
     defense?: number;
     morale?: number;
+    luck?: number;
     armies: UnitStack[];
   };
   onAttackerWon: () => Promise<void>;
@@ -60,6 +98,7 @@ export async function resolveAiAutoCombat({
       attack: Number(attacker.attack ?? 1),
       defense: Number(attacker.defense ?? 1),
       morale: Number(attacker.morale ?? 0),
+      luck: Number(attacker.luck ?? 0),
       armies: attacker.armies,
     },
     {
@@ -67,6 +106,7 @@ export async function resolveAiAutoCombat({
       attack: Number(defender.attack ?? 1),
       defense: Number(defender.defense ?? 1),
       morale: Number(defender.morale ?? 0),
+      luck: Number(defender.luck ?? 0),
       armies: defender.armies,
     },
   );
@@ -75,10 +115,7 @@ export async function resolveAiAutoCombat({
   if (attackerWon) {
     const nextArmies = applyLossesToWinnerArmies(attacker.armies, result.winnerLossRatio);
     await persistHeroArmies(supabase, attacker.id, nextArmies);
-    await supabase
-      .from("heroes")
-      .update({ experience: Number(attacker.experience ?? 0) + experience })
-      .eq("id", attacker.id);
+    await applyHeroExperienceGain(supabase, gameId, attacker.id, Number(attacker.experience ?? 0) + experience);
     await onAttackerWon();
     return { attackerWon: true, attackerPower: result.attackerPower, defenderPower: result.defenderPower };
   }
@@ -103,13 +140,14 @@ export async function persistHeroArmies(supabase: SupabaseAdmin, heroId: string,
 }
 
 export function createBuildingGuardStacks(buildingId: string, guardianPower: number): UnitStack[] {
-  const count = Math.max(5, Math.ceil(Math.max(0, guardianPower) / 12));
+  const rule = getUnitRule(UnitType.PIKEMAN);
+  const count = Math.max(5, Math.ceil(Math.max(0, guardianPower) / rule.power));
   return [{
     id: `${buildingId}-guards`,
     unitType: UnitType.PIKEMAN,
     count,
-    health: count * 12,
-    maxHealth: 12,
+    health: count * rule.health,
+    maxHealth: rule.health,
     position: 0,
   }];
 }

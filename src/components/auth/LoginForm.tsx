@@ -18,13 +18,33 @@ export default function LoginForm() {
     setError("");
 
     try {
+      let email = identifier.trim();
+      if (!email.includes("@")) {
+        if (email.toLowerCase() === "admin") {
+          email = "admin@myheroes.local";
+        } else {
+        const resolveResponse = await fetch("/api/auth/resolve-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: email }),
+        });
+        const resolved = await resolveResponse.json().catch(() => null);
+        if (!resolveResponse.ok || !resolved?.email) {
+          setError("Email, pseudo ou mot de passe incorrect");
+          setLoading(false);
+          return;
+        }
+        email = resolved.email;
+        }
+      }
+
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: identifier,
+        email,
         password,
       });
 
       if (signInError) {
-        setError("Email ou mot de passe incorrect");
+        setError("Email, pseudo ou mot de passe incorrect");
         setLoading(false);
         return;
       }
@@ -59,7 +79,7 @@ export default function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="login-email" className="text-gray-300 text-sm block mb-1">
-              Email
+              Email ou pseudo
             </label>
             <input
               id="login-email"

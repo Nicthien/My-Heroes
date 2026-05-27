@@ -27,7 +27,7 @@ My Heroes est un jeu de strategie au tour par tour ou les joueurs explorent une 
 
 3. Ouvrir [http://localhost:3000](http://localhost:3000).
 
-Supabase Studio est disponible sur [http://127.0.0.1:54323](http://127.0.0.1:54323).
+Supabase Studio est disponible sur [http://127.0.0.1:56023](http://127.0.0.1:56023).
 
 ## Commandes utiles
 

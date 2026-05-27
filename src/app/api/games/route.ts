@@ -10,6 +10,60 @@ import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
 
+type DbRow = Record<string, unknown>;
+
+function rows(value: unknown): DbRow[] {
+  return Array.isArray(value) ? (value as DbRow[]) : [];
+}
+
+function object(value: unknown): DbRow | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as DbRow) : null;
+}
+
+function getPlayerStatus(player: DbRow, game: DbRow) {
+  const gameStatus = String(game.status ?? "");
+  if (gameStatus === "PENDING") return Boolean(player.is_ready) ? "Pret au lancement" : "Pas pret";
+  if (gameStatus === "COMPLETED") return "Partie terminee";
+  if (gameStatus !== "ACTIVE") return gameStatus || "-";
+
+  const playerId = String(player.id ?? "");
+  const turnNumber = Number(game.turn_number ?? 1);
+  const completed = rows(game.turns).some((turn) =>
+    turn.game_player_id === playerId &&
+    Number(turn.turn_number) === turnNumber &&
+    Boolean(turn.is_completed)
+  );
+  if (completed) return "A fini son tour";
+  if (game.current_turn_player_id === playerId) return "Doit jouer maintenant";
+  return "Attend son tour";
+}
+
+function toDashboardGame(row: DbRow, authUsersById: Map<string, { email: string | null; lastSignInAt: string | null }>) {
+  const game = toGame(row);
+  const rawPlayers = rows(row.game_players ?? row.players);
+  return {
+    ...game,
+    players: (game.players ?? []).map((player: { id: unknown; userId?: unknown; user?: Record<string, unknown> }) => {
+      const rawPlayer = rawPlayers.find((item) => item.id === player.id) ?? {};
+      const profile = object(rawPlayer.profiles);
+      const userId = typeof player.userId === "string" ? player.userId : typeof rawPlayer.user_id === "string" ? rawPlayer.user_id : null;
+      const authUser = userId ? authUsersById.get(userId) : undefined;
+      const isAi = Boolean(rawPlayer.is_ai);
+      return {
+        ...player,
+        user: {
+          ...(player.user ?? {}),
+          name: player.user?.name ?? profile?.name ?? null,
+          email: profile?.email ?? authUser?.email ?? null,
+        },
+        email: profile?.email ?? authUser?.email ?? null,
+        lastSignInAt: isAi ? null : authUser?.lastSignInAt ?? null,
+        turnStatus: getPlayerStatus(rawPlayer, row),
+      };
+    }),
+  };
+}
+
 const MAP_SIZES: Record<string, number> = {
   S: 36,
   M: 72,
@@ -23,6 +77,25 @@ export async function GET(request: Request) {
     if (!user) return response;
 
     const supabase = createAdminClient();
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (authError) return apiRouteError("api/games GET auth users", authError);
+
+    const authUsersById = new Map(
+      authUsers.users.map((authUser) => [
+        authUser.id,
+        {
+          email: authUser.email ?? null,
+          lastSignInAt: authUser.last_sign_in_at ?? null,
+        },
+      ]),
+    );
+
+    if (user.role === "admin") {
+      const { data, error } = await fetchDashboardGames(supabase);
+      if (error) return apiRouteError("api/games GET admin games", error);
+      return NextResponse.json((data ?? []).map((row) => toDashboardGame(row as DbRow, authUsersById)));
+    }
+
     const { data: memberships, error: memberError } = await supabase
       .from("game_players")
       .select("game_id")
@@ -30,18 +103,14 @@ export async function GET(request: Request) {
 
     if (memberError) return apiRouteError("api/games GET memberships", memberError);
 
-    const gameIds = memberships.map((item) => item.game_id);
-    if (gameIds.length === 0) return NextResponse.json([]);
+    const gameIds = new Set<string>(memberships.map((item) => String(item.game_id)));
+    if (gameIds.size === 0) return NextResponse.json([]);
 
-    const { data, error } = await supabase
-      .from("games")
-      .select("*, game_players!game_players_game_id_fkey(*, profiles(name))")
-      .in("id", gameIds)
-      .order("created_at", { ascending: false });
+    const { data, error } = await fetchDashboardGames(supabase, Array.from(gameIds));
 
     if (error) return apiRouteError("api/games GET games", error);
 
-    return NextResponse.json((data ?? []).map(toGame));
+    return NextResponse.json((data ?? []).map((row) => toDashboardGame(row as DbRow, authUsersById)));
   } catch (error) {
     return apiRouteError("api/games GET", error);
   }
@@ -106,34 +175,34 @@ export async function POST(request: Request) {
     assignNeutralTownTraits(mapData);
     const profileName = await getProfileName(supabase, user.id);
 
-    const { data: gameRow, error: gameError } = await supabase
-      .from("games")
-      .insert({
-        name: name || `Partie de ${profileName}`,
-        max_players: maxPlayers,
-        map_width: size,
-        map_height: size,
-        status: "PENDING",
-        map_data: mapData,
-        game_config: { turnTimeLimit: 86400, rmgTuning: tuning },
-        seed: mapData.seed,
-        map_size: mapSize,
-        template_id: mapData.templateId,
-      })
-      .select("*")
-      .single();
+    const gameInsert = {
+      name: name || `Partie de ${profileName}`,
+      max_players: maxPlayers,
+      map_width: size,
+      map_height: size,
+      status: "PENDING",
+      map_data: mapData,
+      game_config: { turnTimeLimit: 86400, rmgTuning: tuning },
+      created_by_user_id: user.id,
+      seed: mapData.seed,
+      map_size: mapSize,
+      template_id: mapData.templateId,
+    };
+    const { data: gameRow, error: gameError } = await insertGameRow(supabase, gameInsert);
 
     if (gameError) return apiRouteError("api/games POST game", gameError);
 
-    await createGamePlayerSetup({
-      supabase,
-      gameId: gameRow.id,
-      userId: user.id,
-      faction,
-      color: "#3b82f6",
-      turnOrder: 0,
-      mapData,
-    });
+    if (user.role !== "admin") {
+      await createGamePlayerSetup({
+        supabase,
+        gameId: gameRow.id,
+        userId: user.id,
+        faction,
+        color: "#3b82f6",
+        turnOrder: 0,
+        mapData,
+      });
+    }
 
     const neutralArmyResult = await createNeutralArmies(supabase, gameRow.id, mapData);
     if (!neutralArmyResult.ok) return NextResponse.json({ error: neutralArmyResult.error }, { status: 500 });
@@ -191,6 +260,50 @@ function normalizeRouteError(error: unknown) {
     };
   }
   return { error: error instanceof Error ? error.message : String(error || "Erreur serveur") };
+}
+
+async function fetchDashboardGames(supabase: ReturnType<typeof createAdminClient>, gameIds?: string[]) {
+  let withCreatorQuery = supabase
+    .from("games")
+    .select("*, created_by:profiles!games_created_by_user_id_fkey(name,email), game_players!game_players_game_id_fkey(*, profiles(name,email)), turns(*)")
+    .order("created_at", { ascending: false });
+  if (gameIds) withCreatorQuery = withCreatorQuery.in("id", gameIds);
+  const withCreator = await withCreatorQuery;
+
+  if (!withCreator.error || !isMissingCreatedByColumnError(withCreator.error)) return withCreator;
+
+  let fallbackQuery = supabase
+    .from("games")
+    .select("*, game_players!game_players_game_id_fkey(*, profiles(name,email)), turns(*)")
+    .order("created_at", { ascending: false });
+  if (gameIds) fallbackQuery = fallbackQuery.in("id", gameIds);
+  return fallbackQuery;
+}
+
+async function insertGameRow(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameInsert: Record<string, unknown>
+) {
+  const result = await supabase
+    .from("games")
+    .insert(gameInsert)
+    .select("*")
+    .single();
+
+  if (!result.error || !isMissingCreatedByColumnError(result.error)) return result;
+
+  const { created_by_user_id: _drop, ...legacyInsert } = gameInsert;
+  void _drop;
+  return supabase
+    .from("games")
+    .insert(legacyInsert)
+    .select("*")
+    .single();
+}
+
+function isMissingCreatedByColumnError(error: { message?: string; details?: string | null; code?: string }) {
+  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return text.includes("created_by_user_id") || text.includes("schema cache");
 }
 
 async function createInitialBoats(

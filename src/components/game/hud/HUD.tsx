@@ -39,7 +39,6 @@ import {
 import { useRouter } from "next/navigation";
 import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { useGameStore } from "@/lib/stores/gameStore";
-import { useResponsiveGameLayout } from "@/lib/ui/useResponsiveGameLayout";
 import { Faction, BuildingType, UnitType, type Hero } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -79,7 +78,6 @@ export default function HUD() {
 function HUDContent() {
   const router = useRouter();
   const { data: session } = useSession();
-  const layout = useResponsiveGameLayout();
   const [mobileDrawer, setMobileDrawer] = useState<"heroes" | "towns" | "map" | "players" | "actions" | null>(null);
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
     townId: null,
@@ -102,6 +100,7 @@ function HUDContent() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const setGameState = useGameStore((state) => state.setGameState);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
+  const adminObserverMode = useGameStore((state) => state.adminObserverMode);
   const gameState = nullableGameState!;
   const devPanel = useDevPanel(gameState?.id);
 
@@ -109,6 +108,7 @@ function HUDContent() {
     (player) => player.userId === session?.user?.id
   );
   const isPending = gameState.status === "PENDING";
+  const canStartPendingGame = Boolean(myPlayer?.turnOrder === 0 || adminObserverMode);
   const hasActiveCombats = (gameState.activeCombats ?? []).some((combat) =>
     myPlayer
       ? combatInvolvesPlayer(combat, myPlayer.id) && !findActiveCombatTruce(combat.truces, gameState.turnNumber)
@@ -124,9 +124,11 @@ function HUDContent() {
 
   const allTowns = gameState.players.flatMap((p) => p.towns);
 
-  const selectedHero = myPlayer?.heroes.find((h) => h.id === selectedHeroId);
+  const selectedHero = (adminObserverMode ? gameState.players.flatMap((player) => player.heroes) : myPlayer?.heroes ?? [])
+    .find((h) => h.id === selectedHeroId);
 
-  const selectedTown = myPlayer?.towns.find((t) => t.id === selectedTownId);
+  const selectedTown = (adminObserverMode ? allTowns : myPlayer?.towns ?? [])
+    .find((t) => t.id === selectedTownId);
 
   const selectedTownOwner = gameState.players.find((p) =>
     p.towns.some((town) => town.id === selectedTownId)
@@ -151,7 +153,12 @@ function HUDContent() {
     : undefined;
 
   const handleLeaveGame = async () => {
-    if (!myPlayer || !gameState) return;
+    if (!gameState) return;
+    if (adminObserverMode || !myPlayer) {
+      useGameStore.getState().resetGame();
+      router.push("/dashboard");
+      return;
+    }
 
     if (myPlayer.turnOrder === 0 || gameState.status !== "PENDING") {
       useGameStore.getState().resetGame();
@@ -207,7 +214,10 @@ function HUDContent() {
     });
 
     if (!response.ok) {
-      const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+      const refreshedState = await refreshGameState(gameState.id, session?.user?.id, {
+        revealMap: devRevealMap || adminObserverMode,
+        adminObserver: adminObserverMode,
+      });
       if (refreshedState && refreshedState.status !== "PENDING") {
         useGameStore.getState().setGameState(refreshedState);
         return;
@@ -216,7 +226,10 @@ function HUDContent() {
       return;
     }
 
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, {
+      revealMap: devRevealMap || adminObserverMode,
+      adminObserver: adminObserverMode,
+    });
     if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
@@ -867,7 +880,6 @@ function HUDContent() {
     : undefined;
   const activeReturnMax = activeReturnStack?.count ?? 0;
   const activeReturnCount = Math.min(Math.max(1, returnDialog?.count ?? 1), Math.max(1, activeReturnMax));
-  const isCompactHud = layout.isCompactHud;
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -906,7 +918,7 @@ function HUDContent() {
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
               </span>
             )}
-            {!isPending && (
+            {!isPending && !adminObserverMode && (
               <span
                 className={`inline-flex max-w-[19rem] items-center gap-2 rounded-full border px-5 py-2 text-sm font-black uppercase tracking-widest shadow-[inset_0_0_0_1px_rgba(0,0,0,0.4)] ${
                   myPlayer?.isAlive === false
@@ -916,13 +928,28 @@ function HUDContent() {
                     : "border-red-400/40 bg-gradient-to-b from-red-900/60 to-red-950 text-red-100"
                 }`}
               >
-                {myPlayer?.isAlive === false ? "Défaite" : canAct ? "À vous de jouer" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
+                {myPlayer?.isAlive === false ? "Défaite" : canAct ? "À vous" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
               </span>
             )}
           </div>
 
           <div className="flex min-w-0 items-stretch justify-end gap-2 justify-self-end md:gap-3">
-            {myPlayer && <ResourceBar resources={myPlayer.resources} />}
+            {adminObserverMode ? (
+              <>
+                <div
+                  className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.18em] text-cyan-100"
+                  aria-label={`Images par seconde: ${devPanel.fpsText}`}
+                  title="Images par seconde"
+                >
+                  {devPanel.fpsText}
+                </div>
+                <div className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100">
+                  Observation
+                </div>
+              </>
+            ) : myPlayer ? (
+              <ResourceBar resources={myPlayer.resources} />
+            ) : null}
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}
@@ -964,14 +991,14 @@ function HUDContent() {
         </div>
       )}
 
-      {devPanel.overlay}
+      {!adminObserverMode && devPanel.overlay}
       {turnNotifications.promptUI}
 
-      {isCompactHud && mobileDrawer && (
+      {mobileDrawer && (
         <div className="mobile-hud-drawer pointer-events-auto rounded-xl" data-testid="mobile-hud-drawer">
           <div className="flex items-center justify-between border-b border-amber-700/40 px-3 py-2">
             <div className={`text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
-              {mobileDrawer === "heroes" ? "Héros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Actions"}
+              {mobileDrawer === "heroes" ? "Héros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Suivi"}
             </div>
             <button
               type="button"
@@ -993,13 +1020,13 @@ function HUDContent() {
       )}
 
       {/* Hero panel */}
-      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} />}
+      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} />}
 
       {/* Town panel */}
       {selectedTown && (
         <CollapsiblePanel
           title={selectedTown.name}
-          className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
+          className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
           bodyClassName="flex min-h-0 flex-1 flex-col"
           right={
               <button
@@ -1285,7 +1312,7 @@ function HUDContent() {
                 </div>
               )}
             </div>
-            {myPlayer?.turnOrder === 0 ? (
+            {canStartPendingGame ? (
               <button
                 className="mt-4 rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-2 font-black uppercase tracking-widest text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
                 onClick={handleStartGame}
@@ -1297,7 +1324,7 @@ function HUDContent() {
               <div className="mt-4 text-sm text-amber-200/60">En attente que l&apos;hôte démarre la partie…</div>
             )}
           </div>
-        ) : (
+        ) : !adminObserverMode ? (
           <div className="text-center">
           {hasActiveCombats && canAct && (
             <div className="mb-2 rounded-md border border-amber-500/50 bg-amber-950/80 px-3 py-1 text-sm font-bold text-amber-200">
@@ -1323,7 +1350,7 @@ function HUDContent() {
             </span>
           </button>
           </div>
-        )}
+        ) : null}
       </div>
       <div className="mobile-flex mobile-bottom-nav pointer-events-auto absolute z-30 hidden items-center gap-2 rounded-xl border border-amber-700/55 bg-stone-950/92 p-2 shadow-2xl shadow-black/70 backdrop-blur">
         {(["heroes", "towns", "map", "players", "actions"] as const).map((item) => (
@@ -1338,10 +1365,10 @@ function HUDContent() {
             onClick={() => setMobileDrawer((current) => current === item ? null : item)}
             data-testid={`mobile-nav-${item}`}
           >
-            {item === "heroes" ? "Héros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Actions"}
+            {item === "heroes" ? "Héros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Suivi"}
           </button>
         ))}
-        {!isPending && (
+        {!isPending && !adminObserverMode && (
           <button
             className={`touch-target min-w-[4.5rem] rounded-full border-2 px-2 text-[10px] font-black uppercase tracking-wide ${
               isWaitingForPlayers

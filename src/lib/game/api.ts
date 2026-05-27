@@ -4,9 +4,11 @@ import {
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject, Boat,
   AdventureBuildingState,
 } from "./types";
+import type { GameActionLogEntry } from "./server/action-log";
 import { normalizeArtifactBag } from "./artifacts";
 import { isCreatureBankType } from "./creature-banks";
 import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
+import { isSingleMapRewardBuilding } from "./adventure-buildings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
@@ -41,6 +43,19 @@ interface ApiTurn {
   gamePlayerId: string;
   turnNumber: number;
   isCompleted: boolean;
+}
+
+interface ApiActionLog {
+  id: string;
+  gameId: string;
+  gamePlayerId: string | null;
+  actorKind: GameActionLogEntry["actorKind"];
+  turnNumber: number;
+  actionType: string;
+  category: string;
+  summary: string;
+  details?: Record<string, unknown>;
+  createdAt: string;
 }
 
 interface ApiHero {
@@ -420,6 +435,21 @@ function mapBoats(data: Record<string, unknown>): Boat[] {
   }));
 }
 
+function mapActionLog(data: Record<string, unknown>): GameActionLogEntry[] {
+  return ((data.actionLogs as ApiActionLog[] | undefined) ?? []).map((entry) => ({
+    id: entry.id,
+    gameId: entry.gameId,
+    gamePlayerId: entry.gamePlayerId ?? null,
+    actorKind: entry.actorKind,
+    turnNumber: entry.turnNumber,
+    actionType: entry.actionType,
+    category: entry.category,
+    summary: entry.summary,
+    details: entry.details ?? {},
+    createdAt: entry.createdAt,
+  }));
+}
+
 function buildExploredSet(
   map: GameMap,
   currentPlayer: Player | undefined,
@@ -537,7 +567,7 @@ function applyDynamicMapState(
           delete tile.object;
         } else if (
           object.type === "adventure_building" &&
-          object.subtype === AdventureBuildingType.CAMPFIRE &&
+          (object.subtype === AdventureBuildingType.CAMPFIRE || isSingleMapRewardBuilding(object.subtype)) &&
           visitedAdventureBuildings.has(object.id)
         ) {
           delete tile.object;
@@ -602,6 +632,7 @@ export function mapApiToGameState(
   const gates = mapGates(data, neutralArmies);
   const boats = mapBoats(data);
   const activeCombats = mapActiveCombats(data);
+  const actionLog = mapActionLog(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
   const mapId = data.id as string;
   const normalizedStaticMap = normalizeMapMovement(cloneGameMap(data.mapData as GameMap));
@@ -636,6 +667,7 @@ export function mapApiToGameState(
     boats,
     activeCombats,
     adventureVisits,
+    actionLog,
   };
 }
 
@@ -654,6 +686,7 @@ export function mergeGameDynamicState(
   const gates = mapGates(data, neutralArmies, staticMap);
   const boats = mapBoats(data);
   const activeCombats = mapActiveCombats(data);
+  const actionLog = mapActionLog(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
 
   applyDynamicMapState(
@@ -679,6 +712,7 @@ export function mergeGameDynamicState(
     boats,
     activeCombats,
     adventureVisits: extractAdventureVisitState(data.mapState),
+    actionLog,
   };
 }
 

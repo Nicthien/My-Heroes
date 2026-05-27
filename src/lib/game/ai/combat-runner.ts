@@ -1,15 +1,9 @@
-import {
-  executeManualCombatAction,
-  getHexDistance,
-} from "@/lib/game/combat/persistent";
-import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/movement";
-import { calculateCombatDamageRange, hasAdjacentEnemy, type CombatSideStats } from "@/lib/game/combat/rules";
+import { executeManualCombatAction } from "@/lib/game/combat/persistent";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { getUnitRule } from "@/lib/game/units";
+import { recordGameAction } from "@/lib/game/server/action-log";
 import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { toCombat, type SupabaseAdmin } from "@/lib/supabase/game-db";
-
-type CombatAction = { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string };
+import { chooseAiCombatAction, planAiTacticsPlacements } from "./combat-tactics";
 
 export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, combatId: string) {
   const { data: aiRows, error: aiError } = await supabase
@@ -19,6 +13,13 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     .eq("is_ai", true);
   if (aiError) throw aiError;
   const aiPlayerIds = new Set((aiRows ?? []).map((row) => row.id as string));
+  const { data: gameRow, error: gameError } = await supabase
+    .from("games")
+    .select("turn_number")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (gameError) throw gameError;
+  const turnNumber = Number(gameRow?.turn_number ?? 0);
 
   for (let step = 0; step < 30; step++) {
     const { data: combat, error } = await supabase
@@ -44,22 +45,15 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       const tacticsPhase = boardState.tacticsPhase as { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number };
       const tacticsPlayerId = tacticsPhase.side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
       if (!tacticsPlayerId || aiPlayerIds.has(tacticsPlayerId)) {
-        const aiTacticsLog: string[] = ["IA : phase de tactique en cours…"];
         const units = (boardState.units ?? []).map((u) => ({ ...u }));
-        const myUnits = units.filter((u) => u.side === tacticsPhase.side && u.count > 0 && !u.ranged && !["catapult", "first_aid_tent", "ammo_cart"].includes(u.unitType));
-        const occupied = new Set(units.map((u) => `${u.q},${u.r}`));
-        for (const unit of myUnits) {
-          const targetQ = tacticsPhase.side === "attacker"
-            ? Math.min((tacticsPhase.maxColumn ?? unit.q) - 1, unit.q + 2)
-            : Math.max((tacticsPhase.minColumn ?? unit.q) + 1, unit.q - 2);
-          if (targetQ === unit.q) continue;
-          const oldKey = `${unit.q},${unit.r}`;
-          const targetKey = `${targetQ},${unit.r}`;
-          if (occupied.has(targetKey)) continue;
-          occupied.delete(oldKey);
-          occupied.add(targetKey);
-          unit.q = targetQ;
-          aiTacticsLog.push(`IA déplace ${unit.unitType} en (${targetQ},${unit.r}).`);
+        const placements = planAiTacticsPlacements(units, tacticsPhase.side, tacticsPhase);
+        const aiTacticsLog: string[] = ["IA : phase de tactique en cours…"];
+        for (const placement of placements) {
+          const unit = units.find((u) => u.id === placement.unitId);
+          if (!unit) continue;
+          unit.q = placement.q;
+          unit.r = placement.r;
+          aiTacticsLog.push(`IA déplace ${unit.unitType} en (${placement.q},${placement.r}).`);
         }
         const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
         void _drop;
@@ -67,6 +61,18 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
           board_state: { ...restBoard, units },
           action_log: [...(combat.action_log ?? []), ...aiTacticsLog, "IA : phase de tactique terminée."],
         }).eq("id", combatId);
+        if (tacticsPlayerId) {
+          await recordGameAction(supabase, {
+            gameId,
+            gamePlayerId: tacticsPlayerId,
+            actorKind: "ai",
+            turnNumber,
+            actionType: "AI_COMBAT_TACTICS",
+            category: "combat",
+            summary: "IA termine sa phase de tactique.",
+            details: { combatId, placements },
+          });
+        }
         continue;
       }
     }
@@ -96,6 +102,16 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       defender: boardState.sideStats?.defender ?? { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
     };
     const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? [], sideStats);
+    await recordGameAction(supabase, {
+      gameId,
+      gamePlayerId: actor.ownerPlayerId,
+      actorKind: "ai",
+      turnNumber,
+      actionType: `AI_COMBAT_${action.type}`,
+      category: "combat",
+      summary: `IA effectue ${action.type} en combat.`,
+      details: { combatId, unitId: actor.id, unitType: actor.unitType, action },
+    });
     const execution = executeManualCombatAction({
       units: boardState.units ?? [],
       terrain: boardState.terrain ?? [],
@@ -151,63 +167,6 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     .eq("game_id", gameId)
     .maybeSingle();
   return data ? toCombat(data) : null;
-}
-
-function chooseAiCombatAction(
-  actor: CombatBoardUnit,
-  units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[],
-  sideStats: Record<"attacker" | "defender", CombatSideStats>
-): CombatAction {
-  const enemies = units.filter((unit) => unit.count > 0 && unit.side !== actor.side);
-  if (enemies.length === 0) return { type: "DEFEND" };
-
-  const adjacent = enemies
-    .filter((unit) => getHexDistance(actor, unit) <= 1)
-    .sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
-  if (adjacent) return { type: "ATTACK", targetUnitId: adjacent.id };
-
-  if (actor.ranged && actor.shots > 0 && !hasAdjacentEnemy(actor, units)) {
-    const target = [...enemies].sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
-    return { type: "SHOOT", targetUnitId: target.id };
-  }
-
-  const target = [...enemies].sort((a, b) => targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats))[0];
-  const approach = findMeleeApproach(actor, target, units, terrain);
-  if (approach) return { type: "ATTACK", targetUnitId: target.id };
-
-  const destination = getReachableCombatCells(actor, units, terrain)
-    .sort((a, b) => getHexDistance(a, target) - getHexDistance(b, target))[0];
-  return destination ? { type: "MOVE", q: destination.q, r: destination.r } : { type: "DEFEND" };
-}
-
-function targetPriority(
-  actor: CombatBoardUnit,
-  target: CombatBoardUnit,
-  units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[],
-  sideStats: Record<"attacker" | "defender", CombatSideStats>
-) {
-  const rule = getUnitRule(target.unitType);
-  const distance = getHexDistance(actor, target);
-  const range = calculateCombatDamageRange({
-    attacker: actor,
-    defender: target,
-    attackerStats: sideStats[actor.side],
-    defenderStats: sideStats[target.side],
-    actionType: distance <= 1 ? "ATTACK" : "SHOOT",
-    terrain,
-    actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
-  });
-  const averageDamage = Math.floor((range.minDamage + range.maxDamage) / 2);
-  const canKill = target.health <= averageDamage;
-  return (
-    (canKill ? 1200 : 0) +
-    (target.ranged ? 600 : 0) +
-    ((rule.abilities?.length ?? 0) > 0 ? 250 : 0) +
-    rule.power * target.count * 0.08 +
-    Math.max(0, 400 - target.health * 0.05)
-  );
 }
 
 function buildManualCombatResult(

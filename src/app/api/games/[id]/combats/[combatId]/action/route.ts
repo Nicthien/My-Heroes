@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
+import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
 import {
   buildConcessionBoardState,
   findNextPrimaryParticipant,
@@ -30,6 +32,7 @@ import { UNIT_RULES } from "@/lib/game/economy";
 import { HERO_ARMY_STACK_LIMIT } from "@/lib/game/army-stacks";
 import type { HeroSkills } from "@/lib/game/skills";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
+import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 
@@ -39,6 +42,9 @@ export async function POST(
 ) {
   const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
+  if (user.role === "admin") {
+    return NextResponse.json({ error: "Un administrateur peut seulement consulter les combats." }, { status: 403 });
+  }
 
   const { id, combatId } = await params;
   const action = await request.json();
@@ -87,10 +93,9 @@ export async function POST(
     moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
     sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
   };
+  const aiPlayerIds = await loadAiPlayerIds(supabase, id);
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
-  const currentActorIsAi = currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId
-    ? await isAiGamePlayer(supabase, id, currentActor.ownerPlayerId)
-    : false;
+  const currentActorIsAi = Boolean(currentActor?.ownerPlayerId && currentActor.ownerPlayerId !== gamePlayerId && aiPlayerIds.has(currentActor.ownerPlayerId));
   const expectedCurrentUnitId = typeof action.expectedCurrentUnitId === "string" ? action.expectedCurrentUnitId : null;
   const expectedRound = Number(action.expectedRound);
   const expectedActionLogLength = Number(action.expectedActionLogLength);
@@ -152,7 +157,47 @@ export async function POST(
     return NextResponse.json({ error: "Une negociation de reddition est en cours." }, { status: 400 });
   }
 
-  const tacticsPhase = (boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+  let tacticsPhase = (boardState as { tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number } }).tacticsPhase;
+  // Tactique IA auto : si le camp en phase tactique appartient à une IA, on la résout et on poursuit.
+  if (tacticsPhase) {
+    const tacticsPlayerId = tacticsPhase.side === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
+    if (!tacticsPlayerId || aiPlayerIds.has(tacticsPlayerId)) {
+      const units = (boardState.units ?? []).map((u) => ({ ...u }));
+      const placements = planAiTacticsPlacements(units, tacticsPhase.side, tacticsPhase);
+      const aiTacticsLog: string[] = ["IA : phase de tactique en cours…"];
+      for (const placement of placements) {
+        const unit = units.find((u) => u.id === placement.unitId);
+        if (!unit) continue;
+        unit.q = placement.q;
+        unit.r = placement.r;
+        aiTacticsLog.push(`IA déplace ${unit.unitType} en (${placement.q},${placement.r}).`);
+      }
+      aiTacticsLog.push("IA : phase de tactique terminée.");
+      const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
+      void _drop;
+      const nextCurrentUnitId = (combat.turn_queue ?? []).find((unitId: string) =>
+        units.some((unit) => unit.id === unitId && unit.count > 0)
+      ) ?? null;
+      const nextCurrentPlayerId = units.find((unit) => unit.id === nextCurrentUnitId)?.ownerPlayerId ?? null;
+      await supabase.from("combats").update({
+        board_state: { ...restBoard, units },
+        current_unit_id: nextCurrentUnitId,
+        current_player_id: nextCurrentPlayerId,
+        action_log: [...(combat.action_log ?? []), ...aiTacticsLog, "Combat lance."],
+      }).eq("id", combatId);
+      tacticsPhase = undefined;
+      // Recharge le combat pour la suite (board mis à jour).
+      const { data: refreshed } = await supabase
+        .from("combats")
+        .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
+        .eq("id", combatId)
+        .single();
+      if (refreshed) {
+        Object.assign(combat, refreshed);
+        Object.assign(boardState, refreshed.board_state ?? {});
+      }
+    }
+  }
   if (tacticsPhase && !isTacticsAction) {
     return NextResponse.json({ error: "Terminez la phase de tactique avant les actions de combat." }, { status: 400 });
   }
@@ -244,6 +289,7 @@ export async function POST(
       await evaluateGameLifecycle(supabase, id);
     }
     const mapped = toCombat(data);
+    await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
     return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
   }
 
@@ -271,6 +317,7 @@ export async function POST(
         .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
       return NextResponse.json({ combat: toCombat(data), result: null });
     }
 
@@ -301,6 +348,7 @@ export async function POST(
       .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
     return NextResponse.json({ combat: toCombat(data), result: null });
   }
 
@@ -325,6 +373,7 @@ export async function POST(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await evaluateGameLifecycle(supabase, id);
     const mapped = toCombat(data);
+    await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
     return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
   }
 
@@ -399,6 +448,36 @@ export async function POST(
     ...getEffectiveHeroStatsFromValues(defenderHero ?? { attack: 1, defense: 1 }),
     skills: ((defenderHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>),
   };
+  // Construit les contextes "lanceur de sort IA" pour chaque camp si le joueur principal est une IA.
+  const aiSpellHeroes: { attacker: AiSpellHero | null; defender: AiSpellHero | null } = {
+    attacker: combat.attacker_player_id && aiPlayerIds.has(combat.attacker_player_id) && attackerHero
+      ? {
+          heroId: combat.attacker_hero_id,
+          side: "attacker",
+          playerId: combat.attacker_player_id,
+          spellPower: Number(attackerHero.spell_power ?? 0),
+          knowledge: Number(attackerHero.knowledge ?? 1),
+          mana: attackerHero.mana ?? null,
+          knownSpellIds: (attackerHero.known_spells as string[] | null) ?? null,
+          hasSpellBook: attackerHero.has_spell_book !== false,
+          skills: (attackerHero.skills as Partial<Record<string, "basic" | "advanced" | "expert">>) ?? undefined,
+        }
+      : null,
+    defender: combat.defender_player_id && combat.defender_hero_id && aiPlayerIds.has(combat.defender_player_id) && defenderHero
+      ? {
+          heroId: combat.defender_hero_id,
+          side: "defender",
+          playerId: combat.defender_player_id,
+          spellPower: Number(defenderHero.spell_power ?? 0),
+          knowledge: Number(defenderHero.knowledge ?? 1),
+          mana: defenderHero.mana ?? null,
+          knownSpellIds: (defenderHero.known_spells as string[] | null) ?? null,
+          hasSpellBook: defenderHero.has_spell_book !== false,
+          skills: (defenderHero.skills as Partial<Record<string, "basic" | "advanced" | "expert">>) ?? undefined,
+        }
+      : null,
+  };
+
   const execution = executeActionThenNeutralTurns({
     units: boardState.units ?? [],
     terrain: boardState.terrain ?? [],
@@ -411,6 +490,10 @@ export async function POST(
     defenderStats,
     immortalHeroId: devGodModeHeroId,
     moraleContext,
+    aiPlayerIds,
+    gamePlayerId,
+    aiSpellHeroes,
+    spellCastsByRound: boardState.spellCastsByRound,
   });
 
   // Tirs des tours au début de chaque round (siège)
@@ -462,7 +545,7 @@ export async function POST(
   const { data, error } = await supabase
     .from("combats")
     .update({
-      board_state: { ...boardState, units: unitsAfterTowers, terrain: nextTerrain, fortifications: nextFortifications, lastTowerShots: lastTowerShots.length > 0 ? lastTowerShots : undefined },
+      board_state: { ...boardState, units: unitsAfterTowers, terrain: nextTerrain, fortifications: nextFortifications, lastTowerShots: lastTowerShots.length > 0 ? lastTowerShots : undefined, spellCastsByRound: execution.spellCastsByRound ?? boardState.spellCastsByRound },
       turn_queue: execution.turnQueue,
       current_unit_id: execution.currentUnitId,
       current_player_id: result ? null : execution.currentPlayerId,
@@ -480,7 +563,17 @@ export async function POST(
     await persistResolvedCombat(supabase, combat, initialUnits, execution.units, execution.result);
     await evaluateGameLifecycle(supabase, id);
   }
+  // Persiste les coûts en mana des sorts IA lancés pendant ce tour.
+  if (execution.aiManaDelta) {
+    for (const [heroId, delta] of execution.aiManaDelta) {
+      if (delta <= 0) continue;
+      const { data: heroRow } = await supabase.from("heroes").select("mana").eq("id", heroId).maybeSingle();
+      const currentMana = Number(heroRow?.mana ?? 0);
+      await supabase.from("heroes").update({ mana: Math.max(0, currentMana - delta) }).eq("id", heroId);
+    }
+  }
   const mapped = toCombat(data);
+  await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
   return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
 }
 
@@ -1021,15 +1114,14 @@ async function transferResources(
   return null;
 }
 
-async function isAiGamePlayer(supabase: ReturnType<typeof createAdminClient>, gameId: string, playerId: string) {
+async function loadAiPlayerIds(supabase: ReturnType<typeof createAdminClient>, gameId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from("game_players")
-    .select("is_ai")
+    .select("id")
     .eq("game_id", gameId)
-    .eq("id", playerId)
-    .maybeSingle();
+    .eq("is_ai", true);
   if (error) throw error;
-  return Boolean(data?.is_ai);
+  return new Set((data ?? []).map((row) => row.id as string));
 }
 
 async function fetchCombatHero(
@@ -1148,6 +1240,10 @@ function executeActionThenNeutralTurns(params: {
   defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
   moraleContext?: Parameters<typeof executeManualCombatAction>[0]["moraleContext"];
+  aiPlayerIds: Set<string>;
+  gamePlayerId: string;
+  aiSpellHeroes?: { attacker: AiSpellHero | null; defender: AiSpellHero | null };
+  spellCastsByRound?: Record<string, string[]>;
 }) {
   let units = params.units;
   let turnQueue = params.turnQueue;
@@ -1156,12 +1252,52 @@ function executeActionThenNeutralTurns(params: {
   let currentPlayerId = units.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
   let result: "attacker" | "defender" | null = null;
   const log: string[] = [];
+  const sideStats = { attacker: params.attackerStats, defender: params.defenderStats };
+  let spellCastsByRound = params.spellCastsByRound;
+  const aiSpellHeroes = params.aiSpellHeroes;
+  const aiManaDelta = new Map<string, number>();
+
+  function tryCastSpell(actorSide: "attacker" | "defender") {
+    const hero = aiSpellHeroes?.[actorSide] ?? null;
+    if (!hero) return;
+    const enemy = aiSpellHeroes?.[actorSide === "attacker" ? "defender" : "attacker"];
+    const choice = chooseAiCombatSpell({
+      hero,
+      units,
+      terrain: params.terrain,
+      round,
+      spellCastsByRound,
+      enemySkills: enemy?.skills,
+    });
+    if (!choice) return;
+    const execution = executeAiSpellCast({
+      units,
+      caster: choice.caster,
+      action: choice.action,
+      enemySkills: enemy?.skills,
+    });
+    if (!execution.ok) return;
+    units = execution.units;
+    log.push(...execution.log);
+    const cost = Math.max(0, choice.spell.cost.standard);
+    aiManaDelta.set(hero.heroId, (aiManaDelta.get(hero.heroId) ?? 0) + cost);
+    hero.mana = Math.max(0, (hero.mana ?? hero.knowledge * 10) - cost);
+    spellCastsByRound = markHeroCombatSpellCast(spellCastsByRound, round, hero.heroId);
+    if (execution.result) result = execution.result;
+  }
 
   const actor = units.find((unit) => unit.id === currentUnitId);
+  // Si l'acteur est sur un camp IA, tente un sort avant son action.
+  if (!params.playerAction && params.allowAutomatedAction && actor && (actor.ownerPlayerId === null || params.aiPlayerIds.has(actor.ownerPlayerId ?? ""))) {
+    if (actor.ownerPlayerId && params.aiPlayerIds.has(actor.ownerPlayerId)) {
+      tryCastSpell(actor.side);
+    }
+  }
+  const actorAfterSpell = units.find((unit) => unit.id === currentUnitId);
   const action = params.playerAction
     ? params.playerAction
-    : params.allowAutomatedAction && actor
-      ? chooseNeutralAction(actor, units, params.terrain)
+    : params.allowAutomatedAction && actorAfterSpell
+      ? chooseAutomatedAction(actorAfterSpell, units, params.terrain, sideStats, params.aiPlayerIds)
       : null;
 
   if (!actor || !action) {
@@ -1190,7 +1326,59 @@ function executeActionThenNeutralTurns(params: {
   result = execution.result;
   log.push(...execution.log);
 
-  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log };
+  // Boucle les tours auto consécutifs (neutres ou IA) pour éviter au joueur de cliquer entre chaque.
+  let safetyCap = 30;
+  while (!result && currentUnitId && safetyCap-- > 0) {
+    const nextActor = units.find((unit) => unit.id === currentUnitId);
+    if (!nextActor) break;
+    const isAutomated = nextActor.ownerPlayerId === null || params.aiPlayerIds.has(nextActor.ownerPlayerId ?? "");
+    if (!isAutomated) break;
+    if (nextActor.ownerPlayerId === params.gamePlayerId) break;
+    // Cast de sort IA avant l'action de l'unité.
+    if (nextActor.ownerPlayerId && params.aiPlayerIds.has(nextActor.ownerPlayerId)) {
+      tryCastSpell(nextActor.side);
+      if (result) break;
+    }
+    const refreshedActor = units.find((unit) => unit.id === currentUnitId);
+    if (!refreshedActor) break;
+    const nextAction = chooseAutomatedAction(refreshedActor, units, params.terrain, sideStats, params.aiPlayerIds);
+    const nextExecution = executeManualCombatAction({
+      units,
+      terrain: params.terrain,
+      turnQueue,
+      round,
+      currentUnitId,
+      action: nextAction,
+      attackerStats: params.attackerStats,
+      defenderStats: params.defenderStats,
+      immortalHeroId: params.immortalHeroId,
+      moraleContext: params.moraleContext,
+    });
+    units = nextExecution.units;
+    turnQueue = nextExecution.turnQueue;
+    round = nextExecution.round;
+    currentUnitId = nextExecution.currentUnitId;
+    currentPlayerId = nextExecution.currentPlayerId;
+    result = nextExecution.result;
+    log.push(...nextExecution.log);
+  }
+
+  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log, aiManaDelta, spellCastsByRound };
+}
+
+function chooseAutomatedAction(
+  actor: CombatBoardUnit,
+  units: CombatBoardUnit[],
+  terrain: CombatTerrainFeature[],
+  sideStats: Record<"attacker" | "defender", { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }>,
+  aiPlayerIds: Set<string>,
+): AiCombatAction {
+  // Pour les unités d'un joueur IA : déléguer au choix tactique intelligent.
+  if (actor.ownerPlayerId && aiPlayerIds.has(actor.ownerPlayerId)) {
+    return chooseAiCombatAction(actor, units, terrain, sideStats);
+  }
+  // Pour les unités neutres (sans propriétaire) : ancienne logique simple.
+  return chooseNeutralAction(actor, units, terrain);
 }
 
 function chooseNeutralAction(
@@ -1726,4 +1914,25 @@ async function markCreatureBankDefeated(
       },
     },
   }).eq("id", gameId);
+}
+
+async function logCombatAction(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  gamePlayerId: string;
+  turnNumber: number;
+  action: Record<string, unknown>;
+  combatId: string;
+}) {
+  const actionType = String(params.action.type ?? "COMBAT_ACTION");
+  await recordGameAction(params.supabase, {
+    gameId: params.gameId,
+    gamePlayerId: params.gamePlayerId,
+    actorKind: "player",
+    turnNumber: params.turnNumber,
+    actionType,
+    category: "combat",
+    summary: `Joueur effectue ${actionType} en combat.`,
+    details: { combatId: params.combatId, action: sanitizeActionForLog(params.action) },
+  });
 }

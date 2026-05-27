@@ -379,6 +379,15 @@ export function hasPlayerVisited(visits: Record<string, string[]> | undefined, p
   return visits?.[playerId]?.includes(buildingId) ?? false;
 }
 
+export function isSingleMapRewardBuilding(subtype: string | undefined) {
+  return subtype === AdventureBuildingType.ABANDONED_WAGON ||
+    subtype === AdventureBuildingType.CRATE ||
+    subtype === AdventureBuildingType.SKELETON ||
+    subtype === AdventureBuildingType.WARRIOR_TOMB ||
+    subtype === AdventureBuildingType.FLOTSAM ||
+    subtype === AdventureBuildingType.SEA_CHEST;
+}
+
 export function getAdventureWeekKey(turnNumber: number) {
   return `week-${Math.max(1, Math.floor((turnNumber - 1) / 7) + 1)}`;
 }

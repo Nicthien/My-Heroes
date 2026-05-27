@@ -10,7 +10,7 @@ import {
   subtractCost,
   tierForUnit,
 } from "@/lib/game/economy";
-import { createCampfireReward, addVisit, hasPlayerVisited, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
+import { createCampfireReward, addVisit, hasPlayerVisited, getAdventureBuildingLabel, isSingleMapRewardBuilding } from "@/lib/game/adventure-buildings";
 import { isCreatureBankType, PendingCreatureBankReward } from "@/lib/game/creature-banks";
 import {
   createExternalDwellingState,
@@ -75,6 +75,7 @@ import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBui
 import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
+import { buildActionLogInput, recordGameAction } from "@/lib/game/server/action-log";
 import { cancelPlayerTurnCompletion, completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
@@ -167,6 +168,9 @@ interface MinimalHero {
 
 interface MinimalPlayer {
   id: string;
+  isAi?: boolean;
+  aiName?: string | null;
+  user?: { name?: string | null };
   isAlive?: boolean;
   turnOrder?: number;
   faction?: string;
@@ -223,6 +227,9 @@ export async function POST(
   try {
     const { user, response } = await requireCurrentUser(request);
     if (!user) return response;
+    if (user.role === "admin") {
+      return NextResponse.json({ error: "Un administrateur peut seulement consulter la partie." }, { status: 403 });
+    }
 
     const { id } = await params;
     const action = await request.json();
@@ -246,6 +253,7 @@ export async function POST(
         sulfur: gamePlayer.sulfur + 1000,
       };
       await updatePlayerResources(supabase, gamePlayer.id, resources);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, resources });
     }
 
@@ -259,6 +267,7 @@ export async function POST(
       const amount = 500;
       const experience = hero.experience + amount;
       await applyHeroExperienceGain(supabase, id, hero.id, experience);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, heroId: hero.id, experience, amount });
     }
 
@@ -283,6 +292,8 @@ export async function POST(
           map_state: { ...latestMapState, pendingSkillChoices: nextPending },
         }).eq("id", id);
       }
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true, heroId: hero.id, skillCount: SKILL_DEFINITIONS.length });
     }
@@ -325,6 +336,8 @@ export async function POST(
       for (const key of newlyVisible) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
+
       return NextResponse.json({ success: true, destination });
     }
 
@@ -354,6 +367,7 @@ export async function POST(
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
       const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, artifacts: result.artifacts });
     }
 
@@ -365,6 +379,7 @@ export async function POST(
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
       const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, artifacts: result.artifacts });
     }
 
@@ -384,6 +399,7 @@ export async function POST(
       if (fromError) return NextResponse.json({ error: fromError.message }, { status: 500 });
       const { error: toError } = await supabase.from("heroes").update({ artifacts: result.toArtifacts }).eq("id", toHero.id);
       if (toError) return NextResponse.json({ error: toError.message }, { status: 500 });
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
@@ -413,6 +429,7 @@ export async function POST(
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       collected.add(object.id);
       await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected), defeatedArtifacts: Array.from(defeatedArtifacts) } }).eq("id", id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "ARTIFACT", artifactId, label: artifact.name, destination: { x: hero.x, y: hero.y } } });
     }
 
@@ -655,6 +672,8 @@ export async function POST(
         });
       }
 
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
+
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
     }
 
@@ -675,6 +694,7 @@ export async function POST(
       const explored = new Set(gamePlayer.exploredTiles ?? []);
       for (const key of computeVisibleTiles(mapData, [boatPosition], 5)) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "EMBARK_BOAT", destination: boatPosition, message: "Embarquement effectue." } });
     }
 
@@ -696,6 +716,7 @@ export async function POST(
       const explored = new Set(gamePlayer.exploredTiles ?? []);
       for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "DISEMBARK_BOAT", destination, message: "Debarquement effectue." } });
     }
 
@@ -728,6 +749,8 @@ export async function POST(
         explored,
         choice: normalizeHeroStatChoice(action.choice),
       });
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true, interaction });
     }
@@ -770,6 +793,7 @@ export async function POST(
 
       const nextMana = hasDevInfiniteMana ? mana : mana - cost;
       if (!hasDevInfiniteMana) await supabase.from("heroes").update({ mana: nextMana }).eq("id", hero.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, mana: nextMana, interaction: result.interaction });
     }
 
@@ -799,6 +823,7 @@ export async function POST(
 
       await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
       await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 150);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_BUILDING", buildingType: building.buildingType } });
     }
 
@@ -888,6 +913,7 @@ export async function POST(
         .eq("id", town.id);
       await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 250);
       await evaluateGameLifecycle(supabase, id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
     }
 
@@ -916,6 +942,7 @@ export async function POST(
       const explored = new Set(gamePlayer.exploredTiles ?? []);
       for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "BUILD_BOAT", destination, message: "Bateau construit." } });
     }
 
@@ -1029,6 +1056,8 @@ export async function POST(
         }
       }
 
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
+
       return NextResponse.json({ success: true });
     }
 
@@ -1071,6 +1100,8 @@ export async function POST(
           max_movement: dailyMovement,
           is_moving: false,
         }).eq("id", returningHeroId).eq("game_player_id", gamePlayer.id);
+
+        await logPlayerAction(supabase, game, id, gamePlayer, action);
 
         return NextResponse.json({ success: true });
       }
@@ -1154,6 +1185,8 @@ export async function POST(
       const remaining = offer.filter((entry) => entry.templateId !== action.templateId);
       await supabase.from("towns").update({ tavern_offer: remaining }).eq("id", town.id);
 
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
+
       return NextResponse.json({ success: true });
     }
 
@@ -1177,6 +1210,8 @@ export async function POST(
         available_recruits: { ...(town.availableRecruits ?? {}), [unitType]: available - count },
         garrison: nextGarrison,
       }).eq("id", town.id);
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true });
     }
@@ -1219,6 +1254,7 @@ export async function POST(
         })
         .map((stack, position) => ({ ...stack, position }));
       await persistHeroArmyDiff(supabase, hero.id, stacks, next);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, moved });
     }
 
@@ -1253,6 +1289,7 @@ export async function POST(
       const next = sortedStacks(stacks.map((stack) => stack.id === source.id ? removal.remaining : stack).concat(newStack))
         .map((stack, nextPosition) => ({ ...stack, position: nextPosition }));
       await persistHeroArmyDiff(supabase, hero.id, stacks, next);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
@@ -1318,6 +1355,8 @@ export async function POST(
         );
         await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
       }
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true });
     }
@@ -1406,6 +1445,8 @@ export async function POST(
         },
       }).eq("id", id);
 
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
+
       return NextResponse.json({ success: true });
     }
 
@@ -1434,6 +1475,8 @@ export async function POST(
       await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
 
       await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true });
     }
@@ -1465,6 +1508,8 @@ export async function POST(
           health: Math.max(0, source.health - rule.health * count),
         }).eq("id", source.id);
       }
+
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true });
     }
@@ -1508,6 +1553,7 @@ export async function POST(
       }
 
       await compactGateStackPositions(supabase, gate.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
@@ -1526,6 +1572,7 @@ export async function POST(
       }
 
       await captureGate(supabase, id, gate, gamePlayer.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, interaction: { type: "CAPTURE_GATE", gateId: gate.id } });
     }
 
@@ -1547,6 +1594,7 @@ export async function POST(
       if (toAmount <= 0) return NextResponse.json({ error: "Conversion non supportée" }, { status: 400 });
       const next = { ...resources, [from]: (resources[from] ?? 0) - fromAmount, [to]: (resources[to] ?? 0) + toAmount };
       await updatePlayerResources(supabase, gamePlayer.id, next);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, gained: { resource: to, amount: toAmount } });
     }
 
@@ -1570,6 +1618,7 @@ export async function POST(
       const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
       await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
       await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + totalGold });
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, gold: totalGold });
     }
 
@@ -1603,6 +1652,7 @@ export async function POST(
       await supabase.from("games").update({
         map_state: { ...mapState, townArtifactOffers: { ...townArtifactOffers, [town.id]: nextOffer } },
       }).eq("id", id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, artifact: artifact.name, price });
     }
 
@@ -1647,6 +1697,7 @@ export async function POST(
       if (remaining.length > 0) nextPending[hero.id] = remaining;
       else delete nextPending[hero.id];
       await supabase.from("games").update({ map_state: { ...mapState, pendingSkillChoices: nextPending } }).eq("id", id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, skill: choice, level: next });
     }
 
@@ -1679,6 +1730,7 @@ export async function POST(
         console.error("BUY_WAR_MACHINE: failed to persist war machines", wmUpdate.error);
         return NextResponse.json({ error: "Impossible d'enregistrer la machine de guerre (DB)" }, { status: 500 });
       }
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
@@ -1710,6 +1762,7 @@ export async function POST(
         console.error("LEARN_MAGIC_SCHOOL: failed to persist hero skills", schoolUpdate.error);
         return NextResponse.json({ error: "Impossible d'enregistrer l'école de magie (DB)" }, { status: 500 });
       }
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true, school });
     }
 
@@ -1736,18 +1789,21 @@ export async function POST(
       const nextToGarrison = addUnitsToStackList(toTown.garrison ?? [], unitType, count, rule.health);
       await supabase.from("towns").update({ garrison: nextFromGarrison }).eq("id", fromTown.id);
       await supabase.from("towns").update({ garrison: nextToGarrison }).eq("id", toTown.id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
     if (action.type === "END_TURN") {
       await completePlayerTurn(supabase, id, Number(game.turnNumber), gamePlayer.id);
       await runAiTurnsUntilHuman(supabase, id);
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
     if (action.type === "CANCEL_END_TURN") {
       const result = await cancelPlayerTurnCompletion(supabase, id, Number(game.turnNumber), gamePlayer.id);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      await logPlayerAction(supabase, game, id, gamePlayer, action);
       return NextResponse.json({ success: true });
     }
 
@@ -1776,6 +1832,24 @@ function playerResources(player: {
     gems: player.gems ?? 0,
     sulfur: player.sulfur,
   };
+}
+
+async function logPlayerAction(
+  supabase: SupabaseAdminClient,
+  game: { turnNumber?: unknown },
+  gameId: string,
+  gamePlayer: MinimalPlayer,
+  action: Record<string, unknown>,
+) {
+  const actorName = gamePlayer.isAi ? gamePlayer.aiName || "IA" : gamePlayer.user?.name || "Joueur";
+  await recordGameAction(supabase, buildActionLogInput({
+    gameId,
+    gamePlayerId: gamePlayer.id,
+    actorKind: gamePlayer.isAi ? "ai" : "player",
+    turnNumber: Number(game.turnNumber ?? 0),
+    actorName,
+    action: action as never,
+  }));
 }
 
 function getAffordableCount(resources: Resources, cost: Partial<Resources>, available: number) {
@@ -2767,17 +2841,6 @@ function isHeroVisitBuilding(type: AdventureBuildingType) {
     AdventureBuildingType.SEER_HUT,
     AdventureBuildingType.MERMAID,
     AdventureBuildingType.BUOY,
-  ].includes(type);
-}
-
-function isSingleMapRewardBuilding(type: AdventureBuildingType) {
-  return [
-    AdventureBuildingType.ABANDONED_WAGON,
-    AdventureBuildingType.CRATE,
-    AdventureBuildingType.SKELETON,
-    AdventureBuildingType.WARRIOR_TOMB,
-    AdventureBuildingType.FLOTSAM,
-    AdventureBuildingType.SEA_CHEST,
   ].includes(type);
 }
 

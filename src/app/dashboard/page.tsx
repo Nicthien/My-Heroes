@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
-import { useSession, getSupabaseAccessToken } from "@/lib/auth/client";
+import { useSession, getSupabaseAccessToken, signOutWithLocalFallback } from "@/lib/auth/client";
 import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { generateMap } from "@/lib/game/engine";
 import {
@@ -29,7 +29,10 @@ import {
 interface PlayerInfo {
   id: string;
   userId: string | null;
-  user?: { name: string | null };
+  user?: { name: string | null; email?: string | null };
+  email?: string | null;
+  lastSignInAt?: string | null;
+  turnStatus?: string | null;
   isAi?: boolean;
   aiName?: string | null;
   faction: string;
@@ -46,7 +49,24 @@ interface GameInfo {
   maxPlayers: number;
   mapWidth: number;
   mapHeight: number;
+  createdAt?: string | null;
   players: PlayerInfo[];
+}
+
+interface AdminGamePlayerInfo extends PlayerInfo {
+  email?: string | null;
+  joinedAt?: string | null;
+  lastSignInAt?: string | null;
+  turnStatus?: string | null;
+}
+
+interface AdminCreatorInfo {
+  id: string;
+  userId?: string | null;
+  user?: { name: string | null; email?: string | null };
+  email?: string | null;
+  isAi?: boolean;
+  aiName?: string | null;
 }
 
 interface OpenGame {
@@ -54,6 +74,24 @@ interface OpenGame {
   name: string;
   maxPlayers: number;
   players: PlayerInfo[];
+}
+
+interface AdminUserInfo {
+  id: string;
+  email: string | null;
+  name: string | null;
+  role: string;
+  mustChangePassword: boolean;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  gameCount: number;
+}
+
+interface AdminGameInfo extends Omit<GameInfo, "players"> {
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  createdBy?: AdminCreatorInfo | null;
+  players: AdminGamePlayerInfo[];
 }
 
 type FactionAlignment = "good" | "evil" | "barbarian";
@@ -240,6 +278,81 @@ function randomSeedValue() {
   return value;
 }
 
+function formatAdminDate(value?: string | null, fallback = "-") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function formatGameAge(value?: string | null, now = Date.now()) {
+  if (!value) return "-";
+  const createdAt = new Date(value);
+  if (Number.isNaN(createdAt.getTime())) return "-";
+
+  const current = new Date(now);
+  if (createdAt.getTime() > current.getTime()) return "moins d'une minute";
+
+  let years = current.getFullYear() - createdAt.getFullYear();
+  let months = current.getMonth() - createdAt.getMonth();
+  let days = current.getDate() - createdAt.getDate();
+  let hours = current.getHours() - createdAt.getHours();
+  let minutes = current.getMinutes() - createdAt.getMinutes();
+
+  if (minutes < 0) {
+    minutes += 60;
+    hours -= 1;
+  }
+  if (hours < 0) {
+    hours += 24;
+    days -= 1;
+  }
+  if (days < 0) {
+    const previousMonth = new Date(current.getFullYear(), current.getMonth(), 0);
+    days += previousMonth.getDate();
+    months -= 1;
+  }
+  if (months < 0) {
+    months += 12;
+    years -= 1;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} ${years > 1 ? "ans" : "an"}`);
+  if (months > 0) parts.push(`${months} mois`);
+  if (days > 0) parts.push(`${days} ${days > 1 ? "jours" : "jour"}`);
+  if (parts.length < 2 && hours > 0) parts.push(`${hours} ${hours > 1 ? "heures" : "heure"}`);
+  if (parts.length < 2 && minutes > 0) parts.push(`${minutes} ${minutes > 1 ? "minutes" : "minute"}`);
+
+  return parts.slice(0, 3).join(", ") || "moins d'une minute";
+}
+
+function adminPlayerName(player?: AdminCreatorInfo | null) {
+  if (!player) return "-";
+  if (player.isAi) return player.aiName || "IA";
+  return player.user?.name || player.email || player.user?.email || "Joueur";
+}
+
+function playerName(player?: PlayerInfo | null) {
+  if (!player) return "-";
+  if (player.isAi) return player.aiName || "IA";
+  return player.user?.name || player.email || player.user?.email || "Joueur";
+}
+
+function playerStatusLabel(player: PlayerInfo) {
+  return player.turnStatus || "-";
+}
+
+function playerStatusClass(status?: string | null) {
+  if (status === "Doit jouer maintenant") return "text-emerald-300";
+  if (status === "A fini son tour" || status === "Pret au lancement" || status === "Partie terminee") return "text-cyan-300";
+  if (status === "Pas pret") return "text-red-300";
+  return "text-amber-200/70";
+}
+
 function RmgTuningSlider({
   label,
   value,
@@ -304,6 +417,7 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [showRmgTuning, setShowRmgTuning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
@@ -316,6 +430,21 @@ export default function DashboardPage() {
   const [profilePasswordConfirm, setProfilePasswordConfirm] = useState("");
   const [profileMessage, setProfileMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [dashboardMessage, setDashboardMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUserInfo[]>([]);
+  const [adminGames, setAdminGames] = useState<AdminGameInfo[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminMessage, setAdminMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [creatingAdminUser, setCreatingAdminUser] = useState(false);
+  const [adminNewUserName, setAdminNewUserName] = useState("");
+  const [adminNewUserEmail, setAdminNewUserEmail] = useState("");
+  const [adminNewUserPassword, setAdminNewUserPassword] = useState("");
+  const [adminNewUserRole, setAdminNewUserRole] = useState<"user" | "admin">("user");
+  const [adminNewUserMustChangePassword, setAdminNewUserMustChangePassword] = useState(true);
+  const [forcedPassword, setForcedPassword] = useState("");
+  const [forcedPasswordConfirm, setForcedPasswordConfirm] = useState("");
+  const [savingForcedPassword, setSavingForcedPassword] = useState(false);
+  const [forcedPasswordError, setForcedPasswordError] = useState("");
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [selectedFaction, setSelectedFaction] = useState<string>("castle");
   const [gameName, setGameName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
@@ -343,6 +472,8 @@ export default function DashboardPage() {
     [effectiveTemplateId, mapSize, maxPlayers, normalizedRmgTuning, seed],
   );
   const previewStats = useMemo(() => summarizeMap(previewMap), [previewMap]);
+  const isAdmin = session?.user?.role === "admin";
+  const mustChangePassword = Boolean(session?.user?.mustChangePassword);
   const generateRandomSeed = () => {
     setSeed(randomSeedValue());
   };
@@ -354,14 +485,10 @@ export default function DashboardPage() {
     setSigningOut(true);
     setDashboardMessage(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signOut();
+    const error = await signOutWithLocalFallback();
 
     if (error) {
-      console.error("signOut failed", error);
-      setDashboardMessage({ kind: "error", text: "Impossible de se déconnecter." });
-      setSigningOut(false);
-      return;
+      console.warn("Remote signOut failed; local session was cleared.", error);
     }
 
     useGameStore.getState().resetGame();
@@ -411,6 +538,33 @@ export default function DashboardPage() {
     setOpenGames(Array.isArray(data) ? data : []);
   }, [fetchWithAuth, parseJsonResponse]);
 
+  const loadAdminData = useCallback(async () => {
+    if (!isAdmin) return;
+    setAdminLoading(true);
+    setAdminMessage(null);
+    const [usersResponse, gamesResponse] = await Promise.all([
+      fetchWithAuth("/api/admin/users", { cache: "no-store" }),
+      fetchWithAuth("/api/admin/games", { cache: "no-store" }),
+    ]);
+
+    if (!usersResponse.ok || !gamesResponse.ok) {
+      const data = !usersResponse.ok
+        ? await parseJsonResponse(usersResponse)
+        : await parseJsonResponse(gamesResponse);
+      setAdminMessage({ kind: "error", text: data?.error || "Impossible de charger l'administration." });
+      setAdminUsers([]);
+      setAdminGames([]);
+      setAdminLoading(false);
+      return;
+    }
+
+    const usersData = await parseJsonResponse(usersResponse);
+    const gamesData = await parseJsonResponse(gamesResponse);
+    setAdminUsers(Array.isArray(usersData) ? usersData : []);
+    setAdminGames(Array.isArray(gamesData) ? gamesData : []);
+    setAdminLoading(false);
+  }, [fetchWithAuth, isAdmin, parseJsonResponse]);
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
   }, [status, router]);
@@ -431,6 +585,24 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [loadOpenGames, showJoin]);
 
+  useEffect(() => {
+    if (!showAdmin || !isAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAdminData().catch((error) => {
+      console.error(error);
+      setAdminMessage({ kind: "error", text: "Impossible de charger l'administration." });
+      setAdminLoading(false);
+    });
+  }, [isAdmin, loadAdminData, showAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentTime(Date.now());
+    const interval = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, [isAdmin]);
+
   const openOptions = () => {
     setProfileEmail(session?.user?.email ?? "");
     setProfileName(session?.user?.name ?? "");
@@ -438,9 +610,124 @@ export default function DashboardPage() {
     setProfilePasswordConfirm("");
     setProfileMessage(null);
     setShowOptions(true);
+    setShowAdmin(false);
     setShowCreate(false);
     setShowJoin(false);
     setShowRmgPreview(false);
+  };
+
+  const saveForcedPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextPassword = forcedPassword.trim();
+    setForcedPasswordError("");
+
+    if (nextPassword.length < 6) {
+      setForcedPasswordError("Le mot de passe doit contenir au moins 6 caracteres.");
+      return;
+    }
+    if (nextPassword === "ChangeMe") {
+      setForcedPasswordError("Choisissez un mot de passe different du mot de passe par defaut.");
+      return;
+    }
+    if (nextPassword !== forcedPasswordConfirm.trim()) {
+      setForcedPasswordError("Les mots de passe ne correspondent pas.");
+      return;
+    }
+
+    setSavingForcedPassword(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password: nextPassword });
+    if (error) {
+      setForcedPasswordError(error.message || "Impossible de changer le mot de passe.");
+      setSavingForcedPassword(false);
+      return;
+    }
+
+    const response = await fetchWithAuth("/api/auth/password-changed", { method: "POST" });
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setForcedPasswordError(data?.error || "Impossible de finaliser le changement.");
+      setSavingForcedPassword(false);
+      return;
+    }
+
+    setForcedPassword("");
+    setForcedPasswordConfirm("");
+    setSavingForcedPassword(false);
+    router.refresh();
+    window.location.reload();
+  };
+
+  const deleteAdminUser = async (target: AdminUserInfo) => {
+    if (!confirm(`Supprimer l'utilisateur ${target.name || target.email || target.id} ?`)) return;
+    setAdminMessage(null);
+    const response = await fetchWithAuth(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setAdminMessage({ kind: "error", text: data?.error || "Impossible de supprimer l'utilisateur." });
+      return;
+    }
+    setAdminMessage({ kind: "success", text: "Utilisateur supprime." });
+    await loadAdminData();
+  };
+
+  const createAdminUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = adminNewUserName.trim();
+    const email = adminNewUserEmail.trim();
+    const password = adminNewUserPassword;
+    setAdminMessage(null);
+
+    if (!name || !email || !password) {
+      setAdminMessage({ kind: "error", text: "Pseudo, email et mot de passe sont requis." });
+      return;
+    }
+    if (password.length < 6) {
+      setAdminMessage({ kind: "error", text: "Le mot de passe doit contenir au moins 6 caracteres." });
+      return;
+    }
+
+    setCreatingAdminUser(true);
+    const response = await fetchWithAuth("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        role: adminNewUserRole,
+        mustChangePassword: adminNewUserMustChangePassword,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setAdminMessage({ kind: "error", text: data?.error || "Impossible de creer l'utilisateur." });
+      setCreatingAdminUser(false);
+      return;
+    }
+
+    setAdminNewUserName("");
+    setAdminNewUserEmail("");
+    setAdminNewUserPassword("");
+    setAdminNewUserRole("user");
+    setAdminNewUserMustChangePassword(true);
+    setAdminMessage({ kind: "success", text: "Utilisateur cree." });
+    setCreatingAdminUser(false);
+    await loadAdminData();
+  };
+
+  const deleteAdminGame = async (target: AdminGameInfo) => {
+    if (!confirm(`Supprimer la partie ${target.name} ?`)) return;
+    setAdminMessage(null);
+    const response = await fetchWithAuth(`/api/admin/games?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setAdminMessage({ kind: "error", text: data?.error || "Impossible de supprimer la partie." });
+      return;
+    }
+    setAdminMessage({ kind: "success", text: "Partie supprimee." });
+    await Promise.all([loadAdminData(), loadMyGames()]);
   };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -523,12 +810,12 @@ export default function DashboardPage() {
         seed,
         templateId: effectiveTemplateId,
         rmgTuning: normalizedRmgTuning,
-        faction: selectedFaction,
+        ...(isAdmin ? {} : { faction: selectedFaction }),
       }),
     });
     if (res.ok) {
       const game = await res.json();
-      router.push(`/game/${game.id}`);
+      router.push(`/game/${game.id}${isAdmin ? "?admin=1" : ""}`);
     } else {
       const data = await parseJsonResponse(res);
       setDashboardMessage({
@@ -599,6 +886,7 @@ export default function DashboardPage() {
     }
     await loadMyGames();
     if (showJoin) await loadOpenGames();
+    if (isAdmin) await loadAdminData();
     setDeleteTarget(null);
     setDeletingGameId(null);
     setDashboardMessage({
@@ -636,17 +924,32 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
-              onClick={() => { setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowRmgPreview(false); }}
+              onClick={() => { setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); }}
               className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
               Nouvelle partie
             </button>
             <button
-              onClick={() => { setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
+              onClick={() => { setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
               className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
             >
               Rejoindre
             </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdmin((value) => !value);
+                  setShowCreate(false);
+                  setShowJoin(false);
+                  setShowOptions(false);
+                  setShowRmgPreview(false);
+                }}
+                className="touch-target rounded-lg border border-cyan-400/60 bg-gradient-to-b from-cyan-700 to-cyan-900 px-4 py-3 font-black uppercase tracking-wider text-cyan-50 shadow-[inset_0_0_0_1px_rgba(165,243,252,0.2)] transition hover:from-cyan-600 hover:to-cyan-800 sm:px-5"
+              >
+                Admin
+              </button>
+            )}
             <button
               type="button"
               onClick={openOptions}
@@ -672,6 +975,68 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+
+        {mustChangePassword && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="forced-password-title"
+              className={`relative ${ornateFramePolished} w-full max-w-lg p-4 sm:p-6`}
+            >
+              <CornerOrnaments />
+              <ParchmentBackground />
+              <h2 id="forced-password-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+                Changer le mot de passe
+              </h2>
+              <p className="mb-4 text-sm leading-6 text-amber-100/80">
+                Ce compte utilise un mot de passe temporaire. Choisissez un nouveau mot de passe pour continuer.
+              </p>
+              {forcedPasswordError && (
+                <div className="mb-4 rounded-md border border-red-400/50 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
+                  {forcedPasswordError}
+                </div>
+              )}
+              <form onSubmit={saveForcedPassword} className="space-y-4">
+                <div>
+                  <label htmlFor="forced-password" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                    Nouveau mot de passe
+                  </label>
+                  <input
+                    id="forced-password"
+                    type="password"
+                    value={forcedPassword}
+                    onChange={(event) => setForcedPassword(event.target.value)}
+                    className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="forced-password-confirm" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                    Confirmer
+                  </label>
+                  <input
+                    id="forced-password-confirm"
+                    type="password"
+                    value={forcedPasswordConfirm}
+                    onChange={(event) => setForcedPasswordConfirm(event.target.value)}
+                    className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingForcedPassword}
+                  className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingForcedPassword ? "Enregistrement..." : "Enregistrer"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         {showOptions && (
           <div
@@ -950,8 +1315,12 @@ export default function DashboardPage() {
               />
             </div>
 
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
-            <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
+            {!isAdmin && (
+              <>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
+                <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
+              </>
+            )}
 
             <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
               <button
@@ -1199,6 +1568,266 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {showAdmin && isAdmin && (
+          <div
+            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+            onClick={() => setShowAdmin(false)}
+          >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-panel-title"
+            className={`relative ${ornateFramePolished} my-auto w-full max-w-6xl p-4 sm:p-6`}
+            data-testid="admin-panel"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <CornerOrnaments />
+            <ParchmentBackground />
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 id="admin-panel-title" className={`text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+                Administration
+              </h2>
+              <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => loadAdminData().catch(console.error)}
+                disabled={adminLoading}
+                className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-4 py-2 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {adminLoading ? "Chargement..." : "Actualiser"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdmin(false)}
+                className="rounded-md border border-amber-700/40 bg-stone-950/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
+              >
+                Fermer
+              </button>
+              </div>
+            </div>
+            <div className="max-h-[calc(100dvh-10rem)] space-y-6 overflow-y-auto pr-1">
+              {adminMessage && (
+                <div
+                  role="status"
+                  className={`rounded-md border px-4 py-3 text-sm font-semibold ${
+                    adminMessage.kind === "success"
+                      ? "border-emerald-400/50 bg-emerald-950/45 text-emerald-100"
+                      : "border-red-400/50 bg-red-950/45 text-red-100"
+                  }`}
+                >
+                  {adminMessage.text}
+                </div>
+              )}
+
+              <section>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">Utilisateurs</h3>
+                </div>
+                <form
+                  onSubmit={createAdminUser}
+                  className="mb-4 rounded-md border border-amber-700/35 bg-stone-950/45 p-3"
+                >
+                  <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_1fr_0.8fr_auto] lg:items-end">
+                    <div>
+                      <label htmlFor="admin-create-name" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                        Pseudo
+                      </label>
+                      <input
+                        id="admin-create-name"
+                        type="text"
+                        value={adminNewUserName}
+                        onChange={(event) => setAdminNewUserName(event.target.value)}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="admin-create-email" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                        Email
+                      </label>
+                      <input
+                        id="admin-create-email"
+                        type="email"
+                        value={adminNewUserEmail}
+                        onChange={(event) => setAdminNewUserEmail(event.target.value)}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="admin-create-password" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                        Mot de passe
+                      </label>
+                      <input
+                        id="admin-create-password"
+                        type="password"
+                        value={adminNewUserPassword}
+                        onChange={(event) => setAdminNewUserPassword(event.target.value)}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="admin-create-role" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                        Role
+                      </label>
+                      <select
+                        id="admin-create-role"
+                        value={adminNewUserRole}
+                        onChange={(event) => setAdminNewUserRole(event.target.value === "admin" ? "admin" : "user")}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                      >
+                        <option value="user">Utilisateur</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={creatingAdminUser}
+                      className="rounded-md border border-emerald-400/50 bg-emerald-950/60 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-100 transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {creatingAdminUser ? "Creation..." : "Creer"}
+                    </button>
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                    <input
+                      type="checkbox"
+                      checked={adminNewUserMustChangePassword}
+                      onChange={(event) => setAdminNewUserMustChangePassword(event.target.checked)}
+                      className="h-4 w-4 accent-amber-500"
+                    />
+                    Demander le changement du mot de passe a la premiere connexion
+                  </label>
+                </form>
+                <div className="overflow-x-auto rounded-md border border-amber-700/35">
+                  <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
+                    <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
+                      <tr>
+                        <th className="px-3 py-2">Pseudo</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Cree le</th>
+                        <th className="px-3 py-2">Derniere connexion</th>
+                        <th className="px-3 py-2">Parties</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
+                      {adminUsers.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 font-semibold">{item.name || "Sans pseudo"}</td>
+                          <td className="px-3 py-2">{item.email || "-"}</td>
+                          <td className="px-3 py-2">
+                            {item.role === "admin" ? "Admin" : "Utilisateur"}
+                            {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">mot de passe temporaire</span> : null}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.createdAt)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.lastSignInAt, "Jamais")}</td>
+                          <td className="px-3 py-2">{item.gameCount}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              disabled={item.id === session?.user?.id}
+                              onClick={() => deleteAdminUser(item).catch(console.error)}
+                              className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Supprimer
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {adminUsers.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-6 text-center italic text-amber-200/50">
+                            Aucun utilisateur charge.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">Parties</h3>
+                <div className="space-y-2">
+                  {adminGames.map((game) => (
+                    <div key={game.id} className="rounded-md border border-amber-700/40 bg-stone-950/55 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="font-bold text-amber-100">{game.name}</div>
+                          <div className="text-xs uppercase tracking-wider text-amber-200/60">
+                            {game.status} - Tour {game.turnNumber} - {game.players.length}/{game.maxPlayers} joueurs - {game.mapWidth}x{game.mapHeight}
+                          </div>
+                          <div className="mt-2 grid gap-1 text-xs text-amber-100/75 sm:grid-cols-2">
+                            <div>Cree par: <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy)}</span></div>
+                            <div>Cree le: {formatAdminDate(game.createdAt)}</div>
+                            <div>Derniere mise a jour: {formatAdminDate(game.updatedAt)}</div>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/game/${game.id}?admin=1`)}
+                            className="rounded border border-cyan-400/50 bg-cyan-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-900"
+                          >
+                            Observer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteAdminGame(game).catch(console.error)}
+                            className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded border border-amber-900/45 bg-black/25">
+                        <div className="overflow-x-auto">
+                          <div className="min-w-[760px]">
+                            <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
+                              <div>Joueur</div>
+                              <div>Faction</div>
+                              <div>Rejoint le</div>
+                              <div>Derniere connexion</div>
+                              <div>Statut</div>
+                            </div>
+                            <div className="divide-y divide-amber-900/35">
+                              {game.players.map((player) => (
+                                <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
+                                  <div className="min-w-0">
+                                    <span className="font-semibold text-amber-100">{adminPlayerName(player)}</span>
+                                    {player.email && !player.isAi ? <span className="ml-2 text-amber-200/45">{player.email}</span> : null}
+                                  </div>
+                                  <div>{FACTION_META[player.faction]?.label ?? player.faction}</div>
+                                  <div>{formatAdminDate(player.joinedAt)}</div>
+                                  <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, "Jamais")}</div>
+                                  <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>{playerStatusLabel(player)}</div>
+                                </div>
+                              ))}
+                              {game.players.length === 0 && (
+                                <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
+                                  Aucun joueur dans cette partie.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {adminGames.length === 0 && (
+                    <div className="rounded-md border border-amber-700/35 bg-stone-950/35 px-3 py-6 text-center italic text-amber-200/50">
+                      Aucune partie chargee.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+          </div>
+        )}
+
         {/* Mes parties */}
         <div className={`relative ${ornateFrame}`}>
           <CornerOrnaments />
@@ -1240,7 +1869,7 @@ export default function DashboardPage() {
               <div
                 key={game.id}
                 className="cursor-pointer rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-4 transition hover:border-amber-400/60 hover:shadow-[inset_0_0_0_1px_rgba(252,211,77,0.15)]"
-                onClick={() => router.push(`/game/${game.id}`)}
+                onClick={() => router.push(`/game/${game.id}${isAdmin ? "?admin=1" : ""}`)}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -1250,29 +1879,20 @@ export default function DashboardPage() {
                       <span className={`font-bold ${statusColor}`}>{statusLabel}</span>
                       <span className="mx-1 text-amber-700">◆</span>
                       {game.mapWidth}×{game.mapHeight}
+                      {isAdmin && (
+                        <>
+                          <span className="mx-1 text-amber-700">◆</span>
+                          &Acirc;ge {currentTime === null ? "-" : formatGameAge(game.createdAt, currentTime)}
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs uppercase tracking-wider text-amber-200/60">
                       {game.players.length}/{game.maxPlayers}
                     </div>
-                    <div className="mt-1 flex justify-end gap-1">
-                      {game.players.map((p, i) => (
-                        <div
-                          key={i}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white shadow-inner shadow-black/40"
-                          style={{
-                            backgroundColor: p.color,
-                            boxShadow: `inset 0 0 0 2px ${p.isAlive ? "rgba(252,211,77,0.6)" : "rgba(239,68,68,0.6)"}`,
-                          }}
-                          title={`${p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur"} - ${factionLabel(p.faction)}`}
-                        >
-                          {p.isAi ? "IA" : p.user?.name?.[0]?.toUpperCase() || "?"}
-                        </div>
-                      ))}
-                    </div>
                     <div className="mt-3 flex justify-end gap-2">
-                      {isHost ? (
+                      {isAdmin || isHost ? (
                         <button
                           className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800"
                           onClick={(event) => {
@@ -1294,6 +1914,36 @@ export default function DashboardPage() {
                           Quitter
                         </button>
                       ) : null}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 rounded border border-amber-900/45 bg-black/25">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[620px]">
+                      <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
+                        <div>Pseudo</div>
+                        <div>Faction</div>
+                        <div>Derniere connexion</div>
+                        <div>Statut</div>
+                      </div>
+                      <div className="divide-y divide-amber-900/35">
+                        {game.players.map((player) => {
+                          const status = playerStatusLabel(player);
+                          return (
+                            <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
+                              <div className="min-w-0 font-semibold text-amber-100">{playerName(player)}</div>
+                              <div>{FACTION_META[player.faction]?.label ?? player.faction}</div>
+                              <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, "Jamais")}</div>
+                              <div className={`font-semibold ${playerStatusClass(status)}`}>{status}</div>
+                            </div>
+                          );
+                        })}
+                        {game.players.length === 0 && (
+                          <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
+                            Aucun joueur dans cette partie.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

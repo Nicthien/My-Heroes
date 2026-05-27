@@ -60,7 +60,7 @@ export function useDevPanel(gameId: string | undefined) {
   const [devPanelCollapsed, setDevPanelCollapsed] = useState(getDevPanelCollapsed);
   const [devPanelPosition, setDevPanelPosition] = useState(getDevPanelPosition);
   const [activeTab, setActiveTab] = useState<DevPanelTab>("performances");
-  const devPerformanceStats = useDevPerformanceStats(showDevPanel);
+  const devPerformanceStats = useDevPerformanceStats(true);
   const devFpsText = devPerformanceStats.hasFrameSample
     ? `${Math.round(devPerformanceStats.fps)} FPS`
     : "-- FPS";
@@ -92,8 +92,8 @@ export function useDevPanel(gameId: string | undefined) {
   const getDevPanelSize = useCallback(() => {
     const panel = devPanelRef.current;
     return {
-      width: panel?.offsetWidth ?? 320,
-      height: panel?.offsetHeight ?? (devPanelCollapsed ? 56 : 520),
+      width: panel?.offsetWidth ?? (devPanelCollapsed ? 220 : 320),
+      height: panel?.offsetHeight ?? (devPanelCollapsed ? 44 : 520),
     };
   }, [devPanelCollapsed]);
 
@@ -282,7 +282,9 @@ export function useDevPanel(gameId: string | undefined) {
       {showDevPanel && (
         <div
           ref={devPanelRef}
-          className="pointer-events-auto absolute z-50 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-amber-500/60 bg-stone-950/95 text-amber-100 shadow-2xl shadow-black/70"
+          className={`pointer-events-auto absolute z-50 max-w-[calc(100vw-1.5rem)] overflow-hidden border border-amber-500/60 bg-stone-950/95 text-amber-100 shadow-2xl shadow-black/70 ${
+            devPanelCollapsed ? "w-fit rounded-lg" : "w-80 rounded-xl"
+          }`}
           style={{
             left: devPanelPosition.x,
             top: devPanelPosition.y,
@@ -290,22 +292,30 @@ export function useDevPanel(gameId: string | undefined) {
           }}
         >
           <div
-            className="flex cursor-move touch-none items-center justify-between gap-3 px-4 py-3"
+            className={`flex cursor-move touch-none items-center justify-between ${
+              devPanelCollapsed ? "gap-2 px-2.5 py-2" : "gap-3 px-4 py-3"
+            }`}
             onPointerDown={handleDevPanelPointerDown}
             onPointerMove={handleDevPanelPointerMove}
             onPointerUp={stopDevPanelDrag}
             onPointerCancel={stopDevPanelDrag}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <div className={`min-w-0 truncate text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>Mode DEV</div>
-              <div className="shrink-0 rounded border border-amber-700/50 bg-black/35 px-2 py-0.5 font-mono text-[10px] font-black leading-none text-amber-100">
+              <div className={`min-w-0 truncate font-black uppercase ${goldText} ${
+                devPanelCollapsed ? "text-[10px] tracking-[0.14em]" : "text-xs tracking-[0.18em]"
+              }`}>Mode DEV</div>
+              <div className={`shrink-0 rounded border border-amber-700/50 bg-black/35 font-mono font-black leading-none text-amber-100 ${
+                devPanelCollapsed ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"
+              }`}>
                 {devFpsText}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
-                className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-amber-200 transition hover:border-amber-300"
+                className={`grid place-items-center rounded-md border border-amber-700/50 text-amber-200 transition hover:border-amber-300 ${
+                  devPanelCollapsed ? "h-6 w-6" : "h-7 w-7"
+                }`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setDevPanelCollapse(!devPanelCollapsed)}
                 aria-expanded={!devPanelCollapsed}
@@ -314,7 +324,7 @@ export function useDevPanel(gameId: string | undefined) {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className={`h-4 w-4 transition ${devPanelCollapsed ? "rotate-180" : ""}`}
+                  className={`${devPanelCollapsed ? "h-3.5 w-3.5 rotate-180" : "h-4 w-4"} transition`}
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.4"
@@ -327,7 +337,9 @@ export function useDevPanel(gameId: string | undefined) {
               </button>
               <button
                 type="button"
-                className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-sm font-black text-amber-200 transition hover:border-amber-300"
+                className={`grid place-items-center rounded-md border border-amber-700/50 font-black text-amber-200 transition hover:border-amber-300 ${
+                  devPanelCollapsed ? "h-6 w-6 text-xs" : "h-7 w-7 text-sm"
+                }`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setDevPanelVisibility(false)}
                 aria-label="Fermer le mode DEV"
@@ -458,7 +470,7 @@ export function useDevPanel(gameId: string | undefined) {
     </>
   );
 
-  return { openPassword, overlay };
+  return { fpsText: devFpsText, openPassword, overlay };
 }
 
 function getSelectedHeroName(

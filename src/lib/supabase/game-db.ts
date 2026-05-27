@@ -26,6 +26,14 @@ export function toGame(row: DbRow) {
     mapData: row.map_data,
     gameConfig: row.game_config,
     mapState: row.map_state,
+    createdByUserId: row.created_by_user_id ?? null,
+    createdBy: row.created_by
+      ? {
+          id: row.created_by_user_id ?? null,
+          name: (row.created_by as DbRow).name ?? null,
+          email: (row.created_by as DbRow).email ?? null,
+        }
+      : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     players: rows(row.game_players ?? row.players).map(toPlayer),
@@ -34,6 +42,7 @@ export function toGame(row: DbRow) {
     neutralArmies: rows(row.neutral_armies).map(toNeutralArmy),
     gates: rows(row.gates).map(toGate),
     boats: rows(row.boats).map(toBoat),
+    actionLogs: rows(row.game_action_logs).map(toGameActionLog),
   };
 }
 
@@ -292,6 +301,21 @@ export function toCombat(row: DbRow) {
   };
 }
 
+export function toGameActionLog(row: DbRow) {
+  return {
+    id: row.id,
+    gameId: row.game_id,
+    gamePlayerId: row.game_player_id ?? null,
+    actorKind: row.actor_kind,
+    turnNumber: row.turn_number,
+    actionType: row.action_type,
+    category: row.category,
+    summary: row.summary,
+    details: row.details ?? {},
+    createdAt: row.created_at,
+  };
+}
+
 export function toCombatParticipant(row: DbRow) {
   return {
     id: row.id,
@@ -398,20 +422,32 @@ export async function getGameSyncWithRelations(supabase: SupabaseAdmin, id: stri
 async function getGameWithOptionalRelations(
   supabase: SupabaseAdmin,
   id: string,
-  buildSelect: (includeGates: boolean, includeReinforcementRequests: boolean) => string,
+  buildSelect: (includeGates: boolean, includeReinforcementRequests: boolean, includeCreatedBy: boolean, includeActionLogs: boolean) => string,
 ) {
   const attempts = [
-    { includeGates: true, includeReinforcementRequests: true },
-    { includeGates: false, includeReinforcementRequests: true },
-    { includeGates: true, includeReinforcementRequests: false },
-    { includeGates: false, includeReinforcementRequests: false },
+    { includeGates: true, includeReinforcementRequests: true, includeCreatedBy: true, includeActionLogs: true },
+    { includeGates: false, includeReinforcementRequests: true, includeCreatedBy: true, includeActionLogs: true },
+    { includeGates: true, includeReinforcementRequests: false, includeCreatedBy: true, includeActionLogs: true },
+    { includeGates: false, includeReinforcementRequests: false, includeCreatedBy: true, includeActionLogs: true },
+    { includeGates: true, includeReinforcementRequests: true, includeCreatedBy: false, includeActionLogs: true },
+    { includeGates: false, includeReinforcementRequests: true, includeCreatedBy: false, includeActionLogs: true },
+    { includeGates: true, includeReinforcementRequests: false, includeCreatedBy: false, includeActionLogs: true },
+    { includeGates: false, includeReinforcementRequests: false, includeCreatedBy: false, includeActionLogs: true },
+    { includeGates: true, includeReinforcementRequests: true, includeCreatedBy: true, includeActionLogs: false },
+    { includeGates: false, includeReinforcementRequests: true, includeCreatedBy: true, includeActionLogs: false },
+    { includeGates: true, includeReinforcementRequests: false, includeCreatedBy: true, includeActionLogs: false },
+    { includeGates: false, includeReinforcementRequests: false, includeCreatedBy: true, includeActionLogs: false },
+    { includeGates: true, includeReinforcementRequests: true, includeCreatedBy: false, includeActionLogs: false },
+    { includeGates: false, includeReinforcementRequests: true, includeCreatedBy: false, includeActionLogs: false },
+    { includeGates: true, includeReinforcementRequests: false, includeCreatedBy: false, includeActionLogs: false },
+    { includeGates: false, includeReinforcementRequests: false, includeCreatedBy: false, includeActionLogs: false },
   ];
 
   let lastError: unknown = null;
   for (const attempt of attempts) {
     const { data, error } = await supabase
       .from("games")
-      .select(buildSelect(attempt.includeGates, attempt.includeReinforcementRequests))
+      .select(buildSelect(attempt.includeGates, attempt.includeReinforcementRequests, attempt.includeCreatedBy, attempt.includeActionLogs))
       .eq("id", id)
       .maybeSingle();
 
@@ -423,10 +459,11 @@ async function getGameWithOptionalRelations(
   throw lastError;
 }
 
-function gameRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean) {
+function gameRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean, includeCreatedBy: boolean, includeActionLogs: boolean) {
   const combatRelations = buildCombatRelationsSelect(includeReinforcementRequests);
   return `
     *,
+    ${includeCreatedBy ? "created_by:profiles!games_created_by_user_id_fkey(name,email)," : ""}
     game_players!game_players_game_id_fkey(
       *,
       profiles(name),
@@ -435,13 +472,14 @@ function gameRelationsSelect(includeGates: boolean, includeReinforcementRequests
       resource_buildings(*)
     ),
     turns(*),
+    ${includeActionLogs ? "game_action_logs(*)," : ""}
     ${combatRelations},
     neutral_armies(*, neutral_army_stacks(*))
     ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
   `;
 }
 
-function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean) {
+function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequests: boolean, includeCreatedBy: boolean, includeActionLogs: boolean) {
   const combatRelations = buildCombatRelationsSelect(includeReinforcementRequests);
   return `
     id,
@@ -454,6 +492,7 @@ function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequ
     winner_id,
     map_state,
     updated_at,
+    ${includeCreatedBy ? "created_by_user_id," : ""}
     game_players!game_players_game_id_fkey(
       *,
       profiles(name),
@@ -462,6 +501,7 @@ function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequ
       resource_buildings(*)
     ),
     turns(*),
+    ${includeActionLogs ? "game_action_logs(*)," : ""}
     ${combatRelations},
     neutral_armies(*, neutral_army_stacks(*))
     ${includeGates ? ", gates(*, gate_stacks(*)), boats(*)" : ""}
@@ -474,9 +514,13 @@ function isMissingOptionalGameSchemaError(error: { code?: string; message?: stri
     text.includes("gate_stacks") ||
     text.includes("gate_id") ||
     text.includes("boats") ||
+    text.includes("created_by") ||
+    text.includes("created_by_user_id") ||
+    text.includes("games_created_by_user_id_fkey") ||
     text.includes("combat_reinforcement_requests") ||
     text.includes("combat_surrender_negotiations") ||
-    text.includes("combat_truces");
+    text.includes("combat_truces") ||
+    text.includes("game_action_logs");
 }
 
 function buildCombatRelationsSelect(includeNegotiationTables: boolean) {

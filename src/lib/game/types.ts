@@ -898,4 +898,5 @@ export interface GameState {
   gates?: Gate[];
   boats?: Boat[];
   adventureVisits?: AdventureBuildingState;
+  actionLog?: import("./server/action-log").GameActionLogEntry[];
 }

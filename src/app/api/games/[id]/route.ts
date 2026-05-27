@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { resumeAiActivityUntilHuman } from "@/lib/game/ai/simple-ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 import { computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "./shared";
@@ -12,6 +13,9 @@ export async function GET(
   if (!user) return response;
 
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const isAdminObserver = user.role === "admin" && searchParams.get("admin") === "1";
+  const shouldResumeAi = isAdminObserver && searchParams.get("resumeAi") === "1";
   const supabase = createAdminClient();
   const game = await getGameWithRelations(supabase, id);
 
@@ -26,6 +30,24 @@ export async function GET(
     towns?: Array<Record<string, unknown>>;
   }>;
   const player = players.find((item) => item.userId === user.id);
+  if (!player && !isAdminObserver) {
+    return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
+  }
+  if (isAdminObserver) {
+    if (shouldResumeAi) kickAiRunnerForAdminObserver(supabase, game);
+    return NextResponse.json({
+      ...game,
+      players: players.map((item) => ({
+        ...item,
+        turnProgressRatio: computeTurnProgressRatio(item, Number(game.turnNumber ?? 0)),
+      })),
+      combats: ((game.combats as Array<Record<string, unknown>> | undefined) ?? []).map((combat) => ({
+        ...combat,
+        visibility: "full",
+      })),
+      viewerMode: "admin",
+    });
+  }
   const isSpectator = Boolean(player && !player.isAlive);
   const allTileKeys = isSpectator ? getAllTileKeys(Number(game.mapWidth ?? 0), Number(game.mapHeight ?? 0)) : [];
   const filteredGame = {
@@ -41,6 +63,25 @@ export async function GET(
   };
 
   return NextResponse.json(filteredGame);
+}
+
+function kickAiRunnerForAdminObserver(
+  supabase: ReturnType<typeof createAdminClient>,
+  game: { id: unknown; status?: unknown; currentTurnPlayerId?: unknown; players?: unknown; combats?: unknown }
+) {
+  if (game.status !== "ACTIVE") return;
+  const players = Array.isArray(game.players)
+    ? game.players as Array<{ id?: unknown; userId?: unknown; isAi?: unknown; aiName?: unknown; isAlive?: unknown }>
+    : [];
+  const currentPlayer = players.find((player) => player.id === game.currentTurnPlayerId && player.isAlive !== false);
+  const hasActiveCombat = Array.isArray(game.combats)
+    && (game.combats as Array<{ status?: unknown }>).some((combat) => combat.status === "ACTIVE");
+  const currentPlayerLooksAi = Boolean(currentPlayer?.isAi || currentPlayer?.aiName);
+  if ((!currentPlayerLooksAi && !hasActiveCombat) || typeof game.id !== "string") return;
+  const gameId = game.id;
+  void resumeAiActivityUntilHuman(supabase, gameId).catch((error) => {
+    console.error("admin observer AI runner failed", error);
+  });
 }
 
 export async function POST(
@@ -88,7 +129,7 @@ export async function DELETE(
   const supabase = createAdminClient();
   const hostPlayer = await getGamePlayer(supabase, id, user.id);
 
-  if (!hostPlayer || hostPlayer.turnOrder !== 0) {
+  if (user.role !== "admin" && (!hostPlayer || hostPlayer.turnOrder !== 0)) {
     return NextResponse.json({ error: "Seul le createur peut supprimer cette partie" }, { status: 403 });
   }
 

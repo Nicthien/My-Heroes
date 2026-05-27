@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
-import { createCombatBoard, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
+import { createCombatBoard, executeManualCombatAction, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
 import { COMBAT_COLS } from "@/lib/game/combat/movement";
+import { chooseAiCombatAction, planAiTacticsPlacements } from "@/lib/game/ai/combat-tactics";
 import {
   createCreatureBankGuardStacks,
   createCreatureBankPendingReward,
@@ -422,7 +423,164 @@ export async function POST(
     await evaluateGameLifecycle(supabase, id);
   }
 
-  return NextResponse.json({ combat: toCombat(data), result }, { status: 201 });
+  // Si le combat est manuel et que l'IA doit jouer en premier (tactique ou tour initial),
+  // on résout les actions automatiques avant de répondre pour éviter au joueur d'attendre.
+  let combatRow = data;
+  if (!result && combatRow) {
+    combatRow = await advanceInitialAiTurns({
+      supabase,
+      gameId: id,
+      combatId: combatRow.id,
+      combatRow,
+      attackerStats,
+      defenderStats,
+      attackerMorale: effectiveAttackerMorale,
+      defenderMorale: effectiveDefenderMorale,
+      attackerLuck: effectiveAttackerLuck,
+      defenderLuck: effectiveDefenderLuck,
+      environment,
+    });
+  }
+  return NextResponse.json({ combat: toCombat(combatRow), result }, { status: 201 });
+}
+
+async function advanceInitialAiTurns(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  gameId: string;
+  combatId: string;
+  combatRow: Record<string, unknown> & { board_state?: unknown; turn_queue?: unknown; current_unit_id?: unknown; round?: unknown; action_log?: unknown; attacker_player_id?: string; defender_player_id?: string | null };
+  attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
+  defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
+  attackerMorale: number;
+  defenderMorale: number;
+  attackerLuck: number;
+  defenderLuck: number;
+  environment: { terrain?: import("@/lib/game/types").TerrainType };
+}) {
+  const { data: aiRows } = await params.supabase
+    .from("game_players")
+    .select("id")
+    .eq("game_id", params.gameId)
+    .eq("is_ai", true);
+  const aiPlayerIds = new Set((aiRows ?? []).map((row) => row.id as string));
+  let combatRow = params.combatRow;
+  let boardState = (combatRow.board_state as {
+    units?: import("@/lib/game/types").CombatBoardUnit[];
+    terrain?: import("@/lib/game/types").CombatTerrainFeature[];
+    tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number };
+  } | undefined) ?? {};
+  // 1) Phase de tactique IA
+  if (boardState.tacticsPhase) {
+    const tacticsPhase = boardState.tacticsPhase;
+    const tacticsPlayerId = tacticsPhase.side === "attacker" ? combatRow.attacker_player_id : combatRow.defender_player_id;
+    if (!tacticsPlayerId || aiPlayerIds.has(tacticsPlayerId)) {
+      const units = (boardState.units ?? []).map((u) => ({ ...u }));
+      const placements = planAiTacticsPlacements(units, tacticsPhase.side, tacticsPhase);
+      const logLines: string[] = ["IA : phase de tactique en cours…"];
+      for (const placement of placements) {
+        const unit = units.find((u) => u.id === placement.unitId);
+        if (!unit) continue;
+        unit.q = placement.q;
+        unit.r = placement.r;
+        logLines.push(`IA déplace ${unit.unitType} en (${placement.q},${placement.r}).`);
+      }
+      logLines.push("IA : phase de tactique terminée.", "Combat lance.");
+      const turnQueueArr = Array.isArray(combatRow.turn_queue) ? (combatRow.turn_queue as string[]) : [];
+      const nextCurrentUnitId = turnQueueArr.find((unitId) =>
+        units.some((unit) => unit.id === unitId && unit.count > 0)
+      ) ?? null;
+      const nextCurrentPlayerId = units.find((unit) => unit.id === nextCurrentUnitId)?.ownerPlayerId ?? null;
+      const { tacticsPhase: _drop, ...restBoard } = boardState as Record<string, unknown>;
+      void _drop;
+      const updateResult = await params.supabase
+        .from("combats")
+        .update({
+          board_state: { ...restBoard, units },
+          current_unit_id: nextCurrentUnitId,
+          current_player_id: nextCurrentPlayerId,
+          action_log: [...((combatRow.action_log as string[] | null) ?? []), ...logLines],
+        })
+        .eq("id", params.combatId)
+        .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
+        .single();
+      if (updateResult.data) {
+        combatRow = updateResult.data as typeof combatRow;
+        boardState = (combatRow.board_state as typeof boardState) ?? {};
+      }
+    } else {
+      return combatRow;
+    }
+  }
+
+  // 2) Boucle des tours automatiques jusqu'à tomber sur un joueur humain
+  const sideStats = { attacker: params.attackerStats, defender: params.defenderStats };
+  let units = (boardState.units ?? []).map((u) => ({ ...u }));
+  const terrain = boardState.terrain ?? [];
+  let turnQueue = Array.isArray(combatRow.turn_queue) ? (combatRow.turn_queue as string[]) : [];
+  let round = Number(combatRow.round ?? 1);
+  let currentUnitId = (combatRow.current_unit_id as string | null) ?? null;
+  const actionLog = ((combatRow.action_log as string[] | null) ?? []).slice();
+  let resultSide: "attacker" | "defender" | null = null;
+  let safety = 30;
+  while (!resultSide && currentUnitId && safety-- > 0) {
+    const actor = units.find((u) => u.id === currentUnitId);
+    if (!actor) break;
+    const isAutomated = actor.ownerPlayerId === null || aiPlayerIds.has(actor.ownerPlayerId ?? "");
+    if (!isAutomated) break;
+    const action = actor.ownerPlayerId && aiPlayerIds.has(actor.ownerPlayerId)
+      ? chooseAiCombatAction(actor, units, terrain, sideStats)
+      : { type: "DEFEND" as const };
+    const exec = executeManualCombatAction({
+      units,
+      terrain,
+      turnQueue,
+      round,
+      currentUnitId,
+      action,
+      attackerStats: params.attackerStats,
+      defenderStats: params.defenderStats,
+      moraleContext: {
+        attackerHeroMorale: params.attackerMorale,
+        defenderHeroMorale: params.defenderMorale,
+        attackerHeroLuck: params.attackerLuck,
+        defenderHeroLuck: params.defenderLuck,
+        terrain: params.environment?.terrain,
+      },
+    });
+    units = exec.units;
+    turnQueue = exec.turnQueue;
+    round = exec.round;
+    currentUnitId = exec.currentUnitId;
+    actionLog.push(...exec.log);
+    resultSide = exec.result;
+  }
+
+  const finalResult = resultSide
+    ? {
+      winnerId: resultSide,
+      winnerPlayerId: resultSide === "attacker" ? combatRow.attacker_player_id ?? null : combatRow.defender_player_id ?? null,
+      attackerLosses: [],
+      defenderLosses: [],
+      experienceGained: resultSide === "attacker" ? 500 : 0,
+      log: [`Victoire du camp ${resultSide === "attacker" ? "attaquant" : "défenseur"}.`],
+    }
+    : null;
+  const { data: updated } = await params.supabase
+    .from("combats")
+    .update({
+      board_state: { ...boardState, units },
+      turn_queue: turnQueue,
+      current_unit_id: finalResult ? null : currentUnitId,
+      current_player_id: finalResult ? null : (units.find((u) => u.id === currentUnitId)?.ownerPlayerId ?? null),
+      round,
+      action_log: actionLog,
+      result: finalResult,
+      status: finalResult ? "RESOLVED" : "ACTIVE",
+    })
+    .eq("id", params.combatId)
+    .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
+    .single();
+  return updated ?? combatRow;
 }
 
 function applyAutoLosses(armies: UnitStack[], losses: Array<{ unitType: UnitType; lost: number }>) {

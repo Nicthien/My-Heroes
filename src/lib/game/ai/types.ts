@@ -1,7 +1,9 @@
 import type { BuildingType, Faction, GameMap, MapObject, Position, Resources, UnitStack, UnitType } from "@/lib/game/types";
+import type { AiPersonality } from "./strategy/personality";
+import type { AiPlayerMemory, AiPosture } from "./strategy/memory";
 
 export type AiDifficulty = "simple" | "normal" | "hard";
-export type AiRole = "SCOUT" | "BUILDER" | "CONQUEROR";
+export type AiRole = "SCOUT" | "BUILDER" | "CONQUEROR" | "CHAMPION" | "DEFENDER";
 export type AiObjectiveType =
   | "resource"
   | "resource_building"
@@ -10,7 +12,11 @@ export type AiObjectiveType =
   | "gate"
   | "neutral_town"
   | "enemy_hero"
-  | "exploration";
+  | "enemy_town"
+  | "pickup_garrison"
+  | "exploration"
+  | "defend_town"
+  | "plan_waypoint";
 
 export interface AiArmy extends UnitStack {
   unitType: UnitType;
@@ -61,6 +67,7 @@ export interface AiPlayer {
   id: string;
   userId: string | null;
   isAi?: boolean;
+  aiName?: string | null;
   aiDifficulty?: string | null;
   isAlive?: boolean;
   turnOrder?: number;
@@ -144,6 +151,7 @@ export interface AiContext {
   playerAdventureVisits: Record<string, string[]>;
   heroAdventureVisits: Record<string, string[]>;
   weeklyAdventureVisits: Record<string, string>;
+  mysticalGardenVisits: Record<string, string>;
   killedNeutralArmies: Set<string>;
   explored: Set<string>;
   difficulty: AiDifficulty;
@@ -151,6 +159,9 @@ export interface AiContext {
   visibleOpponents: AiPlayer[];
   threats: AiThreat[];
   resourceNeeds: Partial<Record<keyof Resources, number>>;
+  memory: AiPlayerMemory;
+  personality: AiPersonality;
+  posture: AiPosture;
 }
 
 export interface AiObjective {
@@ -164,7 +175,10 @@ export interface AiObjective {
   object?: MapObject;
   targetPlayerId?: string | null;
   targetHeroId?: string;
+  targetTownId?: string;
   buildingType?: string;
+  guardianPower?: number;
+  canAutoWin?: boolean;
 }
 
 export interface AiUtilityScore {

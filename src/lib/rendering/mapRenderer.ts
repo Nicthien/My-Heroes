@@ -44,6 +44,7 @@ export interface MapRenderer {
   setSpellRevealHighlights(tiles: Position[], color?: number, alpha?: number, hints?: SpellRevealHint[]): void;
   clearSpellRevealHighlights(): void;
   clearReachable(): void;
+  followHero(heroId: string | null): void;
   centerOnTile(x: number, y: number): void;
   panCamera(dx: number, dy: number): void;
   zoomCamera(direction: number, screenX?: number, screenY?: number): void;

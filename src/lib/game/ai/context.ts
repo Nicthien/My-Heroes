@@ -12,6 +12,9 @@ import { hasTownBuilding } from "@/lib/game/town-buildings";
 import { BuildingType, Faction, GameMap, MapObject, Position, Resources } from "@/lib/game/types";
 import { calculateStacksPower } from "./combat";
 import type { AiContext, AiDifficulty, AiDifficultyProfile, AiGame, AiPlayer, AiThreat, AiTown } from "./types";
+import { loadAiMemory } from "./strategy/memory";
+import { getPersonalityProfile, mergeDifficultyProfile } from "./strategy/personality";
+import { computePosture } from "./strategy/posture";
 
 export const AI_BUILD_PRIORITY: BuildingType[] = [
   BuildingType.TOWN_HALL,
@@ -81,7 +84,10 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     }))
     .filter((candidate) => candidate.heroes.length > 0 || candidate.towns.length > 0);
 
-  return {
+  const memory = loadAiMemory(game, player);
+  const personalityProfile = getPersonalityProfile(memory.personality);
+  const profile = mergeDifficultyProfile(DIFFICULTY_PROFILES[difficulty], memory.personality);
+  const partial: AiContext = {
     game,
     player,
     map,
@@ -91,14 +97,25 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     playerAdventureVisits: (mapState.playerAdventureVisits as Record<string, string[]> | undefined) ?? {},
     heroAdventureVisits: (mapState.heroAdventureVisits as Record<string, string[]> | undefined) ?? {},
     weeklyAdventureVisits: (mapState.weeklyAdventureVisits as Record<string, string> | undefined) ?? {},
+    mysticalGardenVisits: (mapState.mysticalGardenVisits as Record<string, string> | undefined) ?? {},
     killedNeutralArmies,
     explored,
     difficulty,
-    profile: DIFFICULTY_PROFILES[difficulty],
+    profile,
     visibleOpponents,
     threats: buildThreats(game, player.id, explored),
-    resourceNeeds: computeResourceNeeds(player),
+    resourceNeeds: computeResourceNeeds(player, personalityProfile.buildPriority),
+    memory,
+    personality: memory.personality,
+    posture: memory.posture,
   };
+  partial.posture = computePosture(partial, memory);
+  partial.memory = { ...memory, posture: partial.posture };
+  return partial;
+}
+
+export function buildPriorityForPersonality(context: AiContext) {
+  return getPersonalityProfile(context.personality).buildPriority;
 }
 
 function buildThreats(game: AiGame, playerId: string, explored: Set<string>): AiThreat[] {
@@ -135,14 +152,17 @@ function buildThreats(game: AiGame, playerId: string, explored: Set<string>): Ai
   return threats;
 }
 
-export function computeResourceNeeds(player: AiPlayer): Partial<Record<keyof Resources, number>> {
+export function computeResourceNeeds(
+  player: AiPlayer,
+  buildPriority: BuildingType[] = AI_BUILD_PRIORITY,
+): Partial<Record<keyof Resources, number>> {
   const needs: Partial<Record<keyof Resources, number>> = {};
   const resources = playerResources(player);
 
   for (const town of [...(player.towns ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
     const faction = normalizeFaction(town.townType ?? player.faction);
     const buildings = town.buildings ?? [];
-    const nextRule = AI_BUILD_PRIORITY
+    const nextRule = buildPriority
       .filter((building) => !hasTownBuilding(buildings, building))
       .map((building) => getFactionBuildingRule(faction, building))
       .find((rule) => rule && !rule.requires?.some((requirement) => !hasTownBuilding(buildings, requirement)));
@@ -227,6 +247,22 @@ export function countNewVisibleTiles(map: GameMap, explored: Set<string>, positi
     if (!explored.has(key)) count++;
   }
   return count;
+}
+
+// Mesure si une case est sur la frontière de l'inconnu (8 voisines).
+// Plus le score est élevé, plus la case sert à pousser le brouillard.
+export function frontierScore(map: GameMap, explored: Set<string>, position: Position): number {
+  let unexplored = 0;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const x = position.x + dx;
+      const y = position.y + dy;
+      if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
+      if (!explored.has(`${x},${y}`)) unexplored++;
+    }
+  }
+  return unexplored;
 }
 
 export function hasAdjacentUnexplored(map: GameMap, explored: Set<string>, position: Position) {

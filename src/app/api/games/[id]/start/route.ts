@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { finalizeStartingRareMines } from "@/lib/game/engine";
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
+import { recordGameAction } from "@/lib/game/server/action-log";
 import { createGamePlayerSetup, PLAYER_COLORS, pickAiFaction, pickAiName } from "@/lib/game/server/player-setup";
 import { syncResourceBuildingsFromMap } from "@/lib/game/server/resource-buildings";
 import { GameMap } from "@/lib/game/types";
@@ -23,13 +24,14 @@ export async function POST(
 
   const players = game.players as unknown as Array<{ id: string; userId: string | null; isAi?: boolean; turnOrder: number }>;
   const currentUserPlayer = players.find((player) => player.userId === user.id);
-  if (!currentUserPlayer) {
+  const isAdminStarter = user.role === "admin";
+  if (!currentUserPlayer && !isAdminStarter) {
     return NextResponse.json({ error: "Vous n'etes pas dans cette partie" }, { status: 403 });
   }
   if (game.status !== "PENDING") {
-    return NextResponse.json({ error: "La partie est déjà démarrée" }, { status: 400 });
+    return NextResponse.json(game);
   }
-  if (currentUserPlayer.turnOrder !== 0) {
+  if (!isAdminStarter && currentUserPlayer?.turnOrder !== 0) {
     return NextResponse.json({ error: "Seul le createur peut demarrer la partie" }, { status: 403 });
   }
 
@@ -39,6 +41,8 @@ export async function POST(
 
   for (let turnOrder = 0; turnOrder < maxPlayers; turnOrder++) {
     if (existingTurnOrders.has(turnOrder)) continue;
+    const aiName = pickAiName(turnOrder);
+    const faction = pickAiFaction(turnOrder);
     try {
       await createGamePlayerSetup({
         supabase,
@@ -46,10 +50,19 @@ export async function POST(
         mapData,
         turnOrder,
         isAi: true,
-        aiName: pickAiName(turnOrder),
+        aiName,
         aiDifficulty: "simple",
-        faction: pickAiFaction(turnOrder),
+        faction,
         color: PLAYER_COLORS[turnOrder] || "#ffffff",
+      });
+      await recordGameAction(supabase, {
+        gameId: id,
+        actorKind: "system",
+        turnNumber: Number(game.turnNumber ?? 1),
+        actionType: "CREATE_AI_PLAYER",
+        category: "setup",
+        summary: `${aiName} rejoint la partie comme IA.`,
+        details: { turnOrder, faction },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Impossible de creer les joueurs IA";
@@ -77,6 +90,15 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await recordGameAction(supabase, {
+    gameId: id,
+    actorKind: "system",
+    turnNumber: Number(gameWithAi.turnNumber ?? 1),
+    actionType: "START_GAME",
+    category: "setup",
+    summary: "La partie demarre.",
+    details: { firstPlayerId: firstPlayer.id, playerCount: activePlayers.length },
+  });
   await runAiTurnsUntilHuman(supabase, id);
   const updatedGame = await getGameWithRelations(supabase, id);
   return NextResponse.json(updatedGame);

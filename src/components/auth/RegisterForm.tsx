@@ -26,16 +26,22 @@ export default function RegisterForm() {
     setLoading(true);
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name },
-        },
+      const registerResponse = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
       });
 
-      if (signUpError) {
-        setError(signUpError.message || "Erreur lors de l'inscription");
+      if (!registerResponse.ok) {
+        const data = await registerResponse.json().catch(() => null);
+        setError(data?.error || "Erreur lors de l'inscription");
+        setLoading(false);
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        setError(signInError.message || "Compte cree, mais connexion impossible.");
         setLoading(false);
         return;
       }
@@ -47,12 +53,6 @@ export default function RegisterForm() {
       setLoading(false);
       return;
     }
-
-    await fetch("/api/auth/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
 
     router.push("/dashboard");
     router.refresh();

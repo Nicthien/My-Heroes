@@ -6,21 +6,34 @@ import { useGameStore } from "@/lib/stores/gameStore";
 export async function refreshGameState(
   gameId: string,
   userId?: string,
-  options: { revealMap?: boolean } = {}
+  options: { revealMap?: boolean; adminObserver?: boolean; resumeAi?: boolean } = {}
 ) {
   const baseGameState = useGameStore.getState().gameState;
   const canUseIncrementalSync = baseGameState?.id === gameId && Boolean(getCachedStaticGameMap(gameId));
   let usedIncrementalSync = canUseIncrementalSync;
-  let endpoint = usedIncrementalSync ? `/api/games/${gameId}/sync` : `/api/games/${gameId}`;
+  const query = new URLSearchParams();
+  if (options.adminObserver) query.set("admin", "1");
+  if (options.adminObserver && options.resumeAi) query.set("resumeAi", "1");
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  let endpoint = usedIncrementalSync ? `/api/games/${gameId}/sync${suffix}` : `/api/games/${gameId}${suffix}`;
 
   let res = await fetchWithSupabaseAuth(endpoint, { cache: "no-store" });
   if (!res.ok && usedIncrementalSync) {
+    if (options.adminObserver) return null;
     usedIncrementalSync = false;
-    endpoint = `/api/games/${gameId}`;
+    endpoint = `/api/games/${gameId}${suffix}`;
     res = await fetchWithSupabaseAuth(endpoint, { cache: "no-store" });
   }
   if (!res.ok) return null;
   const data = await res.json();
+  const responseIsAdminObserver = data.viewerMode === "admin";
+  const effectiveOptions = {
+    ...options,
+    revealMap: Boolean(options.revealMap || responseIsAdminObserver),
+  };
+  if (responseIsAdminObserver) {
+    useGameStore.getState().setAdminObserverMode(true);
+  }
 
   if (!usedIncrementalSync) {
     if (!data.mapData) {
@@ -46,8 +59,8 @@ export async function refreshGameState(
       }
     }
 
-    const nextGameState = mapApiToGameState(data, userId, options);
-    writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), options);
+    const nextGameState = mapApiToGameState(data, userId, effectiveOptions);
+    writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), effectiveOptions);
     return nextGameState;
   }
 
@@ -55,7 +68,7 @@ export async function refreshGameState(
     return null;
   }
 
-  const nextGameState = mergeGameDynamicState(baseGameState, data, userId, options);
-  writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), options);
+  const nextGameState = mergeGameDynamicState(baseGameState, data, userId, effectiveOptions);
+  writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), effectiveOptions);
   return nextGameState;
 }

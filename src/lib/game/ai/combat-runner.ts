@@ -35,7 +35,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       initialUnits?: CombatBoardUnit[];
       terrain?: CombatTerrainFeature[];
       environment?: { terrain?: import("@/lib/game/types").TerrainType };
-      moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+      moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
       sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
       tacticsPhase?: { side: "attacker" | "defender" };
     };
@@ -108,6 +108,8 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       moraleContext: {
         attackerHeroMorale: Number(boardState.moraleContext?.attackerHeroMorale ?? 0),
         defenderHeroMorale: Number(boardState.moraleContext?.defenderHeroMorale ?? 0),
+        attackerHeroLuck: Number(boardState.moraleContext?.attackerHeroLuck ?? 0),
+        defenderHeroLuck: Number(boardState.moraleContext?.defenderHeroLuck ?? 0),
         terrain: boardState.environment?.terrain,
       },
     });

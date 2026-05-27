@@ -241,8 +241,12 @@ export async function POST(
         townDefender: (targetDefender as unknown as { townLevel?: number | null; townBuildings?: string[] | null }),
       })
     : { towerCount: 0, towerDamage: 0, wallHp: 0, gateHp: 0 };
-  const attackerLeadership = skillLevelValue((attacker as unknown as { skills?: Record<string, string> }).skills, "leadership");
-  const defenderLeadership = skillLevelValue((targetDefender as unknown as { skills?: Record<string, string> }).skills, "leadership");
+  const attackerSkills = (attacker as unknown as { skills?: Record<string, string> }).skills;
+  const defenderSkills = (targetDefender as unknown as { skills?: Record<string, string> }).skills;
+  const attackerLeadership = skillLevelValue(attackerSkills, "leadership");
+  const defenderLeadership = skillLevelValue(defenderSkills, "leadership");
+  const effectiveAttackerLuck = (attackerStats.luck ?? 0) + skillLevelValue(attackerSkills, "luck");
+  const effectiveDefenderLuck = (defenderStats.luck ?? 0) + skillLevelValue(defenderSkills, "luck");
   const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus + attackerLeadership - siegeEffects.fearMoraleMalus;
   const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus + defenderLeadership;
   const combatStart = createCombatBoard(
@@ -254,7 +258,7 @@ export async function POST(
       defense: attackerStats.defense,
       skills: (attacker as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveAttackerMorale,
-      luck: attackerStats.luck,
+      luck: effectiveAttackerLuck,
       armies: attackerArmiesWithMachines,
     },
     {
@@ -265,7 +269,7 @@ export async function POST(
       defense: defenderStats.defense,
       skills: (targetDefender as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveDefenderMorale,
-      luck: defenderStats.luck,
+      luck: effectiveDefenderLuck,
       armies: targetDefender.armies,
     },
     {
@@ -285,7 +289,7 @@ export async function POST(
         attack: attackerStats.attack,
         defense: attackerStats.defense,
         morale: effectiveAttackerMorale,
-        luck: attackerStats.luck,
+        luck: effectiveAttackerLuck,
         armies: attacker.armies,
       },
       {
@@ -295,7 +299,7 @@ export async function POST(
         attack: defenderStats.attack,
         defense: defenderStats.defense,
         morale: effectiveDefenderMorale,
-        luck: defenderStats.luck,
+        luck: effectiveDefenderLuck,
         armies: targetDefender.armies,
       },
       { immortalHeroId: devGodModeHeroId }
@@ -350,8 +354,8 @@ export async function POST(
           moraleContext: {
             attackerHeroMorale: effectiveAttackerMorale,
             defenderHeroMorale: effectiveDefenderMorale,
-            attackerHeroLuck: (attackerStats.luck ?? 0) + skillLevelValue((attacker as unknown as { skills?: Record<string, string> }).skills, "luck"),
-            defenderHeroLuck: (defenderStats.luck ?? 0) + skillLevelValue((targetDefender as unknown as { skills?: Record<string, string> }).skills, "luck"),
+            attackerHeroLuck: effectiveAttackerLuck,
+            defenderHeroLuck: effectiveDefenderLuck,
           },
           siegeEffects: siegeEffects.escapeTunnel || siegeEffects.sulfurDamagePerUnit > 0 ? siegeEffects : undefined,
           fortifications: siegeFortifications.towerCount > 0

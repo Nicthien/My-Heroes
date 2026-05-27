@@ -84,7 +84,7 @@ export async function POST(
     terrain?: CombatTerrainFeature[];
     spellCastsByRound?: Record<string, string[]>;
     environment?: { terrain?: import("@/lib/game/types").TerrainType };
-    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number };
+    moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
     sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
   };
   const currentActor = (boardState.units ?? []).find((unit) => unit.id === combat.current_unit_id);
@@ -387,6 +387,8 @@ export async function POST(
     defenderHeroMorale: Number(
       boardState.moraleContext?.defenderHeroMorale ?? defenderHero?.morale ?? 0
     ),
+    attackerHeroLuck: Number(boardState.moraleContext?.attackerHeroLuck ?? attackerHero.luck ?? 0),
+    defenderHeroLuck: Number(boardState.moraleContext?.defenderHeroLuck ?? defenderHero?.luck ?? 0),
     terrain: boardState.environment?.terrain,
   };
   const attackerStats = boardState.sideStats?.attacker ?? {

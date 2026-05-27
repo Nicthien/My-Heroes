@@ -850,6 +850,7 @@ export function IsoBattlefield({
           attacking={attacking}
           lifted
           depthScale={getDepthScale(unit.r)}
+          persistentLuckIcon={combat.gameId === "dev-combat-game"}
           interactive={Boolean(isTacticsActive && isMyAction && tacticsPhase && unit.side === tacticsPhase.side && !selectedTacticsUnitId)}
           onClick={() => {
             if (isTacticsActive && tacticsPhase && unit.side === tacticsPhase.side) {

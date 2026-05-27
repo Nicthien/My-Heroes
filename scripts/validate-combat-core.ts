@@ -39,6 +39,8 @@ function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "u
     morale: params.morale ?? 0,
     moraleApplied: params.moraleApplied ?? false,
     moraleBonus: params.moraleBonus ?? false,
+    luck: params.luck ?? 0,
+    luckTriggered: params.luckTriggered ?? false,
     ...params,
   };
 }
@@ -540,6 +542,56 @@ function testCombatBoardNormalizesStackStats() {
   }
 }
 
+function testPositiveLuckDoublesDamageAndMarksAttacker() {
+  const attacker = unit({
+    id: "lucky",
+    unitType: UnitType.PIKEMAN,
+    side: "attacker",
+    q: 1,
+    r: 1,
+    count: 10,
+    minDamage: 2,
+    maxDamage: 2,
+    luck: 3,
+  });
+  const defender = unit({
+    id: "target",
+    unitType: UnitType.PIKEMAN,
+    side: "defender",
+    q: 2,
+    r: 1,
+    count: 10,
+    health: 100,
+  });
+  const roll = rollCombatDamage({
+    attacker,
+    defender,
+    attackerStats: stats(),
+    defenderStats: stats(),
+    actionType: "ATTACK",
+    random: () => 0,
+  });
+  assert.equal(roll.luckTriggered, true);
+  assert.equal(roll.damage, 39);
+
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const result = executeManualCombatAction({
+      units: [attacker, defender],
+      turnQueue: ["lucky", "target"],
+      round: 1,
+      currentUnitId: "lucky",
+      action: { type: "ATTACK", targetUnitId: "target" },
+      attackerStats: stats(),
+      defenderStats: stats(),
+    });
+    assert.equal(result.units.find((item) => item.id === "lucky")?.luckTriggered, true);
+  } finally {
+    Math.random = originalRandom;
+  }
+}
+
 function testUpgradedDwellingsKeepBaseGrowth() {
   const growth = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
   assert.ok((growth[UnitType.CENTAUR] ?? 0) > 0);
@@ -566,6 +618,7 @@ testLastPlayerConcessionLeavesNoActiveSide();
 testCombatSpellImmunityAndMitigation();
 testAutoResolveIsNotEasierAtEqualPower();
 testCombatBoardNormalizesStackStats();
+testPositiveLuckDoublesDamageAndMarksAttacker();
 testUpgradedDwellingsKeepBaseGrowth();
 
 console.log("Combat core validation passed.");

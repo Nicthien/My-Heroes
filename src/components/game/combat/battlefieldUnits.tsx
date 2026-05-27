@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { CombatBoardUnit } from "@/lib/game/types";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
 import { getUnitRenderOffsetX } from "./combatLayout";
@@ -13,6 +14,7 @@ export function UnitModel({
   lifted = false,
   depthScale = 1,
   interactive = false,
+  persistentLuckIcon = false,
   onClick,
   onContextMenu,
 }: {
@@ -24,6 +26,7 @@ export function UnitModel({
   lifted?: boolean;
   depthScale?: number;
   interactive?: boolean;
+  persistentLuckIcon?: boolean;
   onClick?: () => void;
   onContextMenu?: (event: React.MouseEvent<HTMLSpanElement>) => void;
 }) {
@@ -31,6 +34,7 @@ export function UnitModel({
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
   const renderOffsetX = getUnitRenderOffsetX(unit);
+  const centeredOverlayOffsetX = renderOffsetX / depthScale;
   const attackClass = attacking
     ? `combat-unit-attacking-${attacking}-${unit.side}`
     : "";
@@ -67,6 +71,23 @@ export function UnitModel({
         </span>
       </span>
       {damaged && <span className="combat-unit-hit-flash absolute left-1/2 top-4 h-24 w-24 -translate-x-1/2 rounded-full bg-red-500/35 blur-sm" />}
+      {unit.luckTriggered && (
+        <span
+          className={`${persistentLuckIcon ? "combat-luck-icon-static h-12 w-12" : "combat-luck-icon h-10 w-10"} absolute top-[-20px] grid -translate-x-1/2 place-items-center`}
+          style={{ left: `calc(50% - ${centeredOverlayOffsetX}px)` }}
+          aria-hidden="true"
+        >
+          <span className="absolute inset-0 rounded-full bg-amber-200/25 blur-sm" />
+          <Image
+            src="/assets/sprites/artifacts/clover_fortune.webp"
+            alt=""
+            width={40}
+            height={40}
+            unoptimized
+            className={`${persistentLuckIcon ? "h-12 w-12" : "h-10 w-10"} relative object-contain drop-shadow-[0_2px_5px_rgba(0,0,0,0.75)]`}
+          />
+        </span>
+      )}
     </span>
   );
 }

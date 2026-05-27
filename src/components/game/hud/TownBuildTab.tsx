@@ -15,10 +15,12 @@ export function TownBuildTab({
   selectedTownFaction,
   displayedBuildRules,
   onOpenBuildTree,
-  hideMissingBuildRequirements,
-  setHideMissingBuildRequirements,
-  hideBuiltBuildings,
-  setHideBuiltBuildings,
+  showBuildableBuildings,
+  setShowBuildableBuildings,
+  showMissingBuildRequirements,
+  setShowMissingBuildRequirements,
+  showBuiltBuildings,
+  setShowBuiltBuildings,
   gameState,
   myPlayer,
   hasPlayerCapitol,
@@ -32,10 +34,12 @@ export function TownBuildTab({
   selectedTownFaction: Faction;
   displayedBuildRules: TownBuildingRule[];
   onOpenBuildTree: () => void;
-  hideMissingBuildRequirements: boolean;
-  setHideMissingBuildRequirements: (next: boolean) => void;
-  hideBuiltBuildings: boolean;
-  setHideBuiltBuildings: (next: boolean) => void;
+  showBuildableBuildings: boolean;
+  setShowBuildableBuildings: (next: boolean) => void;
+  showMissingBuildRequirements: boolean;
+  setShowMissingBuildRequirements: (next: boolean) => void;
+  showBuiltBuildings: boolean;
+  setShowBuiltBuildings: (next: boolean) => void;
   gameState: GameState;
   myPlayer: Player | undefined;
   hasPlayerCapitol: boolean;
@@ -67,24 +71,23 @@ export function TownBuildTab({
         <BuildTreeIcon className="h-4 w-4" />
         Arbre des constructions
       </button>
-      <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5 accent-amber-500"
-          checked={hideMissingBuildRequirements}
-          onChange={(event) => setHideMissingBuildRequirements(event.currentTarget.checked)}
+      <div className="grid grid-cols-3 gap-1.5" aria-label="Filtres des constructions">
+        <BuildFilterToggle
+          pressed={showBuildableBuildings}
+          onPressedChange={setShowBuildableBuildings}
+          label="Achetable"
         />
-        <span>Masquer les prérequis manquants</span>
-      </label>
-      <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5 accent-amber-500"
-          checked={hideBuiltBuildings}
-          onChange={(event) => setHideBuiltBuildings(event.currentTarget.checked)}
+        <BuildFilterToggle
+          pressed={showMissingBuildRequirements}
+          onPressedChange={setShowMissingBuildRequirements}
+          label="Prérequis"
         />
-        <span>Masquer les bâtiments construits</span>
-      </label>
+        <BuildFilterToggle
+          pressed={showBuiltBuildings}
+          onPressedChange={setShowBuiltBuildings}
+          label="Construits"
+        />
+      </div>
       {displayedBuildRules.map((rule) => {
         if (isShipyardBuilding(selectedTownFaction, rule.type) && !isCoastal) return null;
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
@@ -198,6 +201,31 @@ export function TownBuildTab({
 
 function isTownCoastal(gameState: GameState, town: Town) {
   return isTownCoastalForBoats(gameState.map, town.position);
+}
+
+function BuildFilterToggle({
+  pressed,
+  onPressedChange,
+  label,
+}: {
+  pressed: boolean;
+  onPressedChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={() => onPressedChange(!pressed)}
+      className={`min-h-9 rounded-md border px-2 py-2 text-[10px] font-black uppercase leading-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70 ${
+        pressed
+          ? "border-amber-300/75 bg-gradient-to-b from-amber-500 to-amber-800 text-amber-50 shadow-[inset_0_0_0_1px_rgba(254,243,199,0.25)]"
+          : "border-amber-700/30 bg-black/35 text-amber-100/55 hover:border-amber-500/50 hover:text-amber-100"
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
 function BuildTreeIcon({ className }: { className?: string }) {

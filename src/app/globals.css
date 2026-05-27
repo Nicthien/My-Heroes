@@ -122,6 +122,36 @@ body::before {
   }
 }
 
+@keyframes combat-luck-icon-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.35);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1.18);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-50%, -10px) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -10px) scale(1);
+  }
+}
+
+@keyframes combat-luck-icon-blink {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(252, 211, 77, 0.75));
+  }
+  50% {
+    opacity: 0.42;
+    filter: drop-shadow(0 0 2px rgba(252, 211, 77, 0.28));
+  }
+}
+
 .combat-unit-damaged {
   animation: combat-unit-damage-hit 520ms ease-out both;
 }
@@ -132,6 +162,16 @@ body::before {
 
 .combat-unit-count-damaged {
   animation: combat-unit-count-hit 520ms ease-out both;
+}
+
+.combat-luck-icon {
+  animation:
+    combat-luck-icon-pop 520ms ease-out both,
+    combat-luck-icon-blink 820ms ease-in-out 520ms infinite;
+}
+
+.combat-luck-icon-static {
+  animation: combat-luck-icon-blink 820ms ease-in-out infinite;
 }
 
 @keyframes combat-unit-attack-melee-attacker {

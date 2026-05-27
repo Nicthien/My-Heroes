@@ -1,5 +1,6 @@
 import type { CombatBoardUnit, CombatTerrainFeature } from "../types";
 import { getUnitRule } from "../units";
+import { LUCK_DAMAGE_MULTIPLIER, clampLuck, rollPositiveLuck } from "./luck";
 import { getHexDistance } from "./movement";
 
 export const COMBAT_LONG_RANGE_HEXES = 6;
@@ -34,6 +35,7 @@ export interface CombatDamageRoll {
   damage: number;
   baseDamagePerUnit: number;
   kills: number;
+  luckTriggered: boolean;
   profile: CombatAttackProfile;
 }
 
@@ -52,6 +54,8 @@ export function normalizeCombatUnit(unit: CombatBoardUnit): CombatBoardUnit {
     morale: Number.isFinite(unit.morale) ? unit.morale : 0,
     moraleApplied: Boolean(unit.moraleApplied),
     moraleBonus: Boolean(unit.moraleBonus),
+    luck: clampLuck(Number(unit.luck ?? 0)),
+    luckTriggered: Boolean(unit.luckTriggered),
   };
 }
 
@@ -167,16 +171,19 @@ export function rollCombatDamage(params: {
     terrain: params.terrain,
     actorAdjacentToEnemy: params.actorAdjacentToEnemy,
   });
-  if (!profile.canStrike) return { damage: 0, baseDamagePerUnit: 0, kills: 0, profile };
+  if (!profile.canStrike) return { damage: 0, baseDamagePerUnit: 0, kills: 0, luckTriggered: false, profile };
 
   const baseDamagePerUnit = randomInt(attacker.minDamage, attacker.maxDamage, params.random);
+  const luckTriggered = rollPositiveLuck(attacker.luck ?? 0, params.random);
   const multiplier = getAttackDefenseMultiplier(attacker, defender, params.attackerStats, params.defenderStats);
   const skillMultiplier = getSkillDamageMultiplier(attacker, params.attackerStats, params.defenderStats, profile);
-  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty * skillMultiplier));
+  const luckMultiplier = luckTriggered ? LUCK_DAMAGE_MULTIPLIER : 1;
+  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty * skillMultiplier * luckMultiplier));
   return {
     damage,
     baseDamagePerUnit,
     kills: getLossesForDamage(defender, damage),
+    luckTriggered,
     profile,
   };
 }

@@ -21,6 +21,7 @@ import {
   rollCombatDamage,
   type ManualCombatActionType,
 } from "./rules";
+import { clampLuck } from "./luck";
 import { assignMoraleToBoard, refreshMoraleForRound, rollMorale, type MoraleContext } from "./morale";
 
 export { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
@@ -48,8 +49,8 @@ export function createCombatBoard(
   const defenderAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.defender ?? 0));
   const rowCount = getInitialCombatRows(attacker.armies.length, defender.armies.length);
   const terrain = createCombatTerrain(rowCount);
-  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain);
-  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain);
+  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain, attacker.luck);
+  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain, defender.luck);
   assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
@@ -100,7 +101,8 @@ function addUnits(
   qColumns: number[],
   joinsRound: number,
   rowCount = COMBAT_BASE_ROWS,
-  terrain: CombatTerrainFeature[] = []
+  terrain: CombatTerrainFeature[] = [],
+  luck = 0
 ) {
   const preferredRows = Array.from({ length: rowCount }, (_, row) => row);
   armies.filter((army) => army.count > 0).forEach((army, index) => {
@@ -131,6 +133,8 @@ function addUnits(
       hasRetaliated: false,
       defended: false,
       waited: false,
+      luck: clampLuck(luck),
+      luckTriggered: false,
     });
   });
 }
@@ -148,7 +152,7 @@ export function addReinforcementUnits(params: {
 }) {
   const q = params.side === "attacker" ? 0 : COMBAT_COLS - 1;
   const rowCount = getReinforcementCombatRows(params.units, params.armies.length, q, params.terrain ?? []);
-  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, [q], params.joinsRound, rowCount, params.terrain ?? []);
+  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, [q], params.joinsRound, rowCount, params.terrain ?? [], getHeroLuckForSide(params.side, params.moraleContext));
   assignMoraleToBoard(params.units, params.moraleContext ?? {});
 }
 
@@ -162,6 +166,10 @@ function buildMoraleContext(params: {
     defenderHeroMorale: params.defender.morale ?? 0,
     terrain: params.environment?.terrain,
   };
+}
+
+function getHeroLuckForSide(side: CombatSide, context: { attackerHeroLuck?: number; defenderHeroLuck?: number } = {}) {
+  return clampLuck(side === "attacker" ? Number(context.attackerHeroLuck ?? 0) : Number(context.defenderHeroLuck ?? 0));
 }
 
 function getInitialCombatRows(attackerStackCount: number, defenderStackCount: number) {
@@ -222,7 +230,7 @@ export function executeManualCombatAction(params: {
   let didAct = false;
   let didWait = false;
   let deferredTurnQueue: string[] | null = null;
-  const units = params.units.map((unit) => normalizeCombatUnit({ ...unit }));
+  const units = params.units.map((unit) => normalizeCombatUnit({ ...unit, luckTriggered: false }));
   const actor = units.find((unit) => unit.id === params.currentUnitId);
   if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
 
@@ -344,6 +352,7 @@ export function executeManualCombatAction(params: {
       if (roll.profile.canStrike) {
         const allyAmmoCart = units.some((u) => u.side === actor.side && u.unitType === "ammo_cart" && u.count > 0);
         if (actionType === "SHOOT" && !allyAmmoCart) actor.shots = Math.max(0, actor.shots - 1);
+        actor.luckTriggered = roll.luckTriggered;
         applyRolledDamage(actor, target, roll, log, false, params.immortalHeroId);
         didAct = true;
         if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
@@ -355,6 +364,7 @@ export function executeManualCombatAction(params: {
             actionType: "ATTACK",
             terrain: params.terrain,
           });
+          target.luckTriggered = retaliationRoll.luckTriggered;
           applyRolledDamage(target, actor, retaliationRoll, log, true, params.immortalHeroId);
           target.hasRetaliated = true;
         }

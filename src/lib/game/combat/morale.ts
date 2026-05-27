@@ -27,6 +27,8 @@ const FACTION_NATIVE_TERRAIN: Partial<Record<CreatureGroupKey, TerrainType>> = {
 export interface MoraleContext {
   attackerHeroMorale?: number;
   defenderHeroMorale?: number;
+  attackerHeroLuck?: number;
+  defenderHeroLuck?: number;
   terrain?: TerrainType;
 }
 

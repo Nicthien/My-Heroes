@@ -85,8 +85,9 @@ function HUDContent() {
     townId: null,
     tab: "summary",
   });
-  const [hideMissingBuildRequirements, setHideMissingBuildRequirements] = useState(true);
-  const [hideBuiltBuildings, setHideBuiltBuildings] = useState(true);
+  const [showBuildableBuildings, setShowBuildableBuildings] = useState(true);
+  const [showMissingBuildRequirements, setShowMissingBuildRequirements] = useState(false);
+  const [showBuiltBuildings, setShowBuiltBuildings] = useState(false);
   const [buildTreeTownId, setBuildTreeTownId] = useState<string | null>(null);
   const [hideMissingRecruitRequirements, setHideMissingRecruitRequirements] = useState(true);
   const [garrisonTargetHeroId, setGarrisonTargetHeroId] = useState<string | null>(null);
@@ -780,13 +781,25 @@ function HUDContent() {
     : "summary";
   const displayedBuildRules = selectedTown
     ? selectedTownBuildingRules.filter((rule) => {
-        if (hideMissingBuildRequirements && rule.requires?.some((requirement) => !hasTownBuilding(selectedTown.buildings, requirement))) {
-          return false;
-        }
-        if (hideBuiltBuildings && selectedTown.buildings.includes(rule.type)) {
-          return false;
-        }
-        return true;
+        const alreadyBuilt = selectedTown.buildings.includes(rule.type);
+        const missingRequirement = rule.requires?.some(
+          (requirement) => !hasTownBuilding(selectedTown.buildings, requirement)
+        );
+        const blockedByCapitolLimit =
+          rule.type === BuildingType.CAPITOL &&
+          hasPlayerCapitol &&
+          !selectedTown.buildings.includes(BuildingType.CAPITOL);
+        const isBuildable =
+          !alreadyBuilt &&
+          !missingRequirement &&
+          !blockedByCapitolLimit &&
+          selectedTown.lastBuiltTurn !== gameState.turnNumber &&
+          Boolean(myPlayer && canAfford(myPlayer.resources, rule.cost));
+
+        if (isBuildable) return showBuildableBuildings;
+        if (missingRequirement) return showMissingBuildRequirements;
+        if (alreadyBuilt) return showBuiltBuildings;
+        return false;
       })
     : selectedTownBuildingRules;
   const displayedRecruitEntries = selectedTown && hideMissingRecruitRequirements
@@ -955,7 +968,7 @@ function HUDContent() {
       {turnNotifications.promptUI}
 
       {isCompactHud && mobileDrawer && (
-        <div className="mobile-hud-drawer pointer-events-auto rounded-xl">
+        <div className="mobile-hud-drawer pointer-events-auto rounded-xl" data-testid="mobile-hud-drawer">
           <div className="flex items-center justify-between border-b border-amber-700/40 px-3 py-2">
             <div className={`text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
               {mobileDrawer === "heroes" ? "Héros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Actions"}
@@ -972,8 +985,9 @@ function HUDContent() {
           <div className="max-h-[calc(min(58dvh,28rem)-3rem)] overflow-y-auto overscroll-contain p-2">
             {mobileDrawer === "map" && <MiniMap />}
             {mobileDrawer === "players" && <PlayersListPanel gameState={gameState} myPlayer={myPlayer} />}
-            {mobileDrawer === "actions" && <SidePanel />}
-            {(mobileDrawer === "heroes" || mobileDrawer === "towns") && <SidePanel />}
+            {mobileDrawer === "heroes" && <SidePanel mode="heroes" />}
+            {mobileDrawer === "towns" && <SidePanel mode="towns" />}
+            {mobileDrawer === "actions" && <SidePanel mode="actions" />}
           </div>
         </div>
       )}
@@ -1062,10 +1076,12 @@ function HUDContent() {
                 selectedTownFaction={selectedTownFaction}
                 displayedBuildRules={displayedBuildRules}
                 onOpenBuildTree={() => setBuildTreeTownId(selectedTown.id)}
-                hideMissingBuildRequirements={hideMissingBuildRequirements}
-                setHideMissingBuildRequirements={setHideMissingBuildRequirements}
-                hideBuiltBuildings={hideBuiltBuildings}
-                setHideBuiltBuildings={setHideBuiltBuildings}
+                showBuildableBuildings={showBuildableBuildings}
+                setShowBuildableBuildings={setShowBuildableBuildings}
+                showMissingBuildRequirements={showMissingBuildRequirements}
+                setShowMissingBuildRequirements={setShowMissingBuildRequirements}
+                showBuiltBuildings={showBuiltBuildings}
+                setShowBuiltBuildings={setShowBuiltBuildings}
                 gameState={gameState}
                 myPlayer={myPlayer}
                 hasPlayerCapitol={hasPlayerCapitol}
@@ -1244,9 +1260,13 @@ function HUDContent() {
       )}
 
       {/* Bouton de fin de tour */}
-      <div className="desktop-only pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2">
+      <div className={
+        isPending
+          ? "pointer-events-auto absolute left-1/2 top-1/2 z-30 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
+          : "desktop-only pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2"
+      }>
         {isPending ? (
-          <div className={`${ornateFramePolished} min-w-80 p-5 text-center`}>
+          <div className={`${ornateFramePolished} relative w-full p-5 text-center`} data-testid="pending-lobby-panel">
             <CornerOrnaments />
             <ParchmentBackground />
             <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Salle d&apos;attente</div>
@@ -1316,6 +1336,7 @@ function HUDContent() {
                 : "border-amber-800/55 bg-black/35 text-amber-200"
             }`}
             onClick={() => setMobileDrawer((current) => current === item ? null : item)}
+            data-testid={`mobile-nav-${item}`}
           >
             {item === "heroes" ? "Héros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Actions"}
           </button>

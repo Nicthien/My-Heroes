@@ -8,7 +8,12 @@ import { buildMockState, mockAuthValue } from "./mockState";
 
 export default function DevHudPage() {
   useEffect(() => {
-    useGameStore.getState().setGameState(buildMockState());
+    const mockState = buildMockState();
+    const params = new URLSearchParams(window.location.search);
+    useGameStore.getState().setGameState({
+      ...mockState,
+      status: params.get("status") === "pending" ? "PENDING" : mockState.status,
+    });
     useGameStore.getState().selectHero("h1");
   }, []);
 

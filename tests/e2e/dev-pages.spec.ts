@@ -87,6 +87,52 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByLabel("Effets")).toBeVisible();
   });
 
+  test("pending HUD lobby panel is centered", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/dev/hud?status=pending", { waitUntil: "domcontentloaded" });
+
+    const lobbyTitle = page.getByText("Salle d'attente");
+    await expect(lobbyTitle).toBeVisible();
+
+    const panelBox = await page.getByTestId("pending-lobby-panel").boundingBox();
+    expect(panelBox).not.toBeNull();
+
+    const panelCenterX = panelBox!.x + panelBox!.width / 2;
+    const panelCenterY = panelBox!.y + panelBox!.height / 2;
+    expect(Math.abs(panelCenterX - 640)).toBeLessThanOrEqual(8);
+    expect(Math.abs(panelCenterY - 360)).toBeLessThanOrEqual(8);
+  });
+
+  test("mobile HUD drawer filters heroes, towns, and actions", async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+      const drawer = page.getByTestId("mobile-hud-drawer");
+
+      await page.getByTestId("mobile-nav-heroes").click({ force: true });
+      await expect(drawer.getByText("Héros (2)")).toBeVisible();
+      await expect(drawer.getByText("Châteaux (1)")).toHaveCount(0);
+      await expect(drawer.getByText("Mines (3)")).toHaveCount(0);
+
+      await page.getByTestId("mobile-nav-towns").click({ force: true });
+      await expect(drawer.getByText("Châteaux (1)")).toBeVisible();
+      await expect(drawer.getByText("Héros (2)")).toHaveCount(0);
+      await expect(drawer.getByText("Mines (3)")).toHaveCount(0);
+
+      await page.getByTestId("mobile-nav-actions").click({ force: true });
+      await expect(drawer.getByText("Mines (3)")).toBeVisible();
+      await expect(drawer.getByText("Héros (2)")).toHaveCount(0);
+      await expect(drawer.getByText("Châteaux (1)")).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("spell books are available from HUD and combat previews", async ({ page }) => {
     await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Livre de sorts" }).click();

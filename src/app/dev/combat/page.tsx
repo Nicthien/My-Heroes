@@ -59,6 +59,8 @@ function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id"
     morale: 0,
     moraleApplied: false,
     moraleBonus: false,
+    luck: 0,
+    luckTriggered: false,
     ...params,
   };
 }
@@ -220,9 +222,10 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
   const scenarioUnits = scenario === "hero"
     ? units
     : units.map((unit) => unit.side === "defender" ? { ...unit, ownerPlayerId: null, heroId: null } : unit);
-  const combatUnits = phase === "death"
+  const combatUnits = (phase === "death"
     ? scenarioUnits.map((unit) => unit.id === "def-1" ? { ...unit, count: 0, health: 0 } : unit)
-    : scenarioUnits;
+    : scenarioUnits
+  ).map((unit) => (unit.id === "atk-1" ? { ...unit, luckTriggered: true } : unit));
   const fullTurnQueue = buildTurnQueue(combatUnits, 1);
   const phaseTurnQueue = getPhaseTurnQueue(fullTurnQueue, phase);
   const currentUnitId = phase === "tactics" ? null : phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;

@@ -15,7 +15,9 @@ import {
 import ActiveCombatsPanel from "../combat/ActiveCombatsPanel";
 import CollapsiblePanel from "./CollapsiblePanel";
 
-export default function SidePanel() {
+type SidePanelMode = "all" | "heroes" | "towns" | "actions";
+
+export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
   const { data: session } = useSession();
   const gameState = useGameStore((s) => s.gameState);
   const selectedHeroId = useGameStore((s) => s.selectedHeroId);
@@ -32,10 +34,13 @@ export default function SidePanel() {
   const heroes = me.heroes;
   const towns = me.towns;
   const mines = me.resourceBuildings;
+  const showHeroes = mode === "all" || mode === "heroes";
+  const showTowns = mode === "all" || mode === "towns";
+  const showActions = mode === "all" || mode === "actions";
 
   return (
     <div className="pointer-events-auto flex w-full flex-col gap-3">
-      {heroes.length > 0 && (
+      {showHeroes && heroes.length > 0 && (
         <Section title={`Héros (${heroes.length})`}>
           {heroes.map((h) => {
             const active = h.id === selectedHeroId;
@@ -87,7 +92,11 @@ export default function SidePanel() {
         </Section>
       )}
 
-      {towns.length > 0 && (
+      {showHeroes && heroes.length === 0 && (
+        <EmptyState>Aucun heros disponible.</EmptyState>
+      )}
+
+      {showTowns && towns.length > 0 && (
         <Section title={`Châteaux (${towns.length})`}>
           {towns.map((t) => {
             const active = t.id === selectedTownId;
@@ -128,7 +137,11 @@ export default function SidePanel() {
         </Section>
       )}
 
-      {mines.length > 0 && (
+      {showTowns && towns.length === 0 && (
+        <EmptyState>Aucun chateau disponible.</EmptyState>
+      )}
+
+      {showActions && mines.length > 0 && (
         <Section title={`Mines (${mines.length})`}>
           {mines.map((m) => {
             const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === m.type);
@@ -164,7 +177,7 @@ export default function SidePanel() {
         </Section>
       )}
 
-      <ActiveCombatsPanel />
+      {showActions && <ActiveCombatsPanel />}
     </div>
   );
 }
@@ -180,6 +193,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     >
       {children}
     </CollapsiblePanel>
+  );
+}
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className={`${ornateFrame} px-3 py-4 text-center text-sm font-semibold text-amber-200/60`}>
+      {children}
+    </div>
   );
 }
 

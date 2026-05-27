@@ -648,6 +648,8 @@ export interface CombatBoardUnit extends UnitStack {
   morale?: number;
   moraleApplied?: boolean;
   moraleBonus?: boolean;
+  luck?: number;
+  luckTriggered?: boolean;
 }
 
 export type HeroSkillLevel = "basic" | "advanced" | "expert";

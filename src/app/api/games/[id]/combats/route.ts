@@ -26,6 +26,7 @@ import {
 } from "@/lib/game/engine";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
+import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { getUnitRule } from "@/lib/game/units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
@@ -380,6 +381,31 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await recordGameAction(supabase, {
+    gameId: id,
+    gamePlayerId: gamePlayer.id,
+    actorKind: gamePlayer.isAi ? "ai" : "player",
+    turnNumber: Number(game.turnNumber ?? 0),
+    actionType: "START_COMBAT",
+    category: "combat",
+    summary: `Joueur lance un combat ${combatTargetLabel(body.targetType)}.`,
+    details: {
+      combatId: data.id,
+      targetType: body.targetType,
+      targetId: body.targetId,
+      position: { x: targetDefender.x, y: targetDefender.y },
+      mode: body.mode ?? "MANUAL",
+      result: result ? "resolved" : "active",
+      action: sanitizeActionForLog({
+        type: "START_COMBAT",
+        attackerHeroId: body.attackerHeroId,
+        targetType: body.targetType,
+        targetId: body.targetId,
+        mode: body.mode ?? "MANUAL",
+      } as Record<string, unknown>),
+    },
+  });
+
   if (autoResult && result) {
     const attackerWon = autoResult.winnerId === attacker.id;
     const winnerArmies = attackerWon
@@ -442,6 +468,18 @@ export async function POST(
     });
   }
   return NextResponse.json({ combat: toCombat(combatRow), result }, { status: 201 });
+}
+
+function combatTargetLabel(targetType: unknown) {
+  const labels: Record<string, string> = {
+    artifact: "pour un artefact",
+    building: "pour une mine",
+    creature_bank: "contre une banque de créatures",
+    gate: "contre une porte",
+    monster: "contre des créatures",
+    town: "contre un château",
+  };
+  return labels[String(targetType ?? "")] ?? "";
 }
 
 async function advanceInitialAiTurns(params: {

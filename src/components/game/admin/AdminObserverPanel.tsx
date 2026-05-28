@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import type { Player, ResourceBuilding } from "@/lib/game/types";
 import type { GameActionLogEntry } from "@/lib/game/server/action-log";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useDraggableWindow } from "../hud/useDraggableWindow";
+import { categoryLabel, formatActionLogTooltip, formatActor, formatLogTime, playerName, sortActionLogNewestFirst } from "../hud/actionLogDisplay";
 
 const FACTION_LABELS: Record<string, string> = {
   castle: "Chateau",
@@ -39,11 +41,6 @@ function resourceBuildingLabel(building: ResourceBuilding) {
   return RESOURCE_BUILDING_LABELS[building.type] ?? building.type;
 }
 
-function playerName(player: Player) {
-  if (player.isAi) return player.name || "IA";
-  return player.name || "Joueur";
-}
-
 function resourcesLabel(player: Player) {
   const resources = player.resources;
   return [
@@ -64,35 +61,6 @@ function turnStatus(player: Player, currentTurnPlayerId: string) {
   return "En attente";
 }
 
-function categoryLabel(category: string) {
-  const labels: Record<string, string> = {
-    action: "Action",
-    adventure: "Aventure",
-    artifact: "Artefact",
-    capture: "Capture",
-    combat: "Combat",
-    economy: "Economie",
-    magic: "Magie",
-    movement: "Mouvement",
-    recruitment: "Recrutement",
-    turn: "Tour",
-  };
-  return labels[category] ?? category;
-}
-
-function formatActor(entry: GameActionLogEntry, player?: Player) {
-  if (player) return playerName(player);
-  if (entry.actorKind === "ai") return "IA";
-  if (entry.actorKind === "system") return "Systeme";
-  return "Joueur";
-}
-
-function formatLogTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-}
-
 export default function AdminObserverPanel() {
   const gameState = useGameStore((state) => state.gameState);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
@@ -103,6 +71,17 @@ export default function AdminObserverPanel() {
   const [activeTab, setActiveTab] = useState<"players" | "journal">("players");
   const [collapsedPlayerIds, setCollapsedPlayerIds] = useState<Set<string>>(() => new Set());
   const [showJournalDetails, setShowJournalDetails] = useState(false);
+  const {
+    ref: adminWindowRef,
+    style: adminWindowStyle,
+    isEnabled: adminWindowEnabled,
+    resetPosition: resetAdminWindowPosition,
+    dragHandleProps: adminWindowDragHandleProps,
+  } = useDraggableWindow({
+    storageKey: `my-heroes:hud-window-position:v3:${gameState?.id ?? "dev"}:admin-observer`,
+    defaultPosition: { x: 12, y: 80 },
+    fallbackSize: { width: 416, height: 520 },
+  });
 
   if (!adminObserverMode || !gameState) return null;
 
@@ -111,9 +90,7 @@ export default function AdminObserverPanel() {
   };
   const sortedPlayers = gameState.players.slice().sort((a, b) => a.turnOrder - b.turnOrder);
   const playersById = new Map(sortedPlayers.map((player) => [player.id, player]));
-  const actionLog = (gameState.actionLog ?? [])
-    .slice()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const actionLog = sortActionLogNewestFirst(gameState.actionLog ?? []);
   const togglePlayer = (playerId: string) => {
     setCollapsedPlayerIds((current) => {
       const next = new Set(current);
@@ -124,25 +101,48 @@ export default function AdminObserverPanel() {
   };
 
   return (
-    <aside
+    <div
+      ref={adminWindowRef}
       data-testid="admin-observer-panel"
       className="pointer-events-auto absolute left-3 top-20 z-[95] flex max-h-[calc(100vh-6rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-md border border-cyan-300/45 bg-slate-950/92 text-cyan-50 shadow-2xl shadow-black/55 backdrop-blur-sm"
+      style={adminWindowStyle}
     >
       <div className="flex items-center justify-between gap-3 border-b border-cyan-400/20 px-3 py-2">
-        <div className="min-w-0">
+        <div
+          {...(adminWindowEnabled ? adminWindowDragHandleProps : {})}
+          className={`min-w-0 flex-1 ${adminWindowEnabled ? "cursor-move touch-none select-none" : ""}`}
+        >
           <div className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100">Observation admin</div>
           <div className="truncate text-[11px] font-semibold uppercase tracking-wider text-cyan-200/60">
             {gameState.players.length}/{gameState.maxPlayers} joueurs - Tour {gameState.turnNumber}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded border border-cyan-400/35 bg-cyan-950/55 text-sm font-black text-cyan-100 transition hover:bg-cyan-900"
-          aria-label={collapsed ? "Ouvrir le panneau admin" : "Reduire le panneau admin"}
-        >
-          {collapsed ? "+" : "-"}
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {adminWindowEnabled && (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={resetAdminWindowPosition}
+              className="grid h-8 w-8 place-items-center rounded border border-cyan-400/35 bg-cyan-950/55 text-cyan-100 transition hover:bg-cyan-900"
+              aria-label="Reinitialiser la position du panneau admin"
+              title="Position initiale"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v5h5" />
+              </svg>
+            </button>
+          )}
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setCollapsed((value) => !value)}
+            className="grid h-8 w-8 place-items-center rounded border border-cyan-400/35 bg-cyan-950/55 text-sm font-black text-cyan-100 transition hover:bg-cyan-900"
+            aria-label={collapsed ? "Ouvrir le panneau admin" : "Reduire le panneau admin"}
+          >
+            {collapsed ? "+" : "-"}
+          </button>
+        </div>
       </div>
 
       {!collapsed && (
@@ -240,7 +240,7 @@ export default function AdminObserverPanel() {
           </div>
         </>
       )}
-    </aside>
+    </div>
   );
 }
 
@@ -293,7 +293,11 @@ function AdminJournal({
           {entries.map((entry) => {
             const player = entry.gamePlayerId ? playersById.get(entry.gamePlayerId) : undefined;
             return (
-              <article key={entry.id} className="rounded border border-cyan-400/20 bg-slate-900/45 px-3 py-2 text-cyan-50/82">
+              <article
+                key={entry.id}
+                className="rounded border border-cyan-400/20 bg-slate-900/45 px-3 py-2 text-cyan-50/82"
+                title={formatActionLogTooltip(entry, player)}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold text-cyan-50">{entry.summary}</div>

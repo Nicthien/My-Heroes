@@ -14,8 +14,6 @@ import CollapsiblePanel from "../hud/CollapsiblePanel";
 export default function ActiveCombatsPanel() {
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
-  const restoreCombat = useGameStore((state) => state.restoreCombat);
-  const focusTile = useGameStore.getState().focusTile;
   const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
   const combats = (gameState?.activeCombats ?? []).filter((combat) =>
     myPlayer?.isAlive === false || combat.visibility !== "joinable_summary"
@@ -30,6 +28,27 @@ export default function ActiveCombatsPanel() {
       collapsedClassName="shrink-0 overflow-hidden"
       bodyClassName="max-h-32 space-y-1 overflow-y-auto overscroll-contain px-2 py-2"
     >
+      <ActiveCombatsList />
+    </CollapsiblePanel>
+  );
+}
+
+export function ActiveCombatsList() {
+  const { data: session } = useSession();
+  const gameState = useGameStore((state) => state.gameState);
+  const restoreCombat = useGameStore((state) => state.restoreCombat);
+  const focusTile = useGameStore.getState().focusTile;
+  const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+  const combats = (gameState?.activeCombats ?? []).filter((combat) =>
+    myPlayer?.isAlive === false || combat.visibility !== "joinable_summary"
+  );
+
+  if (combats.length === 0) {
+    return <div className="rounded-lg border border-amber-700/20 bg-black/30 px-3 py-3 text-center text-sm font-semibold text-amber-200/60">Aucun combat actif.</div>;
+  }
+
+  return (
+    <>
       {combats.map((combat) => (
         <CombatRow
           key={combat.id}
@@ -40,7 +59,7 @@ export default function ActiveCombatsPanel() {
           onFocus={() => focusTile(combat.position.x, combat.position.y)}
         />
       ))}
-    </CollapsiblePanel>
+    </>
   );
 }
 

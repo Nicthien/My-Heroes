@@ -145,6 +145,101 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.locator('[data-testid="minimap-control-overlay"]').first()).toBeVisible();
   });
 
+  test("desktop HUD overview uses tabs and saves draggable positions", async ({ page }) => {
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+
+    const overview = page.getByTestId("hud-overview-window");
+    await expect(overview).toBeVisible();
+    await expect(page.getByText("Carte").first()).toBeVisible();
+    await expect(page.getByText("Joueurs").first()).toBeVisible();
+    await expect(page.getByText("Leon").first()).toBeVisible();
+
+    await overview.getByRole("button", { name: /Châteaux/ }).click();
+    await expect(overview.getByText("Château Astral")).toBeVisible();
+    await expect(overview.getByText("Aldric")).toHaveCount(0);
+
+    await overview.getByRole("button", { name: /Mines/ }).click();
+    await expect(overview.getByText("Mine d'or")).toBeVisible();
+    await expect(overview.getByText("Château Astral")).toHaveCount(0);
+
+    await overview.getByRole("button", { name: /Combats/ }).click();
+    await expect(overview.getByText("Aucun combat actif.")).toBeVisible();
+
+    await overview.getByRole("button", { name: /Journal/ }).click();
+    await expect(overview.getByText("Leon Sticky-Fingers lance un combat contre des créatures.")).toBeVisible();
+    const resourceEntry = overview.getByText("Leon Sticky-Fingers collecte des ressources.");
+    await expect(resourceEntry).toBeVisible();
+    await expect(overview.getByText("Leon Sticky-Fingers capture une mine.")).toBeVisible();
+    await expect(overview.getByText("Le jour commence.")).toBeVisible();
+    await expect(overview.getByText("Leon Sticky-Fingers déplace un héros.")).toHaveCount(0);
+    await expect(overview.getByText("Adversaire termine son tour.")).toHaveCount(0);
+    await expect(overview.getByText("actionType")).toHaveCount(0);
+    await expect(resourceEntry.locator("xpath=ancestor::article")).toHaveAttribute("title", /Type : COLLECT_RESOURCE/);
+
+    const before = await overview.boundingBox();
+    expect(before).not.toBeNull();
+    await page.mouse.move(before!.x + 30, before!.y + 16);
+    await page.mouse.down();
+    await page.mouse.move(before!.x - 90, before!.y + 60, { steps: 6 });
+    await page.mouse.up();
+
+    const moved = await overview.boundingBox();
+    expect(moved).not.toBeNull();
+    expect(Math.abs(moved!.x - before!.x)).toBeGreaterThan(40);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const restored = await page.getByTestId("hud-overview-window").boundingBox();
+    expect(restored).not.toBeNull();
+    expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(8);
+
+    await page.getByRole("button", { name: /Réinitialiser la position Suivi/ }).click();
+    const reset = await page.getByTestId("hud-overview-window").boundingBox();
+    expect(reset).not.toBeNull();
+    expect(Math.abs(reset!.x - moved!.x)).toBeGreaterThan(40);
+  });
+
+  test("mobile HUD suivi exposes the player journal", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+    const page = await context.newPage();
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+
+    await page.getByTestId("mobile-nav-actions").click();
+    const drawer = page.getByTestId("mobile-hud-drawer");
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: "Journal" }).click();
+    await expect(drawer.getByText("Leon Sticky-Fingers collecte des ressources.")).toBeVisible();
+    await expect(drawer.getByText("Leon Sticky-Fingers déplace un héros.")).toHaveCount(0);
+    await expect(drawer.getByText("Adversaire termine son tour.")).toHaveCount(0);
+
+    await context.close();
+  });
+
+  test("desktop HUD window follows a held drag smoothly", async ({ page }) => {
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+    const overview = page.getByTestId("hud-overview-window");
+    await expect(overview).toBeVisible();
+
+    await page.getByRole("button", { name: /Réinitialiser la position Suivi/ }).click();
+    const start = await overview.boundingBox();
+    expect(start).not.toBeNull();
+
+    await page.mouse.move(start!.x + 48, start!.y + 18);
+    await page.mouse.down();
+    for (let index = 1; index <= 8; index += 1) {
+      await page.mouse.move(start!.x + 48 - index * 16, start!.y + 18 - index * 9);
+      const current = await overview.boundingBox();
+      expect(current).not.toBeNull();
+      expect(current!.x).toBeLessThan(start!.x + 4);
+      expect(current!.y).toBeLessThan(start!.y + 4);
+    }
+    await page.mouse.up();
+
+    const end = await overview.boundingBox();
+    expect(end).not.toBeNull();
+    expect(end!.x).toBeLessThan(start!.x - 90);
+    expect(end!.y).toBeLessThan(start!.y - 55);
+  });
+
   test("admin minimap shows fully controlled explored zones", async ({ page }) => {
     await page.goto("/dev/hud?admin=1", { waitUntil: "domcontentloaded" });
 
@@ -179,6 +274,36 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await panel.getByRole("button", { name: "Details" }).click();
     await expect(panel.getByText("actionType").first()).toBeVisible();
     await expect(panel.getByText("MOVE_HERO")).toBeVisible();
+  });
+
+  test("admin observer panel is draggable and resettable", async ({ page }) => {
+    await page.goto("/dev/admin-observer", { waitUntil: "domcontentloaded" });
+
+    const panel = page.getByTestId("admin-observer-panel");
+    await expect(panel).toBeVisible();
+    await page.getByRole("button", { name: "Reinitialiser la position du panneau admin" }).click();
+
+    const start = await panel.boundingBox();
+    expect(start).not.toBeNull();
+    await page.mouse.move(start!.x + 80, start!.y + 16);
+    await page.mouse.down();
+    await page.mouse.move(start!.x + 180, start!.y + 86, { steps: 8 });
+    await page.mouse.up();
+
+    const moved = await panel.boundingBox();
+    expect(moved).not.toBeNull();
+    expect(moved!.x).toBeGreaterThan(start!.x + 80);
+    expect(moved!.y).toBeGreaterThanOrEqual(start!.y);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const restored = await page.getByTestId("admin-observer-panel").boundingBox();
+    expect(restored).not.toBeNull();
+    expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(8);
+
+    await page.getByRole("button", { name: "Reinitialiser la position du panneau admin" }).click();
+    const reset = await page.getByTestId("admin-observer-panel").boundingBox();
+    expect(reset).not.toBeNull();
+    expect(reset!.x).toBeLessThan(moved!.x - 80);
   });
 
   test("mobile HUD drawer filters heroes, towns, and actions", async ({ browser }) => {

@@ -8,16 +8,14 @@ import { ornateFrame } from "./theme";
 export function PlayersListPanel({
   gameState,
   myPlayer,
+  embedded = false,
 }: {
   gameState: GameState;
   myPlayer: Player | undefined;
+  embedded?: boolean;
 }) {
-  return (
-    <CollapsiblePanel
-      title="Joueurs"
-      className={`${ornateFrame} pointer-events-auto shrink-0 overflow-hidden`}
-      bodyClassName="max-h-32 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
-    >
+  const content = (
+    <>
       {[...gameState.players]
         .sort((a, b) => {
           if (a.id === myPlayer?.id) return -1;
@@ -52,6 +50,18 @@ export function PlayersListPanel({
             <TurnStatusIcon ended={p.hasEndedTurn} />
           </div>
         ))}
+    </>
+  );
+
+  if (embedded) return <div className="space-y-0.5">{content}</div>;
+
+  return (
+    <CollapsiblePanel
+      title="Joueurs"
+      className={`${ornateFrame} pointer-events-auto shrink-0 overflow-hidden`}
+      bodyClassName="max-h-32 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
+    >
+      {content}
     </CollapsiblePanel>
   );
 }

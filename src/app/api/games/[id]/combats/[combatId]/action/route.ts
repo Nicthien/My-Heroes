@@ -1932,7 +1932,27 @@ async function logCombatAction(params: {
     turnNumber: params.turnNumber,
     actionType,
     category: "combat",
-    summary: `Joueur effectue ${actionType} en combat.`,
+    summary: `Joueur ${combatActionLabel(actionType)}.`,
     details: { combatId: params.combatId, action: sanitizeActionForLog(params.action) },
   });
+}
+
+function combatActionLabel(actionType: string) {
+  const labels: Record<string, string> = {
+    ACCEPT_SURRENDER_NEGOTIATION: "accepte une reddition",
+    ACCEPT_TRUCE: "accepte une trêve",
+    ATTACK: "attaque en combat",
+    CAST_SPELL: "lance un sort en combat",
+    DEFEND: "défend en combat",
+    MOVE: "déplace une unité en combat",
+    NEGOTIATE_SURRENDER: "négocie une reddition",
+    REJECT_SURRENDER_NEGOTIATION: "refuse une reddition",
+    REJECT_TRUCE: "refuse une trêve",
+    REQUEST_TRUCE: "propose une trêve",
+    RETREAT: "bat en retraite",
+    SHOOT: "tire en combat",
+    SURRENDER: "se rend",
+    WAIT: "attend en combat",
+  };
+  return labels[actionType] ?? `effectue ${actionType} en combat`;
 }

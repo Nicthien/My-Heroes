@@ -24,10 +24,21 @@ import { MovementGauge, Stat } from "./gauges";
 import { UnitSprite } from "./UnitSprite";
 import { unitTypeLabel } from "./helpers";
 import { goldDivider, ornateFramePolished } from "./theme";
+import { useDraggableWindow } from "./useDraggableWindow";
 
 type HeroTab = "profile" | "army" | "artifacts" | "skills";
 
-export function HeroPanel({ hero, townAtHero, readOnly = false }: { hero: Hero; townAtHero: Town | undefined; readOnly?: boolean }) {
+export function HeroPanel({
+  hero,
+  townAtHero,
+  readOnly = false,
+  storagePlayerId,
+}: {
+  hero: Hero;
+  townAtHero: Town | undefined;
+  readOnly?: boolean;
+  storagePlayerId?: string;
+}) {
   const { data: session } = useSession();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<HeroTab>("profile");
@@ -39,6 +50,11 @@ export function HeroPanel({ hero, townAtHero, readOnly = false }: { hero: Hero; 
   const setPendingAdventureSpell = useGameStore((state) => state.setPendingAdventureSpell);
   const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
   const setSpellRevealHighlight = useGameStore((state) => state.setSpellRevealHighlight);
+  const heroDraggable = useDraggableWindow({
+    storageKey: `my-heroes:hud-window-position:v3:${gameState?.id ?? "dev"}:${storagePlayerId ?? "viewer"}:selected-hero`,
+    defaultPosition: { x: 16, y: 112 },
+    fallbackSize: { width: 352, height: 520 },
+  });
   const displayHero = devInfiniteMana ? { ...hero, mana: getHeroMaxMana(hero) } : hero;
   const effectiveStats = getEffectiveHeroStats(hero);
   const artifactBonus = getArtifactStatsBonus(hero);
@@ -126,16 +142,23 @@ export function HeroPanel({ hero, townAtHero, readOnly = false }: { hero: Hero; 
         title={hero.name}
         className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[min(32rem,calc(100vh-9rem))] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
         bodyClassName="flex min-h-0 flex-1 flex-col"
+        dragHandleProps={heroDraggable.isEnabled ? heroDraggable.dragHandleProps : undefined}
+        onResetPosition={heroDraggable.isEnabled ? heroDraggable.resetPosition : undefined}
+        rootRef={heroDraggable.ref}
+        style={heroDraggable.style}
         right={
           <button
-            className="rounded text-amber-300/60 transition hover:text-amber-100"
+            type="button"
+            className="grid h-7 w-7 place-items-center rounded-md border border-amber-700/50 text-amber-200 transition hover:border-amber-300 hover:text-amber-100"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
               useGameStore.getState().selectHero(null);
             }}
             aria-label="Fermer"
+            title="Fermer"
           >
-            x
+            X
           </button>
         }
       >

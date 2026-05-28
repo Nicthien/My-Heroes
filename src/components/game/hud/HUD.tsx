@@ -6,6 +6,7 @@ import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
 import { HeroPanel } from "./HeroPanel";
 import { PlayersListPanel } from "./PlayersListPanel";
+import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { CountDialog } from "./townDialogs";
 import { TownSummaryTab } from "./TownSummaryTab";
 import { TownBuildTab } from "./TownBuildTab";
@@ -56,6 +57,9 @@ import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
 import MiniMap from "./MiniMap";
+import DesktopHudWindows from "./DesktopHudWindows";
+import { ActiveCombatsList } from "../combat/ActiveCombatsPanel";
+import { useDraggableWindow } from "./useDraggableWindow";
 import AdventureMusicControl from "./AdventureMusicControl";
 import {
   CornerOrnaments,
@@ -63,7 +67,6 @@ import {
   HourglassIcon,
   ParchmentBackground,
   goldText,
-  ornateFrame,
   ornateFramePolished,
 } from "./theme";
 
@@ -79,6 +82,7 @@ function HUDContent() {
   const router = useRouter();
   const { data: session } = useSession();
   const [mobileDrawer, setMobileDrawer] = useState<"heroes" | "towns" | "map" | "players" | "actions" | null>(null);
+  const [mobileActionsTab, setMobileActionsTab] = useState<"mines" | "combats" | "journal">("mines");
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
     townId: null,
     tab: "summary",
@@ -107,6 +111,12 @@ function HUDContent() {
   const myPlayer = gameState.players.find(
     (player) => player.userId === session?.user?.id
   );
+  const hudStoragePlayerId = myPlayer?.id ?? session?.user?.id;
+  const townDraggable = useDraggableWindow({
+    storageKey: `my-heroes:hud-window-position:v3:${gameState.id}:${hudStoragePlayerId ?? "viewer"}:selected-town`,
+    defaultPosition: { x: 16, y: 112 },
+    fallbackSize: { width: 352, height: 520 },
+  });
   const isPending = gameState.status === "PENDING";
   const canStartPendingGame = Boolean(myPlayer?.turnOrder === 0 || adminObserverMode);
   const hasActiveCombats = (gameState.activeCombats ?? []).some((combat) =>
@@ -123,6 +133,7 @@ function HUDContent() {
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
 
   const allTowns = gameState.players.flatMap((p) => p.towns);
+  const playersById = new Map(gameState.players.map((player) => [player.id, player]));
 
   const selectedHero = (adminObserverMode ? gameState.players.flatMap((player) => player.heroes) : myPlayer?.heroes ?? [])
     .find((h) => h.id === selectedHeroId);
@@ -964,20 +975,8 @@ function HUDContent() {
         </div>
       </div>
 
-      {/* Right column: players + side shortcuts */}
-      <div className="desktop-only pointer-events-none absolute right-3 top-[7rem] bottom-3 flex w-64 flex-col gap-3 overflow-hidden">
-        <CollapsiblePanel
-          title="Carte"
-          className={`${ornateFrame} pointer-events-auto shrink-0`}
-          bodyClassName=""
-        >
-          <MiniMap />
-        </CollapsiblePanel>
-        <PlayersListPanel gameState={gameState} myPlayer={myPlayer} />
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-          <SidePanel />
-        </div>
-      </div>
+      {/* Desktop floating windows: map, players, and tabbed overview */}
+      <DesktopHudWindows gameId={gameState.id} playerId={hudStoragePlayerId} />
 
       {combatMessage && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-auto rounded-2xl border border-yellow-400/40 bg-[#080714]/90 px-6 py-4 text-center shadow-2xl shadow-yellow-950/40 backdrop-blur-xl">
@@ -1014,13 +1013,40 @@ function HUDContent() {
             {mobileDrawer === "players" && <PlayersListPanel gameState={gameState} myPlayer={myPlayer} />}
             {mobileDrawer === "heroes" && <SidePanel mode="heroes" />}
             {mobileDrawer === "towns" && <SidePanel mode="towns" />}
-            {mobileDrawer === "actions" && <SidePanel mode="actions" />}
+            {mobileDrawer === "actions" && myPlayer && (
+              <div className="flex min-h-0 flex-col">
+                <div className="mb-2 grid grid-cols-3 gap-1">
+                  {([
+                    ["mines", "Mines"],
+                    ["combats", "Combats"],
+                    ["journal", "Journal"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`touch-target rounded-md border px-2 text-[10px] font-black uppercase tracking-wide ${
+                        mobileActionsTab === id
+                          ? "border-amber-300 bg-amber-500 text-stone-950"
+                          : "border-amber-800/55 bg-black/30 text-amber-200"
+                      }`}
+                      onClick={() => setMobileActionsTab(id)}
+                      aria-pressed={mobileActionsTab === id}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {mobileActionsTab === "mines" && <SidePanel mode="mines" />}
+                {mobileActionsTab === "combats" && <ActiveCombatsList />}
+                {mobileActionsTab === "journal" && <PlayerJournalPanel entries={gameState.actionLog} player={myPlayer} playersById={playersById} />}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Hero panel */}
-      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} />}
+      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} storagePlayerId={hudStoragePlayerId} />}
 
       {/* Town panel */}
       {selectedTown && (
@@ -1028,6 +1054,10 @@ function HUDContent() {
           title={selectedTown.name}
           className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
           bodyClassName="flex min-h-0 flex-1 flex-col"
+          dragHandleProps={townDraggable.isEnabled ? townDraggable.dragHandleProps : undefined}
+          onResetPosition={townDraggable.isEnabled ? townDraggable.resetPosition : undefined}
+          rootRef={townDraggable.ref}
+          style={townDraggable.style}
           right={
               <button
                 className="rounded text-amber-300/60 transition hover:text-amber-100"

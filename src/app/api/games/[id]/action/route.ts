@@ -530,6 +530,13 @@ export async function POST(
         await incrementPlayerResource(supabase, gamePlayer.id, resourceType, amount);
         await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected) } }).eq("id", id);
         interaction = { type: "COLLECT", resource: resourceType, amount, gold: resourceType === "gold" ? amount : undefined, destination: lastPos };
+        await logPlayerAction(supabase, game, id, gamePlayer, {
+          type: "COLLECT_RESOURCE",
+          heroId: hero.id,
+          resource: resourceType,
+          amount,
+          position: lastPos,
+        });
       }
 
       if (firstStop?.hero) {
@@ -671,8 +678,6 @@ export async function POST(
           turnNumber: Number(game.turnNumber ?? 1),
         });
       }
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
 
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
     }

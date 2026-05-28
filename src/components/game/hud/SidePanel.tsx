@@ -15,7 +15,7 @@ import {
 import ActiveCombatsPanel from "../combat/ActiveCombatsPanel";
 import CollapsiblePanel from "./CollapsiblePanel";
 
-type SidePanelMode = "all" | "heroes" | "towns" | "actions";
+type SidePanelMode = "all" | "heroes" | "towns" | "actions" | "mines" | "combats";
 
 export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
   const { data: session } = useSession();
@@ -36,7 +36,8 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
   const mines = me.resourceBuildings;
   const showHeroes = mode === "all" || mode === "heroes";
   const showTowns = mode === "all" || mode === "towns";
-  const showActions = mode === "all" || mode === "actions";
+  const showMines = mode === "all" || mode === "actions" || mode === "mines";
+  const showCombats = mode === "all" || mode === "actions" || mode === "combats";
 
   return (
     <div className="pointer-events-auto flex w-full flex-col gap-3">
@@ -141,7 +142,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
         <EmptyState>Aucun chateau disponible.</EmptyState>
       )}
 
-      {showActions && mines.length > 0 && (
+      {showMines && mines.length > 0 && (
         <Section title={`Mines (${mines.length})`}>
           {mines.map((m) => {
             const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === m.type);
@@ -177,7 +178,11 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
         </Section>
       )}
 
-      {showActions && <ActiveCombatsPanel />}
+      {showMines && mines.length === 0 && (
+        <EmptyState>Aucune mine contrôlée.</EmptyState>
+      )}
+
+      {showCombats && <ActiveCombatsPanel />}
     </div>
   );
 }
@@ -196,7 +201,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function EmptyState({ children }: { children: React.ReactNode }) {
+export function EmptyState({ children }: { children: React.ReactNode }) {
   return (
     <div className={`${ornateFrame} px-3 py-4 text-center text-sm font-semibold text-amber-200/60`}>
       {children}
@@ -204,7 +209,7 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MiniMovementGauge({ movement, maxMovement }: { movement: number; maxMovement: number }) {
+export function MiniMovementGauge({ movement, maxMovement }: { movement: number; maxMovement: number }) {
   const ratio = maxMovement > 0 ? Math.max(0, Math.min(1, movement / maxMovement)) : 0;
   const fillColor = ratio > 0.35 ? "bg-emerald-300" : ratio > 0 ? "bg-amber-300" : "bg-red-400";
 
@@ -221,7 +226,7 @@ function MiniMovementGauge({ movement, maxMovement }: { movement: number; maxMov
   );
 }
 
-function Row({
+export function Row({
   left,
   title,
   subtitle,

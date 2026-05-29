@@ -19,7 +19,7 @@ const TERRAIN_FACTION_POOLS: Partial<Record<TerrainType, Faction[]>> = {
   [TerrainType.LAVA]: [Faction.INFERNO],
   [TerrainType.SWAMP]: [Faction.FORTRESS],
   [TerrainType.SAND]: [Faction.DUNGEON, Faction.STRONGHOLD],
-  [TerrainType.DIRT]: [Faction.STRONGHOLD, Faction.CASTLE],
+  [TerrainType.DIRT]: [Faction.DUNGEON, Faction.STRONGHOLD, Faction.CASTLE],
   [TerrainType.MOUNTAIN]: [Faction.DUNGEON, Faction.TOWER, Faction.STRONGHOLD, Faction.CONFLUX],
   [TerrainType.WATER]: [Faction.FORTRESS],
 };

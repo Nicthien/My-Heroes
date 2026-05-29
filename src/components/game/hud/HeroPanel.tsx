@@ -17,6 +17,7 @@ import { SKILL_DEFINITIONS, type SkillId, type SkillLevel } from "@/lib/game/ski
 import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP } from "@/lib/game/army-stacks";
 import type { Hero, Town, UnitStack } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
 import CollapsiblePanel from "./CollapsiblePanel";
@@ -695,13 +696,15 @@ function bonusLabel(key: string) {
 }
 
 function canTransferArtifacts(hero: Hero, candidate: Hero, towns: Town[]) {
+  if (normalizeMapLevel(hero.position.level) !== normalizeMapLevel(candidate.position.level)) return false;
   const adjacent = Math.max(Math.abs(hero.position.x - candidate.position.x), Math.abs(hero.position.y - candidate.position.y)) <= 1;
   if (adjacent) return true;
   return towns.some((town) =>
     town.position.x === hero.position.x &&
     town.position.y === hero.position.y &&
     town.position.x === candidate.position.x &&
-    town.position.y === candidate.position.y
+    town.position.y === candidate.position.y &&
+    normalizeMapLevel(town.position.level) === normalizeMapLevel(hero.position.level)
   );
 }
 

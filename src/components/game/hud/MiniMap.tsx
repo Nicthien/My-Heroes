@@ -4,6 +4,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { useSession } from "@/lib/auth/client";
 import { TerrainType, type GameState, type MapObject, type Player, type Position } from "@/lib/game/types";
 import { computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
+import { normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -45,6 +46,7 @@ export default function MiniMap() {
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
+  const activeMapLevel = useGameStore((state) => state.activeMapLevel);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
   const hasActiveCombat = useGameStore((state) => Boolean(state.activeCombat));
@@ -52,19 +54,23 @@ export default function MiniMap() {
   const zoomMap = useGameStore((state) => state.zoomMap);
 
   const currentPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
+  const activeMap = useMemo(
+    () => gameState ? withActiveMapLayer(gameState.map, activeMapLevel) : null,
+    [activeMapLevel, gameState],
+  );
   const revealAll = devRevealMap || hasActiveCombat || adminObserverMode;
   const visibility = useMemo(
-    () => (gameState && (currentPlayer || revealAll) ? getMiniMapVisibility(gameState, currentPlayer, revealAll) : null),
-    [gameState, currentPlayer, revealAll]
+    () => (gameState && activeMap && (currentPlayer || revealAll) ? getMiniMapVisibility(activeMap, activeMapLevel, currentPlayer, revealAll) : null),
+    [activeMap, activeMapLevel, gameState, currentPlayer, revealAll]
   );
   const controlTiles = useMemo(
-    () => (gameState?.map && visibility ? getMiniMapControlTiles(gameState, visibility) : []),
-    [gameState, visibility]
+    () => (gameState && activeMap && visibility ? getMiniMapControlTiles(gameState, activeMap, activeMapLevel, visibility) : []),
+    [activeMap, activeMapLevel, gameState, visibility]
   );
 
-  if (!gameState?.map || !visibility) return null;
+  if (!gameState?.map || !activeMap || !visibility) return null;
 
-  const { map } = gameState;
+  const map = activeMap;
   const totalTiles = map.width * map.height;
   const explorationPercent = totalTiles > 0
     ? Math.round((visibility.explored.size / totalTiles) * 100)
@@ -120,7 +126,7 @@ export default function MiniMap() {
               opacity={tile.opacity}
             />
           ))}
-          {getKnownBuildings(gameState, visibility).map((position) => (
+          {getKnownBuildings(gameState, activeMapLevel, visibility).map((position) => (
             <rect
               key={`building-${position.x}-${position.y}`}
               x={position.x + 0.18}
@@ -133,7 +139,7 @@ export default function MiniMap() {
           ))}
           {gameState.players.flatMap((player) =>
             player.towns
-              .filter((town) => isKnownPosition(town.position, player, currentPlayer, visibility))
+              .filter((town) => normalizeMapLevel(town.position.level) === activeMapLevel && isKnownPosition(town.position, player, currentPlayer, visibility))
               .map((town) => (
                 <rect
                   key={`town-${town.id}`}
@@ -149,7 +155,7 @@ export default function MiniMap() {
           )}
           {gameState.players.flatMap((player) =>
             player.heroes
-              .filter((hero) => isKnownPosition(hero.position, player, currentPlayer, visibility))
+              .filter((hero) => normalizeMapLevel(hero.position.level) === activeMapLevel && isKnownPosition(hero.position, player, currentPlayer, visibility))
               .map((hero) => (
                 <circle
                   key={`hero-${hero.id}`}
@@ -216,13 +222,23 @@ export default function MiniMap() {
   );
 }
 
-function getMiniMapVisibility(gameState: GameState, currentPlayer: Player | undefined, revealAll: boolean): MiniMapVisibility {
+function getMiniMapVisibility(
+  activeMap: GameState["map"],
+  activeMapLevel: Position["level"],
+  currentPlayer: Player | undefined,
+  revealAll: boolean,
+): MiniMapVisibility {
   const visible = new Set<string>();
-  const explored = new Set<string>(currentPlayer?.exploredTiles ?? []);
+  const explored = new Set<string>(
+    (currentPlayer?.exploredTiles ?? [])
+      .map(normalizeExploredTileKey)
+      .filter((key) => key.startsWith(`${normalizeMapLevel(activeMapLevel)}:`))
+      .map((key) => key.slice(key.indexOf(":") + 1))
+  );
 
   if (revealAll) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
         const key = `${x},${y}`;
         visible.add(key);
         explored.add(key);
@@ -233,7 +249,13 @@ function getMiniMapVisibility(gameState: GameState, currentPlayer: Player | unde
 
   if (!currentPlayer) return { visible, explored };
 
-  for (const key of computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5)) {
+  const currentLayerPlayer = {
+    ...currentPlayer,
+    heroes: currentPlayer.heroes.filter((hero) => normalizeMapLevel(hero.position.level) === normalizeMapLevel(activeMapLevel)),
+    towns: currentPlayer.towns.filter((town) => normalizeMapLevel(town.position.level) === normalizeMapLevel(activeMapLevel)),
+  };
+
+  for (const key of computeVisibleTiles(activeMap, getPlayerVisionCenters(currentLayerPlayer), 5)) {
     visible.add(key);
     explored.add(key);
   }
@@ -251,10 +273,11 @@ function isKnownPosition(
   return owner.id === currentPlayer?.id || visibility.visible.has(key) || visibility.explored.has(key);
 }
 
-function getKnownBuildings(gameState: GameState, visibility: MiniMapVisibility) {
+function getKnownBuildings(gameState: GameState, activeMapLevel: Position["level"], visibility: MiniMapVisibility) {
   const positions: Position[] = [];
   for (const player of gameState.players) {
     for (const building of player.resourceBuildings) {
+      if (normalizeMapLevel(building.position.level) !== normalizeMapLevel(activeMapLevel)) continue;
       const key = `${building.position.x},${building.position.y}`;
       if (visibility.visible.has(key) || visibility.explored.has(key)) positions.push(building.position);
     }
@@ -262,10 +285,15 @@ function getKnownBuildings(gameState: GameState, visibility: MiniMapVisibility) 
   return positions;
 }
 
-function getMiniMapControlTiles(gameState: GameState, visibility: MiniMapVisibility): ControlTile[] {
-  const sitesByZone = collectControlSitesByZone(gameState, visibility);
+function getMiniMapControlTiles(
+  gameState: GameState,
+  activeMap: GameState["map"],
+  activeMapLevel: Position["level"],
+  visibility: MiniMapVisibility,
+): ControlTile[] {
+  const sitesByZone = collectControlSitesByZone(gameState, activeMap, activeMapLevel, visibility);
   const playerColorById = new Map(gameState.players.map((player) => [player.id, player.color]));
-  const fullyExploredZoneIds = getFullyExploredZoneIds(gameState, visibility);
+  const fullyExploredZoneIds = getFullyExploredZoneIds(activeMap, visibility);
   const zoneOwnerById = new Map<number, string>();
 
   for (const [zoneId, sites] of sitesByZone) {
@@ -276,9 +304,9 @@ function getMiniMapControlTiles(gameState: GameState, visibility: MiniMapVisibil
   }
 
   const controlTiles: ControlTile[] = [];
-  for (let y = 0; y < gameState.map.height; y++) {
-    for (let x = 0; x < gameState.map.width; x++) {
-      const tile = gameState.map.tiles[y]?.[x];
+  for (let y = 0; y < activeMap.height; y++) {
+    for (let x = 0; x < activeMap.width; x++) {
+      const tile = activeMap.tiles[y]?.[x];
       const zoneId = tile?.zoneId;
       const key = `${x},${y}`;
       if (typeof zoneId !== "number" || !visibility.explored.has(key)) continue;
@@ -300,11 +328,17 @@ function getMiniMapControlTiles(gameState: GameState, visibility: MiniMapVisibil
   return controlTiles;
 }
 
-function collectControlSitesByZone(gameState: GameState, visibility: MiniMapVisibility) {
+function collectControlSitesByZone(
+  gameState: GameState,
+  activeMap: GameState["map"],
+  activeMapLevel: Position["level"],
+  visibility: MiniMapVisibility,
+) {
   const sitesByZone = new Map<number, ControlSite[]>();
   const pushSite = (site: Omit<ControlSite, "zoneId">) => {
+    if (normalizeMapLevel(site.position.level) !== normalizeMapLevel(activeMapLevel)) return;
     const key = `${site.position.x},${site.position.y}`;
-    const zoneId = gameState.map.tiles[site.position.y]?.[site.position.x]?.zoneId;
+    const zoneId = activeMap.tiles[site.position.y]?.[site.position.x]?.zoneId;
     if (typeof zoneId !== "number" || !visibility.explored.has(key)) return;
     const sites = sitesByZone.get(zoneId) ?? [];
     sites.push({ ...site, zoneId });
@@ -324,22 +358,22 @@ function collectControlSitesByZone(gameState: GameState, visibility: MiniMapVisi
     pushSite({ id: `gate-${gate.id}`, ownerId: gate.ownerId, position: gate.position });
   }
 
-  for (const row of gameState.map.tiles) {
+  for (const row of activeMap.tiles) {
     for (const tile of row) {
       const object = tile.object;
       if (!isExternalDwellingObject(object)) continue;
-      pushSite({ id: `external-dwelling-${object.id}`, ownerId: object.ownerId ?? null, position: { x: tile.x, y: tile.y } });
+      pushSite({ id: `external-dwelling-${object.id}`, ownerId: object.ownerId ?? null, position: { x: tile.x, y: tile.y, level: normalizeMapLevel(activeMapLevel) } });
     }
   }
 
   return sitesByZone;
 }
 
-function getFullyExploredZoneIds(gameState: GameState, visibility: MiniMapVisibility) {
+function getFullyExploredZoneIds(activeMap: GameState["map"], visibility: MiniMapVisibility) {
   const zoneTileCounts = new Map<number, number>();
   const exploredZoneTileCounts = new Map<number, number>();
 
-  for (const row of gameState.map.tiles) {
+  for (const row of activeMap.tiles) {
     for (const tile of row) {
       if (typeof tile.zoneId !== "number") continue;
       const key = `${tile.x},${tile.y}`;

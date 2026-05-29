@@ -18,6 +18,7 @@ type CollapsiblePanelProps = {
   collapsedClassName?: string;
   defaultCollapsed?: boolean;
   right?: ReactNode;
+  beforeReset?: ReactNode;
   dragHandleProps?: HTMLAttributes<HTMLDivElement>;
   onResetPosition?: () => void;
   rootRef?: Ref<HTMLDivElement>;
@@ -34,6 +35,7 @@ export default function CollapsiblePanel({
   collapsedClassName,
   defaultCollapsed = false,
   right,
+  beforeReset,
   dragHandleProps,
   onResetPosition,
   rootRef,
@@ -70,6 +72,7 @@ export default function CollapsiblePanel({
           <FleurDeLis className="h-3 w-3 shrink-0 text-amber-400" />
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {beforeReset}
           {onResetPosition && (
             <button
               type="button"

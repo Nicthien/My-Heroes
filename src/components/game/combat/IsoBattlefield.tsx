@@ -66,14 +66,14 @@ const SIEGE_SPRITES = {
 } as const;
 
 // ============================================================
-// 1 segment de mur par hex - VUE DE PROFIL (mur vertical fin, créneaux à GAUCHE)
+// 1 segment de mur par hex - VUE DE PROFIL (mur vertical, créneaux à GAUCHE)
 // Le mur court le long de la colonne q=9, vu de côté par les attaquants venant de la gauche.
-// viewBox 40×80 : strip étroit, vertical
+// viewBox 72×80 : strip assez large pour lire une vraie emprise de tuile.
 // ============================================================
 function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel?: boolean; isTop?: boolean; isBottom?: boolean }) {
   void showCrenel;
   return (
-    <svg viewBox="0 0 40 80" preserveAspectRatio="none" className="h-full w-full">
+    <svg viewBox="0 0 72 80" preserveAspectRatio="none" className="h-full w-full">
       <defs>
         <linearGradient id="ws-front" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#e5dec9" />
@@ -92,7 +92,7 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
         return (
           <polygon
             key={`crenel-${i}`}
-            points={`14,${y} 22,${y - 2} 22,${y + 6} 14,${y + 8}`}
+            points={`20,${y} 34,${y - 2} 34,${y + 7} 20,${y + 9}`}
             fill="url(#ws-front)"
             stroke="#3a3428"
             strokeWidth="0.6"
@@ -100,8 +100,8 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
         );
       })}
 
-      {/* Corps principal du mur : bande verticale fine */}
-      <rect x="18" y="0" width="14" height="80" fill="url(#ws-front)" stroke="#3a3428" strokeWidth="0.8" />
+      {/* Corps principal du mur : bande verticale couvrant le centre de l'hex. */}
+      <rect x="30" y="0" width="28" height="80" fill="url(#ws-front)" stroke="#3a3428" strokeWidth="0.8" />
 
       {/* Lignes horizontales de briques (rangées) */}
       {Array.from({ length: 8 }).map((_, i) => {
@@ -109,9 +109,9 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
         return (
           <line
             key={`brick-h-${i}`}
-            x1="18"
+            x1="30"
             y1={y}
-            x2="32"
+            x2="58"
             y2={y}
             stroke="#5a5040"
             strokeWidth="0.5"
@@ -124,7 +124,7 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
       {Array.from({ length: 8 }).map((_, i) => {
         const y1 = 6 + i * 9;
         const y2 = y1 + 9;
-        const xJoint = i % 2 === 0 ? 25 : 21;
+        const xJoint = i % 2 === 0 ? 44 : 36;
         return (
           <line
             key={`brick-v-${i}`}
@@ -143,7 +143,7 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
       {Array.from({ length: 8 }).map((_, i) => {
         const y1 = 6 + i * 9;
         const y2 = y1 + 9;
-        const xJoint = i % 2 === 0 ? 29 : 28;
+        const xJoint = i % 2 === 0 ? 54 : 50;
         return (
           <line
             key={`brick-v2-${i}`}
@@ -159,16 +159,16 @@ function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel
       })}
 
       {/* Ombre sur le côté gauche (mur faisant face aux attaquants à gauche) */}
-      <rect x="18" y="0" width="4" height="80" fill="url(#ws-shadow)" opacity="0.5" />
+      <rect x="30" y="0" width="7" height="80" fill="url(#ws-shadow)" opacity="0.5" />
 
       {/* Bande sombre à droite (profondeur) */}
-      <rect x="30" y="0" width="2" height="80" fill="rgba(0,0,0,0.35)" />
+      <rect x="54" y="0" width="4" height="80" fill="rgba(0,0,0,0.35)" />
 
       {/* Base au sol sur le dernier segment */}
       {isBottom && (
         <>
-          <rect x="14" y="76" width="20" height="4" fill="#3a3428" />
-          <ellipse cx="24" cy="80" rx="16" ry="2" fill="rgba(0,0,0,0.4)" />
+          <rect x="24" y="76" width="38" height="4" fill="#3a3428" />
+          <ellipse cx="43" cy="80" rx="28" ry="2" fill="rgba(0,0,0,0.4)" />
         </>
       )}
     </svg>
@@ -193,12 +193,12 @@ function getPointerDistance(points: Map<number, { x: number; y: number }>) {
 }
 
 // ============================================================
-// Porte VUE DE PROFIL - même format que le mur (viewBox 40×80)
+// Porte VUE DE PROFIL - même format que le mur (viewBox 72×80)
 // Battant bois bombé sur la gauche (vu de côté), 2 piliers de pierre en haut/bas
 // ============================================================
 function IsoGateSvg() {
   return (
-    <svg viewBox="0 0 40 80" preserveAspectRatio="none" className="h-full w-full">
+    <svg viewBox="0 0 72 80" preserveAspectRatio="none" className="h-full w-full">
       <defs>
         <linearGradient id="gt2-stone" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#e5dec9" />
@@ -213,26 +213,26 @@ function IsoGateSvg() {
       </defs>
 
       {/* Pilier de pierre haut (continuité du mur) */}
-      <rect x="18" y="0" width="14" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
+      <rect x="30" y="0" width="28" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
       {[0, 1].map((i) => (
-        <line key={`top-brick-${i}`} x1="18" y1={4 + i * 5} x2="32" y2={4 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
+        <line key={`top-brick-${i}`} x1="30" y1={4 + i * 5} x2="58" y2={4 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
       ))}
       {/* Créneau au-dessus du pilier haut */}
-      <polygon points="14,2 22,0 22,8 14,10" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
+      <polygon points="20,2 34,0 34,8 20,10" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
 
       {/* Pilier de pierre bas */}
-      <rect x="18" y="66" width="14" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
+      <rect x="30" y="66" width="28" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
       {[0, 1].map((i) => (
-        <line key={`bot-brick-${i}`} x1="18" y1={70 + i * 5} x2="32" y2={70 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
+        <line key={`bot-brick-${i}`} x1="30" y1={70 + i * 5} x2="58" y2={70 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
       ))}
       {/* Créneau au-dessus du pilier bas */}
-      <polygon points="14,68 22,66 22,74 14,76" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
+      <polygon points="20,68 34,66 34,74 20,76" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
 
       {/* Cavité ombrée entre les 2 piliers (passage) */}
-      <rect x="18" y="14" width="14" height="52" fill="#1a0e07" />
+      <rect x="30" y="14" width="28" height="52" fill="#1a0e07" />
 
       {/* Battant en bois (visible dans le passage, légèrement bombé vers la gauche) */}
-      <polygon points="20,14 30,16 30,64 20,66" fill="url(#gt2-wood)" stroke="#1a0e07" strokeWidth="0.5" />
+      <polygon points="33,14 54,16 54,64 33,66" fill="url(#gt2-wood)" stroke="#1a0e07" strokeWidth="0.5" />
 
       {/* Planches horizontales (vues de profil) */}
       {[0, 1, 2, 3, 4, 5].map((i) => {
@@ -240,9 +240,9 @@ function IsoGateSvg() {
         return (
           <line
             key={`plank-${i}`}
-            x1="20"
+            x1="33"
             y1={y}
-            x2="30"
+            x2="54"
             y2={y + 0.5}
             stroke="#2a1810"
             strokeWidth="0.5"
@@ -251,24 +251,24 @@ function IsoGateSvg() {
       })}
 
       {/* Bandes de fer verticales (perpendiculaires aux planches sur la silhouette) */}
-      {[23, 27].map((x) => (
-        <rect key={`band-${x}`} x={x} y="14" width="1.5" height="52" fill="#2a2018" />
+      {[39, 48].map((x) => (
+        <rect key={`band-${x}`} x={x} y="14" width="2.4" height="52" fill="#2a2018" />
       ))}
 
       {/* Clous sur les bandes */}
       {[22, 30, 38, 46, 54, 62].flatMap((y) =>
-        [23.75, 27.75].map((cx) => (
+        [40.2, 49.2].map((cx) => (
           <circle key={`stud-${y}-${cx}`} cx={cx} cy={y} r="0.7" fill="#0e0a06" />
         ))
       )}
 
       {/* Anneau de porte (silhouette latérale) */}
-      <circle cx="22" cy="40" r="1.5" fill="none" stroke="#3a2918" strokeWidth="1" />
+      <circle cx="37" cy="40" r="1.8" fill="none" stroke="#3a2918" strokeWidth="1" />
 
       {/* Ombre sur le côté gauche */}
-      <rect x="18" y="0" width="3" height="80" fill="rgba(0,0,0,0.35)" />
+      <rect x="30" y="0" width="6" height="80" fill="rgba(0,0,0,0.35)" />
       {/* Ombre verticale à droite */}
-      <rect x="30" y="0" width="2" height="80" fill="rgba(0,0,0,0.4)" />
+      <rect x="54" y="0" width="4" height="80" fill="rgba(0,0,0,0.4)" />
     </svg>
   );
 }
@@ -885,10 +885,10 @@ export function IsoBattlefield({
       />
     );
   });
-  // Mur iso : sprite couvrant r=1 à r=7, compact et aligné avec tours/porte
-  // Mur étroit vu de profil : strip vertical de ~40px de large, placé à droite du hex
-  const WALL_STRIP_WIDTH = 40;
-  const WALL_STRIP_X_OFFSET = (TILE_WIDTH - WALL_STRIP_WIDTH) / 2 + 18;
+  // Mur iso : un segment par tuile sur q=9, ancré sur le même repère que les hexs.
+  const WALL_STRIP_WIDTH = 72;
+  const WALL_STRIP_X_OFFSET = (TILE_WIDTH - WALL_STRIP_WIDTH) / 2;
+  const WALL_STRIP_Y_OFFSET = UNIT_HEIGHT;
   const wallMarkers = fortifications
     ? [1, 2, 3, 5, 6, 7].map((r) => {
         const { x, y } = getIsoPosition(9, r);
@@ -898,7 +898,7 @@ export function IsoBattlefield({
             className="pointer-events-none absolute block"
             style={{
               left: x + WALL_STRIP_X_OFFSET,
-              top: y,
+              top: y + WALL_STRIP_Y_OFFSET,
               width: WALL_STRIP_WIDTH,
               height: TILE_HEIGHT,
               zIndex: 8800 + r,
@@ -919,7 +919,7 @@ export function IsoBattlefield({
         className="pointer-events-none absolute block"
         style={{
           left: x + WALL_STRIP_X_OFFSET,
-          top: y,
+          top: y + WALL_STRIP_Y_OFFSET,
           width: WALL_STRIP_WIDTH,
           height: TILE_HEIGHT,
           zIndex: 8850 + 4,

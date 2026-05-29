@@ -6,6 +6,7 @@ import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/game/types";
 import { normalizeRmgTuning } from "@/lib/game/engine/rmg-tuning";
+import { mapLevels, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations, getProfileName, toGame } from "@/lib/supabase/game-db";
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
       seed,
       templateId,
       rmgTuning,
+      undergroundEnabled = false,
       faction = "castle",
     } = body;
     const tuning = normalizeRmgTuning(rmgTuning);
@@ -167,6 +169,7 @@ export async function POST(request: Request) {
       templateId,
       playerCount: maxPlayers,
       tuning,
+      undergroundEnabled: Boolean(undergroundEnabled),
     });
     const objectIdPrefix = randomUUID();
     prefixMonsterIds(mapData, objectIdPrefix);
@@ -182,7 +185,7 @@ export async function POST(request: Request) {
       map_height: size,
       status: "PENDING",
       map_data: mapData,
-      game_config: { turnTimeLimit: 86400, rmgTuning: tuning },
+      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled) },
       created_by_user_id: user.id,
       seed: mapData.seed,
       map_size: mapSize,
@@ -209,7 +212,7 @@ export async function POST(request: Request) {
     const gateResult = await createGates(supabase, gameRow.id, mapData);
     if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
     if (boatSchema.ok) {
-      const boatResult = await createInitialBoats(supabase, gameRow.id, mapData, faction);
+      const boatResult = await createInitialBoats(supabase, gameRow.id, mapData, faction, maxPlayers);
       if (!boatResult.ok) return NextResponse.json({ error: boatResult.error }, { status: 500 });
     }
     await createNeutralTowns(supabase, gameRow.id, mapData);
@@ -311,17 +314,21 @@ async function createInitialBoats(
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
   faction: string,
+  playerCount: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const placementWater = collectBoatPlacementWater(mapData);
+  const targetCount = getInitialBoatCount(playerCount);
   const candidates = mapData.tiles
     .flatMap((row) => row)
     .filter((tile) =>
       tile.terrain === TerrainType.WATER &&
       tile.isPassable &&
-      hasAdjacentLand(mapData, tile.x, tile.y)
+      placementWater.has(tileKey(tile.x, tile.y)) &&
+      hasCardinalAdjacentLand(mapData, tile.x, tile.y)
     );
   const selected = candidates
-    .filter((_, index) => index % Math.max(1, Math.floor(candidates.length / 4)) === 0)
-    .slice(0, 4);
+    .filter((_, index) => index % Math.max(1, Math.floor(candidates.length / targetCount)) === 0)
+    .slice(0, targetCount);
   if (selected.length === 0) return { ok: true };
 
   const { error } = await supabase.from("boats").insert(selected.map((tile) => ({
@@ -331,20 +338,100 @@ async function createInitialBoats(
     faction,
     x: tile.x,
     y: tile.y,
+    map_level: SURFACE_LEVEL,
   })));
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 
-function hasAdjacentLand(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>, x: number, y: number) {
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const tile = mapData.tiles[y + dy]?.[x + dx];
-      if (tile && tile.terrain !== TerrainType.WATER && tile.isPassable) return true;
+function getInitialBoatCount(playerCount: number) {
+  return Math.max(1, playerCount);
+}
+
+function collectBoatPlacementWater(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>) {
+  const regions = collectWaterRegions(mapData);
+  const edgeRegions = regions.filter((region) => region.touchesEdge);
+  const selectedRegions = edgeRegions.length > 0
+    ? edgeRegions
+    : regions
+      .filter((region) => region.tiles.size >= Math.max(16, Math.floor(mapData.width * mapData.height * 0.01)))
+      .sort((a, b) => b.tiles.size - a.tiles.size)
+      .slice(0, 2);
+  return new Set(selectedRegions.flatMap((region) => Array.from(region.tiles)));
+}
+
+function collectWaterRegions(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>) {
+  const seen = new Set<string>();
+  const regions: Array<{ tiles: Set<string>; touchesEdge: boolean }> = [];
+
+  for (const row of mapData.tiles) {
+    for (const tile of row) {
+      const startKey = tileKey(tile.x, tile.y);
+      if (seen.has(startKey) || tile.terrain !== TerrainType.WATER || !tile.isPassable) continue;
+
+      const tiles = new Set<string>();
+      const queue = [{ x: tile.x, y: tile.y }];
+      let touchesEdge = false;
+      seen.add(startKey);
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        tiles.add(tileKey(current.x, current.y));
+        if (current.x === 0 || current.y === 0 || current.x === mapData.width - 1 || current.y === mapData.height - 1) {
+          touchesEdge = true;
+        }
+
+        for (const next of [
+          { x: current.x + 1, y: current.y },
+          { x: current.x - 1, y: current.y },
+          { x: current.x, y: current.y + 1 },
+          { x: current.x, y: current.y - 1 },
+        ]) {
+          const nextTile = mapData.tiles[next.y]?.[next.x];
+          const nextKey = tileKey(next.x, next.y);
+          if (!nextTile || seen.has(nextKey) || nextTile.terrain !== TerrainType.WATER || !nextTile.isPassable) continue;
+          seen.add(nextKey);
+          queue.push(next);
+        }
+      }
+
+      regions.push({ tiles, touchesEdge });
     }
   }
+
+  return regions;
+}
+
+function tileKey(x: number, y: number) {
+  return `${x},${y}`;
+}
+
+function hasCardinalAdjacentLand(mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>, x: number, y: number) {
+  for (const position of [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+  ]) {
+    const tile = mapData.tiles[position.y]?.[position.x];
+    if (tile && tile.terrain !== TerrainType.WATER && tile.isPassable) return true;
+  }
   return false;
+}
+
+function allMapTiles(mapData: GameMap): Array<{ tile: MapTile; mapLevel: string; layer: GameMap }> {
+  return mapLevels(mapData).flatMap((layer) => {
+    const layerMap = {
+      ...mapData,
+      width: layer.width,
+      height: layer.height,
+      tiles: layer.tiles,
+      zones: layer.zones,
+    };
+    return layer.tiles.flatMap((row) =>
+      row.map((tile) => ({ tile, mapLevel: layer.id, layer: layerMap }))
+    );
+  });
 }
 
 async function createNeutralArmies(
@@ -352,16 +439,14 @@ async function createNeutralArmies(
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const monsterTiles = mapData.tiles.flatMap((row) =>
-    row.filter((tile) => tile.object?.type === "monster"),
-  );
+  const monsterTiles = allMapTiles(mapData).filter(({ tile }) => tile.object?.type === "monster");
 
-  for (const tile of monsterTiles) {
+  for (const { tile, mapLevel } of monsterTiles) {
     const id = tile.object?.id;
     if (!id) continue;
     const guardianPower = tile.object?.guardianPower ?? 100;
     const stacks = createNeutralArmyStacksForTile(tile, guardianPower, id);
-    const { error: armyError } = await supabase.from("neutral_armies").insert({ id, game_id: gameId, x: tile.x, y: tile.y });
+    const { error: armyError } = await supabase.from("neutral_armies").insert({ id, game_id: gameId, x: tile.x, y: tile.y, map_level: mapLevel });
     if (armyError) return { ok: false, error: armyError.message };
     const { error: stackError } = await supabase.from("neutral_army_stacks").insert(stacks.map((stack) => ({
       neutral_army_id: id,
@@ -381,11 +466,9 @@ async function createGates(
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const gateTiles = mapData.tiles.flatMap((row) =>
-    row.filter((tile) => tile.object?.type === "gate"),
-  );
+  const gateTiles = allMapTiles(mapData).filter(({ tile }) => tile.object?.type === "gate");
 
-  for (const tile of gateTiles) {
+  for (const { tile, mapLevel } of gateTiles) {
     const id = tile.object?.id;
     if (!id) continue;
     const guardianPower = tile.object?.guardianPower ?? 100;
@@ -396,6 +479,7 @@ async function createGates(
       game_player_id: null,
       x: tile.x,
       y: tile.y,
+      map_level: mapLevel,
       guardian_power: guardianPower,
     });
     if (gateError) return { ok: false, error: gateError.message };
@@ -415,13 +499,11 @@ async function createGates(
 function assignMonsterSubtypes(
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
 ) {
-  for (const row of mapData.tiles) {
-    for (const tile of row) {
-      if (tile.object?.type !== "monster") continue;
-      const stacks = createNeutralArmyStacksForTile(tile, tile.object.guardianPower ?? 100, tile.object.id);
-      const dominantUnitType = getDominantUnitType(stacks);
-      if (dominantUnitType) tile.object.subtype = dominantUnitType;
-    }
+  for (const { tile } of allMapTiles(mapData)) {
+    if (tile.object?.type !== "monster") continue;
+    const stacks = createNeutralArmyStacksForTile(tile, tile.object.guardianPower ?? 100, tile.object.id);
+    const dominantUnitType = getDominantUnitType(stacks);
+    if (dominantUnitType) tile.object.subtype = dominantUnitType;
   }
 }
 
@@ -429,11 +511,9 @@ function prefixMonsterIds(
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
   prefix: string,
 ) {
-  for (const row of mapData.tiles) {
-    for (const tile of row) {
-      if (tile.object?.type === "monster") {
-        tile.object.id = `${prefix}-${tile.object.id}`;
-      }
+  for (const { tile } of allMapTiles(mapData)) {
+    if (tile.object?.type === "monster") {
+      tile.object.id = `${prefix}-${tile.object.id}`;
     }
   }
 }
@@ -442,11 +522,9 @@ function prefixGateIds(
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
   prefix: string,
 ) {
-  for (const row of mapData.tiles) {
-    for (const tile of row) {
-      if (tile.object?.type === "gate") {
-        tile.object.id = `${prefix}-${tile.object.id}`;
-      }
+  for (const { tile } of allMapTiles(mapData)) {
+    if (tile.object?.type === "gate") {
+      tile.object.id = `${prefix}-${tile.object.id}`;
     }
   }
 }
@@ -456,48 +534,46 @@ async function createNeutralTowns(
   gameId: string,
   mapData: ReturnType<typeof import("@/lib/game/engine").generateMap>,
 ) {
-  for (let y = 0; y < mapData.tiles.length; y++) {
-    for (let x = 0; x < mapData.tiles[y].length; x++) {
-      const tile = mapData.tiles[y][x];
-      if (tile.object?.type !== "town") continue;
-      if (!isNeutralTownObject(tile.object)) continue;
+  for (const { tile, mapLevel, layer } of allMapTiles(mapData)) {
+    const { x, y } = tile;
+    if (tile.object?.type !== "town") continue;
+    if (!isNeutralTownObject(tile.object)) continue;
 
-      const terrain = townBiomeTerrain(mapData, tile);
-      const seed = `${mapData.seed ?? gameId}:${tile.object.id}:${x}:${y}`;
-      const f = isFaction(tile.object.subtype)
-        ? tile.object.subtype
-        : pickTownFactionForTerrain(terrain, seed);
-      const townName = tile.object.name ?? pickTownName(f, seed);
+    const terrain = townBiomeTerrain(layer, tile);
+    const seed = `${mapData.seed ?? gameId}:${mapLevel}:${tile.object.id}:${x}:${y}`;
+    const f = isFaction(tile.object.subtype)
+      ? tile.object.subtype
+      : pickTownFactionForTerrain(terrain, seed);
+    const townName = tile.object.name ?? pickTownName(f, seed);
 
-      await supabase.from("towns").insert({
-        game_id: gameId,
-        game_player_id: null,
-        name: townName,
-        town_type: f,
-        x,
-        y,
-        buildings: [BuildingType.VILLAGE_HALL],
-        garrison: [],
-        is_neutral: true,
-        neutral_garrison: createNeutralTownGarrison(f),
-      });
-    }
+    await supabase.from("towns").insert({
+      game_id: gameId,
+      game_player_id: null,
+      name: townName,
+      town_type: f,
+      x,
+      y,
+      map_level: mapLevel,
+      buildings: [BuildingType.VILLAGE_HALL],
+      garrison: [],
+      is_neutral: true,
+      neutral_garrison: createNeutralTownGarrison(f),
+    });
   }
 }
 
 function assignNeutralTownTraits(mapData: GameMap) {
-  for (let y = 0; y < mapData.tiles.length; y++) {
-    for (let x = 0; x < mapData.tiles[y].length; x++) {
-      const tile = mapData.tiles[y][x];
-      if (tile.object?.type !== "town") continue;
-      if (!isNeutralTownObject(tile.object)) continue;
+  for (const { tile, mapLevel, layer } of allMapTiles(mapData)) {
+    const x = tile.x;
+    const y = tile.y;
+    if (tile.object?.type !== "town") continue;
+    if (!isNeutralTownObject(tile.object)) continue;
 
-      const terrain = townBiomeTerrain(mapData, tile);
-      const seed = `${mapData.seed ?? "map"}:${tile.object.id}:${x}:${y}`;
-      const faction = pickTownFactionForTerrain(terrain, seed);
-      tile.object.subtype = faction;
-      tile.object.name = pickTownName(faction, seed);
-    }
+    const terrain = townBiomeTerrain(layer, tile);
+    const seed = `${mapData.seed ?? "map"}:${mapLevel}:${tile.object.id}:${x}:${y}`;
+    const faction = pickTownFactionForTerrain(terrain, seed);
+    tile.object.subtype = faction;
+    tile.object.name = pickTownName(faction, seed);
   }
 }
 

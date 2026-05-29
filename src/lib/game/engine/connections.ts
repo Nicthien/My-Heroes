@@ -36,7 +36,7 @@ export function buildConnectionsAndWalls(
   zoneGrid.meta.forEach((m) => templateZoneToZoneId.set(m.templateZoneId, m.id));
 
   const connectionByPair = new Map<string, ConnectionTemplate>();
-  for (const c of template.connections) {
+  for (const c of template.connections.filter((connection) => (connection.connectionType ?? "horizontal") === "horizontal")) {
     const a = templateZoneToZoneId.get(c.from);
     const b = templateZoneToZoneId.get(c.to);
     if (a === undefined || b === undefined) continue;
@@ -80,7 +80,7 @@ export function buildConnectionsAndWalls(
 
   // 2) Pour chaque connexion : percer un chokepoint au milieu de la frontière
   const chokepoints: Chokepoint[] = [];
-  for (const c of template.connections) {
+  for (const c of template.connections.filter((connection) => (connection.connectionType ?? "horizontal") === "horizontal")) {
     const from = templateZoneToZoneId.get(c.from);
     const to = templateZoneToZoneId.get(c.to);
     if (from === undefined || to === undefined) continue;

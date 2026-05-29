@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState, type ReactNode } from "react";
 import { useSession } from "@/lib/auth/client";
 import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
+import { normalizeMapLevel, SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
+import type { MapLevelId } from "@/lib/game/types";
 import { MAP_SPRITES } from "@/lib/rendering/phaser/assets";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { ActiveCombatsList } from "../combat/ActiveCombatsPanel";
@@ -41,12 +43,15 @@ function rightColumnDefault(y: number) {
 export default function DesktopHudWindows({ gameId, playerId }: { gameId: string; playerId?: string }) {
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
+  const activeMapLevel = useGameStore((state) => state.activeMapLevel);
+  const setActiveMapLevel = useGameStore((state) => state.setActiveMapLevel);
   const [activeTab, setActiveTab] = useState<OverviewTab>("heroes");
 
   if (!gameState) return null;
   const me = gameState.players.find((player) => player.userId === session?.user?.id);
   const playersById = new Map(gameState.players.map((player) => [player.id, player]));
   const knownJournalCount = me ? getKnownActionLogEntries(gameState.actionLog, me.id).length : 0;
+  const hasUnderground = Boolean(gameState.map.levels?.underground);
 
   const tabs: Array<{ id: OverviewTab; label: string; count: number; icon: ReactNode }> = [
     { id: "heroes", label: "Héros", count: me?.heroes.length ?? 0, icon: <HeroIcon className="h-4 w-4" /> },
@@ -64,6 +69,11 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
         defaultPosition={rightColumnDefault(RIGHT_COLUMN_TOP)}
         className="w-64"
         fallbackSize={{ width: 256, height: 210 }}
+        beforeReset={
+          hasUnderground ? (
+            <MapLevelHeaderToggle activeMapLevel={activeMapLevel} onChange={setActiveMapLevel} />
+          ) : undefined
+        }
       >
         <MiniMap />
       </HudWindow>
@@ -131,6 +141,7 @@ export function HudWindow({
   bodyClassName,
   fallbackSize,
   testId,
+  beforeReset,
 }: {
   title: ReactNode;
   storageKey: string;
@@ -140,6 +151,7 @@ export function HudWindow({
   bodyClassName?: string;
   fallbackSize?: { width: number; height: number };
   testId?: string;
+  beforeReset?: ReactNode;
 }) {
   const draggable = useDraggableWindow({ storageKey, defaultPosition, fallbackSize });
 
@@ -150,12 +162,50 @@ export function HudWindow({
       bodyClassName={bodyClassName}
       dragHandleProps={draggable.isEnabled ? draggable.dragHandleProps : undefined}
       onResetPosition={draggable.isEnabled ? draggable.resetPosition : undefined}
+      beforeReset={beforeReset}
       rootRef={draggable.ref}
       style={draggable.style}
       testId={testId}
     >
       {children}
     </CollapsiblePanel>
+  );
+}
+
+function MapLevelHeaderToggle({
+  activeMapLevel,
+  onChange,
+}: {
+  activeMapLevel: MapLevelId;
+  onChange: (level: MapLevelId) => void;
+}) {
+  return (
+    <div className="flex h-7 rounded-md border border-amber-700/50 bg-black/25 p-0.5" aria-label="Niveau de carte">
+      {[
+        { id: SURFACE_LEVEL, label: "S", title: "Surface" },
+        { id: UNDERGROUND_LEVEL, label: "U", title: "Souterrain" },
+      ].map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChange(item.id);
+          }}
+          aria-pressed={activeMapLevel === item.id}
+          aria-label={item.title}
+          title={item.title}
+          className={`grid h-6 w-6 place-items-center rounded text-[10px] font-black uppercase transition ${
+            activeMapLevel === item.id
+              ? "bg-amber-500/30 text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.25)]"
+              : "text-amber-200/55 hover:bg-amber-950/45 hover:text-amber-100"
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -174,7 +224,11 @@ function HeroesList({ playerId }: { playerId: string }) {
     <>
       {player.heroes.map((hero) => {
         const active = hero.id === selectedHeroId;
-        const townAtHero = player.towns.find((town) => town.position.x === hero.position.x && town.position.y === hero.position.y);
+        const townAtHero = player.towns.find((town) =>
+          town.position.x === hero.position.x &&
+          town.position.y === hero.position.y &&
+          normalizeMapLevel(town.position.level) === normalizeMapLevel(hero.position.level)
+        );
         return (
           <Row
             key={hero.id}

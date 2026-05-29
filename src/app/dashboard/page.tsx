@@ -13,7 +13,8 @@ import {
   normalizeRmgTuning,
 } from "@/lib/game/engine/rmg-tuning";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
-import { GameMap, TerrainType } from "@/lib/game/types";
+import { GameMap, TerrainType, type MapLevelId } from "@/lib/game/types";
+import { UNDERGROUND_LEVEL, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import { createClient } from "@/lib/supabase/browser";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -452,6 +453,8 @@ export default function DashboardPage() {
   const [seed, setSeed] = useState(() => randomSeedValue());
   const [templateId, setTemplateId] = useState<string>("auto");
   const [rmgTuning, setRmgTuning] = useState<RmgTuning>(DEFAULT_RMG_TUNING);
+  const [undergroundEnabled, setUndergroundEnabled] = useState(false);
+  const [previewLevel, setPreviewLevel] = useState<MapLevelId>(SURFACE_LEVEL);
   const router = useRouter();
   const templateOptions = useMemo(() => listTemplatesForPlayers(maxPlayers), [maxPlayers]);
   const selectedTemplateId = templateId !== "auto" && templateOptions.some((template) => template.id === templateId)
@@ -468,10 +471,15 @@ export default function DashboardPage() {
         playerCount: maxPlayers,
         templateId: effectiveTemplateId,
         tuning: normalizedRmgTuning,
+        undergroundEnabled,
       }),
-    [effectiveTemplateId, mapSize, maxPlayers, normalizedRmgTuning, seed],
+    [effectiveTemplateId, mapSize, maxPlayers, normalizedRmgTuning, seed, undergroundEnabled],
   );
-  const previewStats = useMemo(() => summarizeMap(previewMap), [previewMap]);
+  const visiblePreviewMap = useMemo(
+    () => withActiveMapLayer(previewMap, undergroundEnabled ? previewLevel : SURFACE_LEVEL),
+    [previewLevel, previewMap, undergroundEnabled],
+  );
+  const previewStats = useMemo(() => summarizeMap(visiblePreviewMap), [visiblePreviewMap]);
   const isAdmin = session?.user?.role === "admin";
   const mustChangePassword = Boolean(session?.user?.mustChangePassword);
   const generateRandomSeed = () => {
@@ -810,6 +818,7 @@ export default function DashboardPage() {
         seed,
         templateId: effectiveTemplateId,
         rmgTuning: normalizedRmgTuning,
+        undergroundEnabled,
         ...(isAdmin ? {} : { faction: selectedFaction }),
       }),
     });
@@ -1256,6 +1265,19 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <label className="mb-4 flex items-center gap-3 rounded-md border border-amber-700/40 bg-stone-950/60 p-3 text-sm font-bold text-amber-100">
+              <input
+                type="checkbox"
+                checked={undergroundEnabled}
+                onChange={(event) => {
+                  setUndergroundEnabled(event.target.checked);
+                  if (!event.target.checked) setPreviewLevel(SURFACE_LEVEL);
+                }}
+                className="h-4 w-4 accent-amber-500"
+              />
+              <span>Générer un souterrain</span>
+            </label>
+
             <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60">
               <button
                 type="button"
@@ -1295,9 +1317,28 @@ export default function DashboardPage() {
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
                   <div className="text-[11px] uppercase tracking-wider text-amber-200/50">
-                    Graine {previewMap.seed} - {previewMap.width}x{previewMap.height}
+                    Graine {previewMap.seed} - {visiblePreviewMap.width}x{visiblePreviewMap.height}{undergroundEnabled ? " - Souterrain activé" : ""}
                   </div>
                 </div>
+                {undergroundEnabled && (
+                  <div className="flex rounded-md border border-amber-700/40 bg-black/30 p-1">
+                    {[
+                      { id: SURFACE_LEVEL, label: "Surface" },
+                      { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPreviewLevel(item.id)}
+                        className={`rounded px-3 py-1 text-xs font-black uppercase tracking-wider ${
+                          previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-amber-200/55 hover:text-amber-100"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowRmgPreview(true)}
@@ -1307,7 +1348,7 @@ export default function DashboardPage() {
                 </button>
               </div>
               <RmgMapPreview
-                map={previewMap}
+                map={visiblePreviewMap}
                 minSize={260}
                 maxSize={360}
                 cellScale={4}
@@ -1355,10 +1396,29 @@ export default function DashboardPage() {
                   <div>
                     <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
                     <p className="text-sm text-stone-400">
-                      Graine {previewMap.seed} - Modèle {previewMap.templateId}
+                      Graine {previewMap.seed} - Modèle {previewMap.templateId}{undergroundEnabled ? " - Souterrain activé" : ""}
                     </p>
                   </div>
                   <div className="flex gap-2">
+                    {undergroundEnabled && (
+                      <div className="flex rounded border border-stone-700 bg-stone-900 p-1">
+                        {[
+                          { id: SURFACE_LEVEL, label: "Surface" },
+                          { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                        ].map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setPreviewLevel(item.id)}
+                            className={`h-7 rounded px-2 text-xs font-semibold ${
+                              previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-stone-300 hover:text-amber-100"
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={generateRandomSeed}
@@ -1435,11 +1495,11 @@ export default function DashboardPage() {
                 </section>
 
                 <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <RmgMapPreview map={previewMap} minSize={420} maxSize={1120} cellScale={8} />
+                  <RmgMapPreview map={visiblePreviewMap} minSize={420} maxSize={1120} cellScale={8} />
 
                   <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
                     <RmgLegend />
-                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={previewMap.width * previewMap.height} />
+                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
                     <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
                     <RmgStatBlock title="Details" values={previewStats.details} />
                   </aside>

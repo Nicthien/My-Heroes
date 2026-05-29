@@ -4,6 +4,7 @@ import { MINIMUM_ADVENTURE_STEP_COST, getDailyAdventureMovement } from "@/lib/ga
 import { normalizeArtifactBag } from "@/lib/game/artifacts";
 import { HERO_ROSTER } from "@/lib/game/heroes";
 import { type CombatBoardUnit, type Resources, UnitType } from "@/lib/game/types";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 type DbRow = Record<string, unknown>;
@@ -128,6 +129,7 @@ export function toHero(row: DbRow) {
     maxMovement,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     isMoving: row.is_moving,
     armies,
   };
@@ -169,6 +171,7 @@ export function toTown(row: DbRow) {
     townType: row.town_type,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     level: row.level,
     isFort: row.is_fort,
     isNeutral: row.is_neutral,
@@ -189,6 +192,7 @@ export function toResourceBuilding(row: DbRow) {
     buildingType: row.building_type,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     guardianPower: row.guardian_power,
   };
 }
@@ -210,6 +214,7 @@ export function toNeutralArmy(row: DbRow) {
     gameId: row.game_id,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     status: row.status,
     stacks: rows(row.neutral_army_stacks ?? row.stacks).map(toNeutralArmyStack),
   };
@@ -234,6 +239,7 @@ export function toGate(row: DbRow) {
     gamePlayerId: row.game_player_id,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     guardianPower: row.guardian_power,
     garrison: rows(row.gate_stacks ?? row.garrison).map(toGateStack).filter((stack) => Number(stack.count) > 0),
   };
@@ -260,6 +266,7 @@ export function toBoat(row: DbRow) {
     faction: row.faction ?? "castle",
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
   };
 }
 
@@ -283,6 +290,7 @@ export function toCombat(row: DbRow) {
     round: row.round,
     x: row.x,
     y: row.y,
+    mapLevel: normalizeMapLevel(row.map_level),
     boardState: row.board_state,
     turnQueue: row.turn_queue ?? [],
     actionLog: row.action_log ?? [],

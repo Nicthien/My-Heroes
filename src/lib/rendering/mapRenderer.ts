@@ -28,13 +28,14 @@ export interface SpellRevealHint {
 }
 
 export type RendererLoadingProgress = (progress: number, message?: string) => void;
+export type FogTheme = "surface" | "underground";
 
 export interface MapRenderer {
   init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress): Promise<void>;
   isReady(): boolean;
   renderMap(map: GameMap): void;
   setObjects(objects: MapObjectData[]): void;
-  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>): void;
+  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>, theme?: FogTheme): void;
   animateHeroMovement(heroId: string, path: Position[]): Promise<void>;
   highlightPath(path: Position[]): void;
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string): void;

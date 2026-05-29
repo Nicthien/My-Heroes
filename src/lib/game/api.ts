@@ -10,6 +10,7 @@ import { isCreatureBankType } from "./creature-banks";
 import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
 import { isSingleMapRewardBuilding } from "./adventure-buildings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
+import { normalizeMapLevel } from "./map-levels";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
@@ -79,6 +80,7 @@ interface ApiHero {
   warMachines?: unknown;
   x: number;
   y: number;
+  mapLevel?: string | null;
   movement: number;
   maxMovement: number;
   armies: ApiArmy[];
@@ -98,6 +100,7 @@ interface ApiNeutralArmy {
   status: string;
   x: number;
   y: number;
+  mapLevel?: string | null;
   stacks?: ApiArmy[];
 }
 
@@ -106,6 +109,7 @@ interface ApiGate {
   gamePlayerId: string | null;
   x: number;
   y: number;
+  mapLevel?: string | null;
   guardianPower: number;
   garrison?: ApiArmy[];
 }
@@ -117,6 +121,7 @@ interface ApiBoat {
   faction?: string | null;
   x: number;
   y: number;
+  mapLevel?: string | null;
 }
 
 interface ApiTown {
@@ -125,6 +130,7 @@ interface ApiTown {
   townType?: string;
   x: number;
   y: number;
+  mapLevel?: string | null;
   level: number;
   buildings: string[];
   garrison: string[];
@@ -141,6 +147,7 @@ interface ApiResourceBuilding {
   buildingType: string;
   x: number;
   y: number;
+  mapLevel?: string | null;
   guardianPower: number;
 }
 
@@ -160,6 +167,7 @@ interface ApiCombat {
   round: number;
   x: number;
   y: number;
+  mapLevel?: string | null;
   boardState: PersistentCombat["boardState"];
   turnQueue: string[];
   actionLog: string[];
@@ -268,7 +276,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
         skills,
         warMachines: (hero.warMachines as { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean } | undefined) ?? {},
         pendingSkillChoices,
-        position: { x: hero.x, y: hero.y },
+        position: { x: hero.x, y: hero.y, level: normalizeMapLevel(hero.mapLevel) },
         movement: hero.movement,
         maxMovement: hero.maxMovement,
         armies: hero.armies.map((army) => ({
@@ -287,7 +295,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
       name: town.name,
       faction: player.faction as Faction,
       townType: town.townType as Faction | undefined,
-      position: { x: town.x, y: town.y },
+      position: { x: town.x, y: town.y, level: normalizeMapLevel(town.mapLevel) },
       level: town.level,
       buildings: normalizeTownBuildings((town.buildings || []) as BuildingType[]),
       garrison: (town.garrison || []) as never[],
@@ -309,7 +317,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
     resourceBuildings: (player.resourceBuildings ?? []).map((building): ResourceBuilding => ({
       id: building.id,
       type: building.buildingType as ResourceBuildingType,
-      position: { x: building.x, y: building.y },
+      position: { x: building.x, y: building.y, level: normalizeMapLevel(building.mapLevel) },
       ownerId: building.gamePlayerId,
       guardianPower: building.guardianPower ?? 0,
     })),
@@ -325,7 +333,7 @@ function mapNeutralArmies(data: Record<string, unknown>) {
   return ((data.neutralArmies as ApiNeutralArmy[] | undefined) ?? []).map((army): NeutralArmy => ({
     id: army.id,
     status: army.status,
-    position: { x: army.x, y: army.y },
+    position: { x: army.x, y: army.y, level: normalizeMapLevel(army.mapLevel) },
     stacks: (army.stacks ?? []).map((stack) => ({
       id: stack.id,
       unitType: stack.unitType as UnitType,
@@ -350,7 +358,7 @@ function mapGates(data: Record<string, unknown>, neutralArmies: NeutralArmy[] = 
   for (const gate of ((data.gates as ApiGate[] | undefined) ?? []).map((gate): Gate => ({
     id: gate.id,
     ownerId: gate.gamePlayerId,
-    position: { x: gate.x, y: gate.y },
+    position: { x: gate.x, y: gate.y, level: normalizeMapLevel(gate.mapLevel) },
     guardianPower: gate.guardianPower ?? 0,
     garrison: (gate.garrison ?? []).map((stack) => ({
       id: stack.id,
@@ -412,7 +420,7 @@ function mapActiveCombats(data: Record<string, unknown>) {
       currentPlayerId: combat.currentPlayerId,
       currentUnitId: combat.currentUnitId,
       round: combat.round,
-      position: { x: combat.x, y: combat.y },
+      position: { x: combat.x, y: combat.y, level: normalizeMapLevel(combat.mapLevel) },
       boardState: combat.boardState,
       turnQueue: combat.turnQueue,
       actionLog: combat.actionLog,
@@ -431,7 +439,7 @@ function mapBoats(data: Record<string, unknown>): Boat[] {
     ownerId: boat.ownerId ?? null,
     heroId: boat.heroId ?? null,
     faction: boat.faction ?? Faction.CASTLE,
-    position: { x: boat.x, y: boat.y },
+    position: { x: boat.x, y: boat.y, level: normalizeMapLevel(boat.mapLevel) },
   }));
 }
 

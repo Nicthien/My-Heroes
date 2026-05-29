@@ -1,5 +1,5 @@
 import type { ArtifactClass } from "../artifacts";
-import { TerrainType } from "../types";
+import { MapLevelId, TerrainType } from "../types";
 import { shuffle, type RNG } from "./rng";
 
 export type GuardStrength = "weak" | "normal" | "strong" | "veryStrong";
@@ -10,6 +10,8 @@ export type LandStyle = "islands" | "large-islands" | "volcanic-crown";
 export interface ZoneTemplate {
   id: string;
   type: "player" | "treasure" | "junction";
+  mapLevel?: MapLevelId;
+  pairedZoneId?: string;
   ownerIndex?: number;
   baseTerrain: TerrainType;
   sizeWeight: number;
@@ -33,6 +35,7 @@ export interface ZoneTemplate {
 export interface ConnectionTemplate {
   from: string;
   to: string;
+  connectionType?: "horizontal" | "subterranean_gate";
   guardStrength: GuardStrength;
   wallType: WallType;
 }
@@ -191,6 +194,40 @@ const JEBUS_CROSS: MapTemplate = {
       pocketCount: 3,
       pocketGuardStrength: "strong",
     },
+    {
+      id: "ug-vault",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "center",
+      baseTerrain: TerrainType.DIRT,
+      sizeWeight: 1.0,
+      value: 6500,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.5,
+      treasureDensity: 1.25,
+      pocketCount: 2,
+      pocketGuardStrength: "strong",
+    },
+    {
+      id: "ug-hellcore",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "j-s",
+      baseTerrain: TerrainType.LAVA,
+      sizeWeight: 0.72,
+      value: 7200,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.66,
+      treasureDensity: 1.2,
+      pocketCount: 1,
+      pocketGuardStrength: "veryStrong",
+    },
   ],
   connections: [
     { from: "p1", to: "j-n", guardStrength: "normal", wallType: "natural" },
@@ -205,6 +242,9 @@ const JEBUS_CROSS: MapTemplate = {
     { from: "j-s", to: "center", guardStrength: "veryStrong", wallType: "brick" },
     { from: "j-w", to: "center", guardStrength: "veryStrong", wallType: "brick" },
     { from: "j-e", to: "center", guardStrength: "veryStrong", wallType: "brick" },
+    { from: "center", to: "ug-vault", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
+    { from: "j-s", to: "ug-hellcore", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
+    { from: "ug-vault", to: "ug-hellcore", guardStrength: "veryStrong", wallType: "brick" },
   ],
 };
 
@@ -253,10 +293,28 @@ const DUEL: MapTemplate = {
       pocketCount: 3,
       pocketGuardStrength: "strong",
     },
+    {
+      id: "ug-vault",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "center",
+      baseTerrain: TerrainType.DIRT,
+      sizeWeight: 0.95,
+      value: 6200,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.5,
+      treasureDensity: 1.2,
+      pocketCount: 2,
+      pocketGuardStrength: "strong",
+    },
   ],
   connections: [
     { from: "p1", to: "center", guardStrength: "strong", wallType: "natural" },
     { from: "p2", to: "center", guardStrength: "strong", wallType: "natural" },
+    { from: "center", to: "ug-vault", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
   ],
 };
 
@@ -362,6 +420,23 @@ const ARCHIPELAGO: MapTemplate = {
       pocketCount: 3,
       pocketGuardStrength: "strong",
     },
+    {
+      id: "ug-vault",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "center",
+      baseTerrain: TerrainType.DIRT,
+      sizeWeight: 0.95,
+      value: 7000,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.5,
+      treasureDensity: 1.2,
+      pocketCount: 2,
+      pocketGuardStrength: "strong",
+    },
   ],
   connections: [
     { from: "p1", to: "north-isle", guardStrength: "normal", wallType: "natural" },
@@ -370,6 +445,7 @@ const ARCHIPELAGO: MapTemplate = {
     { from: "p4", to: "south-isle", guardStrength: "normal", wallType: "natural" },
     { from: "north-isle", to: "center", guardStrength: "veryStrong", wallType: "natural" },
     { from: "south-isle", to: "center", guardStrength: "veryStrong", wallType: "natural" },
+    { from: "center", to: "ug-vault", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
   ],
 };
 
@@ -470,6 +546,23 @@ const BROKEN_KINGDOMS: MapTemplate = {
       pocketCount: 2,
       pocketGuardStrength: "normal",
     },
+    {
+      id: "ug-vault",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "crown",
+      baseTerrain: TerrainType.DIRT,
+      sizeWeight: 1.0,
+      value: 6400,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.5,
+      treasureDensity: 1.2,
+      pocketCount: 2,
+      pocketGuardStrength: "strong",
+    },
   ],
   connections: [
     { from: "p1", to: "west-vault", guardStrength: "normal", wallType: "natural" },
@@ -478,6 +571,7 @@ const BROKEN_KINGDOMS: MapTemplate = {
     { from: "p4", to: "east-vault", guardStrength: "normal", wallType: "natural" },
     { from: "west-vault", to: "crown", guardStrength: "strong", wallType: "brick" },
     { from: "east-vault", to: "crown", guardStrength: "strong", wallType: "brick" },
+    { from: "crown", to: "ug-vault", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
   ],
 };
 
@@ -620,6 +714,40 @@ const VOLCANIC_CROWN: MapTemplate = {
       pocketCount: 2,
       pocketGuardStrength: "veryStrong",
     },
+    {
+      id: "ug-vault",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "volcanic-ring",
+      baseTerrain: TerrainType.DIRT,
+      sizeWeight: 0.9,
+      value: 7200,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.48,
+      treasureDensity: 1.2,
+      pocketCount: 2,
+      pocketGuardStrength: "strong",
+    },
+    {
+      id: "ug-hellcore",
+      type: "treasure",
+      mapLevel: "underground",
+      pairedZoneId: "hellcore",
+      baseTerrain: TerrainType.LAVA,
+      sizeWeight: 0.78,
+      value: 8200,
+      hasTown: true,
+      townIsNeutral: true,
+      monsterStrength: "strong",
+      nx: 0.5,
+      ny: 0.6,
+      treasureDensity: 1.25,
+      pocketCount: 2,
+      pocketGuardStrength: "veryStrong",
+    },
   ],
   connections: [
     { from: "p1", to: "north-pass", guardStrength: "normal", wallType: "natural" },
@@ -631,6 +759,9 @@ const VOLCANIC_CROWN: MapTemplate = {
     { from: "north-pass", to: "volcanic-ring", guardStrength: "veryStrong", wallType: "brick" },
     { from: "south-pass", to: "volcanic-ring", guardStrength: "veryStrong", wallType: "brick" },
     { from: "volcanic-ring", to: "hellcore", guardStrength: "veryStrong", wallType: "brick" },
+    { from: "volcanic-ring", to: "ug-vault", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
+    { from: "hellcore", to: "ug-hellcore", connectionType: "subterranean_gate", guardStrength: "strong", wallType: "natural" },
+    { from: "ug-vault", to: "ug-hellcore", guardStrength: "veryStrong", wallType: "brick" },
   ],
 };
 

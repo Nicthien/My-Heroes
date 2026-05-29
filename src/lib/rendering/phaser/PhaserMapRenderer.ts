@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPreferences";
 import { measureDevPerformance, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
+import { UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
@@ -42,8 +43,10 @@ import {
   FOG_TILE_UNINITIALIZED,
   FOG_TILE_VISIBLE,
   FOG_UNEXPLORED_STAMP_CONFIG,
+  UNDERGROUND_FOG_STAMP_TEXTURE_KEYS,
   type FogChunk,
   type FogChunkBounds,
+  type FogTheme,
   type FogStampKey,
   type FogTileState,
 } from "@/lib/rendering/phaser/fogConstants";
@@ -102,6 +105,7 @@ import {
   getTerrainSideFaceColor,
   getTerrainTopStroke,
   getTileDepth,
+  type TerrainSideExposure,
   type TerrainSideVisibility,
 } from "@/lib/rendering/phaser/terrainFaceRender";
 import { getCubeCorners, getCubeFacePoints } from "@/lib/rendering/phaser/isoCube";
@@ -139,6 +143,13 @@ type FailedLoaderFile = {
   src?: unknown;
   url?: unknown;
 };
+
+const UNDERGROUND_VOID_TOP_TEXTURE: TerrainTopTexture = {
+  path: "/assets/textures/terrain/mountain/mountain-cracked-rock.webp",
+  tags: ["crack"],
+};
+
+const UNDERGROUND_VOID_WALL_DEPTH = 18;
 
 import {
   areObjectsRenderEquivalent,
@@ -227,6 +238,7 @@ class PhaserMapScene extends Phaser.Scene {
   private hoverLabelTimer?: Phaser.Time.TimerEvent;
   private visibleTiles: Set<string> | null = null;
   private exploredTiles: Set<string> | null = null;
+  private fogTheme: FogTheme = "surface";
   private fogChunkColumns = 0;
   private fogChunkRows = 0;
   private fogChunks: FogChunk[] = [];
@@ -438,7 +450,7 @@ class PhaserMapScene extends Phaser.Scene {
         const iso = cartToIso(x, y);
         this.renderTile(tile, iso.x, iso.y, terrainBase, terrainCover);
         const depth = getTileDepth(tile);
-        if (tile.object?.type === "wall" && tile.object.subtype === "natural") {
+        if (tile.object?.type === "wall" && tile.object.subtype === "natural" && this.map?.activeLevel !== UNDERGROUND_LEVEL) {
           this.renderNaturalWall(tile, iso.x, iso.y - depth);
         }
         if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth, decorGraphics);
@@ -839,7 +851,13 @@ class PhaserMapScene extends Phaser.Scene {
     this.objectLayer.add(sprite);
   }
 
-
+  private isUndergroundVoidTile(tile: MapTile) {
+    return Boolean(
+      this.map?.activeLevel === UNDERGROUND_LEVEL &&
+      tile.object?.type === "wall" &&
+      tile.object.subtype === "natural"
+    );
+  }
 
   setObjects(objects: MapObjectData[]) {
     measureDevPerformance("phaser.setObjects", () => {
@@ -862,14 +880,19 @@ class PhaserMapScene extends Phaser.Scene {
     }
   }
 
-  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
-    measureDevPerformance("phaser.setFog", () => this.setFogMeasured(visibleTiles, exploredTiles));
+  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>, theme: FogTheme = "surface") {
+    measureDevPerformance("phaser.setFog", () => this.setFogMeasured(visibleTiles, exploredTiles, theme));
   }
 
-  private setFogMeasured(visibleTiles: Set<string>, exploredTiles: Set<string>) {
+  private setFogMeasured(visibleTiles: Set<string>, exploredTiles: Set<string>, theme: FogTheme) {
     if (!this.map) return;
     this.visibleTiles = new Set(visibleTiles);
     this.exploredTiles = new Set(exploredTiles);
+    if (this.fogTheme !== theme) {
+      this.fogTheme = theme;
+      this.fogStampTextureKeys = theme === "underground" ? UNDERGROUND_FOG_STAMP_TEXTURE_KEYS : FOG_STAMP_TEXTURE_KEYS;
+      this.fogTileStates = null;
+    }
     if (this.isLoadingDynamicTextures) return;
     const totalTiles = this.map.width * this.map.height;
     if (!this.fogTileStates || this.fogTileStates.length !== totalTiles || this.fogChunks.length === 0) {
@@ -918,7 +941,7 @@ class PhaserMapScene extends Phaser.Scene {
     const visibleTiles = new Set(this.visibleTiles);
     const exploredTiles = new Set(this.exploredTiles);
     this.fogTileStates = null;
-    this.setFog(visibleTiles, exploredTiles);
+    this.setFog(visibleTiles, exploredTiles, this.fogTheme);
   }
 
   highlightPath(path: Position[]) {
@@ -1308,6 +1331,13 @@ class PhaserMapScene extends Phaser.Scene {
     baseGraphics: Phaser.GameObjects.Graphics,
     coverGraphics: Phaser.GameObjects.Graphics
   ) {
+    if (this.isUndergroundVoidTile(tile)) {
+      if (this.isUndergroundVoidPerimeter(tile)) {
+        this.renderUndergroundVoidWall(tile, isoX, isoY);
+      }
+      return;
+    }
+
     const depth = getTileDepth(tile);
     const topColor = TERRAIN_TOP[tile.terrain] ?? 0x333333;
     const sideLit = TERRAIN_SIDE_LIT[tile.terrain] ?? 0x333333;
@@ -1326,7 +1356,7 @@ class PhaserMapScene extends Phaser.Scene {
         if (!exposure) continue;
 
         const points = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, exposure.bottomDepth));
-        const baseColor = face === "SW" ? sideLit : sideDark;
+        const baseColor = this.getTerrainSideBaseColor(tile, face, sideLit, sideDark, exposure);
         coverGraphics.fillStyle(getTerrainSideFaceColor(tile.terrain, baseColor, exposure));
         coverGraphics.beginPath();
         coverGraphics.moveTo(points.topA.x, points.topA.y);
@@ -1339,6 +1369,8 @@ class PhaserMapScene extends Phaser.Scene {
 
       drawTerrainSideDetails(coverGraphics, tile, visibleSides, isoX, isoY, depth);
     }
+
+    this.drawUndergroundPlayableVoidEdges(coverGraphics, tile, isoX, isoY, depth);
 
     const topStroke = getTerrainTopStroke(tile.terrain);
     baseGraphics.fillStyle(topColor, tile.terrain === TerrainType.WATER ? 0.86 : 1);
@@ -1371,6 +1403,111 @@ class PhaserMapScene extends Phaser.Scene {
 
   }
 
+  private isUndergroundVoidPerimeter(tile: MapTile) {
+    if (!this.map || !this.isUndergroundVoidTile(tile)) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const neighbor = this.map.tiles[tile.y + dy]?.[tile.x + dx];
+        if (neighbor && !this.isUndergroundVoidTile(neighbor)) return true;
+      }
+    }
+    return false;
+  }
+
+  private renderUndergroundVoidWall(tile: MapTile, isoX: number, isoY: number) {
+    const depth = UNDERGROUND_VOID_WALL_DEPTH;
+    const topY = isoY - depth;
+    const tileGraphics = this.getElevatedBandGraphics(tile.x, tile.y, isoY);
+    const tileDepth = isoY + 0.1;
+
+    const sideLit = TERRAIN_SIDE_LIT[TerrainType.MOUNTAIN];
+    const sideDark = TERRAIN_SIDE_DARK[TerrainType.MOUNTAIN];
+
+    for (const face of ["SW", "SE"] as const) {
+      const neighbor = face === "SW"
+        ? this.map?.tiles[tile.y + 1]?.[tile.x]
+        : this.map?.tiles[tile.y]?.[tile.x + 1];
+      if (!neighbor || this.isUndergroundVoidTile(neighbor)) continue;
+      const neighborDepth = getTileDepth(neighbor);
+      if (neighborDepth >= depth) continue;
+
+      const corners = getCubeCorners(isoX, isoY, depth, neighborDepth);
+      const points = getCubeFacePoints(face, corners);
+      tileGraphics.fillStyle(face === "SW" ? sideLit : sideDark, 1);
+      tileGraphics.beginPath();
+      tileGraphics.moveTo(points.topA.x, points.topA.y);
+      tileGraphics.lineTo(points.topB.x, points.topB.y);
+      tileGraphics.lineTo(points.bottomB.x, points.bottomB.y);
+      tileGraphics.lineTo(points.bottomA.x, points.bottomA.y);
+      tileGraphics.closePath();
+      tileGraphics.fillPath();
+
+      tileGraphics.lineStyle(1, 0x2f3637, 0.5);
+      tileGraphics.beginPath();
+      tileGraphics.moveTo(points.bottomA.x, points.bottomA.y);
+      tileGraphics.lineTo(points.bottomB.x, points.bottomB.y);
+      tileGraphics.strokePath();
+
+      tileGraphics.lineStyle(1, 0xd3d7d2, 0.22);
+      tileGraphics.beginPath();
+      tileGraphics.moveTo(points.topA.x, points.topA.y);
+      tileGraphics.lineTo(points.topB.x, points.topB.y);
+      tileGraphics.strokePath();
+    }
+
+    tileGraphics.fillStyle(0x9a9ea0, 1);
+    drawDiamondPath(tileGraphics, isoX, topY);
+    tileGraphics.fillPath();
+
+    this.renderTerrainTopTexture(UNDERGROUND_VOID_TOP_TEXTURE, tile, isoX, topY, tileDepth + 0.01);
+
+    tileGraphics.lineStyle(0.8, 0x384144, 0.42);
+    drawDiamondPath(tileGraphics, isoX, topY);
+    tileGraphics.strokePath();
+  }
+
+  private drawUndergroundPlayableVoidEdges(
+    graphics: Phaser.GameObjects.Graphics,
+    tile: MapTile,
+    isoX: number,
+    isoY: number,
+    depth: number
+  ) {
+    if (this.map?.activeLevel !== UNDERGROUND_LEVEL || this.isUndergroundVoidTile(tile) || !tile.isPassable) return;
+
+    const bottomDepth = 0;
+    const corners = getCubeCorners(isoX, isoY, depth, bottomDepth);
+    for (const face of ["SW", "SE"] as const) {
+      const neighbor = face === "SW"
+        ? this.map.tiles[tile.y + 1]?.[tile.x]
+        : this.map.tiles[tile.y]?.[tile.x + 1];
+      if (!neighbor || !this.isUndergroundVoidTile(neighbor)) continue;
+
+      const points = getCubeFacePoints(face, corners);
+      graphics.fillStyle(face === "SW" ? 0x9aa19e : 0x737d7c, 1);
+      graphics.beginPath();
+      graphics.moveTo(points.topA.x, points.topA.y);
+      graphics.lineTo(points.topB.x, points.topB.y);
+      graphics.lineTo(points.bottomB.x, points.bottomB.y);
+      graphics.lineTo(points.bottomA.x, points.bottomA.y);
+      graphics.closePath();
+      graphics.fillPath();
+
+      graphics.lineStyle(1, 0x2f3637, 0.48);
+      graphics.beginPath();
+      graphics.moveTo(points.bottomA.x, points.bottomA.y);
+      graphics.lineTo(points.bottomB.x, points.bottomB.y);
+      graphics.strokePath();
+
+      graphics.lineStyle(1, 0xd3d7d2, 0.22);
+      graphics.beginPath();
+      graphics.moveTo(points.topA.x, points.topA.y);
+      graphics.lineTo(points.topB.x, points.topB.y);
+      graphics.strokePath();
+    }
+  }
+
   private renderElevatedTerrainTile(
     tile: MapTile,
     isoX: number,
@@ -1392,7 +1529,7 @@ class PhaserMapScene extends Phaser.Scene {
         if (!exposure) continue;
 
         const points = getCubeFacePoints(face, getCubeCorners(isoX, isoY, depth, exposure.bottomDepth));
-        const baseColor = face === "SW" ? sideLit : sideDark;
+        const baseColor = this.getTerrainSideBaseColor(tile, face, sideLit, sideDark, exposure);
         tileGraphics.fillStyle(getTerrainSideFaceColor(tile.terrain, baseColor, exposure));
         tileGraphics.beginPath();
         tileGraphics.moveTo(points.topA.x, points.topA.y);
@@ -1524,6 +1661,24 @@ class PhaserMapScene extends Phaser.Scene {
       return depth > BASE_HEIGHT ? { bottomDepth: BASE_HEIGHT } : null;
     }
     return getTerrainSideExposure(depth, neighbor);
+  }
+
+  private getTerrainSideBaseColor(
+    tile: MapTile,
+    face: "SW" | "SE",
+    sideLit: number,
+    sideDark: number,
+    exposure: TerrainSideExposure,
+  ) {
+    if (
+      this.map?.activeLevel === UNDERGROUND_LEVEL &&
+      this.isUndergroundVoidTile(tile) &&
+      exposure.neighborTerrain === TerrainType.MOUNTAIN &&
+      exposure.bottomDepth === 0
+    ) {
+      return face === "SW" ? 0x8f9a9a : 0x687373;
+    }
+    return face === "SW" ? sideLit : sideDark;
   }
 
   private renderTerrainTopTexture(
@@ -3547,8 +3702,8 @@ export class PhaserMapRenderer implements MapRenderer {
     if (this.isReady()) this.scene?.setObjects(objects);
   }
 
-  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>) {
-    if (this.isReady()) this.scene?.setFog(visibleTiles, exploredTiles);
+  setFog(visibleTiles: Set<string>, exploredTiles: Set<string>, theme?: FogTheme) {
+    if (this.isReady()) this.scene?.setFog(visibleTiles, exploredTiles, theme);
   }
 
   animateHeroMovement(heroId: string, path: Position[]) {

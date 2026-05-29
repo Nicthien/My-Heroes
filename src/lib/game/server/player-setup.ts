@@ -1,4 +1,5 @@
 import { computeVisibleTiles, getDailyAdventureMovement, placePlayerStart } from "@/lib/game/engine";
+import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { makeRng } from "@/lib/game/engine/rng";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
@@ -97,7 +98,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
       faction: factionKey,
       color: options.color ?? PLAYER_COLORS[turnOrder] ?? "#ffffff",
       turn_order: turnOrder,
-      explored_tiles: Array.from(initialExplored),
+      explored_tiles: Array.from(initialExplored, (key) => key.includes(":") ? key : `${SURFACE_LEVEL}:${key}`),
       ...STARTING_RESOURCES,
       is_ai: isAi,
       ai_name: isAi ? aiName ?? pickAiName(turnOrder) : null,
@@ -130,6 +131,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     artifacts: { inventory: [], equipment: {} },
     x: startPos.x,
     y: startPos.y,
+    map_level: SURFACE_LEVEL,
     movement: dailyMovement,
     max_movement: dailyMovement,
   };

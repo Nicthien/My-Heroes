@@ -757,7 +757,7 @@ export default function CombatScreen() {
             <div className="text-xs uppercase tracking-[0.28em] text-red-400">Fuite</div>
             <h2 className="mt-2 text-2xl font-bold text-red-100">Quitter le combat ?</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              Votre héros va fuir immédiatement. Les créatures de ce héros seront retirées du combat et comptées comme perdues. Si votre camp n&apos;a plus aucune unité active après la fuite, l&apos;adversaire remporte le combat. Cette action est définitive.
+              Votre héros va fuir immédiatement. Les créatures de ce héros seront retirées du combat et chaque pile perdra la moitié de ses unités, arrondie à l&apos;entier inférieur. Si votre camp n&apos;a plus aucune unité active après la fuite, l&apos;adversaire remporte le combat. Cette action est définitive.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" className="rounded-md border border-stone-600 px-4 py-2 text-sm font-bold text-stone-200 hover:bg-stone-800" onClick={() => setRetreatConfirmOpen(false)}>Annuler</button>

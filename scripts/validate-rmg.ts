@@ -9,7 +9,7 @@ import {
 import { getMinimumStargateDistance } from "../src/lib/game/engine/adventure-buildings";
 import { listTemplatesForPlayers, TEMPLATES } from "../src/lib/game/engine/template";
 import { RESOURCE_BUILDING_RULES } from "../src/lib/game/economy";
-import { Faction, GameMap, MapTile, ResourceBuildingType, TerrainType } from "../src/lib/game/types";
+import { AdventureBuildingType, Faction, GameMap, MapTile, ResourceBuildingType, TerrainType } from "../src/lib/game/types";
 
 interface ValidationIssue {
   severity: "error" | "warning";
@@ -95,6 +95,17 @@ for (const playerCount of playerCounts) {
         finalizeStartingRareMines(map, validationFactionsFor(playerCount));
         const stats = collectStats(map);
         validateMap(map, stats, template.id, seed, playerCount, size);
+        if (seed === seeds[0]) {
+          const undergroundMap = generateMap({
+            width: size,
+            height: size,
+            seed: `${template.id}-${playerCount}-${size}-${seed}-ug`,
+            playerCount,
+            templateId: template.id,
+            undergroundEnabled: true,
+          });
+          validateUndergroundMap(undergroundMap, template.id, seed, playerCount, size);
+        }
       }
     }
     summaries.push(`${template.id}: checked ${sizes.length * seeds.length} maps for ${playerCount}p`);
@@ -232,7 +243,7 @@ function validateMap(
         const key = `${tile.x},${tile.y}`;
         if (tile.road && !allowsSplitRoadNetworks && !connectedRoads.has(key)) {
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} path is not connected to the road network at ${tile.x},${tile.y}`);
-        } else if (!tile.road && !hasConnectedAdjacentAccess(map, tile, connected)) {
+        } else if (!allowsSplitRoadNetworks && !tile.road && !hasConnectedAdjacentAccess(map, tile, connected)) {
           addIssue("error", templateId, seed, playerCount, size, `building ${tile.object.id} has no connected visible or invisible access at ${tile.x},${tile.y}`);
         }
       }
@@ -349,6 +360,158 @@ function validateStartingEconomy(
       }
     }
   }
+}
+
+function validateUndergroundMap(
+  map: GameMap,
+  templateId: string,
+  seed: string,
+  playerCount: number,
+  size: number,
+): void {
+  const underground = map.levels?.underground;
+  const surface = map.levels?.surface;
+  const template = TEMPLATES.find((item) => item.id === templateId);
+  const templateVerticalPairs = template?.connections.filter((connection) => connection.connectionType === "subterranean_gate").length ?? 0;
+  if (templateVerticalPairs === 0 && !underground) return;
+  const expectedPairs = playerCount;
+
+  if (!underground) {
+    addIssue("error", templateId, seed, playerCount, size, "expected underground layer but none was generated");
+    return;
+  }
+
+  let water = 0;
+  let walls = 0;
+  let passable = 0;
+  let contourLeaks = 0;
+  let passableBlockingDecor = 0;
+  const verticalTransports: MapTile[] = [];
+  const surfaceVerticalTransports: MapTile[] = [];
+  if (surface) {
+    for (const row of surface.tiles) {
+      for (const tile of row) {
+        if (
+          tile.object?.type === "adventure_building" &&
+          (tile.object.subtype === AdventureBuildingType.SUBTERRANEAN_GATE || tile.object.subtype === AdventureBuildingType.STARGATE) &&
+          tile.object.targetLevel === "underground"
+        ) {
+          surfaceVerticalTransports.push(tile);
+        }
+      }
+    }
+  }
+  for (const row of underground.tiles) {
+    for (const tile of row) {
+      if (tile.terrain === TerrainType.WATER) water++;
+      if (tile.object?.type === "wall" || tile.decor?.blocking || !tile.isPassable) walls++;
+      if (tile.isPassable) passable++;
+      if (tile.isPassable && tile.decor?.blocking) passableBlockingDecor++;
+      const surfaceTile = surface?.tiles[tile.y]?.[tile.x];
+      const outsideSurfaceContour = Boolean(surfaceTile?.worldEdge);
+      if (outsideSurfaceContour && (tile.isPassable || tile.road || (tile.object && tile.object.type !== "wall"))) {
+        contourLeaks++;
+      }
+      if (
+        tile.object?.type === "adventure_building" &&
+        (tile.object.subtype === AdventureBuildingType.SUBTERRANEAN_GATE || tile.object.subtype === AdventureBuildingType.STARGATE) &&
+        tile.object.targetLevel === "surface"
+      ) {
+        verticalTransports.push(tile);
+      }
+    }
+  }
+
+  if (water > 0) addIssue("error", templateId, seed, playerCount, size, `underground has ${water} water tiles`);
+  if (contourLeaks > 0) {
+    addIssue("error", templateId, seed, playerCount, size, `underground leaks outside surface contour on ${contourLeaks} tiles`);
+  }
+  if (passableBlockingDecor > 0) {
+    addIssue("error", templateId, seed, playerCount, size, `underground has ${passableBlockingDecor} blocking decor items on passable paths`);
+  }
+  if (verticalTransports.length !== expectedPairs) {
+    addIssue("error", templateId, seed, playerCount, size, `expected ${expectedPairs} underground vertical transports, got ${verticalTransports.length}`);
+  }
+  if (surfaceVerticalTransports.length !== expectedPairs) {
+    addIssue("error", templateId, seed, playerCount, size, `expected ${expectedPairs} surface vertical transports, got ${surfaceVerticalTransports.length}`);
+  }
+  if (surfaceVerticalTransports.length !== verticalTransports.length) {
+    addIssue("error", templateId, seed, playerCount, size, `surface/underground vertical transport count mismatch: ${surfaceVerticalTransports.length}/${verticalTransports.length}`);
+  }
+  const undergroundByPosition = new Map(verticalTransports.map((gate) => [`${gate.x},${gate.y}`, gate]));
+  const minGateDistance = Math.max(4, Math.floor(size / 14));
+  for (let index = 0; index < surfaceVerticalTransports.length; index++) {
+    const gate = surfaceVerticalTransports[index];
+    const zone = surface?.zones?.find((item) => item.id === gate.zoneId);
+    if (zone?.type === "player") {
+      addIssue("error", templateId, seed, playerCount, size, `surface vertical transport ${gate.object?.id} is inside player zone ${zone.templateZoneId}`);
+    }
+    const mirror = undergroundByPosition.get(`${gate.x},${gate.y}`);
+    if (!mirror) {
+      addIssue("error", templateId, seed, playerCount, size, `surface vertical transport ${gate.object?.id} has no underground mirror at ${gate.x},${gate.y}`);
+    } else if (mirror.object?.targetPosition?.x !== gate.x || mirror.object?.targetPosition?.y !== gate.y) {
+      addIssue("error", templateId, seed, playerCount, size, `underground mirror ${mirror.object?.id} does not point back to ${gate.x},${gate.y}`);
+    }
+    for (const other of surfaceVerticalTransports.slice(index + 1)) {
+      if (Math.max(Math.abs(gate.x - other.x), Math.abs(gate.y - other.y)) < minGateDistance) {
+        addIssue("error", templateId, seed, playerCount, size, `surface vertical transports are too close: ${gate.x},${gate.y} and ${other.x},${other.y}`);
+      }
+    }
+  }
+  const wallRatio = walls / Math.max(1, underground.width * underground.height);
+  if (wallRatio < 0.22) {
+    addIssue("warning", templateId, seed, playerCount, size, `underground wall ratio is low: ${percent(wallRatio)}`);
+  }
+  if (passable < Math.max(20, expectedPairs * 8)) {
+    addIssue("error", templateId, seed, playerCount, size, `underground has too few passable tiles: ${passable}`);
+  }
+
+  for (const gate of verticalTransports) {
+    const target = gate.object?.targetPosition;
+    if (!gate.isPassable || gate.terrain === TerrainType.LAVA || gate.terrain === TerrainType.WATER) {
+      addIssue("error", templateId, seed, playerCount, size, `underground gate ${gate.object?.id} is not on passable land at ${gate.x},${gate.y}`);
+    }
+    if (!gate.object?.targetId || gate.object.targetLevel !== "surface" || target?.level !== "surface") {
+      addIssue("error", templateId, seed, playerCount, size, `underground gate ${gate.object?.id} is missing surface target metadata`);
+    }
+    if (!hasAdjacentRoadOrPassableAccess(underground.tiles, gate)) {
+      addIssue("error", templateId, seed, playerCount, size, `underground gate ${gate.object?.id} has no adjacent access at ${gate.x},${gate.y}`);
+    }
+    if (!gate.object?.id.startsWith("adv-subterranean-gate-underground-") && !gate.object?.id.startsWith("adv-stargate-underground-fallback-")) {
+      addIssue("error", templateId, seed, playerCount, size, `underground gate id is not unique/prefixed: ${gate.object?.id}`);
+    }
+  }
+
+  const reachable = new Set<string>();
+  for (const gate of verticalTransports) {
+    for (const key of floodReachable(underground as GameMap, gate)) reachable.add(key);
+  }
+  for (const row of underground.tiles) {
+    for (const tile of row) {
+      if (!isUsefulUndergroundObject(tile)) continue;
+      if (!isTileOrAdjacentReachable(underground.tiles, tile, reachable)) {
+        addIssue("error", templateId, seed, playerCount, size, `underground object ${tile.object?.id} is isolated at ${tile.x},${tile.y}`);
+      }
+    }
+  }
+}
+
+function isUsefulUndergroundObject(tile: MapTile): boolean {
+  if (!tile.object || tile.object.type === "wall" || tile.object.type === "town_footprint") return false;
+  return true;
+}
+
+function isTileOrAdjacentReachable(tiles: MapTile[][], tile: MapTile, reachable: Set<string>): boolean {
+  if (tile.isPassable && reachable.has(`${tile.x},${tile.y}`)) return true;
+  return [
+    { x: tile.x + 1, y: tile.y },
+    { x: tile.x - 1, y: tile.y },
+    { x: tile.x, y: tile.y + 1 },
+    { x: tile.x, y: tile.y - 1 },
+  ].some((position) => {
+    const neighbor = tiles[position.y]?.[position.x];
+    return Boolean(neighbor?.isPassable && reachable.has(`${position.x},${position.y}`));
+  });
 }
 
 function validateMineResourceClusters(
@@ -492,6 +655,17 @@ function hasConnectedAdjacentAccess(map: GameMap, tile: MapTile, connected: Set<
     const accessTile = map.tiles[neighbor.y]?.[neighbor.x];
     if (!isAccessibleStandingTile(accessTile)) continue;
     if (connected.has(`${neighbor.x},${neighbor.y}`)) return true;
+  }
+  return false;
+}
+
+function hasAdjacentRoadOrPassableAccess(tiles: MapTile[][], tile: MapTile): boolean {
+  for (const neighbor of getAdjacentNeighbors(tile)) {
+    const access = tiles[neighbor.y]?.[neighbor.x];
+    if (!access || access.terrain === TerrainType.WATER || access.terrain === TerrainType.LAVA) continue;
+    if (access.road || (access.isPassable && !access.decor?.blocking && access.object?.type !== "wall" && access.object?.type !== "town_footprint")) {
+      return true;
+    }
   }
   return false;
 }

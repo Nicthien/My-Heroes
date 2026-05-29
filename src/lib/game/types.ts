@@ -1,7 +1,10 @@
 export interface Position {
   x: number;
   y: number;
+  level?: MapLevelId;
 }
+
+export type MapLevelId = "surface" | "underground";
 
 export enum TerrainType {
   GRASS = "grass",
@@ -481,6 +484,11 @@ export type DecorKind =
   | "lava-scorched-deadwood"
   | "lava-sulfur-shrub"
   | "lava-obsidian-bramble"
+  | "underground-stalagmite-cluster"
+  | "underground-crystal-ribs"
+  | "underground-mushroom-thicket"
+  | "underground-rubble-pillar"
+  | "underground-root-snarl"
   | "massif-mountain-granite-2x2"
   | "massif-mountain-snowcap-2x2"
   | "massif-mountain-pine-2x2"
@@ -543,6 +551,7 @@ export enum AdventureBuildingType {
   CAMPFIRE = "campfire",
   LIGHTHOUSE = "lighthouse",
   STARGATE = "stargate",
+  SUBTERRANEAN_GATE = "subterranean_gate",
   EXTERNAL_DWELLING = "external_dwelling",
   ARENA = "arena",
   MERCENARY_CAMP = "mercenary_camp",
@@ -620,6 +629,8 @@ export interface MapObject {
   ownerId?: string | null;
   amount?: number;
   targetId?: string;
+  targetLevel?: MapLevelId;
+  targetPosition?: Position;
   roadAxis?: "x" | "y";
   ownerIndex?: number;
   strategicRole?: "start_wood" | "start_ore" | "start_gold" | "start_rare";
@@ -802,8 +813,18 @@ export interface GameMap {
   width: number;
   height: number;
   tiles: MapTile[][];
+  levels?: Partial<Record<MapLevelId, MapLayer>>;
+  activeLevel?: MapLevelId;
   seed?: string;
   templateId?: string;
+  zones?: ZoneMeta[];
+}
+
+export interface MapLayer {
+  id: MapLevelId;
+  width: number;
+  height: number;
+  tiles: MapTile[][];
   zones?: ZoneMeta[];
 }
 
@@ -811,6 +832,8 @@ export interface ZoneMeta {
   id: number;
   templateZoneId: string;
   type: "player" | "treasure" | "junction";
+  mapLevel?: MapLevelId;
+  pairedZoneId?: string;
   ownerIndex?: number;
   centerX: number;
   centerY: number;

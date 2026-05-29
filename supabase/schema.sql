@@ -89,6 +89,7 @@ create table public.heroes (
   max_movement numeric not null default 1500,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   is_moving boolean not null default false
 );
 
@@ -109,6 +110,7 @@ create table public.towns (
   town_type text not null,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   level integer not null default 1,
   is_fort boolean not null default false,
   buildings jsonb not null default '[]',
@@ -128,6 +130,7 @@ create table public.neutral_armies (
   game_id uuid not null references public.games(id) on delete cascade,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   status text not null default 'ACTIVE'
 );
 
@@ -148,6 +151,7 @@ create table public.resource_buildings (
   building_type text not null,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   guardian_power integer not null default 0
 );
 
@@ -157,6 +161,7 @@ create table public.gates (
   game_player_id uuid references public.game_players(id) on delete set null,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   guardian_power integer not null default 0
 );
 
@@ -178,6 +183,7 @@ create table public.boats (
   faction text not null default 'castle',
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint boats_empty_or_occupied check (
@@ -228,6 +234,7 @@ create table public.combats (
   round integer not null default 1,
   x integer not null,
   y integer not null,
+  map_level text not null default 'surface',
   board_state jsonb not null,
   turn_queue jsonb not null default '[]',
   action_log jsonb not null default '[]',

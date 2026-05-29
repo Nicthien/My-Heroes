@@ -1,4 +1,5 @@
 import { GameMap } from "@/lib/game/types";
+import { mapLevels } from "@/lib/game/map-levels";
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 
 interface ExistingResourceBuilding {
@@ -22,8 +23,8 @@ export async function syncResourceBuildingsFromMap(
   const existingById = new Map(
     ((existingRows ?? []) as ExistingResourceBuilding[]).map((row) => [row.id, row]),
   );
-  const rows = mapData.tiles.flatMap((row) =>
-    row
+  const rows = mapLevels(mapData).flatMap((layer) =>
+    layer.tiles.flatMap((row) => row
       .filter((tile) => tile.object?.type === "building" && tile.object.subtype)
       .map((tile) => {
         const object = tile.object!;
@@ -37,11 +38,12 @@ export async function syncResourceBuildingsFromMap(
           building_type: object.subtype!,
           x: tile.x,
           y: tile.y,
+          map_level: layer.id,
           guardian_power: preserveCapturedState
             ? Number(existing?.guardian_power ?? 0)
             : Number(object.guardianPower ?? 200),
         };
-      }),
+      })),
   );
 
   if (rows.length === 0) return;

@@ -57,6 +57,11 @@ export const DECOR_SPRITES: Partial<Record<DecorKind, string>> = {
   "lava-scorched-deadwood": MAP_SPRITES.decor.lava_scorched_deadwood,
   "lava-sulfur-shrub": MAP_SPRITES.decor.lava_sulfur_shrub,
   "lava-obsidian-bramble": MAP_SPRITES.decor.lava_obsidian_bramble,
+  "underground-stalagmite-cluster": MAP_SPRITES.decor.underground_stalagmite_cluster,
+  "underground-crystal-ribs": MAP_SPRITES.decor.underground_crystal_ribs,
+  "underground-mushroom-thicket": MAP_SPRITES.decor.underground_mushroom_thicket,
+  "underground-rubble-pillar": MAP_SPRITES.decor.underground_rubble_pillar,
+  "underground-root-snarl": MAP_SPRITES.decor.underground_root_snarl,
   "massif-mountain-granite-2x2": MAP_SPRITES.decor.massif_mountain_granite_2x2,
   "massif-mountain-snowcap-2x2": MAP_SPRITES.decor.massif_mountain_snowcap_2x2,
   "massif-mountain-pine-2x2": MAP_SPRITES.decor.massif_mountain_pine_2x2,
@@ -74,6 +79,11 @@ export const BLOCKING_DECOR_ORIGINS: Partial<Record<DecorKind, SpriteOrigin>> = 
   "deadwood-thicket": { originX: 0.502, originY: 0.835 },
   "flowering-hedge": { originX: 0.5, originY: 0.82 },
   "boulder-cluster": { originX: 0.514, originY: 0.84 },
+  "underground-stalagmite-cluster": { originX: 0.5, originY: 0.84 },
+  "underground-crystal-ribs": { originX: 0.5, originY: 0.84 },
+  "underground-mushroom-thicket": { originX: 0.5, originY: 0.84 },
+  "underground-rubble-pillar": { originX: 0.5, originY: 0.84 },
+  "underground-root-snarl": { originX: 0.5, originY: 0.84 },
   "massif-mountain-granite-2x2": { originX: 0.5, originY: 0.84 },
   "massif-mountain-snowcap-2x2": { originX: 0.5, originY: 0.84 },
   "massif-mountain-pine-2x2": { originX: 0.5, originY: 0.84 },
@@ -97,6 +107,26 @@ export const BLOCKING_DECOR_SPRITE_METRICS: Partial<Record<DecorKind, { size: nu
   "bramble-thicket": {
     size: 68,
     groundOffset: 8,
+  },
+  "underground-stalagmite-cluster": {
+    size: 54,
+    groundOffset: 6,
+  },
+  "underground-crystal-ribs": {
+    size: 56,
+    groundOffset: 6,
+  },
+  "underground-mushroom-thicket": {
+    size: 54,
+    groundOffset: 6,
+  },
+  "underground-rubble-pillar": {
+    size: 56,
+    groundOffset: 6,
+  },
+  "underground-root-snarl": {
+    size: 54,
+    groundOffset: 6,
   },
   "massif-mountain-granite-2x2": {
     size: 158,

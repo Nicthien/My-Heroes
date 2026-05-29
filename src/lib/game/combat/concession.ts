@@ -57,3 +57,17 @@ export function buildConcessionBoardState(params: {
     currentPlayerId: getCurrentCombatPlayerId({ units }, currentUnitId),
   };
 }
+
+export function buildHalfLossConcessionPersistenceUnits(params: {
+  units: CombatBoardUnit[];
+  heroId: string;
+  playerId: string;
+}) {
+  return params.units.map((unit) => {
+    if (!isHeroCombatUnit(unit, params.heroId, params.playerId)) return unit;
+    const lostCount = Math.floor(Math.max(0, unit.count) / 2);
+    const nextCount = Math.max(0, unit.count - lostCount);
+    const nextHealth = Math.max(0, Math.min(unit.health - lostCount * unit.maxHealth, nextCount * unit.maxHealth));
+    return { ...unit, count: nextCount, health: nextHealth };
+  });
+}

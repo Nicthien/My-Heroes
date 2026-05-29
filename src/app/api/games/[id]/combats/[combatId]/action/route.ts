@@ -4,6 +4,7 @@ import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/per
 import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
 import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
 import {
+  buildHalfLossConcessionPersistenceUnits,
   buildConcessionBoardState,
   findNextPrimaryParticipant,
   getHeroCombatUnits,
@@ -425,6 +426,7 @@ export async function POST(
       concedingHeroId,
       concedingSide,
       preserveArmy: false,
+      halveArmyLosses: true,
       logLine: `${concedingParticipant.label} fuit le combat.`,
     });
   }
@@ -950,6 +952,7 @@ async function applyCombatConcession(params: {
   concedingHeroId: string;
   concedingSide: "attacker" | "defender";
   preserveArmy: boolean;
+  halveArmyLosses?: boolean;
   logLine: string;
 }) {
   const winnerSide = params.concedingSide === "attacker" ? "defender" : "attacker";
@@ -963,7 +966,15 @@ async function applyCombatConcession(params: {
     currentUnitId: params.combat.current_unit_id,
   });
   const boardAfterUnits = concessionBoard.units;
-  const persistenceAfterUnits = params.preserveArmy ? beforeUnits : boardAfterUnits;
+  const persistenceAfterUnits = params.preserveArmy
+    ? beforeUnits
+    : params.halveArmyLosses
+      ? buildHalfLossConcessionPersistenceUnits({
+          units: beforeUnits,
+          heroId: params.concedingHeroId,
+          playerId: params.concedingPlayerId,
+        })
+      : boardAfterUnits;
   const activeConcedingSide = sideHasActivePlayerUnits(boardAfterUnits, params.concedingSide);
   const promoted = isPrimaryCombatHero(params.combat, params.concedingSide, params.concedingHeroId) && activeConcedingSide
     ? findNextPrimaryParticipant(params.combat.combat_participants ?? [], boardAfterUnits, params.concedingSide)
@@ -1012,7 +1023,7 @@ async function applyCombatConcession(params: {
     concedingHeroId: params.concedingHeroId,
     winnerSide,
     winnerHeroId: combatResolved ? winnerHeroId ?? null : null,
-    preserveArmy: params.preserveArmy,
+    preserveArmy: params.preserveArmy || Boolean(params.halveArmyLosses),
   });
   await deleteConsumedCombatParticipants(params.supabase, params.combatId, [
     params.combat.combat_participants?.find((participant) => participant.hero_id === params.concedingHeroId)?.id,

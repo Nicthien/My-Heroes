@@ -6,6 +6,7 @@ import type { Diagonal4 } from "@/lib/rendering/phaser/directions";
 export type FogTileState = 0 | 1 | 2;
 export type FogEdgeSide = Diagonal4;
 export type FogStampKey = "fog-near" | "fog-unexplored" | "fog-explored" | "fog-edge-nw" | "fog-edge-ne" | "fog-edge-se" | "fog-edge-sw";
+export type FogTheme = "surface" | "underground";
 
 export type FogChunkBounds = {
   left: number;
@@ -70,4 +71,14 @@ export const FOG_STAMP_TEXTURE_KEYS: Record<FogStampKey, string[]> = {
   "fog-edge-ne": ["my-heroes-fog-edge-ne"],
   "fog-edge-se": ["my-heroes-fog-edge-se"],
   "fog-edge-sw": ["my-heroes-fog-edge-sw"],
+};
+
+export const UNDERGROUND_FOG_STAMP_TEXTURE_KEYS: Record<FogStampKey, string[]> = {
+  "fog-near": baseVariantKeys("my-heroes-underground-fog-near"),
+  "fog-unexplored": baseVariantKeys("my-heroes-underground-fog-unexplored"),
+  "fog-explored": baseVariantKeys("my-heroes-underground-fog-explored"),
+  "fog-edge-nw": ["my-heroes-underground-fog-edge-nw"],
+  "fog-edge-ne": ["my-heroes-underground-fog-edge-ne"],
+  "fog-edge-se": ["my-heroes-underground-fog-edge-se"],
+  "fog-edge-sw": ["my-heroes-underground-fog-edge-sw"],
 };

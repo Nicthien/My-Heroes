@@ -80,6 +80,7 @@ export const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
   lighthouse: { originX: 0.49, originY: 0.898 },
   observatory: { originX: 0.475, originY: 0.938 },
   stargate: { originX: 0.48, originY: 0.918 },
+  subterranean_gate: { originX: 0.5, originY: 0.9 },
   arena: { originX: 0.5, originY: 0.9 },
   mercenary_camp: { originX: 0.5, originY: 0.9 },
   marletto_tower: { originX: 0.5, originY: 0.92 },

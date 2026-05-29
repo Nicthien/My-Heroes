@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { CombatSummary, GameState, GameAction, PersistentCombat, Position } from "@/lib/game/types";
+import { CombatSummary, GameState, GameAction, PersistentCombat, Position, type MapLevelId } from "@/lib/game/types";
 import { processAction } from "@/lib/game/engine";
+import { normalizeMapLevel, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import type { SpellId } from "@/lib/game/spells";
 import type { SpellRevealHint } from "@/lib/rendering/mapRenderer";
 
@@ -37,6 +38,7 @@ interface GameStore {
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
   adminObserverMode: boolean;
+  activeMapLevel: MapLevelId;
 
   setGameState: (state: GameState) => void;
   setMovePending: (pending: boolean) => void;
@@ -63,6 +65,7 @@ interface GameStore {
   setDevInfiniteMana: (enabled: boolean) => void;
   setDevTeleportArmed: (armed: boolean) => void;
   setAdminObserverMode: (enabled: boolean) => void;
+  setActiveMapLevel: (level: MapLevelId) => void;
   resetGame: () => void;
 }
 
@@ -96,6 +99,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   cameraTarget: null,
   zoomRequest: null,
   adminObserverMode: false,
+  activeMapLevel: SURFACE_LEVEL,
 
   setGameState: (state) => set((prev) => {
     const syncedCombat = prev.activeCombat
@@ -144,10 +148,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setCombatResult: (result) => set({ lastCombatResult: result }),
 
   selectHero: (heroId) =>
-    set({ selectedHeroId: heroId, selectedTownId: null }),
+    set((state) => {
+      const hero = heroId
+        ? state.gameState?.players.flatMap((player) => player.heroes).find((item) => item.id === heroId)
+        : null;
+      return {
+        selectedHeroId: heroId,
+        selectedTownId: null,
+        activeMapLevel: hero ? normalizeMapLevel(hero.position.level) : state.activeMapLevel,
+      };
+    }),
 
   selectTown: (townId) =>
-    set({ selectedTownId: townId, selectedHeroId: null }),
+    set((state) => {
+      const town = townId
+        ? state.gameState?.players.flatMap((player) => player.towns).find((item) => item.id === townId)
+        : null;
+      return {
+        selectedTownId: townId,
+        selectedHeroId: null,
+        activeMapLevel: town ? normalizeMapLevel(town.position.level) : state.activeMapLevel,
+      };
+    }),
 
   dispatchAction: (action) => {
     const { gameState } = get();
@@ -179,6 +201,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setDevInfiniteMana: (enabled) => set({ devInfiniteMana: enabled }),
   setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
   setAdminObserverMode: (enabled) => set({ adminObserverMode: enabled }),
+  setActiveMapLevel: (level) => set({ activeMapLevel: level }),
 
   resetGame: () =>
     set({
@@ -207,5 +230,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       cameraTarget: null,
       zoomRequest: null,
       adminObserverMode: false,
+      activeMapLevel: SURFACE_LEVEL,
     }),
 }));

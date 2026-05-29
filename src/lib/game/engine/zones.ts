@@ -10,6 +10,11 @@ export interface ZoneGrid {
   meta: ZoneMeta[];
 }
 
+export interface ZoneGridOptions {
+  forcedCenters?: Map<string, { x: number; y: number }>;
+  sizeWeightMultiplier?: number;
+}
+
 /** Place les centres Voronoi + assigne chaque tile a la zone la plus proche. */
 export function buildZoneGrid(
   template: MapTemplate,
@@ -17,6 +22,7 @@ export function buildZoneGrid(
   height: number,
   rng?: RNG,
   landmass?: Landmass,
+  options: ZoneGridOptions = {},
 ): ZoneGrid {
   const meta: ZoneMeta[] = template.zones.map((z, idx) => {
     // Défauts: les zones joueur n'ont PAS de pocket (cadeau visible devant la porte
@@ -31,8 +37,10 @@ export function buildZoneGrid(
       templateZoneId: z.id,
       type: z.type,
       ownerIndex: z.ownerIndex,
-      centerX: Math.round(jitterNormalized(z.nx, rng) * (width - 1)),
-      centerY: Math.round(jitterNormalized(z.ny, rng) * (height - 1)),
+      centerX: options.forcedCenters?.get(z.id)?.x ?? Math.round(jitterNormalized(z.nx, rng) * (width - 1)),
+      centerY: options.forcedCenters?.get(z.id)?.y ?? Math.round(jitterNormalized(z.ny, rng) * (height - 1)),
+      mapLevel: z.mapLevel,
+      pairedZoneId: z.pairedZoneId,
       baseTerrain: z.baseTerrain,
       value: z.value,
       hasTown: z.hasTown,
@@ -63,7 +71,7 @@ export function buildZoneGrid(
         const tpl = template.zones[i];
         const dx = x - zone.centerX;
         const dy = y - zone.centerY;
-        const dist = Math.sqrt(dx * dx + dy * dy) / Math.max(0.1, tpl.sizeWeight);
+        const dist = Math.sqrt(dx * dx + dy * dy) / Math.max(0.1, tpl.sizeWeight * (options.sizeWeightMultiplier ?? 1));
         if (dist < bestScore) {
           bestScore = dist;
           bestId = i;

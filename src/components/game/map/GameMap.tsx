@@ -4,7 +4,8 @@ import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapObjectData, MapRenderer } from "@/lib/rendering/mapRenderer";
 import { getMapObjectHoverDescription } from "@/lib/rendering/phaser/mapObjectLayout";
-import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType } from "@/lib/game/types";
+import { GameState, Gate, Position, ResourceBuilding, UnitStack, UnitType, type MapLevelId } from "@/lib/game/types";
+import { SURFACE_LEVEL, UNDERGROUND_LEVEL, normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingExhaustion, getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
@@ -72,7 +73,7 @@ type PendingAdventureChoice = {
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string; alreadyVisited?: boolean }
-  | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination?: Position }
+  | { type: "TELEPORT"; buildingType: "stargate" | "subterranean_gate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination?: Position }
@@ -143,6 +144,8 @@ export default function GameMapComponent() {
   const lastMouse = useRef<Position>({ x: 0, y: 0 });
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
+  const activeMapLevel = useGameStore((state) => state.activeMapLevel);
+  const setActiveMapLevel = useGameStore((state) => state.setActiveMapLevel);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
   const selectHero = useGameStore((state) => state.selectHero);
   const selectTown = useGameStore((state) => state.selectTown);
@@ -166,12 +169,18 @@ export default function GameMapComponent() {
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
   );
+  const activeMap = useMemo(
+    () => gameState ? withActiveMapLayer(gameState.map, activeMapLevel) : null,
+    [activeMapLevel, gameState],
+  );
+  const hasUnderground = Boolean(gameState?.map.levels?.underground);
   const selectedHeroReachableTileKeys = useMemo(() => {
-    if (!gameState || revealMap || !selectedHeroId) return null;
+    if (!gameState || !activeMap || revealMap || !selectedHeroId) return null;
     const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
     if (!hero || activeCombatHeroIds.has(hero.id)) return null;
-    return computeReachableTiles(gameState.map, hero.position, hero.movement);
-  }, [activeCombatHeroIds, revealMap, gameState, selectedHeroId]);
+    if (normalizeMapLevel(hero.position.level) !== activeMapLevel) return null;
+    return computeReachableTiles(activeMap, hero.position, hero.movement);
+  }, [activeCombatHeroIds, activeMap, activeMapLevel, revealMap, gameState, selectedHeroId]);
   const selectedHeroReachableTiles = useMemo(() => {
     if (!selectedHeroReachableTileKeys) return [];
     return Array.from(selectedHeroReachableTileKeys).map((key) => {
@@ -179,6 +188,16 @@ export default function GameMapComponent() {
       return { x, y };
     });
   }, [selectedHeroReachableTileKeys]);
+
+  useEffect(() => {
+    renderedMapRef.current = null;
+  }, [activeMapLevel]);
+
+  useEffect(() => {
+    if (gameState && !hasUnderground && activeMapLevel !== SURFACE_LEVEL) {
+      setActiveMapLevel(SURFACE_LEVEL);
+    }
+  }, [activeMapLevel, gameState, hasUnderground, setActiveMapLevel]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -279,7 +298,8 @@ export default function GameMapComponent() {
 
   useEffect(() => {
     const renderer = rendererRef.current;
-    if (!renderer || !gameState?.map) return;
+    if (!renderer || !gameState?.map || !activeMap) return;
+    const renderMap = activeMap;
 
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
@@ -309,53 +329,63 @@ export default function GameMapComponent() {
         lastGateRenderKeyRef.current = gateRenderKey;
       }
 
-      const mapReferenceChanged = renderedMapRef.current !== gameState.map;
+      const mapReferenceChanged = renderedMapRef.current !== renderMap;
       if (mapReferenceChanged) {
         reportMapLoading(91, "Construction du terrain...");
       }
       // Incremental sync mutates the existing map object with dynamic tile.object
       // updates. Always let Phaser compare signatures so resources, monsters, and
       // gates re-render even when the GameMap reference stays stable.
-      renderer.renderMap(gameState.map);
+      renderer.renderMap(renderMap);
       if (mapReferenceChanged) {
         reportMapLoading(94, "Placement des objets...");
-        renderedMapRef.current = gameState.map;
+        renderedMapRef.current = renderMap;
         lastFogVisibleRef.current = null;
         lastFogExploredRef.current = null;
       }
-      renderer.setObjects(buildObjects(gameState, currentPlayer, revealMap, selectedHeroId));
+      renderer.setObjects(buildObjects(gameState, currentPlayer, revealMap, selectedHeroId, activeMapLevel, renderMap));
       reportMapLoading(95, "Calcul de la visibilite...");
 
       let visibleTiles: Set<string>;
       let exploredTiles: Set<string>;
       if (activeCombat || revealMap || currentPlayer?.isAlive === false) {
-        const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
+        const allTiles = getAllTileKeys(renderMap.width, renderMap.height);
         visibleTiles = allTiles;
         exploredTiles = allTiles;
       } else if (currentPlayer) {
-        visibleTiles = computeVisibleTiles(gameState.map, getPlayerVisionCenters(currentPlayer), 5);
-        for (const key of computeExtraTownVisionTiles(gameState.map, currentPlayer.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })), 9)) {
+        const currentLayerPlayer = {
+          ...currentPlayer,
+          heroes: currentPlayer.heroes.filter((hero) => normalizeMapLevel(hero.position.level) === activeMapLevel),
+          towns: currentPlayer.towns.filter((town) => normalizeMapLevel(town.position.level) === activeMapLevel),
+        };
+        visibleTiles = computeVisibleTiles(renderMap, getPlayerVisionCenters(currentLayerPlayer), 5);
+        for (const key of computeExtraTownVisionTiles(renderMap, currentLayerPlayer.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })), 9)) {
           visibleTiles.add(key);
         }
-        for (const key of computeExtraHeroScoutingTiles(gameState.map, currentPlayer.heroes.map((h) => ({ position: h.position, skills: h.skills })), 5)) {
+        for (const key of computeExtraHeroScoutingTiles(renderMap, currentLayerPlayer.heroes.map((h) => ({ position: h.position, skills: h.skills })), 5)) {
           visibleTiles.add(key);
         }
         const enemyTowns = gameState.players
           .filter((p) => p.id !== currentPlayer.id)
-          .flatMap((p) => p.towns.map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })));
-        const darkness = computeEnemyDarknessTiles(gameState.map, enemyTowns, 8);
+          .flatMap((p) => p.towns.filter((t) => normalizeMapLevel(t.position.level) === activeMapLevel).map((t) => ({ position: t.position, townType: (t as { townType?: string }).townType, buildings: t.buildings })));
+        const darkness = computeEnemyDarknessTiles(renderMap, enemyTowns, 8);
         if (darkness.size > 0) {
-          const heroCloseSet = computeVisibleTiles(gameState.map, currentPlayer.heroes.map((h) => h.position), 3);
+          const heroCloseSet = computeVisibleTiles(renderMap, currentLayerPlayer.heroes.map((h) => h.position), 3);
           for (const key of darkness) {
             if (!heroCloseSet.has(key)) visibleTiles.delete(key);
           }
         }
-        exploredTiles = new Set<string>(currentPlayer.exploredTiles);
+        exploredTiles = new Set<string>(
+          currentPlayer.exploredTiles
+            .map(normalizeExploredTileKey)
+            .filter((key) => key.startsWith(`${activeMapLevel}:`))
+            .map((key) => key.slice(key.indexOf(":") + 1))
+        );
         for (const key of visibleTiles) {
           exploredTiles.add(key);
         }
       } else {
-        const allTiles = getAllTileKeys(gameState.map.width, gameState.map.height);
+        const allTiles = getAllTileKeys(renderMap.width, renderMap.height);
         visibleTiles = allTiles;
         exploredTiles = allTiles;
       }
@@ -365,7 +395,7 @@ export default function GameMapComponent() {
         !areTileKeySetsEqual(lastFogExploredRef.current, exploredTiles)
       ) {
         reportMapLoading(97, "Application du brouillard de guerre...");
-        renderer.setFog(visibleTiles, exploredTiles);
+        renderer.setFog(visibleTiles, exploredTiles, activeMapLevel === UNDERGROUND_LEVEL ? "underground" : "surface");
         reportMapLoading(98, "Centrage de la camera...");
         lastFogVisibleRef.current = visibleTiles;
         lastFogExploredRef.current = exploredTiles;
@@ -400,7 +430,7 @@ export default function GameMapComponent() {
         }, 150);
       }
     });
-  }, [adminObserverMode, gameState, session?.user?.id, activeCombat, rendererReadyVersion, revealMap, selectedHeroId]);
+  }, [activeMap, activeMapLevel, adminObserverMode, gameState, session?.user?.id, activeCombat, rendererReadyVersion, revealMap, selectedHeroId]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;
@@ -782,13 +812,15 @@ export default function GameMapComponent() {
 
     if (interaction.type === "TELEPORT") {
       setCombatMessage(interaction.message ?? "Teleportation effectuee.");
+      setActiveMapLevel(normalizeMapLevel(interaction.to.level));
+      renderedMapRef.current = null;
       rendererRef.current?.centerOnTile(interaction.to.x, interaction.to.y);
       return true;
     }
 
     setCombatMessage(interaction.message ?? "Action effectuee.");
     return true;
-  }, [setCombatMessage, setPendingCombat]);
+  }, [setActiveMapLevel, setCombatMessage, setPendingCombat]);
 
   const resolveAdventureChoice = useCallback(async (choice: AdventureChoiceValue) => {
     if (!gameState || !pendingAdventureChoice) return;
@@ -900,7 +932,8 @@ export default function GameMapComponent() {
       : "Vous ne pouvez pas jouer pour le moment.";
 
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
-    const targetTile = tile ? gameState.map.tiles[tile.y]?.[tile.x] : undefined;
+    const mapForAction = activeMap ?? gameState.map;
+    const targetTile = tile ? mapForAction.tiles[tile.y]?.[tile.x] : undefined;
     let objects = filterClickThroughTownSpriteHits(
       rendererRef.current.getObjectsAtScreen(screenX, screenY),
       tile,
@@ -948,6 +981,14 @@ export default function GameMapComponent() {
           isSyncingMoveRef.current = false;
           useGameStore.getState().setMovePending(false);
         });
+      return;
+    }
+
+    const selectedHeroForLayer = selectedHeroId
+      ? myPlayer?.heroes.find((hero) => hero.id === selectedHeroId)
+      : null;
+    if (selectedHeroForLayer && normalizeMapLevel(selectedHeroForLayer.position.level) !== activeMapLevel) {
+      setCombatMessage(activeMapLevel === UNDERGROUND_LEVEL ? "Ce héros est à la surface." : "Ce héros est dans le souterrain.");
       return;
     }
 
@@ -1033,16 +1074,16 @@ export default function GameMapComponent() {
         return "inaccessible";
       }
 
-      let fullPath = findPath(gameState.map, heroSrc.position, destination, Number.POSITIVE_INFINITY);
+      let fullPath = findPath(mapForAction, heroSrc.position, destination, Number.POSITIVE_INFINITY);
       if (fullPath.length <= 1) {
         // Destination impassable / disconnected: try adjacent tiles
         const candidates = getAdjacentPositions(destination);
         let best: Position[] = [];
         for (const c of candidates) {
-          if (c.x < 0 || c.x >= gameState.map.width || c.y < 0 || c.y >= gameState.map.height) continue;
-          if (!isTileTraversable(gameState.map.tiles[c.y][c.x])) continue;
-          const p = findPath(gameState.map, heroSrc.position, c, Number.POSITIVE_INFINITY);
-          if (p.length > 1 && (best.length === 0 || getPathMovementCost(gameState.map, p) < getPathMovementCost(gameState.map, best))) {
+          if (c.x < 0 || c.x >= mapForAction.width || c.y < 0 || c.y >= mapForAction.height) continue;
+          if (!isTileTraversable(mapForAction.tiles[c.y][c.x])) continue;
+          const p = findPath(mapForAction, heroSrc.position, c, Number.POSITIVE_INFINITY);
+          if (p.length > 1 && (best.length === 0 || getPathMovementCost(mapForAction, p) < getPathMovementCost(mapForAction, best))) {
             best = p;
           }
         }
@@ -1053,7 +1094,7 @@ export default function GameMapComponent() {
       let usedCost = 0;
       let splitIndex = 0;
       for (let i = 1; i < fullPath.length; i++) {
-        const c = getAdventureStepCost(gameState.map, fullPath[i - 1], fullPath[i]);
+        const c = getAdventureStepCost(mapForAction, fullPath[i - 1], fullPath[i]);
         if (usedCost + c > heroSrc.movement) break;
         usedCost += c;
         splitIndex = i;
@@ -1061,7 +1102,7 @@ export default function GameMapComponent() {
 
       const reachable = fullPath.slice(0, splitIndex + 1);
       const unreachable = fullPath.slice(splitIndex + 1);
-      const totalCost = getPathMovementCost(gameState.map, fullPath);
+      const totalCost = getPathMovementCost(mapForAction, fullPath);
       const remaining = totalCost - usedCost;
       const maxMove = heroSrc.maxMovement > 0 ? heroSrc.maxMovement : 1;
       const additionalTurns = Math.max(1, Math.ceil(remaining / maxMove));
@@ -1256,7 +1297,7 @@ export default function GameMapComponent() {
 
         if (garrisonCount > 0 && !isOwnedGate) {
           if (blockIfHeroInCombat(hero.id)) return;
-          const approach = getCombatApproach(gameState.map, hero.position, gate.position, hero.movement);
+          const approach = getCombatApproach(mapForAction, hero.position, gate.position, hero.movement);
           if (!approach) {
             rendererRef.current?.highlightTile(gate.position.x, gate.position.y, 0xff0000);
             setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -1330,7 +1371,7 @@ export default function GameMapComponent() {
             return;
           }
           const destination = { x: obj.x, y: obj.y };
-          const path = findPath(gameState.map, hero.position, destination, hero.movement);
+          const path = findPath(mapForAction, hero.position, destination, hero.movement);
           if (path.length <= 1) {
             if (handleOutOfRange(hero, destination) === "inaccessible") {
               rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1426,7 +1467,7 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
-        const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+        const approach = getCombatApproach(mapForAction, hero.position, destination, hero.movement);
         if (!approach) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1474,7 +1515,7 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
-        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement);
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1531,7 +1572,7 @@ export default function GameMapComponent() {
               if (normalizedMessage.includes("garde")) {
                 pendingAttackRef.current = null;
                 rendererRef.current?.clearHighlights();
-                const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+                const approach = getCombatApproach(mapForAction, hero.position, destination, hero.movement);
                 if (approach) {
                   setPendingCombat({
                     attackerHeroId: selectedHeroId,
@@ -1582,7 +1623,7 @@ export default function GameMapComponent() {
           return;
         }
 
-        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement);
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1676,9 +1717,9 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
-        const guardianPower = gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0;
+        const guardianPower = mapForAction.tiles[destination.y]?.[destination.x]?.object?.guardianPower ?? 0;
         if (guardianPower > 0) {
-          const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+          const approach = getCombatApproach(mapForAction, hero.position, destination, hero.movement);
           if (!approach) {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
             setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -1703,7 +1744,7 @@ export default function GameMapComponent() {
           return;
         }
 
-        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement);
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1765,7 +1806,7 @@ export default function GameMapComponent() {
         if (!hero) return;
         if (blockIfHeroInCombat(hero.id)) return;
         const destination = { x: obj.x, y: obj.y };
-        const path = findPath(gameState.map, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement);
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1863,7 +1904,7 @@ export default function GameMapComponent() {
 
             if (garrisonCount > 0) {
               const destination = { x: obj.x, y: obj.y };
-              const approach = getCombatApproach(gameState.map, hero.position, destination, hero.movement);
+              const approach = getCombatApproach(mapForAction, hero.position, destination, hero.movement);
               if (!approach) {
                 rendererRef.current?.highlightTile(destination.x, destination.y, 0xff0000);
                 setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -1888,7 +1929,7 @@ export default function GameMapComponent() {
 
             if (hero.position.x !== gate.position.x || hero.position.y !== gate.position.y) {
               const destination = gate.position;
-              const path = findPath(gameState.map, hero.position, destination, hero.movement);
+              const path = findPath(mapForAction, hero.position, destination, hero.movement);
               if (path.length <= 1) {
                 if (handleOutOfRange(hero, destination) === "inaccessible") {
                   rendererRef.current?.highlightTile(destination.x, destination.y, 0xff0000);
@@ -2025,9 +2066,9 @@ export default function GameMapComponent() {
       if (!hero) return;
       if (blockIfHeroInCombat(hero.id)) return;
 
-      const targetTile = gameState.map.tiles[tile.y]?.[tile.x];
+      const targetTile = mapForAction.tiles[tile.y]?.[tile.x];
       if (targetTile?.object?.type === "artifact") {
-        const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+        const approach = getCombatApproach(mapForAction, hero.position, tile, hero.movement);
         if (!approach) {
           rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
           setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -2070,7 +2111,7 @@ export default function GameMapComponent() {
       }
 
       if (targetTile?.object?.type === "monster") {
-        const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+        const approach = getCombatApproach(mapForAction, hero.position, tile, hero.movement);
         if (!approach) {
           rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
           setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -2111,7 +2152,7 @@ export default function GameMapComponent() {
         const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
         const guardianPower = targetTile.object?.guardianPower ?? 0;
         if (!isMyBuilding && guardianPower > 0) {
-          const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+          const approach = getCombatApproach(mapForAction, hero.position, tile, hero.movement);
           if (!approach) {
             rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
             setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -2177,7 +2218,7 @@ export default function GameMapComponent() {
         return;
       }
 
-      const path = findPath(gameState.map, hero.position, tile, hero.movement);
+      const path = findPath(mapForAction, hero.position, tile, hero.movement);
       if (path.length > 1) {
         if (targetTile?.object?.type === "building") {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
@@ -2189,7 +2230,7 @@ export default function GameMapComponent() {
 
             const guardianPower = targetTile.object?.guardianPower ?? 0;
             if (guardianPower > 0) {
-              const approach = getCombatApproach(gameState.map, hero.position, tile, hero.movement);
+              const approach = getCombatApproach(mapForAction, hero.position, tile, hero.movement);
               if (!approach) {
                 rendererRef.current.highlightTile(tile.x, tile.y, 0xff0000);
                 setTimeout(() => rendererRef.current?.clearHighlights(), 500);
@@ -2357,7 +2398,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
+  }, [activeMap, activeMapLevel, adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div
@@ -3018,9 +3059,11 @@ function areTileKeySetsEqual(left: Set<string> | null, right: Set<string>) {
 
 function buildObjects(
   gameState: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>,
-  currentPlayer: { id: string; isAlive?: boolean; exploredTiles: string[]; heroes: { position: { x: number; y: number } }[]; towns: { position: { x: number; y: number } }[] } | undefined,
+  currentPlayer: { id: string; isAlive?: boolean; exploredTiles: string[]; heroes: { position: Position }[]; towns: { position: Position }[] } | undefined,
   revealMap = false,
   selectedHeroId?: string | null,
+  activeMapLevel: MapLevelId = SURFACE_LEVEL,
+  activeMap = withActiveMapLayer(gameState.map, activeMapLevel),
 ): MapObjectData[] {
   const adventureVisits = gameState.adventureVisits;
   const exhaustionCtx = currentPlayer && adventureVisits ? {
@@ -3034,7 +3077,12 @@ function buildObjects(
     mysticalGardenVisits: adventureVisits.mysticalGardenVisits ?? {},
   } : null;
   const objects: MapObjectData[] = [];
-  const exploredSet = new Set(currentPlayer?.exploredTiles ?? []);
+  const exploredSet = new Set(
+    (currentPlayer?.exploredTiles ?? [])
+      .map(normalizeExploredTileKey)
+      .filter((key) => key.startsWith(`${activeMapLevel}:`))
+      .map((key) => key.slice(key.indexOf(":") + 1))
+  );
   const visiblePositions = new Set<string>();
   const heroCombatIds = new Map<string, string>();
   const embarkedHeroIds = new Set((gameState.boats ?? []).map((boat) => boat.heroId).filter(Boolean));
@@ -3046,8 +3094,8 @@ function buildObjects(
   }
 
   if (revealMap || currentPlayer?.isAlive === false) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
         const key = `${x},${y}`;
         exploredSet.add(key);
         visiblePositions.add(key);
@@ -3067,18 +3115,20 @@ function buildObjects(
 
   for (const player of gameState.players) {
     const isCurrentPlayer = player.id === currentPlayer?.id;
-    const townPositions = new Set(player.towns.map((town) => `${town.position.x},${town.position.y}`));
+    const layerTowns = player.towns.filter((town) => normalizeMapLevel(town.position.level) === activeMapLevel);
+    const layerHeroes = player.heroes.filter((hero) => normalizeMapLevel(hero.position.level) === activeMapLevel);
+    const townPositions = new Set(layerTowns.map((town) => `${town.position.x},${town.position.y}`));
     const heroesByTown = new Map<string, typeof player.heroes>();
-    for (const town of player.towns) {
+    for (const town of layerTowns) {
       const key = `${town.position.x},${town.position.y}`;
       heroesByTown.set(
         key,
-        player.heroes.filter((hero) => hero.position.x === town.position.x && hero.position.y === town.position.y)
+        layerHeroes.filter((hero) => hero.position.x === town.position.x && hero.position.y === town.position.y)
       );
     }
 
     if (gameState.status !== "PENDING") {
-      for (const hero of player.heroes) {
+      for (const hero of layerHeroes) {
         const key = `${hero.position.x},${hero.position.y}`;
         if (!isCurrentPlayer && currentPlayer?.isAlive !== false && !visiblePositions.has(key)) continue;
         const townHeroes = heroesByTown.get(key) ?? [];
@@ -3102,7 +3152,7 @@ function buildObjects(
         });
       }
     }
-    for (const town of player.towns) {
+    for (const town of layerTowns) {
       const key = `${town.position.x},${town.position.y}`;
       // Show own towns always, enemy towns only if explored
       if (!isCurrentPlayer && currentPlayer?.isAlive !== false && !exploredSet.has(key)) continue;
@@ -3121,6 +3171,7 @@ function buildObjects(
 
   for (const boat of gameState.boats ?? []) {
     if (boat.heroId) continue;
+    if (normalizeMapLevel(boat.position.level) !== activeMapLevel) continue;
     const key = `${boat.position.x},${boat.position.y}`;
     if (currentPlayer?.isAlive !== false && !exploredSet.has(key) && !visiblePositions.has(key)) continue;
     objects.push({
@@ -3147,15 +3198,16 @@ function buildObjects(
 
   for (const player of gameState.players) {
     for (const building of player.resourceBuildings) {
+      if (normalizeMapLevel(building.position.level) !== activeMapLevel) continue;
       buildingByPosition.set(`${building.position.x},${building.position.y}`, building);
       ownerByBuildingId.set(building.id, player);
     }
   }
 
-  if (gameState.map?.tiles) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
-        const tile = gameState.map.tiles[y]?.[x];
+  if (activeMap?.tiles) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
+        const tile = activeMap.tiles[y]?.[x];
         if (!tile?.object || tile.object.type !== "town") continue;
         const key = `${x},${y}`;
         if (knownTownPositions.has(key)) continue;
@@ -3176,10 +3228,10 @@ function buildObjects(
   }
 
   // Resource buildings from map tiles + ownership data
-  if (gameState.map?.tiles) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
-        const tile = gameState.map.tiles[y]?.[x];
+  if (activeMap?.tiles) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
+        const tile = activeMap.tiles[y]?.[x];
         if (!tile?.object || tile.object.type !== "building") continue;
         const tileObject = tile.object;
         const key = `${x},${y}`;
@@ -3205,10 +3257,10 @@ function buildObjects(
     }
   }
 
-  if (gameState.map?.tiles) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
-        const tile = gameState.map.tiles[y]?.[x];
+  if (activeMap?.tiles) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
+        const tile = activeMap.tiles[y]?.[x];
         if (!tile?.object || tile.object.type !== "adventure_building") continue;
         const key = `${x},${y}`;
         if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
@@ -3246,6 +3298,7 @@ function buildObjects(
 
   const gatePositions = new Set<string>();
   for (const gate of gameState.gates ?? []) {
+    if (normalizeMapLevel(gate.position.level) !== activeMapLevel) continue;
     const key = `${gate.position.x},${gate.position.y}`;
     if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
     gatePositions.add(key);
@@ -3263,10 +3316,10 @@ function buildObjects(
     });
   }
 
-  if (gameState.map?.tiles) {
-    for (let y = 0; y < gameState.map.height; y++) {
-      for (let x = 0; x < gameState.map.width; x++) {
-        const tile = gameState.map.tiles[y]?.[x];
+  if (activeMap?.tiles) {
+    for (let y = 0; y < activeMap.height; y++) {
+      for (let x = 0; x < activeMap.width; x++) {
+        const tile = activeMap.tiles[y]?.[x];
         if (!tile?.object || tile.object.type !== "gate") continue;
         const key = `${x},${y}`;
         if (gatePositions.has(key)) continue;
@@ -3288,6 +3341,7 @@ function buildObjects(
   }
 
   for (const combat of gameState.activeCombats ?? []) {
+    if (normalizeMapLevel(combat.position.level) !== activeMapLevel) continue;
     const key = `${combat.position.x},${combat.position.y}`;
     if (!exploredSet.has(key) && !visiblePositions.has(key)) continue;
     objects.push({
@@ -3304,7 +3358,7 @@ function buildObjects(
 
   for (const player of gameState.players) {
     const isCurrentPlayer = player.id === currentPlayer?.id;
-    for (const hero of player.heroes) {
+    for (const hero of player.heroes.filter((item) => normalizeMapLevel(item.position.level) === activeMapLevel)) {
       const combatId = heroCombatIds.get(hero.id);
       if (!combatId) continue;
       const key = `${hero.position.x},${hero.position.y}`;

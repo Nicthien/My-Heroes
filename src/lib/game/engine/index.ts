@@ -10,13 +10,15 @@ import {
   Resources,
   UnitStack,
   Boat,
+  MapLevelId,
 } from "../types";
+import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "../map-levels";
 
 import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "../economy";
 import { getTownGoldProduction } from "../town-buildings";
 import { getUnitRule } from "../units";
 import { makeRng, randomSeed, type RNG } from "./rng";
-import { getTemplate, resolveTemplate, listTemplatesForPlayers } from "./template";
+import { getTemplate, resolveTemplate, listTemplatesForPlayers, type MapTemplate } from "./template";
 import { buildZoneGrid, generateZoneTerrain } from "./zones";
 import { buildConnectionsAndWalls, enforceChokepointGateFrames } from "./connections";
 import {
@@ -39,6 +41,19 @@ import { RmgTuning, normalizeRmgTuning } from "./rmg-tuning";
 import { placeLargeMountainMassifs } from "./large-obstacles";
 import { applyWorldEdge } from "./world-edge";
 import { placeZonePockets, repairUnreachablePockets } from "./pockets";
+import {
+  applySurfaceContourToUnderground,
+  buildUndergroundForcedCenters,
+  carveUndergroundCaverns,
+  ensureUndergroundObjectAccess,
+  filterTemplateForLevel,
+  finalizeUndergroundCavernNetwork,
+  hasTemplateLevel,
+  normalizeUndergroundTerrain,
+  placeUndergroundBlockingDecor,
+  placeTemplateSubterraneanGatePairs,
+  prefixMapObjectIds,
+} from "./underground";
 import { measureDevPerformance } from "@/lib/dev/performanceMetrics";
 export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
 
@@ -447,6 +462,16 @@ export interface GenerateMapOptions {
   templateId?: string;
   playerCount: number;
   tuning?: Partial<RmgTuning>;
+  undergroundEnabled?: boolean;
+}
+
+interface GenerateMapLayerOptions extends GenerateMapOptions {
+  seed: string;
+  templateId: string;
+  fullTemplate: MapTemplate;
+  template: MapTemplate;
+  mapLevel: MapLevelId;
+  forcedCenters?: Map<string, Position>;
 }
 
 export function generateMap(opts: GenerateMapOptions): GameMap;
@@ -459,16 +484,77 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   } else {
     opts = arg1;
   }
-  const { width, height, playerCount } = opts;
-  const tuning = normalizeRmgTuning(opts.tuning);
   const seed = opts.seed && opts.seed.length > 0 ? opts.seed : randomSeed();
   const rng = makeRng(seed);
-
-  // Choix du template
-  const templateId =
-    opts.templateId ?? pickDefaultTemplate(playerCount, rng);
+  const templateId = opts.templateId ?? pickDefaultTemplate(opts.playerCount, rng);
   const fullTemplate = getTemplate(templateId);
-  const template = resolveTemplate(fullTemplate, playerCount, rng);
+  const resolvedTemplate = resolveTemplate(fullTemplate, opts.playerCount, rng);
+  const surfaceTemplate = filterTemplateForLevel(resolvedTemplate, SURFACE_LEVEL);
+
+  if (!opts.undergroundEnabled || !hasTemplateLevel(resolvedTemplate, UNDERGROUND_LEVEL)) {
+    return generateMapLayer({
+      ...opts,
+      seed,
+      templateId,
+      fullTemplate,
+      template: surfaceTemplate,
+      mapLevel: SURFACE_LEVEL,
+    });
+  }
+
+  const surface = generateMapLayer({
+    ...opts,
+    seed,
+    templateId,
+    fullTemplate,
+    template: surfaceTemplate,
+    mapLevel: SURFACE_LEVEL,
+  });
+  const undergroundTemplate = filterTemplateForLevel(resolvedTemplate, UNDERGROUND_LEVEL);
+  const undergroundSeed = `${surface.seed ?? seed}:underground`;
+  const underground = generateMapLayer({
+    ...opts,
+    seed: undergroundSeed,
+    templateId,
+    fullTemplate,
+    template: undergroundTemplate,
+    mapLevel: UNDERGROUND_LEVEL,
+    forcedCenters: buildUndergroundForcedCenters(resolvedTemplate, surface.zones, opts.width, opts.height),
+  });
+  finalizeUndergroundCavernNetwork(underground, resolvedTemplate, surface);
+  applySurfaceContourToUnderground(surface, underground);
+  prefixMapObjectIds(underground, "ug");
+  placeTemplateSubterraneanGatePairs(surface, underground, resolvedTemplate, opts.playerCount);
+  placeUndergroundBlockingDecor(underground, makeRng(`${undergroundSeed}:blocking-decor`));
+  ensureUndergroundObjectAccess(underground, surface);
+  surface.levels = {
+    surface: {
+      id: SURFACE_LEVEL,
+      width: surface.width,
+      height: surface.height,
+      tiles: surface.tiles,
+      zones: surface.zones,
+    },
+    underground: {
+      id: UNDERGROUND_LEVEL,
+      width: underground.width,
+      height: underground.height,
+      tiles: underground.tiles,
+      zones: underground.zones,
+    },
+  };
+  return surface;
+}
+
+function generateMapLayer(opts: GenerateMapLayerOptions): GameMap {
+  const { width, height } = opts;
+  const tuning = normalizeRmgTuning(opts.tuning);
+  const seed = opts.seed;
+  const rng = makeRng(seed);
+  const templateId = opts.templateId;
+  const fullTemplate = opts.fullTemplate;
+  const template = opts.template;
+  const isUnderground = opts.mapLevel === UNDERGROUND_LEVEL;
 
   // 1) Zones + terrain
   const tiles: MapTile[][] = [];
@@ -486,11 +572,26 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     }
   }
 
-  const landmass = generateLandmass(width, height, rng, fullTemplate.landStyle);
-  const zoneGrid = buildZoneGrid(template, width, height, rng, landmass);
+  const landmass = isUnderground ? undefined : generateLandmass(width, height, rng, fullTemplate.landStyle);
+  const zoneGrid = buildZoneGrid(
+    template,
+    width,
+    height,
+    rng,
+    landmass,
+    {
+      forcedCenters: opts.forcedCenters,
+      sizeWeightMultiplier: isUnderground ? 1 / 1.25 : 1,
+    },
+  );
   generateZoneTerrain(tiles, zoneGrid, width, height, rng, landmass);
-  carveHydrology(tiles, width, height, rng);
-  applyWorldEdge(tiles, width, height, seed);
+  if (isUnderground) {
+    normalizeUndergroundTerrain(tiles, zoneGrid);
+    carveUndergroundCaverns(tiles, zoneGrid, template, width, height);
+  } else {
+    carveHydrology(tiles, width, height, rng);
+    applyWorldEdge(tiles, width, height, seed);
+  }
 
   // 2) Murs + chokepoints
   const chokepoints = buildConnectionsAndWalls(tiles, zoneGrid, template, width, height);
@@ -553,7 +654,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   applyChokepointGuards({ tiles, zoneGrid, width, height, rng }, chokepoints);
 
   // 5) Routes : pavées entre châteaux, dirt vers les mines
-  const roadOptions = { allowWaterRoads: fullTemplate.allowRoadBridges !== false };
+  const roadOptions = { allowWaterRoads: !isUnderground && fullTemplate.allowRoadBridges !== false };
   buildRoads(tiles, width, height, townPositions, "paved", roadOptions);
   buildSecondaryRoads(tiles, width, height, townPositions, miningPositions, 10, roadOptions);
   enforceChokepointGateFrames(tiles, width, height, chokepoints, "paved");
@@ -582,7 +683,9 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   placeAdventureBuildings({ tiles, zoneGrid, width, height, rng }, tuning);
   placeDecor(tiles, width, height, rng);
   ensureInvisibleAccessToObjects(tiles, width, height, townPositions, roadOptions);
-  applyWorldEdge(tiles, width, height, seed);
+  buildSecondaryRoads(tiles, width, height, townPositions, collectBuildingPositions(tiles), width + height, roadOptions);
+  clearAdventureBuildingRoads(tiles);
+  if (!isUnderground) applyWorldEdge(tiles, width, height, seed);
 
   // 7) Garantir que chaque chokepoint reste praticable même après décor
   for (const cp of chokepoints) {
@@ -602,7 +705,7 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     templateId,
     zones: zoneGrid.meta,
   };
-  const finalReachable = floodPassableTiles(map, placePlayerStart(map, 0));
+  const finalReachable = floodPassableTiles(map, findLayerReachabilityStart(map) ?? placePlayerStart(map, 0));
   repairUnreachablePockets(
     { tiles, zoneGrid, width, height, rng },
     pockets,
@@ -611,6 +714,42 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
   repairUnreachableAdventureBuildings(map, finalReachable);
 
   return map;
+}
+
+function collectBuildingPositions(tiles: MapTile[][]): Position[] {
+  const positions: Position[] = [];
+  for (const row of tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "building") positions.push({ x: tile.x, y: tile.y });
+    }
+  }
+  return positions;
+}
+
+function clearAdventureBuildingRoads(tiles: MapTile[][]): void {
+  for (const row of tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "adventure_building") tile.road = undefined;
+    }
+  }
+}
+
+function findLayerReachabilityStart(map: GameMap): Position | null {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "town" && tile.isPassable) return { x: tile.x, y: tile.y };
+    }
+  }
+  for (const zone of map.zones ?? []) {
+    const tile = map.tiles[zone.centerY]?.[zone.centerX];
+    if (tile?.isPassable) return { x: zone.centerX, y: zone.centerY };
+  }
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.isPassable) return { x: tile.x, y: tile.y };
+    }
+  }
+  return null;
 }
 
 function pickDefaultTemplate(playerCount: number, rng: RNG): string {

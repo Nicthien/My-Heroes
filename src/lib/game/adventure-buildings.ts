@@ -50,6 +50,14 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.35,
   },
+  [AdventureBuildingType.SUBTERRANEAN_GATE]: {
+    type: AdventureBuildingType.SUBTERRANEAN_GATE,
+    label: "Entrée souterraine",
+    description: "Relie la surface au souterrain.",
+    visitMode: "repeatable",
+    preferredTerrain: [TerrainType.DIRT, TerrainType.MOUNTAIN, TerrainType.SWAMP, TerrainType.GRASS],
+    rarity: 0.4,
+  },
   [AdventureBuildingType.EXTERNAL_DWELLING]: {
     type: AdventureBuildingType.EXTERNAL_DWELLING,
     label: "Demeure externe",

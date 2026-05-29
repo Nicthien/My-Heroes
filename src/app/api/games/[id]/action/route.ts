@@ -40,6 +40,7 @@ import {
   type ArtifactSlot,
 } from "@/lib/game/artifacts";
 import { AdventureBuildingType, BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
+import { normalizeMapLevel, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import {
   CLASS_STARTING_STATS,
   HERO_RECRUIT_COST_GOLD,
@@ -95,6 +96,7 @@ interface MinimalTown {
   gamePlayerId?: string | null;
   x: number;
   y: number;
+  mapLevel?: string | null;
   level?: number;
   townType?: string;
   buildings?: string[];
@@ -126,6 +128,7 @@ interface MinimalBoat {
   faction?: string | null;
   x: number;
   y: number;
+  mapLevel?: string | null;
 }
 
 interface MinimalTurn {
@@ -150,6 +153,7 @@ interface MinimalHero {
   specialty?: string | null;
   x: number;
   y: number;
+  mapLevel?: string | null;
   level?: number;
   movement: number;
   mana?: number | null;
@@ -190,7 +194,7 @@ interface MinimalPlayer {
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
   | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string; alreadyVisited?: boolean }
-  | { type: "TELEPORT"; buildingType: "stargate"; from: Position; to: Position; message?: string; destination: Position }
+  | { type: "TELEPORT"; buildingType: "stargate" | "subterranean_gate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }
   | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
@@ -437,7 +441,9 @@ export async function POST(
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
 
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      const fullMapData = normalizeMapMovement(game.mapData as GameMap);
+      const heroMapLevel = normalizeMapLevel(hero.mapLevel);
+      const mapData = withActiveMapLayer(fullMapData, heroMapLevel);
       const effectiveGates = getEffectiveGates(gates, mapData);
       if (isHeroInActiveCombat(game.combats, hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
@@ -483,45 +489,78 @@ export async function POST(
       }
 
       const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
-        item.id === hero.id ? { ...hero, x: lastPos.x, y: lastPos.y } : item
+        item.id === hero.id ? { ...hero, x: lastPos.x, y: lastPos.y, mapLevel: heroMapLevel } : item
       );
       const newlyVisible = computeVisibleTiles(
         mapData,
         getPlayerVisionCenters({
-          heroes: movedHeroes.map((h) => ({ position: { x: h.x, y: h.y } })),
-          towns: gamePlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+          heroes: movedHeroes.filter((h) => normalizeMapLevel(h.mapLevel) === heroMapLevel).map((h) => ({ position: { x: h.x, y: h.y } })),
+          towns: gamePlayer.towns.filter((town) => normalizeMapLevel((town as MinimalTown & { mapLevel?: string | null }).mapLevel) === heroMapLevel).map((town) => ({ position: { x: town.x, y: town.y } })),
         }),
         5
       );
       const currentlyVisible = computeVisibleTiles(
         mapData,
         getPlayerVisionCenters({
-          heroes: gamePlayer.heroes.map((h) => ({ position: { x: h.x, y: h.y } })),
-          towns: gamePlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
+          heroes: gamePlayer.heroes.filter((h) => normalizeMapLevel(h.mapLevel) === heroMapLevel).map((h) => ({ position: { x: h.x, y: h.y } })),
+          towns: gamePlayer.towns.filter((town) => normalizeMapLevel((town as MinimalTown & { mapLevel?: string | null }).mapLevel) === heroMapLevel).map((town) => ({ position: { x: town.x, y: town.y } })),
         }),
         5
       );
       const watchTowerVision = computeExtraTownVisionTiles(
         mapData,
-        gamePlayer.towns.map((t) => ({ position: { x: t.x, y: t.y }, townType: t.townType, buildings: t.buildings })),
+        gamePlayer.towns.filter((t) => normalizeMapLevel((t as MinimalTown & { mapLevel?: string | null }).mapLevel) === heroMapLevel).map((t) => ({ position: { x: t.x, y: t.y }, townType: t.townType, buildings: t.buildings })),
         9
       );
       const heroScouting = computeExtraHeroScoutingTiles(
         mapData,
-        movedHeroes.map((h) => ({ position: { x: h.x, y: h.y }, skills: ((h as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills) })),
+        movedHeroes.filter((h) => normalizeMapLevel(h.mapLevel) === heroMapLevel).map((h) => ({ position: { x: h.x, y: h.y }, skills: ((h as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills) })),
         5
       );
       const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-      for (const key of currentlyVisible) explored.add(key);
-      for (const key of newlyVisible) explored.add(key);
-      for (const key of watchTowerVision) explored.add(key);
-      for (const key of heroScouting) explored.add(key);
+      for (const key of currentlyVisible) explored.add(key.includes(":") ? key : `${heroMapLevel}:${key}`);
+      for (const key of newlyVisible) explored.add(key.includes(":") ? key : `${heroMapLevel}:${key}`);
+      for (const key of watchTowerVision) explored.add(key.includes(":") ? key : `${heroMapLevel}:${key}`);
+      for (const key of heroScouting) explored.add(key.includes(":") ? key : `${heroMapLevel}:${key}`);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
 
       const tile = mapData.tiles?.[lastPos.y]?.[lastPos.x];
       const stopObject = firstStop?.object;
       const stopTargetPosition = firstStop?.targetPosition;
       let interaction: MoveInteraction | null = null;
+
+      if (tile?.object?.type === "adventure_building" && tile.object.subtype === AdventureBuildingType.SUBTERRANEAN_GATE) {
+        const targetLevel = normalizeMapLevel(tile.object.targetLevel);
+        const target = tile.object.targetPosition;
+        const targetMap = withActiveMapLayer(fullMapData, targetLevel);
+        const targetTile = target ? targetMap.tiles[target.y]?.[target.x] : undefined;
+        if (!target || !targetTile?.isPassable) {
+          interaction = { type: "STOP", message: "Juste à l'entrée, un amas de gravats bloque le tunnel. Vous repartez découragé.", destination: lastPos };
+        } else {
+          const nextMovement = getUsableAdventureMovement(targetMap, target, hero.movement - usedMovement);
+          const { error: levelMoveError } = await supabase.from("heroes").update({
+            x: target.x,
+            y: target.y,
+            map_level: targetLevel,
+            movement: nextMovement,
+          }).eq("id", hero.id);
+          if (levelMoveError) return NextResponse.json({ error: `Erreur mise à jour héros: ${levelMoveError.message}` }, { status: 500 });
+          for (const key of computeVisibleTiles(targetMap, [{ x: target.x, y: target.y }], 5)) {
+            explored.add(key.includes(":") ? key : `${targetLevel}:${key}`);
+          }
+          await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+          interaction = {
+            type: "TELEPORT",
+            buildingType: "subterranean_gate",
+            from: { x: lastPos.x, y: lastPos.y, level: heroMapLevel },
+            to: { x: target.x, y: target.y, level: targetLevel },
+            destination: { x: target.x, y: target.y, level: targetLevel },
+            message: targetLevel === "underground" ? "Vous descendez dans le souterrain." : "Vous remontez à la surface.",
+          };
+        }
+        await logPlayerAction(supabase, game, id, gamePlayer, action);
+        return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: lastPos });
+      }
 
       if (tile?.object?.type === "resource" && !collected.has(tile.object.id)) {
         collected.add(tile.object.id);
@@ -685,11 +724,13 @@ export async function POST(
     if (action.type === "EMBARK_BOAT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Impossible d'embarquer dans le souterrain" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       if (boats.some((boat) => boat.heroId === hero.id)) return NextResponse.json({ error: "Ce héros est déjà embarqué" }, { status: 400 });
       const boat = boats.find((item) => item.id === action.boatId);
       if (!boat || boat.heroId) return NextResponse.json({ error: "Bateau indisponible" }, { status: 400 });
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      if (normalizeMapLevel(boat.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
+      const mapData = normalizeMapMovement(withActiveMapLayer(game.mapData as GameMap, SURFACE_LEVEL));
       const boatPosition = { x: boat.x, y: boat.y };
       const boatTile = mapData.tiles[boat.y]?.[boat.x];
       if (boatTile?.terrain !== "water") return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
@@ -706,10 +747,12 @@ export async function POST(
     if (action.type === "DISEMBARK_BOAT") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
       if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+      if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Impossible de debarquer dans le souterrain" }, { status: 400 });
       if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       const boat = boats.find((item) => item.heroId === hero.id);
       if (!boat) return NextResponse.json({ error: "Ce héros n'est pas embarqué" }, { status: 400 });
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
+      if (normalizeMapLevel(boat.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
+      const mapData = normalizeMapMovement(withActiveMapLayer(game.mapData as GameMap, SURFACE_LEVEL));
       const destination = getActionPosition(action.position);
       if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
       const tile = mapData.tiles[destination.y]?.[destination.x];
@@ -717,7 +760,7 @@ export async function POST(
       if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, destination)) return NextResponse.json({ error: "La rive est trop eloignee" }, { status: 400 });
       if (isOccupiedByAnyHero(players, hero.id, destination)) return NextResponse.json({ error: "Destination occupee" }, { status: 400 });
       await supabase.from("heroes").update({ x: destination.x, y: destination.y, movement: 0 }).eq("id", hero.id);
-      await supabase.from("boats").update({ hero_id: null, x: hero.x, y: hero.y }).eq("id", boat.id);
+      await supabase.from("boats").update({ hero_id: null, x: hero.x, y: hero.y, map_level: SURFACE_LEVEL }).eq("id", boat.id);
       const explored = new Set(gamePlayer.exploredTiles ?? []);
       for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
       await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
@@ -925,6 +968,9 @@ export async function POST(
     if (action.type === "BUILD_BOAT") {
       const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
       if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
+      if (normalizeMapLevel(town.mapLevel) !== SURFACE_LEVEL) {
+        return NextResponse.json({ error: "Impossible de construire un bateau dans le souterrain" }, { status: 400 });
+      }
       const buildings = (town.buildings ?? []) as string[];
       const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
       if (!hasShipyardBuilding(townFaction, buildings)) return NextResponse.json({ error: "Construisez d'abord le Chantier naval" }, { status: 400 });
@@ -942,6 +988,7 @@ export async function POST(
         faction: townFaction,
         x: destination.x,
         y: destination.y,
+        map_level: SURFACE_LEVEL,
       });
       if (boatError) return NextResponse.json({ error: `Erreur construction bateau: ${boatError.message}` }, { status: 500 });
       const explored = new Set(gamePlayer.exploredTiles ?? []);
@@ -1973,7 +2020,7 @@ function adjacentPositions(position: Position): Position[] {
 }
 
 function findFreeAdjacentWaterTile(map: GameMap, position: Position, boats: MinimalBoat[]) {
-  const occupied = new Set(boats.filter((boat) => !boat.heroId).map((boat) => `${boat.x},${boat.y}`));
+  const occupied = new Set(boats.filter((boat) => !boat.heroId && normalizeMapLevel(boat.mapLevel) === SURFACE_LEVEL).map((boat) => `${boat.x},${boat.y}`));
   return adjacentPositions(position).find((candidate) => {
     const tile = map.tiles[candidate.y]?.[candidate.x];
     return tile?.terrain === "water" && isTileTraversable(tile) && !occupied.has(`${candidate.x},${candidate.y}`);
@@ -1982,7 +2029,7 @@ function findFreeAdjacentWaterTile(map: GameMap, position: Position, boats: Mini
 
 function findNearestEmptyBoat(boats: MinimalBoat[], position: Position) {
   return boats
-    .filter((boat) => !boat.heroId)
+    .filter((boat) => !boat.heroId && normalizeMapLevel(boat.mapLevel) === SURFACE_LEVEL)
     .sort((a, b) =>
       Math.max(Math.abs(a.x - position.x), Math.abs(a.y - position.y)) -
       Math.max(Math.abs(b.x - position.x), Math.abs(b.y - position.y))
@@ -3606,6 +3653,7 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "summon_boat") {
+    if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return { ok: false, error: "Impossible d'invoquer un bateau dans le souterrain" };
     if (boats.some((boat) => boat.heroId === hero.id)) return { ok: false, error: "Ce héros est déjà embarqué" };
     const landing = findFreeAdjacentWaterTile(mapData, heroPosition, boats);
     if (!landing) return { ok: false, error: "Aucune eau adjacente libre" };
@@ -3615,6 +3663,7 @@ async function applyAdventureSpell({
       x: landing.x,
       y: landing.y,
       owner_player_id: gamePlayer.id,
+      map_level: SURFACE_LEVEL,
     }).eq("id", boat.id);
     return {
       ok: true,
@@ -3623,10 +3672,11 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "scuttle_boat") {
+    if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return { ok: false, error: "Impossible de saborder un bateau dans le souterrain" };
     const targetPosition = getActionPosition(target);
     const boat = targetPosition
-      ? boats.find((item) => !item.heroId && item.x === targetPosition.x && item.y === targetPosition.y)
-      : boats.find((item) => !item.heroId && areAdjacentOrSame(heroPosition, { x: item.x, y: item.y }));
+      ? boats.find((item) => !item.heroId && normalizeMapLevel(item.mapLevel) === SURFACE_LEVEL && item.x === targetPosition.x && item.y === targetPosition.y)
+      : boats.find((item) => !item.heroId && normalizeMapLevel(item.mapLevel) === SURFACE_LEVEL && areAdjacentOrSame(heroPosition, { x: item.x, y: item.y }));
     if (!boat) return { ok: false, error: "Aucun bateau vide à saborder" };
     if (!areAdjacentOrSame(heroPosition, { x: boat.x, y: boat.y })) return { ok: false, error: "Le bateau est trop eloigne" };
     await supabase.from("boats").delete().eq("id", boat.id);

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useSession } from "@/lib/auth/client";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
 import { MAP_SPRITES } from "@/lib/rendering/phaser/assets";
 import {
@@ -47,7 +48,8 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
             const active = h.id === selectedHeroId;
             const townAtHero = towns.find((town) =>
               town.position.x === h.position.x &&
-              town.position.y === h.position.y
+              town.position.y === h.position.y &&
+              normalizeMapLevel(town.position.level) === normalizeMapLevel(h.position.level)
             );
             return (
               <Row

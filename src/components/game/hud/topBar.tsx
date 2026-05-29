@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { type GameState, type PersistentCombat, type Player, type Resources } from "@/lib/game/types";
+import { Faction, type GameState, type PersistentCombat, type Player, type Resources } from "@/lib/game/types";
 import { findActiveCombatTruce } from "@/lib/game/combat/truce";
+import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "@/lib/game/economy";
+import { getEstatesGold } from "@/lib/game/skills";
+import { getTownGoldProduction } from "@/lib/game/town-buildings";
 import { HourglassIcon } from "./theme";
 
 const RESOURCE_ITEMS = [
@@ -17,16 +20,23 @@ const RESOURCE_ITEMS = [
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 
-export function ResourceBar({ resources }: { resources: Resources }) {
+export function ResourceBar({ player }: { player: Player }) {
+  const resources = player.resources;
+  const income = getPlayerResourceIncomePerTurn(player);
+
   return (
     <div className="mobile-resource-bar grid w-[clamp(21rem,34vw,27rem)] grid-cols-[1.15fr_repeat(3,1fr)] grid-rows-2 gap-1.5 text-xs xl:text-sm">
       {RESOURCE_ITEMS.map((item) => {
         const isGold = item.key === "gold";
+        const amount = resources[item.key];
+        const incomeAmount = income[item.key];
+        const title = `${item.label} : ${amount}\nGain par tour : +${incomeAmount}`;
 
         return (
           <span
             key={item.key}
-            title={`${item.label} : ${resources[item.key]}`}
+            title={title}
+            aria-label={title}
             className={`group flex items-center rounded-lg border border-amber-700/50 bg-gradient-to-b from-stone-900 to-black shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)] transition hover:-translate-y-0.5 hover:border-amber-400/70 ${
               isGold
                 ? "row-span-2 flex-col justify-center gap-1.5 px-2 py-2"
@@ -35,13 +45,56 @@ export function ResourceBar({ resources }: { resources: Resources }) {
           >
             <ResourceIcon item={item} size={isGold ? "lg" : "sm"} />
             <span className={`font-black tabular-nums text-amber-100 drop-shadow ${isGold ? "text-lg xl:text-xl" : ""}`}>
-              {resources[item.key]}
+              {amount}
             </span>
           </span>
         );
       })}
     </div>
   );
+}
+
+function getPlayerResourceIncomePerTurn(player: Player): Resources {
+  const income = createEmptyResourceTotals();
+
+  for (const building of player.resourceBuildings ?? []) {
+    const rule = RESOURCE_BUILDING_RULES.find((item) => item.type === building.type);
+    if (rule) addResourceProduction(income, rule.production);
+  }
+
+  let totalGoldInterestPercent = 0;
+  for (const town of player.towns ?? []) {
+    const buildings = town.buildings ?? [];
+    const townFaction = ((town as { townType?: string }).townType ?? town.faction ?? player.faction ?? Faction.CASTLE) as Faction;
+    income.gold += getTownGoldProduction(buildings);
+
+    for (const building of buildings) {
+      const rule = getFactionBuildingRule(townFaction, building);
+      if (rule?.dailyProduction) addResourceProduction(income, rule.dailyProduction);
+      totalGoldInterestPercent += rule?.goldInterestPercent ?? 0;
+    }
+  }
+
+  if (totalGoldInterestPercent > 0) {
+    income.gold += Math.floor(player.resources.gold * (totalGoldInterestPercent / 100));
+  }
+
+  for (const hero of player.heroes ?? []) {
+    income.gold += getEstatesGold(hero.skills);
+  }
+
+  return income;
+}
+
+function createEmptyResourceTotals(): Resources {
+  return { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 };
+}
+
+function addResourceProduction(total: Resources, production: Partial<Resources>) {
+  for (const [resource, amount] of Object.entries(production)) {
+    const key = resource as keyof Resources;
+    total[key] += amount ?? 0;
+  }
 }
 
 function ResourceIcon({ item, size = "sm" }: { item: ResourceItem; size?: "sm" | "lg" }) {

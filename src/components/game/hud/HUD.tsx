@@ -43,6 +43,7 @@ import { useGameStore } from "@/lib/stores/gameStore";
 import { Faction, BuildingType, UnitType, type Hero } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
 import {
   UNIT_RULES,
   canAfford,
@@ -151,7 +152,8 @@ function HUDContent() {
   const heroesAtSelectedTown = selectedTown && myPlayer
     ? myPlayer.heroes.filter((hero) =>
         hero.position.x === selectedTown.position.x &&
-        hero.position.y === selectedTown.position.y
+        hero.position.y === selectedTown.position.y &&
+        normalizeMapLevel(hero.position.level) === normalizeMapLevel(selectedTown.position.level)
       )
     : [];
   const selectedGarrisonTargetHero = heroesAtSelectedTown.find((hero) => hero.id === garrisonTargetHeroId);
@@ -159,7 +161,8 @@ function HUDContent() {
   const townAtSelectedHero = selectedHero
     ? allTowns.find((town) =>
         town.position.x === selectedHero.position.x &&
-        town.position.y === selectedHero.position.y
+        town.position.y === selectedHero.position.y &&
+        normalizeMapLevel(town.position.level) === normalizeMapLevel(selectedHero.position.level)
       )
     : undefined;
 
@@ -959,7 +962,7 @@ function HUDContent() {
                 </div>
               </>
             ) : myPlayer ? (
-              <ResourceBar resources={myPlayer.resources} />
+              <ResourceBar player={myPlayer} />
             ) : null}
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"

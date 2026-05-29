@@ -181,6 +181,7 @@ export const MAP_SPRITES = {
     campfire: "/assets/sprites/map/adventure-campfire.webp",
     lighthouse: "/assets/sprites/map/adventure-lighthouse.webp",
     stargate: "/assets/sprites/map/adventure-stargate.webp",
+    subterranean_gate: "/assets/sprites/map/adventure-subterranean-gate.webp",
     arena: "/assets/sprites/map/adventure-arena.webp",
     mercenary_camp: "/assets/sprites/map/adventure-mercenary-camp.webp",
     marletto_tower: "/assets/sprites/map/adventure-marletto-tower.webp",
@@ -305,6 +306,11 @@ export const MAP_SPRITES = {
     lava_scorched_deadwood: "/assets/sprites/map/lava-scorched-deadwood.webp",
     lava_sulfur_shrub: "/assets/sprites/map/lava-sulfur-shrub.webp",
     lava_obsidian_bramble: "/assets/sprites/map/lava-obsidian-bramble.webp",
+    underground_stalagmite_cluster: "/assets/sprites/map/underground-stalagmite-cluster.webp",
+    underground_crystal_ribs: "/assets/sprites/map/underground-crystal-ribs.webp",
+    underground_mushroom_thicket: "/assets/sprites/map/underground-mushroom-thicket.webp",
+    underground_rubble_pillar: "/assets/sprites/map/underground-rubble-pillar.webp",
+    underground_root_snarl: "/assets/sprites/map/underground-root-snarl.webp",
     massif_mountain_granite_2x2: "/assets/sprites/map/massif-mountain-granite-2x2.webp",
     massif_mountain_snowcap_2x2: "/assets/sprites/map/massif-mountain-snowcap-2x2.webp",
     massif_mountain_pine_2x2: "/assets/sprites/map/massif-mountain-pine-2x2.webp",
@@ -312,6 +318,7 @@ export const MAP_SPRITES = {
     massif_mountain_desert_2x2: "/assets/sprites/map/massif-mountain-desert-2x2.webp",
     massif_mountain_mossy_2x2: "/assets/sprites/map/massif-mountain-mossy-2x2.webp",
     boulder_cluster: "/assets/sprites/map/boulder-cluster.webp",
+    underground_cave_wall: "/assets/sprites/map/underground-cave-wall.webp",
   } as Record<string, string>,
 };
 

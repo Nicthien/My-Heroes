@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
 import { generateMap } from "@/lib/game/engine";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
+import { SURFACE_LEVEL, UNDERGROUND_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import { GameMap, TerrainType } from "@/lib/game/types";
 
 const MAP_SIZES = {
@@ -31,6 +32,8 @@ function RmgPreviewContent() {
   const [seed, setSeed] = useState(() => initialSeed(searchParams));
   const [size, setSize] = useState<SizeKey>(() => initialSize(searchParams));
   const [playerCount, setPlayerCount] = useState(() => initialPlayerCount(searchParams));
+  const [undergroundEnabled, setUndergroundEnabled] = useState(() => initialUndergroundEnabled(searchParams));
+  const [previewLevel, setPreviewLevel] = useState<typeof SURFACE_LEVEL | typeof UNDERGROUND_LEVEL>(SURFACE_LEVEL);
   const templates = useMemo(() => listTemplatesForPlayers(playerCount), [playerCount]);
   const [templateId, setTemplateId] = useState<string>(() => initialTemplateId(searchParams));
   const selectedTemplateId = templateId !== "auto" && templates.some((template) => template.id === templateId)
@@ -45,11 +48,16 @@ function RmgPreviewContent() {
         seed,
         playerCount,
         templateId: selectedTemplateId === "auto" ? undefined : selectedTemplateId,
+        undergroundEnabled,
       }),
-    [playerCount, seed, selectedTemplateId, size],
+    [playerCount, seed, selectedTemplateId, size, undergroundEnabled],
+  );
+  const visibleMap = useMemo(
+    () => withActiveMapLayer(map, undergroundEnabled ? previewLevel : SURFACE_LEVEL),
+    [map, previewLevel, undergroundEnabled],
   );
 
-  const stats = useMemo(() => summarizeMap(map), [map]);
+  const stats = useMemo(() => summarizeMap(visibleMap), [visibleMap]);
 
   return (
     <main className="h-screen overflow-hidden bg-stone-950 text-stone-100">
@@ -68,7 +76,7 @@ function RmgPreviewContent() {
           </button>
         </header>
 
-        <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
+        <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto_auto_auto]">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-stone-400">Graine</span>
             <input
@@ -123,14 +131,41 @@ function RmgPreviewContent() {
               ))}
             </select>
           </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-stone-400">Sous-sol</span>
+            <button
+              type="button"
+              onClick={() => {
+                setUndergroundEnabled((value) => !value);
+                setPreviewLevel(SURFACE_LEVEL);
+              }}
+              className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none hover:border-amber-400"
+            >
+              {undergroundEnabled ? "Active" : "Inactif"}
+            </button>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-stone-400">Niveau</span>
+            <select
+              value={previewLevel}
+              disabled={!undergroundEnabled}
+              onChange={(event) => setPreviewLevel(event.target.value as typeof SURFACE_LEVEL | typeof UNDERGROUND_LEVEL)}
+              className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400 disabled:opacity-50"
+            >
+              <option value={SURFACE_LEVEL}>surface</option>
+              <option value={UNDERGROUND_LEVEL}>underground</option>
+            </select>
+          </label>
         </section>
 
         <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <RmgMapPreview map={map} minSize={420} maxSize={1120} cellScale={8} showPockets />
+          <RmgMapPreview map={visibleMap} minSize={420} maxSize={1120} cellScale={8} showPockets />
 
           <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
             <Legend />
-            <StatBlock title="Terrain" values={stats.terrain} total={map.width * map.height} />
+            <StatBlock title="Terrain" values={stats.terrain} total={visibleMap.width * visibleMap.height} />
             <StatBlock title="Objets" values={stats.objects} total={stats.objectTotal} />
             <StatBlock title="Details" values={stats.details} />
             <StatBlock title="Poches" values={stats.pockets} />
@@ -380,4 +415,9 @@ function initialPlayerCount(params: Pick<URLSearchParams, "get">) {
 
 function initialTemplateId(params: Pick<URLSearchParams, "get">) {
   return searchParam(params, "template") || "auto";
+}
+
+function initialUndergroundEnabled(params: Pick<URLSearchParams, "get">) {
+  const value = searchParam(params, "underground");
+  return value === "1" || value === "true";
 }

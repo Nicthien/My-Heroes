@@ -137,6 +137,11 @@ export function isAllowedDecor(kind: DecorKind) {
     kind === "lava-scorched-deadwood" ||
     kind === "lava-sulfur-shrub" ||
     kind === "lava-obsidian-bramble" ||
+    kind === "underground-stalagmite-cluster" ||
+    kind === "underground-crystal-ribs" ||
+    kind === "underground-mushroom-thicket" ||
+    kind === "underground-rubble-pillar" ||
+    kind === "underground-root-snarl" ||
     kind === "massif-mountain-granite-2x2" ||
     kind === "massif-mountain-snowcap-2x2" ||
     kind === "massif-mountain-pine-2x2" ||

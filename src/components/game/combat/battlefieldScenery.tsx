@@ -203,3 +203,19 @@ export function TerrainModel({ feature }: { feature: CombatTerrainFeature }) {
     </span>
   );
 }
+
+export function SiegeMoatModel() {
+  return (
+    <span className="pointer-events-none absolute left-0 top-0 block h-[64px] w-[92px]">
+      <Image
+        src="/assets/sprites/siege/moat-castle.webp"
+        alt=""
+        fill
+        unoptimized
+        sizes="92px"
+        className="absolute inset-0 h-full w-full object-contain drop-shadow-[2px_4px_4px_rgba(0,0,0,0.38)]"
+        draggable={false}
+      />
+    </span>
+  );
+}

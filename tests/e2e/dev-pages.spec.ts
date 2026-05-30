@@ -88,6 +88,82 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByLabel("Effets")).toBeVisible();
   });
 
+  test("combat town preview renders siege sprites", async ({ page }) => {
+    await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Chateau" }).click();
+
+    await expect(page.getByTestId("siege-overlay")).toBeAttached();
+    await expect(page.locator('img[src*="/assets/sprites/map/wall-rampart-cube.png"]').first()).toBeVisible();
+    await expect(page.locator('img[src*="/assets/sprites/map/gate-N-S.webp"]').first()).toBeVisible();
+    await expect(page.locator('img[src*="/assets/sprites/siege/tower-castle-"]').first()).toBeVisible();
+    await expect(page.locator('img[src*="/assets/sprites/siege/tower-castle-"]')).toHaveCount(2);
+    await expect(page.locator('img[src*="/assets/sprites/siege/moat-castle.webp"]').first()).toBeVisible();
+    await expect(page.getByTestId("combat-cell-7-6")).not.toHaveAttribute("data-terrain-feature", /.+/);
+    await expect(page.getByTestId("combat-cell-7-6")).toHaveAttribute("data-siege-moat", "true");
+    await expect(page.getByTestId("combat-cell-7-6").locator('img[src*="moat-castle.webp"]')).toBeVisible();
+    await expect(page.getByTestId("combat-cell-7-6").locator('img[src*="water-tile-"]')).toHaveCount(0);
+    await expect(page.getByTestId("combat-cell-8-2")).not.toHaveAttribute("data-terrain-feature", /.+/);
+    await expect(page.getByTestId("combat-cell-7-9")).toHaveAttribute("data-siege-moat", "true");
+    await expect(page.getByTestId("combat-cell-7-9").locator('img[src*="moat-castle.webp"]')).toBeVisible();
+
+    const towerPlacement = await page.evaluate(() => {
+      const towerRects = Array.from(document.querySelectorAll('img[src*="/assets/sprites/siege/tower-castle-"]')).map((img) => {
+        const rect = img.getBoundingClientRect();
+        return { centerX: rect.x + rect.width / 2, baseY: rect.y + rect.height };
+      });
+      const targetRects = [
+        { wall: "8-3", rear: "9-3" },
+        { wall: "8-7", rear: "9-7" },
+      ].map(({ wall, rear }) => {
+        const wallRect = document.querySelector(`[data-testid="combat-cell-${wall}"]`)?.getBoundingClientRect();
+        const rearRect = document.querySelector(`[data-testid="combat-cell-${rear}"]`)?.getBoundingClientRect();
+        return wallRect && rearRect
+          ? {
+              wallCenterX: wallRect.x + wallRect.width / 2,
+              rearCenterX: rearRect.x + rearRect.width / 2,
+              rearCenterY: rearRect.y + rearRect.height / 2,
+            }
+          : null;
+      });
+      return towerRects.map((tower, index) => {
+        const target = targetRects[index];
+        return target
+          ? {
+              afterWall: tower.centerX - target.wallCenterX,
+              beforeRearCenter: target.rearCenterX - tower.centerX,
+              baseDy: tower.baseY - target.rearCenterY,
+            }
+          : null;
+      });
+    });
+    expect(towerPlacement).toHaveLength(2);
+    for (const placement of towerPlacement) {
+      expect(placement).not.toBeNull();
+      expect(placement!.afterWall).toBeGreaterThan(20);
+      expect(placement!.beforeRearCenter).toBeGreaterThan(20);
+      expect(placement!.baseDy).toBeGreaterThanOrEqual(-24);
+      expect(placement!.baseDy).toBeLessThanOrEqual(-8);
+    }
+
+    const siegeDepths = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-siege-depth-y]"))
+        .map((element) => ({
+          id: element.dataset.testid ?? "",
+          y: Number(element.dataset.siegeDepthY),
+          zIndex: Number(window.getComputedStyle(element).zIndex),
+        }))
+        .sort((a, b) => a.y - b.y || a.zIndex - b.zIndex)
+    );
+    expect(siegeDepths.length).toBeGreaterThan(4);
+    for (let i = 0; i < siegeDepths.length; i++) {
+      for (let j = i + 1; j < siegeDepths.length; j++) {
+        if (siegeDepths[i].y < siegeDepths[j].y) {
+          expect(siegeDepths[i].zIndex, `${siegeDepths[i].id} should render behind ${siegeDepths[j].id}`).toBeLessThan(siegeDepths[j].zIndex);
+        }
+      }
+    }
+  });
+
   test("pending HUD lobby panel is centered", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/dev/hud?status=pending", { waitUntil: "domcontentloaded" });

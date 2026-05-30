@@ -123,7 +123,7 @@ export function getEffectiveCombatUnitStats(unit: CombatBoardUnit, combat: Persi
   const sideStats = getCombatSideStats(unit.side, combat, gameState);
   return {
     attack: getUnitRule(unit.unitType).attack + sideStats.attack,
-    defense: getUnitRule(unit.unitType).defense + sideStats.defense,
+    defense: Math.max(0, getUnitRule(unit.unitType).defense + sideStats.defense - Math.max(0, unit.defensePenalty ?? 0)),
     heroAttack: sideStats.attack,
     heroDefense: sideStats.defense,
   };
@@ -139,7 +139,7 @@ export function getDamagePreview(
   const canShoot = Boolean(actor.ranged && actor.shots > 0 && distance > 1 && !hasAdjacentEnemy(actor, combat.boardState.units));
   const actionType = canShoot ? "SHOOT" : "ATTACK";
   const approach = actionType === "ATTACK" && distance > 1
-    ? findMeleeApproach(actor, target, combat.boardState.units, combat.boardState.terrain ?? [])
+    ? findMeleeApproach(actor, target, combat.boardState.units, combat.boardState.terrain ?? [], combat.boardState.siege)
     : null;
   const previewActor = approach
     ? { ...actor, q: approach.destination.q, r: approach.destination.r }

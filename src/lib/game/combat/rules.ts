@@ -41,7 +41,7 @@ export interface CombatDamageRoll {
 
 export function normalizeCombatUnit(unit: CombatBoardUnit): CombatBoardUnit {
   const rule = getUnitRule(unit.unitType);
-  return {
+  const normalized: CombatBoardUnit = {
     ...unit,
     speed: Number.isFinite(unit.speed) ? unit.speed : rule.speed,
     minDamage: Number.isFinite(unit.minDamage) ? unit.minDamage : rule.minDamage,
@@ -57,6 +57,8 @@ export function normalizeCombatUnit(unit: CombatBoardUnit): CombatBoardUnit {
     luck: clampLuck(Number(unit.luck ?? 0)),
     luckTriggered: Boolean(unit.luckTriggered),
   };
+  if (unit.defensePenalty !== undefined) normalized.defensePenalty = Math.max(0, Number(unit.defensePenalty));
+  return normalized;
 }
 
 export function getAttackProfile(params: {
@@ -204,7 +206,7 @@ export function getAttackDefenseMultiplier(
   defenderStats: CombatSideStats
 ) {
   const attackValue = getUnitRule(attacker.unitType).attack + attackerStats.attack;
-  const baseDefenseValue = getUnitRule(defender.unitType).defense + defenderStats.defense;
+  const baseDefenseValue = Math.max(0, getUnitRule(defender.unitType).defense + defenderStats.defense - Math.max(0, defender.defensePenalty ?? 0));
   const defenseValue = defender.defended ? Math.ceil(baseDefenseValue * 1.2) : baseDefenseValue;
   const diff = attackValue - defenseValue;
   if (diff > 0) return Math.min(5, 1 + 0.05 * diff);

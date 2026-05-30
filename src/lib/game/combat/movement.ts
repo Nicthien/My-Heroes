@@ -1,5 +1,6 @@
 import type { CombatBoardUnit, CombatTerrainFeature } from "../types";
 import { getUnitRule } from "../units";
+import { getSiegeBlockingCells, isSiegeLandingBlocked, type SiegeState } from "./siege";
 
 export const COMBAT_COLS = 13;
 export const COMBAT_BASE_ROWS = 10;
@@ -43,8 +44,16 @@ export function getOccupiedCombatCells(units: CombatBoardUnit[], ignoredUnitId?:
   );
 }
 
-export function getBlockedCombatCells(terrain: CombatTerrainFeature[] = []) {
-  return new Set(terrain.map((feature) => getHexKey(feature)));
+export function getBlockedCombatCells(
+  terrain: CombatTerrainFeature[] = [],
+  siege?: SiegeState | null,
+  units: CombatBoardUnit[] = [],
+  actor?: CombatBoardUnit | null
+) {
+  return new Set([
+    ...terrain.map((feature) => getHexKey(feature)),
+    ...getSiegeBlockingCells(siege, units, actor),
+  ]);
 }
 
 export function findHexPath(
@@ -81,17 +90,18 @@ export function findHexPath(
 export function getReachableCombatCells(
   actor: CombatBoardUnit,
   units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[] = []
+  terrain: CombatTerrainFeature[] = [],
+  siege?: SiegeState | null
 ) {
   const occupied = getOccupiedCombatCells(units, actor.id);
-  const blocked = getBlockedCombatCells(terrain);
+  const blocked = getBlockedCombatCells(terrain, siege, units, actor);
   if (canFlyOverObstacles(actor)) {
     const cells: HexCell[] = [];
     for (let r = 0; r < COMBAT_ROWS; r++) {
       for (let q = 0; q < COMBAT_COLS; q++) {
         const cell = { q, r };
         const key = getHexKey(cell);
-        if (key === getHexKey(actor) || occupied.has(key) || blocked.has(key)) continue;
+        if (key === getHexKey(actor) || occupied.has(key) || blocked.has(key) || isSiegeLandingBlocked(siege, cell, units, actor)) continue;
         if (getHexDistance(actor, cell) <= actor.speed) cells.push(cell);
       }
     }
@@ -122,18 +132,19 @@ export function findMeleeApproach(
   actor: CombatBoardUnit,
   target: CombatBoardUnit,
   units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[] = []
+  terrain: CombatTerrainFeature[] = [],
+  siege?: SiegeState | null
 ) {
   if (getHexDistance(actor, target) <= 1) {
     return { destination: { q: actor.q, r: actor.r }, path: [{ q: actor.q, r: actor.r }] };
   }
 
   const occupied = getOccupiedCombatCells(units, actor.id);
-  const blocked = getBlockedCombatCells(terrain);
+  const blocked = getBlockedCombatCells(terrain, siege, units, actor);
   const candidates = getHexNeighbors(target.q, target.r)
     .filter((cell) => {
       const key = getHexKey(cell);
-      return !blocked.has(key) && !occupied.has(key);
+      return !blocked.has(key) && !occupied.has(key) && !isSiegeLandingBlocked(siege, cell, units, actor);
     })
     .map((cell) => ({ destination: cell, path: findHexPath(actor, cell, occupied, blocked) }))
     .filter((candidate) => candidate.path.length > 1 && candidate.path.length - 1 <= actor.speed)

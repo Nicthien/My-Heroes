@@ -3,6 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { createCombatBoard, executeManualCombatAction, resolveAutomaticCombat } from "@/lib/game/combat/persistent";
+import { createCastleSiegeState, filterSiegeTerrain, type SiegeState } from "@/lib/game/combat/siege";
 import { COMBAT_COLS } from "@/lib/game/combat/movement";
 import { chooseAiCombatAction, planAiTacticsPlacements } from "@/lib/game/ai/combat-tactics";
 import {
@@ -282,6 +283,8 @@ export async function POST(
       },
     }
   );
+  const siegeState = body.targetType === "town" ? createCastleSiegeState(siegeFortifications) : undefined;
+  const combatTerrain = filterSiegeTerrain(combatStart.boardState.terrain, siegeState);
   const autoResult = body.mode === "AUTO"
     ? resolveAutomaticCombat(
       {
@@ -360,13 +363,9 @@ export async function POST(
             defenderHeroLuck: effectiveDefenderLuck,
           },
           siegeEffects: siegeEffects.escapeTunnel || siegeEffects.sulfurDamagePerUnit > 0 ? siegeEffects : undefined,
-          fortifications: siegeFortifications.towerCount > 0
-            ? { ...siegeFortifications, gateOpen: false, gateCurrentHp: siegeFortifications.gateHp }
-            : undefined,
+          ...(siegeState ? { siege: siegeState } : {}),
           tacticsPhase: tacticsPhase ?? undefined,
-          terrain: siegeFortifications.towerCount > 0
-            ? [...(combatStart.boardState.terrain ?? []), ...buildWallTerrain(), { type: "rock", q: 9, r: 4 }]
-            : combatStart.boardState.terrain,
+          terrain: combatTerrain,
           units: applyTowerVolley(applySulfurDamage(combatStart.boardState.units, siegeEffects.sulfurDamagePerUnit), siegeFortifications),
         };
       })(),
@@ -505,6 +504,7 @@ async function advanceInitialAiTurns(params: {
   let boardState = (combatRow.board_state as {
     units?: import("@/lib/game/types").CombatBoardUnit[];
     terrain?: import("@/lib/game/types").CombatTerrainFeature[];
+    siege?: SiegeState;
     tacticsPhase?: { side: "attacker" | "defender"; maxColumn?: number; minColumn?: number };
   } | undefined) ?? {};
   // 1) Phase de tactique IA
@@ -554,6 +554,7 @@ async function advanceInitialAiTurns(params: {
   const sideStats = { attacker: params.attackerStats, defender: params.defenderStats };
   let units = (boardState.units ?? []).map((u) => ({ ...u }));
   const terrain = boardState.terrain ?? [];
+  let siege = boardState.siege;
   let turnQueue = Array.isArray(combatRow.turn_queue) ? (combatRow.turn_queue as string[]) : [];
   let round = Number(combatRow.round ?? 1);
   let currentUnitId = (combatRow.current_unit_id as string | null) ?? null;
@@ -566,7 +567,7 @@ async function advanceInitialAiTurns(params: {
     const isAutomated = actor.ownerPlayerId === null || aiPlayerIds.has(actor.ownerPlayerId ?? "");
     if (!isAutomated) break;
     const action = actor.ownerPlayerId && aiPlayerIds.has(actor.ownerPlayerId)
-      ? chooseAiCombatAction(actor, units, terrain, sideStats)
+      ? chooseAiCombatAction(actor, units, terrain, sideStats, siege)
       : { type: "DEFEND" as const };
     const exec = executeManualCombatAction({
       units,
@@ -584,8 +585,10 @@ async function advanceInitialAiTurns(params: {
         defenderHeroLuck: params.defenderLuck,
         terrain: params.environment?.terrain,
       },
+      siege,
     });
     units = exec.units;
+    siege = exec.siege;
     turnQueue = exec.turnQueue;
     round = exec.round;
     currentUnitId = exec.currentUnitId;
@@ -606,7 +609,7 @@ async function advanceInitialAiTurns(params: {
   const { data: updated } = await params.supabase
     .from("combats")
     .update({
-      board_state: { ...boardState, units },
+      board_state: { ...boardState, units, siege },
       turn_queue: turnQueue,
       current_unit_id: finalResult ? null : currentUnitId,
       current_player_id: finalResult ? null : (units.find((u) => u.id === currentUnitId)?.ownerPlayerId ?? null),
@@ -803,15 +806,6 @@ function getSiegeFortifications(
     wallHp: 100 * level,
     gateHp: 80 * level,
   };
-}
-
-function buildWallTerrain(): Array<{ type: "rock"; q: number; r: number }> {
-  const WALL_COLUMN = 9;
-  const GATE_ROW = 4;
-  return [0, 1, 2, 3, 5, 6, 7, 8].map((r) => ({ type: "rock" as const, q: WALL_COLUMN, r }));
-  // GATE_ROW reste ouvert : porte praticable. La case du gate sera bloquée tant que la porte n'est pas détruite (TODO catapulte).
-  // (variable destinée à future intégration de la mécanique de gate)
-  void GATE_ROW;
 }
 
 function applyTowerVolley<T extends { side?: string; health?: number; count?: number; maxHealth?: number }>(units: T[], fort: { towerCount: number; towerDamage: number }): T[] {

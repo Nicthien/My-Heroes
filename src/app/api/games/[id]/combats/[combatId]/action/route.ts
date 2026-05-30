@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import { applyTowerVolleyInRound, type SiegeState } from "@/lib/game/combat/siege";
 import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
 import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
 import {
@@ -92,6 +93,7 @@ export async function POST(
     spellCastsByRound?: Record<string, string[]>;
     environment?: { terrain?: import("@/lib/game/types").TerrainType };
     moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
+    siege?: SiegeState;
     sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
   };
   const aiPlayerIds = await loadAiPlayerIds(supabase, id);
@@ -492,6 +494,7 @@ export async function POST(
     defenderStats,
     immortalHeroId: devGodModeHeroId,
     moraleContext,
+    siege: boardState.siege,
     aiPlayerIds,
     gamePlayerId,
     aiSpellHeroes,
@@ -499,40 +502,16 @@ export async function POST(
   });
 
   // Tirs des tours au début de chaque round (siège)
-  const fortifications = (boardState as { fortifications?: { towerCount: number; towerDamage: number } }).fortifications;
+  const nextSiege = execution.siege ?? boardState.siege;
   let unitsAfterTowers = execution.units;
   const towerLog: string[] = [];
-  let lastTowerShots: Array<{ towerIndex: number; targetQ: number; targetR: number }> = [];
-  if (fortifications && fortifications.towerCount > 0 && execution.round > (combat.round ?? 1)) {
-    const result = applyTowerVolleyInRound(unitsAfterTowers, fortifications.towerCount, fortifications.towerDamage);
+  let lastTowerShots: Array<{ towerId: string; towerIndex: number; targetQ: number; targetR: number }> = [];
+  if (nextSiege && execution.round > (combat.round ?? 1)) {
+    const result = applyTowerVolleyInRound(unitsAfterTowers, nextSiege);
     unitsAfterTowers = result.units;
     lastTowerShots = result.shots;
     if (result.killed > 0) towerLog.push(`Volée des tours : ${result.killed} unité(s) attaquante(s) éliminée(s).`);
-    else towerLog.push(`Tours de défense tirent (${fortifications.towerCount} salves).`);
-  }
-  // Catapulte : si elle a agi ce tour, cible la porte d'abord, puis les murs
-  let nextTerrain = boardState.terrain ?? [];
-  let nextFortifications = (boardState as { fortifications?: { gateCurrentHp?: number; gateOpen?: boolean; towerCount: number; towerDamage: number; gateHp: number; wallHp: number } }).fortifications;
-  if (execution.log.some((line) => line.includes("Catapulte"))) {
-    const CATAPULT_HIT = 80;
-    if (nextFortifications && !nextFortifications.gateOpen && (nextFortifications.gateCurrentHp ?? 0) > 0) {
-      const remainingHp = Math.max(0, (nextFortifications.gateCurrentHp ?? 0) - CATAPULT_HIT);
-      if (remainingHp <= 0) {
-        nextTerrain = nextTerrain.filter((t: CombatTerrainFeature) => !(t.q === 9 && t.r === 4));
-        nextFortifications = { ...nextFortifications, gateCurrentHp: 0, gateOpen: true };
-        towerLog.push(`Porte fracassée par la catapulte !`);
-      } else {
-        nextFortifications = { ...nextFortifications, gateCurrentHp: remainingHp };
-        towerLog.push(`Porte endommagée par la catapulte (${remainingHp} PV restants).`);
-      }
-    } else {
-      const walls = nextTerrain.filter((t: CombatTerrainFeature) => t.type === "rock" && t.q === 9);
-      if (walls.length > 0) {
-        const removed = walls[Math.floor(Math.random() * walls.length)];
-        nextTerrain = nextTerrain.filter((t: CombatTerrainFeature) => !(t.q === removed.q && t.r === removed.r));
-        towerLog.push(`Mur détruit en (${removed.q},${removed.r}).`);
-      }
-    }
+    else towerLog.push(`Tours de défense tirent (${result.shots.length} salves).`);
   }
   const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
   let result = execution.result
@@ -547,7 +526,7 @@ export async function POST(
   const { data, error } = await supabase
     .from("combats")
     .update({
-      board_state: { ...boardState, units: unitsAfterTowers, terrain: nextTerrain, fortifications: nextFortifications, lastTowerShots: lastTowerShots.length > 0 ? lastTowerShots : undefined, spellCastsByRound: execution.spellCastsByRound ?? boardState.spellCastsByRound },
+      board_state: { ...boardState, units: unitsAfterTowers, siege: nextSiege, lastTowerShots: lastTowerShots.length > 0 ? lastTowerShots : undefined, spellCastsByRound: execution.spellCastsByRound ?? boardState.spellCastsByRound },
       turn_queue: execution.turnQueue,
       current_unit_id: execution.currentUnitId,
       current_player_id: result ? null : execution.currentPlayerId,
@@ -1251,6 +1230,7 @@ function executeActionThenNeutralTurns(params: {
   defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
   moraleContext?: Parameters<typeof executeManualCombatAction>[0]["moraleContext"];
+  siege?: SiegeState | null;
   aiPlayerIds: Set<string>;
   gamePlayerId: string;
   aiSpellHeroes?: { attacker: AiSpellHero | null; defender: AiSpellHero | null };
@@ -1262,6 +1242,7 @@ function executeActionThenNeutralTurns(params: {
   let currentUnitId = params.currentUnitId;
   let currentPlayerId = units.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
   let result: "attacker" | "defender" | null = null;
+  let siege = params.siege;
   const log: string[] = [];
   const sideStats = { attacker: params.attackerStats, defender: params.defenderStats };
   let spellCastsByRound = params.spellCastsByRound;
@@ -1308,12 +1289,12 @@ function executeActionThenNeutralTurns(params: {
   const action = params.playerAction
     ? params.playerAction
     : params.allowAutomatedAction && actorAfterSpell
-      ? chooseAutomatedAction(actorAfterSpell, units, params.terrain, sideStats, params.aiPlayerIds)
+      ? chooseAutomatedAction(actorAfterSpell, units, params.terrain, sideStats, params.aiPlayerIds, siege)
       : null;
 
   if (!actor || !action) {
     currentPlayerId = actor?.ownerPlayerId ?? null;
-    return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log };
+    return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log, siege, spellCastsByRound };
   }
 
   const execution = executeManualCombatAction({
@@ -1327,9 +1308,11 @@ function executeActionThenNeutralTurns(params: {
     defenderStats: params.defenderStats,
     immortalHeroId: params.immortalHeroId,
     moraleContext: params.moraleContext,
+    siege,
   });
 
   units = execution.units;
+  siege = execution.siege;
   turnQueue = execution.turnQueue;
   round = execution.round;
   currentUnitId = execution.currentUnitId;
@@ -1352,7 +1335,7 @@ function executeActionThenNeutralTurns(params: {
     }
     const refreshedActor = units.find((unit) => unit.id === currentUnitId);
     if (!refreshedActor) break;
-    const nextAction = chooseAutomatedAction(refreshedActor, units, params.terrain, sideStats, params.aiPlayerIds);
+    const nextAction = chooseAutomatedAction(refreshedActor, units, params.terrain, sideStats, params.aiPlayerIds, siege);
     const nextExecution = executeManualCombatAction({
       units,
       terrain: params.terrain,
@@ -1364,8 +1347,10 @@ function executeActionThenNeutralTurns(params: {
       defenderStats: params.defenderStats,
       immortalHeroId: params.immortalHeroId,
       moraleContext: params.moraleContext,
+      siege,
     });
     units = nextExecution.units;
+    siege = nextExecution.siege;
     turnQueue = nextExecution.turnQueue;
     round = nextExecution.round;
     currentUnitId = nextExecution.currentUnitId;
@@ -1374,7 +1359,7 @@ function executeActionThenNeutralTurns(params: {
     log.push(...nextExecution.log);
   }
 
-  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log, aiManaDelta, spellCastsByRound };
+  return { units, turnQueue, round, currentUnitId, currentPlayerId, result, log, siege, aiManaDelta, spellCastsByRound };
 }
 
 function chooseAutomatedAction(
@@ -1383,19 +1368,21 @@ function chooseAutomatedAction(
   terrain: CombatTerrainFeature[],
   sideStats: Record<"attacker" | "defender", { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }>,
   aiPlayerIds: Set<string>,
+  siege?: SiegeState | null,
 ): AiCombatAction {
   // Pour les unités d'un joueur IA : déléguer au choix tactique intelligent.
   if (actor.ownerPlayerId && aiPlayerIds.has(actor.ownerPlayerId)) {
-    return chooseAiCombatAction(actor, units, terrain, sideStats);
+    return chooseAiCombatAction(actor, units, terrain, sideStats, siege);
   }
   // Pour les unités neutres (sans propriétaire) : ancienne logique simple.
-  return chooseNeutralAction(actor, units, terrain);
+  return chooseNeutralAction(actor, units, terrain, siege);
 }
 
 function chooseNeutralAction(
   actor: CombatBoardUnit,
   units: CombatBoardUnit[],
-  terrain: CombatTerrainFeature[]
+  terrain: CombatTerrainFeature[],
+  siege?: SiegeState | null
 ): { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND"; q?: number; r?: number; targetUnitId?: string } {
   const enemies = units.filter((unit) => unit.count > 0 && unit.side !== actor.side);
   const adjacent = enemies.find((unit) => getHexDistance(actor, unit) <= 1);
@@ -1409,10 +1396,10 @@ function chooseNeutralAction(
   const closest = [...enemies].sort((a, b) => getHexDistance(actor, a) - getHexDistance(actor, b))[0];
   if (!closest) return { type: "DEFEND" };
 
-  const approach = findMeleeApproach(actor, closest, units, terrain);
+  const approach = findMeleeApproach(actor, closest, units, terrain, siege);
   if (approach) return { type: "ATTACK", targetUnitId: closest.id };
 
-  const destination = getReachableCombatCells(actor, units, terrain)
+  const destination = getReachableCombatCells(actor, units, terrain, siege)
     .sort((a, b) => getHexDistance(a, closest) - getHexDistance(b, closest))[0];
 
   return destination ? { type: "MOVE", q: destination.q, r: destination.r } : { type: "DEFEND" };
@@ -1703,27 +1690,6 @@ async function applyEagleEye(
   if (known.has(spell.id)) return;
   known.add(spell.id);
   await supabase.from("heroes").update({ has_spell_book: true, known_spells: Array.from(known) }).eq("id", observerHeroId);
-}
-
-function applyTowerVolleyInRound(units: CombatBoardUnit[], towerCount: number, towerDamage: number): { units: CombatBoardUnit[]; killed: number; shots: Array<{ towerIndex: number; targetQ: number; targetR: number }> } {
-  if (towerCount <= 0 || towerDamage <= 0) return { units, killed: 0, shots: [] };
-  const attackers = units.map((u, i) => (u.side === "attacker" && u.count > 0 ? i : -1)).filter((i) => i >= 0);
-  if (attackers.length === 0) return { units, killed: 0, shots: [] };
-  const next = units.map((u) => ({ ...u }));
-  let killed = 0;
-  const shots: Array<{ towerIndex: number; targetQ: number; targetR: number }> = [];
-  for (let shot = 0; shot < towerCount; shot++) {
-    const target = next[attackers[shot % attackers.length]];
-    if (!target || target.count <= 0) continue;
-    const nextHealth = Math.max(0, (target.health ?? 0) - towerDamage);
-    const maxHealth = target.maxHealth ?? 1;
-    const nextCount = nextHealth > 0 ? Math.ceil(nextHealth / maxHealth) : 0;
-    killed += Math.max(0, target.count - nextCount);
-    target.health = nextHealth;
-    target.count = nextCount;
-    shots.push({ towerIndex: shot, targetQ: target.q, targetR: target.r });
-  }
-  return { units: next, killed, shots };
 }
 
 async function applyCombatXp(

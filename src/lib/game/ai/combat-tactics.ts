@@ -3,6 +3,7 @@ import { findMeleeApproach, getReachableCombatCells } from "@/lib/game/combat/mo
 import { calculateCombatDamageRange, hasAdjacentEnemy, type CombatSideStats } from "@/lib/game/combat/rules";
 import { getUnitRule } from "@/lib/game/units";
 import type { CombatBoardUnit, CombatTerrainFeature } from "@/lib/game/types";
+import type { SiegeState } from "@/lib/game/combat/siege";
 
 export type AiCombatAction = {
   type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND";
@@ -23,6 +24,7 @@ export function chooseAiCombatAction(
   units: CombatBoardUnit[],
   terrain: CombatTerrainFeature[],
   sideStats: Record<"attacker" | "defender", AiCombatSideStats>,
+  siege?: SiegeState | null,
 ): AiCombatAction {
   const enemies = units.filter((unit) => unit.count > 0 && unit.side !== actor.side);
   if (enemies.length === 0) return { type: "DEFEND" };
@@ -49,10 +51,10 @@ export function chooseAiCombatAction(
     (a, b) =>
       targetPriority(actor, b, units, terrain, sideStats) - targetPriority(actor, a, units, terrain, sideStats),
   )[0];
-  const approach = findMeleeApproach(actor, target, units, terrain);
+  const approach = findMeleeApproach(actor, target, units, terrain, siege);
   if (approach) return { type: "ATTACK", targetUnitId: target.id };
 
-  const reachable = getReachableCombatCells(actor, units, terrain);
+  const reachable = getReachableCombatCells(actor, units, terrain, siege);
   if (reachable.length === 0) {
     if (shouldWaitForAlly(actor, target, allies, units, terrain, sideStats)) return { type: "WAIT" };
     return { type: "DEFEND" };

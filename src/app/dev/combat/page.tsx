@@ -6,6 +6,7 @@ import { AuthContext } from "@/lib/auth/client";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { COMBAT_BASE_ROWS, COMBAT_COLS } from "@/lib/game/combat/movement";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
+import { createCastleSiegeState, filterSiegeTerrain } from "@/lib/game/combat/siege";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   CombatBoardUnit,
@@ -232,12 +233,20 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
   const currentPlayerId = combatUnits.find((unit) => unit.id === currentUnitId)?.ownerPlayerId ?? null;
 
   const isSiege = scenario === "town";
-  const siegeTerrain = isSiege
-    ? [0, 1, 2, 3, 4, 5, 6, 7, 8].map((r) => ({ type: "rock" as const, q: 9, r }))
-    : [];
   const siegeFortifications = isSiege
-    ? { towerCount: 3, towerDamage: 30, wallHp: 300, gateHp: 240, gateCurrentHp: 240, gateOpen: false }
+    ? createCastleSiegeState({ towerCount: 3, towerDamage: 30 })
     : undefined;
+  if (siegeFortifications) {
+    siegeFortifications.walls = siegeFortifications.walls.map((wall) => ({ ...wall, hp: 2 as const }));
+    siegeFortifications.gate = { ...siegeFortifications.gate, hp: 2 };
+    siegeFortifications.towers = siegeFortifications.towers.map((tower, index) => ({ ...tower, hp: ([2, 1, 2] as const)[index] }));
+  }
+  const terrain = filterSiegeTerrain([
+    { type: "rock" as const, q: 5, r: 2 },
+    { type: "rock" as const, q: 7, r: 6 },
+    { type: "water" as const, q: 5, r: 5 },
+    { type: "water" as const, q: 6, r: 5 },
+  ], siegeFortifications);
 
   const combat: PersistentCombat = {
     id: "dev-combat",
@@ -256,14 +265,8 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     boardState: {
       units: combatUnits,
       environment: buildCombatEnvironment(gameState.map, { x: 4, y: 4 }),
-      terrain: [
-        { type: "rock", q: 5, r: 2 },
-        { type: "rock", q: 7, r: 6 },
-        { type: "water", q: 5, r: 5 },
-        { type: "water", q: 6, r: 5 },
-        ...siegeTerrain,
-      ],
-      ...(siegeFortifications ? { fortifications: siegeFortifications } : {}),
+      terrain,
+      ...(siegeFortifications ? { siege: siegeFortifications } : {}),
       ...(phase === "tactics" ? { tacticsPhase: { side: "attacker" as const, maxColumn: 4 } } : {}),
     },
     turnQueue: phaseTurnQueue,

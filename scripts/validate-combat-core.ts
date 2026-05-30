@@ -3,6 +3,7 @@ import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
 import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUnits, sideHasActivePlayerUnits } from "../src/lib/game/combat/concession";
 import { findHexPath, getBlockedCombatCells, getOccupiedCombatCells, getReachableCombatCells } from "../src/lib/game/combat/movement";
 import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
+import { applyTowerVolleyInRound, createCastleSiegeState, damageSiegeWithCatapult, filterSiegeTerrain, isGateEffectivelyOpen } from "../src/lib/game/combat/siege";
 import { computeSurrenderGoldCost } from "../src/lib/game/combat/surrender";
 import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
 import { findActiveCombatTruce, hasPlayerUsedTruce } from "../src/lib/game/combat/truce";
@@ -341,6 +342,120 @@ function testFlyingUnitsCrossBlockingTerrain() {
   assert.ok(!getReachableCombatCells(flyer, [flyer], terrain).some((cell) => cell.q === 2 && cell.r === 1));
 }
 
+function testSiegeWallsGateAndFlyers() {
+  const siege = createCastleSiegeState({ towerCount: 3, towerDamage: 30 });
+  const walker = unit({ id: "walker", unitType: UnitType.PIKEMAN, side: "attacker", q: 6, r: 2, speed: 8 });
+  const flyer = unit({ id: "flyer", unitType: UnitType.GRIFFIN, side: "attacker", q: 6, r: 2, speed: 8 });
+
+  assert.ok(!getReachableCombatCells(walker, [walker], [], siege).some((cell) => cell.q === 9 && cell.r === 2));
+  assert.ok(getReachableCombatCells(flyer, [flyer], [], siege).some((cell) => cell.q === 9 && cell.r === 2));
+  assert.ok(!getReachableCombatCells(flyer, [flyer], [], siege).some((cell) => cell.q === 8 && cell.r === 2));
+
+  const damagedWallSiege = { ...siege, walls: siege.walls.map((wall) => wall.id === "wall-mid-upper" ? { ...wall, hp: 1 as const } : wall) };
+  assert.ok(!getReachableCombatCells(walker, [walker], [], damagedWallSiege).some((cell) => cell.q === 10 && cell.r === 2));
+
+  const brokenWallSiege = { ...siege, walls: siege.walls.map((wall) => wall.id === "wall-mid-upper" ? { ...wall, hp: 0 as const } : wall) };
+  assert.ok(getReachableCombatCells(walker, [walker], [], brokenWallSiege).some((cell) => cell.q === 9 && cell.r === 2));
+}
+
+function testSiegeGateRules() {
+  const siege = createCastleSiegeState({ towerCount: 3, towerDamage: 30 });
+  const attacker = unit({ id: "attacker", unitType: UnitType.PIKEMAN, side: "attacker", q: 6, r: 4, speed: 5 });
+  const defender = unit({ id: "defender", unitType: UnitType.PIKEMAN, side: "defender", q: 10, r: 4, speed: 5 });
+
+  assert.ok(!getReachableCombatCells(attacker, [attacker], [], siege).some((cell) => cell.q === 9 && cell.r === 4));
+  assert.ok(getReachableCombatCells(defender, [defender], [], siege).some((cell) => cell.q === 8 && cell.r === 4));
+
+  const damagedGateSiege = { ...siege, gate: { ...siege.gate, hp: 1 as const } };
+  assert.ok(!getReachableCombatCells(attacker, [attacker], [], damagedGateSiege).some((cell) => cell.q === 9 && cell.r === 4));
+
+  const brokenGateSiege = { ...siege, gate: { ...siege.gate, hp: 0 as const } };
+  assert.ok(getReachableCombatCells(attacker, [attacker], [], brokenGateSiege).some((cell) => cell.q === 9 && cell.r === 4));
+
+  const unitOnGate = unit({ id: "gate-blocker", unitType: UnitType.PIKEMAN, side: "defender", q: 8, r: 4, speed: 5 });
+  assert.equal(isGateEffectivelyOpen(siege, [attacker, unitOnGate]), true);
+}
+
+function testSiegeMoatStopsGroundOnly() {
+  const siege = createCastleSiegeState({ towerCount: 0, towerDamage: 0 });
+  const openSiege = {
+    ...siege,
+    gate: { ...siege.gate, hp: 0 as const },
+    walls: siege.walls.map((wall) => ({ ...wall, hp: 0 as const })),
+  };
+  const walker = unit({ id: "walker", unitType: UnitType.PIKEMAN, side: "attacker", q: 6, r: 3, speed: 8, count: 10, health: 100, maxHealth: 10 });
+  const flyer = unit({ id: "flyer", unitType: UnitType.GRIFFIN, side: "attacker", q: 6, r: 3, speed: 8, count: 10, health: 100, maxHealth: 10 });
+
+  const stopped = executeManualCombatAction({
+    units: [walker],
+    turnQueue: ["walker"],
+    round: 1,
+    currentUnitId: "walker",
+    action: { type: "MOVE", q: 10, r: 3 },
+    attackerStats: stats(),
+    defenderStats: stats(),
+    siege: openSiege,
+  });
+  const stoppedWalker = stopped.units.find((item) => item.id === "walker");
+  assert.deepEqual({ q: stoppedWalker?.q, r: stoppedWalker?.r }, { q: 7, r: 3 });
+  assert.equal(stoppedWalker?.health, 75);
+  assert.equal(stoppedWalker?.defensePenalty, 3);
+
+  const flying = executeManualCombatAction({
+    units: [flyer],
+    turnQueue: ["flyer"],
+    round: 1,
+    currentUnitId: "flyer",
+    action: { type: "MOVE", q: 10, r: 3 },
+    attackerStats: stats(),
+    defenderStats: stats(),
+    siege: openSiege,
+  });
+  const movedFlyer = flying.units.find((item) => item.id === "flyer");
+  assert.deepEqual({ q: movedFlyer?.q, r: movedFlyer?.r }, { q: 10, r: 3 });
+  assert.equal(movedFlyer?.health, 100);
+  assert.equal(movedFlyer?.defensePenalty ?? 0, 0);
+}
+
+function testSiegeTerrainFiltering() {
+  const siege = createCastleSiegeState({ towerCount: 3, towerDamage: 30 });
+  const terrain = [
+    { type: "rock" as const, q: 7, r: 6 },
+    { type: "rock" as const, q: 8, r: 2 },
+    { type: "rock" as const, q: 8, r: 9 },
+    { type: "water" as const, q: 7, r: 9 },
+    { type: "water" as const, q: 5, r: 5 },
+  ];
+
+  const filtered = filterSiegeTerrain(terrain, siege);
+  assert.equal(filtered.some((feature) => feature.q === 7 && feature.r === 6), false);
+  assert.equal(filtered.some((feature) => feature.q === 8 && feature.r === 2), false);
+  assert.equal(filtered.some((feature) => feature.q === 8 && feature.r === 9), false);
+  assert.equal(filtered.some((feature) => feature.q === 7 && feature.r === 9), false);
+  assert.equal(filtered.some((feature) => feature.q === 5 && feature.r === 5), true);
+}
+
+function testSiegeCatapultAndTowerShots() {
+  const siege = createCastleSiegeState({ towerCount: 3, towerDamage: 30 });
+  const firstHit = damageSiegeWithCatapult(siege, () => 0.5);
+  assert.equal(firstHit.hit?.kind, "gate");
+  assert.equal(firstHit.siege?.gate.hp, 1);
+
+  const criticalHit = damageSiegeWithCatapult(firstHit.siege, () => 0.1);
+  assert.equal(criticalHit.siege?.gate.hp, 0);
+  assert.equal(criticalHit.hit?.damage, 2);
+
+  const towerSiege = {
+    ...siege,
+    towers: siege.towers.map((tower, index) => ({ ...tower, hp: ([0, 1, 2] as const)[index] })),
+  };
+  const attacker = unit({ id: "attacker", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, count: 20, health: 200 });
+  const volley = applyTowerVolleyInRound([attacker], towerSiege);
+  assert.equal(volley.shots.length, 2);
+  assert.ok(!volley.shots.some((shot) => shot.towerId === towerSiege.towers[0]?.id));
+  assert.ok((volley.units.find((item) => item.id === "attacker")?.health ?? 200) < 200);
+}
+
 function testMoveDoesNotAttack() {
   const units = [
     unit({ id: "mover", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, speed: 4, minDamage: 10, maxDamage: 10 }),
@@ -608,6 +723,11 @@ testMoveAndMeleeAttack();
 testBlockedMoveAndMeleeAttack();
 testRangedShotAndMoveMeleeAttack();
 testFlyingUnitsCrossBlockingTerrain();
+testSiegeWallsGateAndFlyers();
+testSiegeGateRules();
+testSiegeMoatStopsGroundOnly();
+testSiegeTerrainFiltering();
+testSiegeCatapultAndTowerShots();
 testMoveDoesNotAttack();
 testSpellDamageAndMana();
 testCombatSpellOncePerRoundAndDamage();

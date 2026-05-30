@@ -23,6 +23,16 @@ import {
 } from "./rules";
 import { clampLuck } from "./luck";
 import { assignMoraleToBoard, refreshMoraleForRound, rollMorale, type MoraleContext } from "./morale";
+import {
+  applyMoatToUnit,
+  closeGateIfClear,
+  damageSiegeWithCatapult,
+  findFirstMoatCellInPath,
+  openGateForDefenderPath,
+  refreshMoatPenalties,
+  isSiegeLandingBlocked,
+  type SiegeState,
+} from "./siege";
 
 export { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
 
@@ -225,18 +235,29 @@ export function executeManualCombatAction(params: {
   defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
   moraleContext?: MoraleContext;
+  siege?: SiegeState | null;
 }) {
   const log: string[] = [];
   let didAct = false;
   let didWait = false;
   let deferredTurnQueue: string[] | null = null;
   const units = params.units.map((unit) => normalizeCombatUnit({ ...unit, luckTriggered: false }));
+  let siege = closeGateIfClear(params.siege, units);
   const actor = units.find((unit) => unit.id === params.currentUnitId);
-  if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null };
+  if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null, siege };
 
   // Machines de guerre : comportement automatique
   if (actor.unitType === "catapult") {
-    log.push(`Catapulte frappe le mur.`);
+    const catapult = damageSiegeWithCatapult(siege);
+    siege = catapult.siege;
+    if (catapult.hit) {
+      const targetLabel = catapult.hit.kind === "gate" ? "la porte" : catapult.hit.kind === "tower" ? "une tour" : "un mur";
+      const critical = catapult.hit.critical ? " critique" : "";
+      const destroyed = catapult.hit.destroyed ? " et le detruit" : "";
+      log.push(`Catapulte frappe ${targetLabel}${critical}${destroyed}.`);
+    } else {
+      log.push(`Catapulte n'a plus de cible.`);
+    }
     const livingUnits = units.filter((unit) => unit.count > 0);
     const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
     return {
@@ -247,6 +268,7 @@ export function executeManualCombatAction(params: {
       round: next.round,
       log,
       result: null,
+      siege,
     };
   }
   if (actor.unitType === "first_aid_tent" || actor.unitType === "ammo_cart") {
@@ -281,6 +303,7 @@ export function executeManualCombatAction(params: {
       round: next.round,
       log,
       result: null,
+      siege,
     };
   }
 
@@ -301,6 +324,7 @@ export function executeManualCombatAction(params: {
         round: next.round,
         log,
         result: null,
+        siege,
       };
     }
     if (moraleRoll === "good") {
@@ -314,16 +338,19 @@ export function executeManualCombatAction(params: {
   if (params.action.type === "MOVE") {
     const q = Number(params.action.q);
     const r = Number(params.action.r);
-    if (isInsideCombatCell(q, r) && !isTerrainBlocked(q, r, params.terrain) && !units.some((unit) => unit.q === q && unit.r === r)) {
+    if (isInsideCombatCell(q, r) && !isTerrainBlocked(q, r, params.terrain) && !isSiegeLandingBlocked(siege, { q, r }, units, actor) && !units.some((unit) => unit.q === q && unit.r === r)) {
       const path = findHexPath(
         actor,
         { q, r },
         getOccupiedCombatCells(units, actor.id),
-        getBlockedCombatCells(params.terrain)
+        getBlockedCombatCells(params.terrain, siege, units, actor)
       );
       if (path.length > 1 && path.length - 1 <= actor.speed) {
-        actor.q = q;
-        actor.r = r;
+        siege = openGateForDefenderPath(siege, actor, path);
+        const moatCell = findFirstMoatCellInPath(siege, actor, path);
+        actor.q = moatCell?.q ?? q;
+        actor.r = moatCell?.r ?? r;
+        if (moatCell && siege) applyMoatToUnit(actor, siege, log);
         didAct = true;
         log.push(`${getUnitRule(actor.unitType).label} se déplace.`);
       }
@@ -332,11 +359,19 @@ export function executeManualCombatAction(params: {
     const target = units.find((unit) => unit.id === params.action.targetUnitId && unit.side !== actor.side);
     if (target) {
       const actionType = params.action.type as ManualCombatActionType;
+      let stoppedByMoat = false;
       if (actionType === "ATTACK") {
-        const approach = findMeleeApproach(actor, target, units, params.terrain ?? []);
+        const approach = findMeleeApproach(actor, target, units, params.terrain ?? [], siege);
         if (approach) {
-          actor.q = approach.destination.q;
-          actor.r = approach.destination.r;
+          siege = openGateForDefenderPath(siege, actor, approach.path);
+          const moatCell = findFirstMoatCellInPath(siege, actor, approach.path);
+          actor.q = moatCell?.q ?? approach.destination.q;
+          actor.r = moatCell?.r ?? approach.destination.r;
+          if (moatCell && siege) {
+            applyMoatToUnit(actor, siege, log);
+            didAct = true;
+            stoppedByMoat = true;
+          }
         }
       }
       const distance = getHexDistance(actor, target);
@@ -349,7 +384,7 @@ export function executeManualCombatAction(params: {
         terrain: params.terrain,
         actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
       });
-      if (roll.profile.canStrike) {
+      if (!stoppedByMoat && roll.profile.canStrike) {
         const allyAmmoCart = units.some((u) => u.side === actor.side && u.unitType === "ammo_cart" && u.count > 0);
         if (actionType === "SHOOT" && !allyAmmoCart) actor.shots = Math.max(0, actor.shots - 1);
         actor.luckTriggered = roll.luckTriggered;
@@ -396,12 +431,14 @@ export function executeManualCombatAction(params: {
       round: params.round,
       log: ["Action impossible."],
       result: null,
+      siege,
     };
   }
 
-  const livingUnits = units.filter((unit) => unit.count > 0);
+  const livingUnits = refreshMoatPenalties(units.filter((unit) => unit.count > 0), siege);
+  siege = closeGateIfClear(siege, livingUnits);
   const result = getCombatResult(livingUnits);
-  if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result };
+  if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result, siege };
 
   const grantsBonus = !didWait && actor.moraleBonus && actor.count > 0;
   if (grantsBonus) {
@@ -420,6 +457,7 @@ export function executeManualCombatAction(params: {
     round: next.round,
     log,
     result: null,
+    siege,
   };
 }
 

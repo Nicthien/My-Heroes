@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CombatBoardUnit, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
+import { getCellKey, isSiegeLandingBlocked } from "@/lib/game/combat/siege";
 import {
   COMBAT_COLS,
   COMBAT_BASE_ROWS,
@@ -17,9 +17,10 @@ import { getAttackProfile, hasAdjacentEnemy } from "@/lib/game/combat/rules";
 import { getUnitRule } from "@/lib/game/units";
 import { playCombatDamageHit } from "@/lib/audio/combatAudio";
 import { GAME_CURSORS } from "@/lib/ui/cursors";
-import { BattlefieldScenery, IsoTile, TerrainModel } from "./battlefieldScenery";
+import { BattlefieldScenery, IsoTile, SiegeMoatModel, TerrainModel } from "./battlefieldScenery";
 import { DamagePreviewPanel } from "./combatPanels";
 import { CombatSceneActors } from "./combatSceneActors";
+import { SiegeOverlay } from "./SiegeOverlay";
 import { UnitBadges, UnitModel } from "./battlefieldUnits";
 import {
   DEFAULT_BATTLE_PAN_X,
@@ -61,120 +62,6 @@ const COMBAT_CURSORS: Record<CombatHoverAction, string> = {
   rangedHampered: GAME_CURSORS.combat.shotBad,
 };
 
-const SIEGE_SPRITES = {
-  tower: "/assets/sprites/siege/tower-castle.webp",
-} as const;
-
-// ============================================================
-// 1 segment de mur par hex - VUE DE PROFIL (mur vertical, créneaux à GAUCHE)
-// Le mur court le long de la colonne q=9, vu de côté par les attaquants venant de la gauche.
-// viewBox 72×80 : strip assez large pour lire une vraie emprise de tuile.
-// ============================================================
-function IsoWallSegmentSvg({ showCrenel = true, isBottom = false }: { showCrenel?: boolean; isTop?: boolean; isBottom?: boolean }) {
-  void showCrenel;
-  return (
-    <svg viewBox="0 0 72 80" preserveAspectRatio="none" className="h-full w-full">
-      <defs>
-        <linearGradient id="ws-front" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#e5dec9" />
-          <stop offset="50%" stopColor="#b8af96" />
-          <stop offset="100%" stopColor="#7c7464" />
-        </linearGradient>
-        <linearGradient id="ws-shadow" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="rgba(0,0,0,0.4)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-        </linearGradient>
-      </defs>
-
-      {/* Créneaux qui dépassent vers la gauche (en profil) */}
-      {[0, 1, 2, 3].map((i) => {
-        const y = 4 + i * 20;
-        return (
-          <polygon
-            key={`crenel-${i}`}
-            points={`20,${y} 34,${y - 2} 34,${y + 7} 20,${y + 9}`}
-            fill="url(#ws-front)"
-            stroke="#3a3428"
-            strokeWidth="0.6"
-          />
-        );
-      })}
-
-      {/* Corps principal du mur : bande verticale couvrant le centre de l'hex. */}
-      <rect x="30" y="0" width="28" height="80" fill="url(#ws-front)" stroke="#3a3428" strokeWidth="0.8" />
-
-      {/* Lignes horizontales de briques (rangées) */}
-      {Array.from({ length: 8 }).map((_, i) => {
-        const y = 6 + i * 9;
-        return (
-          <line
-            key={`brick-h-${i}`}
-            x1="30"
-            y1={y}
-            x2="58"
-            y2={y}
-            stroke="#5a5040"
-            strokeWidth="0.5"
-            opacity="0.7"
-          />
-        );
-      })}
-
-      {/* Joints verticaux en quinconce */}
-      {Array.from({ length: 8 }).map((_, i) => {
-        const y1 = 6 + i * 9;
-        const y2 = y1 + 9;
-        const xJoint = i % 2 === 0 ? 44 : 36;
-        return (
-          <line
-            key={`brick-v-${i}`}
-            x1={xJoint}
-            y1={y1}
-            x2={xJoint}
-            y2={y2}
-            stroke="#5a5040"
-            strokeWidth="0.5"
-            opacity="0.7"
-          />
-        );
-      })}
-
-      {/* Joint vertical secondaire en quinconce */}
-      {Array.from({ length: 8 }).map((_, i) => {
-        const y1 = 6 + i * 9;
-        const y2 = y1 + 9;
-        const xJoint = i % 2 === 0 ? 54 : 50;
-        return (
-          <line
-            key={`brick-v2-${i}`}
-            x1={xJoint}
-            y1={y1}
-            x2={xJoint}
-            y2={y2}
-            stroke="#5a5040"
-            strokeWidth="0.5"
-            opacity="0.5"
-          />
-        );
-      })}
-
-      {/* Ombre sur le côté gauche (mur faisant face aux attaquants à gauche) */}
-      <rect x="30" y="0" width="7" height="80" fill="url(#ws-shadow)" opacity="0.5" />
-
-      {/* Bande sombre à droite (profondeur) */}
-      <rect x="54" y="0" width="4" height="80" fill="rgba(0,0,0,0.35)" />
-
-      {/* Base au sol sur le dernier segment */}
-      {isBottom && (
-        <>
-          <rect x="24" y="76" width="38" height="4" fill="#3a3428" />
-          <ellipse cx="43" cy="80" rx="28" ry="2" fill="rgba(0,0,0,0.4)" />
-        </>
-      )}
-    </svg>
-  );
-}
-
 function getPointerCenter(points: Map<number, { x: number; y: number }>) {
   if (points.size === 0) return null;
   let x = 0;
@@ -190,87 +77,6 @@ function getPointerDistance(points: Map<number, { x: number; y: number }>) {
   const [first, second] = Array.from(points.values());
   if (!first || !second) return 0;
   return Math.hypot(second.x - first.x, second.y - first.y);
-}
-
-// ============================================================
-// Porte VUE DE PROFIL - même format que le mur (viewBox 72×80)
-// Battant bois bombé sur la gauche (vu de côté), 2 piliers de pierre en haut/bas
-// ============================================================
-function IsoGateSvg() {
-  return (
-    <svg viewBox="0 0 72 80" preserveAspectRatio="none" className="h-full w-full">
-      <defs>
-        <linearGradient id="gt2-stone" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#e5dec9" />
-          <stop offset="50%" stopColor="#b8af96" />
-          <stop offset="100%" stopColor="#7c7464" />
-        </linearGradient>
-        <linearGradient id="gt2-wood" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#9a6332" />
-          <stop offset="55%" stopColor="#6c4520" />
-          <stop offset="100%" stopColor="#3a2410" />
-        </linearGradient>
-      </defs>
-
-      {/* Pilier de pierre haut (continuité du mur) */}
-      <rect x="30" y="0" width="28" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
-      {[0, 1].map((i) => (
-        <line key={`top-brick-${i}`} x1="30" y1={4 + i * 5} x2="58" y2={4 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
-      ))}
-      {/* Créneau au-dessus du pilier haut */}
-      <polygon points="20,2 34,0 34,8 20,10" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
-
-      {/* Pilier de pierre bas */}
-      <rect x="30" y="66" width="28" height="14" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.8" />
-      {[0, 1].map((i) => (
-        <line key={`bot-brick-${i}`} x1="30" y1={70 + i * 5} x2="58" y2={70 + i * 5} stroke="#5a5040" strokeWidth="0.5" opacity="0.7" />
-      ))}
-      {/* Créneau au-dessus du pilier bas */}
-      <polygon points="20,68 34,66 34,74 20,76" fill="url(#gt2-stone)" stroke="#3a3428" strokeWidth="0.6" />
-
-      {/* Cavité ombrée entre les 2 piliers (passage) */}
-      <rect x="30" y="14" width="28" height="52" fill="#1a0e07" />
-
-      {/* Battant en bois (visible dans le passage, légèrement bombé vers la gauche) */}
-      <polygon points="33,14 54,16 54,64 33,66" fill="url(#gt2-wood)" stroke="#1a0e07" strokeWidth="0.5" />
-
-      {/* Planches horizontales (vues de profil) */}
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const y = 18 + i * 8;
-        return (
-          <line
-            key={`plank-${i}`}
-            x1="33"
-            y1={y}
-            x2="54"
-            y2={y + 0.5}
-            stroke="#2a1810"
-            strokeWidth="0.5"
-          />
-        );
-      })}
-
-      {/* Bandes de fer verticales (perpendiculaires aux planches sur la silhouette) */}
-      {[39, 48].map((x) => (
-        <rect key={`band-${x}`} x={x} y="14" width="2.4" height="52" fill="#2a2018" />
-      ))}
-
-      {/* Clous sur les bandes */}
-      {[22, 30, 38, 46, 54, 62].flatMap((y) =>
-        [40.2, 49.2].map((cx) => (
-          <circle key={`stud-${y}-${cx}`} cx={cx} cy={y} r="0.7" fill="#0e0a06" />
-        ))
-      )}
-
-      {/* Anneau de porte (silhouette latérale) */}
-      <circle cx="37" cy="40" r="1.8" fill="none" stroke="#3a2918" strokeWidth="1" />
-
-      {/* Ombre sur le côté gauche */}
-      <rect x="30" y="0" width="6" height="80" fill="rgba(0,0,0,0.35)" />
-      {/* Ombre verticale à droite */}
-      <rect x="54" y="0" width="4" height="80" fill="rgba(0,0,0,0.4)" />
-    </svg>
-  );
 }
 
 function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit | undefined) {
@@ -346,7 +152,9 @@ export function IsoBattlefield({
   const effectiveCurrentUnitId = displayedCurrentUnitId ?? combat.currentUnitId;
   const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
   const occupied = currentUnit ? getOccupiedCombatCells(units, currentUnit.id) : getOccupiedCombatCells(units);
-  const blocked = getBlockedCombatCells(terrain);
+  const siege = combat.boardState.siege;
+  const moatCells = useMemo(() => new Set((siege?.moat.cells ?? []).map(getCellKey)), [siege]);
+  const blocked = getBlockedCombatCells(terrain, siege, units, currentUnit);
   const activePendingMove = pendingMove?.unitId === effectiveCurrentUnitId ? pendingMove : null;
   const previewTarget = units.find((unit) => unit.id === (hoveredUnitId ?? inspectedUnitId));
   const preview = currentUnit && previewTarget && previewTarget.side !== currentUnit.side
@@ -635,7 +443,6 @@ export function IsoBattlefield({
     };
   };
 
-  const fortifications = (combat.boardState as { fortifications?: { towerCount: number; towerDamage: number; gateOpen?: boolean; gateCurrentHp?: number; gateHp?: number } }).fortifications;
   const handleTacticsBoardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isTacticsActive || !tacticsPhase || !isMyAction) return;
     if (event.target instanceof Element && event.target.closest('button[data-testid^="combat-cell-"]')) return;
@@ -665,8 +472,10 @@ export function IsoBattlefield({
     for (let q = 0; q < COMBAT_COLS; q++) {
       const unit = units.find((item) => item.q === q && item.r === r);
       const feature = terrain.find((item) => item.q === q && item.r === r);
-      const path = currentUnit && !unit && !feature ? findHexPath(currentUnit, { q, r }, occupied, blocked) : [];
-      const reachable = Boolean(!isTacticsActive && isMyAction && currentUnit && !unit && !feature && path.length > 1 && path.length - 1 <= currentUnit.speed);
+      const moatFeature = !feature && moatCells.has(`${q},${r}`) ? { type: "water" as const, q, r } : null;
+      const landingBlocked = Boolean(currentUnit && isSiegeLandingBlocked(siege, { q, r }, units, currentUnit));
+      const path = currentUnit && !unit && !feature && !landingBlocked ? findHexPath(currentUnit, { q, r }, occupied, blocked) : [];
+      const reachable = Boolean(!isTacticsActive && isMyAction && currentUnit && !unit && !feature && !landingBlocked && path.length > 1 && path.length - 1 <= currentUnit.speed);
       const isPendingDestination = activePendingMove?.q === q && activePendingMove.r === r;
       const isPendingPath = Boolean(activePendingMove?.path.some((step) => step.q === q && step.r === r));
       const enemyUnit = currentUnit && unit && unit.side !== currentUnit.side ? unit : null;
@@ -680,7 +489,7 @@ export function IsoBattlefield({
           })
         : null;
       const canShoot = Boolean(shotProfile?.canStrike);
-      const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain) : null;
+      const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain, siege) : null;
       const isTacticsSelectableUnit = Boolean(isTacticsActive && tacticsPhase && unit && unit.side === tacticsPhase.side);
       const isTacticsDestination = Boolean(
         isTacticsActive &&
@@ -716,6 +525,8 @@ export function IsoBattlefield({
           type="button"
           key={`${q}-${r}`}
           data-testid={`combat-cell-${q}-${r}`}
+          data-terrain-feature={feature?.type}
+          data-siege-moat={moatFeature ? "true" : undefined}
           data-tactics-destination={isTacticsDestination ? "true" : undefined}
           data-tactics-selected={unit?.id === selectedTacticsUnitId ? "true" : undefined}
           className="absolute overflow-visible text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
@@ -801,7 +612,8 @@ export function IsoBattlefield({
             q={q}
             r={r}
           />
-          {feature && !(fortifications && feature.type === "rock" && feature.q === 9) && <TerrainModel feature={feature} />}
+          {feature && <TerrainModel feature={feature} />}
+          {moatFeature && <SiegeMoatModel />}
         </button>
       );
     }
@@ -823,7 +635,7 @@ export function IsoBattlefield({
       isMyAction &&
       currentUnit &&
       unit.side !== currentUnit.side &&
-      (canShoot || findMeleeApproach(currentUnit, unit, units, terrain))
+      (canShoot || findMeleeApproach(currentUnit, unit, units, terrain, siege))
     );
     const damaged = damagedUnitIds.has(unit.id);
     const attacking = attackingUnit?.id === unit.id ? attackingUnit.kind : null;
@@ -862,118 +674,6 @@ export function IsoBattlefield({
     );
   });
 
-  // Sièges : overlay tours + projectiles (fortifications déclarées plus haut)
-  const lastTowerShots = (combat.boardState as { lastTowerShots?: Array<{ towerIndex: number; targetQ: number; targetR: number }> }).lastTowerShots ?? [];
-  const towerProjectiles = lastTowerShots.map((shot, i) => {
-    const rowMap = [1, 4, 7];
-    const towerR = rowMap[shot.towerIndex] ?? 4;
-    const from = getIsoPosition(11, towerR);
-    const to = getIsoPosition(shot.targetQ, shot.targetR);
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    return (
-      <span
-        key={`tower-shot-${i}-${combat.round}`}
-        className="combat-projectile"
-        style={{
-          left: from.x + TILE_WIDTH / 2 - 7,
-          top: from.y + UNIT_HEIGHT - 8,
-          zIndex: Math.max(towerR, shot.targetR) * 100 + 70,
-          ["--proj-dx" as string]: `${dx}px`,
-          ["--proj-dy" as string]: `${dy}px`,
-        } as React.CSSProperties}
-      />
-    );
-  });
-  // Mur iso : un segment par tuile sur q=9, ancré sur le même repère que les hexs.
-  const WALL_STRIP_WIDTH = 72;
-  const WALL_STRIP_X_OFFSET = (TILE_WIDTH - WALL_STRIP_WIDTH) / 2;
-  const WALL_STRIP_Y_OFFSET = UNIT_HEIGHT;
-  const wallMarkers = fortifications
-    ? [1, 2, 3, 5, 6, 7].map((r) => {
-        const { x, y } = getIsoPosition(9, r);
-        return (
-          <span
-            key={`wall-${r}`}
-            className="pointer-events-none absolute block"
-            style={{
-              left: x + WALL_STRIP_X_OFFSET,
-              top: y + WALL_STRIP_Y_OFFSET,
-              width: WALL_STRIP_WIDTH,
-              height: TILE_HEIGHT,
-              zIndex: 8800 + r,
-            }}
-            aria-hidden="true"
-          >
-            <IsoWallSegmentSvg isBottom={r === 7} />
-          </span>
-        );
-      })
-    : null;
-  const gateMarker = fortifications && !fortifications.gateOpen ? (() => {
-    const { x, y } = getIsoPosition(9, 4);
-    const pct = Math.max(0, Math.min(1, (fortifications.gateCurrentHp ?? 0) / (fortifications.gateHp || 1)));
-    return (
-      <span
-        key="gate-marker"
-        className="pointer-events-none absolute block"
-        style={{
-          left: x + WALL_STRIP_X_OFFSET,
-          top: y + WALL_STRIP_Y_OFFSET,
-          width: WALL_STRIP_WIDTH,
-          height: TILE_HEIGHT,
-          zIndex: 8850 + 4,
-        }}
-        aria-hidden="true"
-      >
-        <IsoGateSvg />
-        <div className="absolute -bottom-1 left-1/2 h-1 w-10 -translate-x-1/2 overflow-hidden rounded-full bg-stone-900 ring-1 ring-amber-800/40">
-          <div className="h-full bg-emerald-500" style={{ width: `${pct * 100}%` }} />
-        </div>
-      </span>
-    );
-  })() : null;
-  // Tours : occupent leur hex (q=9 r=0/r=8) + donjon central derrière si 3 tours
-  const towerMarkers = fortifications && fortifications.towerCount > 0
-    ? (() => {
-        const positions: Array<{ q: number; r: number; key: string }> = [
-          { q: 9, r: 0, key: "top" },
-          { q: 9, r: 8, key: "bottom" },
-        ];
-        if (fortifications.towerCount >= 3) {
-          positions.push({ q: 10, r: 4, key: "keep" });
-        }
-        return positions.map((pos) => {
-          const { x, y } = getIsoPosition(pos.q, pos.r);
-          return (
-            <span
-              key={`tower-${pos.key}`}
-              className="pointer-events-none absolute block"
-              style={{
-                left: x - 6,
-                top: y - 64,
-                width: TILE_WIDTH + 12,
-                height: TILE_HEIGHT + 96,
-                zIndex: 9000 + pos.r,
-              }}
-            >
-              <Image
-                src={SIEGE_SPRITES.tower}
-                alt=""
-                fill
-                unoptimized
-                sizes={`${TILE_WIDTH + 12}px`}
-                className="object-contain drop-shadow-[3px_5px_4px_rgba(0,0,0,0.6)]"
-                aria-hidden="true"
-              />
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full border border-amber-500/40 bg-stone-950/85 px-2 py-0.5 text-[9px] font-bold text-amber-200 whitespace-nowrap">
-                {fortifications.towerDamage}dmg
-              </div>
-            </span>
-          );
-        });
-      })()
-    : null;
 
   const unitBadges = visualUnits.map((unit) => {
     const { x, y } = getIsoPosition(unit.q, unit.r);
@@ -1055,10 +755,12 @@ export function IsoBattlefield({
       >
         <CombatSceneActors combat={combat} gameState={gameState} />
         {cells}
-        {wallMarkers}
-        {gateMarker}
-        {towerMarkers}
-        {towerProjectiles}
+        <SiegeOverlay
+          siege={siege}
+          units={visualUnits}
+          lastTowerShots={(combat.boardState as { lastTowerShots?: Array<{ towerId?: string; towerIndex: number; targetQ: number; targetR: number }> }).lastTowerShots ?? []}
+          round={combat.round}
+        />
         {unitModels}
         {unitBadges}
         {attackEffect && (() => {

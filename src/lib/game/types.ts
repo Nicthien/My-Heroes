@@ -656,6 +656,7 @@ export interface CombatBoardUnit extends UnitStack {
   hasRetaliated: boolean;
   defended: boolean;
   waited: boolean;
+  defensePenalty?: number;
   morale?: number;
   moraleApplied?: boolean;
   moraleBonus?: boolean;
@@ -777,6 +778,7 @@ export interface PersistentCombat {
     environment?: CombatEnvironment;
     spellCastsByRound?: Record<string, string[]>;
     moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
+    siege?: import("./combat/siege").SiegeState;
     sideStats?: {
       attacker: CombatSideStatsSnapshot;
       defender: CombatSideStatsSnapshot;

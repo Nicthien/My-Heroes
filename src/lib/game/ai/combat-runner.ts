@@ -1,4 +1,5 @@
 import { executeManualCombatAction } from "@/lib/game/combat/persistent";
+import type { SiegeState } from "@/lib/game/combat/siege";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { recordGameAction } from "@/lib/game/server/action-log";
 import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
@@ -37,6 +38,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       terrain?: CombatTerrainFeature[];
       environment?: { terrain?: import("@/lib/game/types").TerrainType };
       moraleContext?: { attackerHeroMorale?: number; defenderHeroMorale?: number; attackerHeroLuck?: number; defenderHeroLuck?: number };
+      siege?: SiegeState;
       sideStats?: { attacker?: CombatSideStatsSnapshot; defender?: CombatSideStatsSnapshot };
       tacticsPhase?: { side: "attacker" | "defender" };
     };
@@ -101,7 +103,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
       attacker: boardState.sideStats?.attacker ?? { attack: attackerHero?.attack ?? 1, defense: attackerHero?.defense ?? 1 },
       defender: boardState.sideStats?.defender ?? { attack: defenderHero?.attack ?? 1, defense: defenderHero?.defense ?? 1 },
     };
-    const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? [], sideStats);
+    const action = chooseAiCombatAction(actor, boardState.units ?? [], boardState.terrain ?? [], sideStats, boardState.siege);
     await recordGameAction(supabase, {
       gameId,
       gamePlayerId: actor.ownerPlayerId,
@@ -128,6 +130,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
         defenderHeroLuck: Number(boardState.moraleContext?.defenderHeroLuck ?? 0),
         terrain: boardState.environment?.terrain,
       },
+      siege: boardState.siege,
     });
 
     const initialUnits = boardState.initialUnits ?? boardState.units ?? [];
@@ -139,7 +142,7 @@ export async function runAiCombatTurns(supabase: SupabaseAdmin, gameId: string, 
     const { data: updated, error: updateError } = await supabase
       .from("combats")
       .update({
-        board_state: { ...boardState, units: execution.units },
+        board_state: { ...boardState, units: execution.units, siege: execution.siege ?? boardState.siege },
         turn_queue: execution.turnQueue,
         current_unit_id: execution.currentUnitId,
         current_player_id: result ? null : execution.currentPlayerId,

@@ -11,19 +11,59 @@ type SupabaseAuthInternals = {
   };
 };
 
+type BrowserSupabaseClient = ReturnType<typeof createClient>;
+
 export async function getSupabaseAccessToken() {
   const supabase = createClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return readSupabaseAccessToken(supabase);
 }
 
 export async function signOutWithLocalFallback() {
   const supabase = createClient();
-  const { error } = await supabase.auth.signOut();
-  if (!error) return null;
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (!error) return null;
 
-  await clearLocalSupabaseSession(supabase.auth as unknown as SupabaseAuthInternals);
-  return error;
+    await clearLocalSupabaseSession(supabase.auth as unknown as SupabaseAuthInternals);
+    return error;
+  } catch (error) {
+    await clearLocalSupabaseSession(supabase.auth as unknown as SupabaseAuthInternals);
+    return error;
+  }
+}
+
+async function readSupabaseAccessToken(supabase: BrowserSupabaseClient) {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      await clearInvalidRefreshTokenSession(error, supabase.auth as unknown as SupabaseAuthInternals);
+      return null;
+    }
+
+    return data.session?.access_token ?? null;
+  } catch (error) {
+    if (await clearInvalidRefreshTokenSession(error, supabase.auth as unknown as SupabaseAuthInternals)) {
+      return null;
+    }
+    return null;
+  }
+}
+
+async function clearInvalidRefreshTokenSession(error: unknown, auth: SupabaseAuthInternals) {
+  if (!isInvalidRefreshTokenError(error)) return false;
+
+  await clearLocalSupabaseSession(auth);
+  return true;
+}
+
+function isInvalidRefreshTokenError(error: unknown) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+
+  return message.includes("Invalid Refresh Token") || message.includes("Refresh Token Not Found");
 }
 
 async function clearLocalSupabaseSession(auth: SupabaseAuthInternals) {
@@ -80,8 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
+        const token = await readSupabaseAccessToken(supabase);
         if (!token) {
           if (mounted) setProfile(null);
           return;
@@ -106,12 +145,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    supabase.auth.getUser().then(({ data }) => {
+    const setUnauthenticated = () => {
       if (!mounted) return;
-      setUser(data.user ?? null);
-      setStatus(data.user ? "authenticated" : "unauthenticated");
-      void loadProfile(data.user ?? null);
-    });
+      setUser(null);
+      setProfile(null);
+      setStatus("unauthenticated");
+    };
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (!mounted) return;
+        if (error && await clearInvalidRefreshTokenSession(error, supabase.auth as unknown as SupabaseAuthInternals)) {
+          setUnauthenticated();
+          return;
+        }
+
+        setUser(data.user ?? null);
+        setStatus(data.user ? "authenticated" : "unauthenticated");
+        void loadProfile(data.user ?? null);
+      } catch (error) {
+        if (await clearInvalidRefreshTokenSession(error, supabase.auth as unknown as SupabaseAuthInternals)) {
+          setUnauthenticated();
+          return;
+        }
+        setUnauthenticated();
+      }
+    })();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);

@@ -65,9 +65,11 @@ export function UnitSilhouette({
         alt=""
         width={96}
         height={96}
+        loading="eager"
         unoptimized
         draggable={false}
         className="h-full w-full object-contain"
+        style={{ height: "auto" }}
         aria-hidden="true"
       />
     );
@@ -930,4 +932,3 @@ function UndeadSvg({ palette, g, visual }: { palette: ReturnType<typeof getUnitP
     </g>
   );
 }
-

@@ -78,10 +78,10 @@ function SceneActorView({ actor, anchor }: { actor: SceneActor; anchor: "left" |
         <Image
           src={actor.spritePath}
           alt=""
-          width={size.width}
-          height={size.height}
+          fill
           unoptimized
-          className="relative h-full w-full object-contain [image-rendering:pixelated]"
+          sizes={`${size.width}px`}
+          className="object-contain [image-rendering:pixelated]"
           draggable={false}
         />
       )}

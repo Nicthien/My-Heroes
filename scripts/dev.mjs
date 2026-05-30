@@ -73,6 +73,24 @@ function readSupabaseEnv() {
   };
 }
 
+function ensureAdminAccount(supabase) {
+  const ensure = spawnSync(process.execPath, ["scripts/ensure-admin.mjs"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_SUPABASE_URL: supabase.url,
+      SUPABASE_SERVICE_ROLE_KEY: supabase.serviceRoleKey,
+    },
+  });
+
+  if (ensure.stdout) process.stdout.write(ensure.stdout);
+  if (ensure.stderr) process.stderr.write(ensure.stderr);
+  if (ensure.status !== 0) {
+    throw new Error("Unable to ensure local admin account.");
+  }
+}
+
 async function main() {
   console.log("Starting local Supabase...");
   await run("supabase", ["start"]);
@@ -82,6 +100,8 @@ async function main() {
   if (!supabase.anonKey || !supabase.serviceRoleKey) {
     throw new Error("Supabase started, but its local API keys were not found.");
   }
+
+  ensureAdminAccount(supabase);
 
   console.log(`Starting Next.js with Supabase at ${supabase.url}...`);
   console.log(`Supabase Studio: ${supabase.studioUrl}`);

@@ -80,6 +80,17 @@ Voir [`.env.example`](.env.example) pour la liste des variables requises :
 Ces variables sont surtout utiles pour Supabase cloud ou la production. En local, `npm run dev`
 les injecte automatiquement depuis `supabase status`.
 
+## Compte admin local
+
+En local, `npm run dev`, `npm run db:reset`, `npm run admin:ensure` et le seed E2E garantissent
+la presence du compte de secours :
+
+- Email : `admin@myheroes.local`
+- Pseudo : `Admin`
+- Mot de passe : `ChangeMe`
+
+Le profil est marque `must_change_password`, donc l'interface demandera un changement de mot de passe.
+
 ## Stack technique
 
 - **Frontend** : Next.js, React, Tailwind CSS

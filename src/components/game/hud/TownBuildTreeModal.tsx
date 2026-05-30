@@ -179,6 +179,7 @@ function BuildTreeNode({
               width={76}
               height={76}
               className={`h-[4.35rem] w-[4.35rem] object-contain drop-shadow-[0_5px_7px_rgba(0,0,0,0.55)] ${state.kind === "unavailable" || state.kind === "missingRequirement" ? "opacity-45 grayscale" : ""}`}
+              style={{ height: "auto" }}
               unoptimized
               aria-hidden="true"
             />

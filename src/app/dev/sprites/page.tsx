@@ -911,7 +911,9 @@ function UnitCard({
           alt={rule.label}
           width={124}
           height={124}
+          loading="eager"
           className="h-[124px] w-[124px] object-contain drop-shadow-[0_6px_5px_rgba(0,0,0,0.65)]"
+          style={{ height: "auto" }}
           unoptimized
         />
       </div>

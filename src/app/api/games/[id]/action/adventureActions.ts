@@ -1,0 +1,157 @@
+import { NextResponse } from "next/server";
+import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
+import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
+import { normalizeMapMovement } from "@/lib/game/engine";
+import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
+import type { GameMap, Position } from "@/lib/game/types";
+import type { HeroStatKey, MapBuildingLocation, MinimalBoat, MinimalBuilding, MinimalHero, MinimalPlayer, MinimalTown, SupabaseAdminClient } from "./types";
+
+type ActionRecord = Record<string, unknown>;
+type CombatLike = {
+  status?: unknown;
+  attackerHeroId?: unknown;
+  defenderHeroId?: unknown;
+  participants?: Array<{ heroId?: unknown }> | null;
+};
+
+type AdventureActionHelpers = {
+  applyAdventureSpell: (params: {
+    supabase: SupabaseAdminClient;
+    gamePlayer: MinimalPlayer;
+    players: Array<{ id: string; isAlive: boolean; turnOrder: number; resourceBuildings: MinimalBuilding[]; towns: MinimalTown[]; heroes?: MinimalHero[] }>;
+    boats: MinimalBoat[];
+    hero: MinimalHero;
+    spellId: SpellId;
+    target: unknown;
+    mapData: GameMap;
+    mapState: Record<string, unknown>;
+    explored: Set<string>;
+  }) => Promise<{ ok: true; interaction: unknown } | { ok: false; error: string }>;
+  areAdjacentOrSame: (a: Position, b: Position) => boolean;
+  findAdventureBuildingById: (mapData: GameMap, buildingId: string) => MapBuildingLocation | null;
+  handleAdventureBuildingVisit: (params: {
+    supabase: SupabaseAdminClient;
+    gameId: string;
+    gamePlayer: MinimalPlayer;
+    hero: MinimalHero;
+    turnNumber: number;
+    mapData: GameMap;
+    mapState: Record<string, unknown>;
+    object: MapBuildingLocation["object"];
+    position: Position;
+    explored: Set<string>;
+    choice?: HeroStatKey;
+  }) => Promise<unknown>;
+  logPlayerAction: (
+    supabase: SupabaseAdminClient,
+    game: { turnNumber?: unknown },
+    gameId: string,
+    gamePlayer: MinimalPlayer,
+    action: ActionRecord,
+  ) => Promise<void>;
+  normalizeHeroStatChoice: (value: unknown) => HeroStatKey | undefined;
+};
+
+type HandleAdventureActionParams = {
+  supabase: SupabaseAdminClient;
+  game: { turnNumber?: unknown; mapData?: unknown; mapState?: unknown; combats?: CombatLike[] | null };
+  gameId: string;
+  gamePlayer: MinimalPlayer;
+  players: Array<{ id: string; isAlive: boolean; turnOrder: number; resourceBuildings: MinimalBuilding[]; towns: MinimalTown[]; heroes?: MinimalHero[] }>;
+  boats: MinimalBoat[];
+  action: ActionRecord;
+  heroInCombatError: string;
+  helpers: AdventureActionHelpers;
+};
+
+export async function handleAdventureAction({
+  supabase,
+  game,
+  gameId,
+  gamePlayer,
+  players,
+  boats,
+  action,
+  heroInCombatError,
+  helpers,
+}: HandleAdventureActionParams) {
+  if (action.type === "VISIT_ADVENTURE_BUILDING") {
+    const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+    if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+    if (isHeroInActiveCombat(game.combats, hero.id)) {
+      return NextResponse.json({ error: heroInCombatError }, { status: 400 });
+    }
+
+    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const found = helpers.findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
+    if (!found) return NextResponse.json({ error: "Bâtiment d'aventure introuvable" }, { status: 404 });
+    if (!helpers.areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
+      return NextResponse.json({ error: "Le héros doit être sur place pour visiter ce bâtiment" }, { status: 400 });
+    }
+
+    const mapState = (game.mapState as Record<string, unknown>) ?? {};
+    const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+    const interaction = await helpers.handleAdventureBuildingVisit({
+      supabase,
+      gameId,
+      gamePlayer,
+      hero,
+      turnNumber: Number(game.turnNumber ?? 1),
+      mapData,
+      mapState,
+      object: found.object,
+      position: found.position,
+      explored,
+      choice: helpers.normalizeHeroStatChoice(action.choice),
+    });
+
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+
+    return NextResponse.json({ success: true, interaction });
+  }
+
+  if (action.type === "CAST_ADVENTURE_SPELL") {
+    const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+    if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+    if (isHeroInActiveCombat(game.combats, hero.id)) {
+      return NextResponse.json({ error: heroInCombatError }, { status: 400 });
+    }
+
+    const spell = getSpell(String(action.spellId ?? ""));
+    if (!spell || spell.context !== "adventure") return NextResponse.json({ error: "Sort d'aventure invalide" }, { status: 400 });
+    if (hero.hasSpellBook === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
+    if (!heroKnowsSpell(hero, spell.id)) return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
+
+    const effectiveStats = getEffectiveHeroStatsFromValues(hero);
+    const mana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    const cost = getSpellCost(spell);
+    const hasDevInfiniteMana = action.devInfiniteManaHeroId === hero.id;
+    if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
+    if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });
+
+    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const mapState = (game.mapState as Record<string, unknown>) ?? {};
+    const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
+    const result = await helpers.applyAdventureSpell({
+      supabase,
+      gamePlayer,
+      players,
+      boats,
+      hero,
+      spellId: spell.id,
+      target: action.target,
+      mapData,
+      mapState,
+      explored,
+    });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+    const nextMana = hasDevInfiniteMana ? mana : mana - cost;
+    if (!hasDevInfiniteMana) await supabase.from("heroes").update({ mana: nextMana }).eq("id", hero.id);
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+
+    return NextResponse.json({ success: true, mana: nextMana, interaction: result.interaction });
+  }
+
+  return null;
+}

@@ -85,6 +85,7 @@ export function UnitModel({
             height={40}
             unoptimized
             className={`${persistentLuckIcon ? "h-12 w-12" : "h-10 w-10"} relative object-contain drop-shadow-[0_2px_5px_rgba(0,0,0,0.75)]`}
+            style={{ height: "auto" }}
           />
         </span>
       )}

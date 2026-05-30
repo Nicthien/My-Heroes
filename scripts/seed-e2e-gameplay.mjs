@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { ensureAdminAccount } from "./ensure-admin.mjs";
 import { readSupabaseEnv, run } from "./lib/local-supabase.mjs";
 
 export const GAMEPLAY_E2E_EMAIL = process.env.E2E_GAMEPLAY_EMAIL || "e2e-player-a@myheroes.local";
@@ -23,6 +24,8 @@ export async function seedGameplayUser({ startSupabase = false } = {}) {
       persistSession: false,
     },
   });
+
+  await ensureAdminAccount(supabase);
 
   const existing = await findUserByEmail(supabase, GAMEPLAY_E2E_EMAIL);
   let userId = existing?.id;

@@ -1,79 +1,67 @@
-# Plan d'optimisation rendu carte
+# Optimisation du rendu carte
 
-Objectif : passer de **10 fps → 50-60 fps** sur carte XL (144×144 = 20 736 tuiles).
+> Révision : 2026-05-31.
+> Ce fichier garde uniquement le suivi encore utile pour le renderer Phaser actuel.
 
-## Diagnostic
+## Objectif
 
-Carte XL = ~30 000 GameObjects Phaser permanents :
-- 1 `Graphics` par tuile élevée (`renderElevatedTerrainTile`, ligne 1109)
-- 1 sprite par texture de top de tuile (`renderTerrainTopTexture`, ligne 1237)
-- 1-5 sprites par tuile de route
-- 1 sprite par décor bloquant
-- 4 couches `Graphics` plein-map pour le shimmer d'eau (lignes 474-495)
-- Sort `objectLayer` à chaque frame pendant déplacement héros (ligne 2326)
-- 2 tweens infinis sur `fogLayer` qui forcent une recomposition par frame (lignes 299-314)
+Améliorer le rendu des grandes cartes, en particulier XL (144 x 144 = 20 736 tuiles), sans modifier les règles de jeu.
 
-## Étapes (par ROI)
+Objectif historique : passer d'environ 10 fps à 50-60 fps. Plusieurs optimisations ont été appliquées, mais le 60 fps stable sur XL reste limité par le nombre de GameObjects Phaser encore présents dans la scène.
 
-| # | Étape | Gain | Effort | Statut |
-|---|---|---|---|---|
-| 1 | Désactiver fog drift tweens sur grandes cartes | +3 à +8 fps | trivial | ✅ |
-| 2 | Throttle `objectLayer.sort("depth")` | +2 à +5 fps | trivial | ✅ |
-| 3 | Eau : 1 frame statique au lieu de 4 sur grandes cartes | +5 à +15 fps | trivial | ✅ |
-| 4 | Spatial index pour hover (`getObjectsAtScreen`) | élimine lag hover | faible | ✅ |
-| 5 | Lazy preload des spritesheets faction | temps de chargement | faible | ⏸️ skip (pas un gain runtime) |
-| 6 | Batch tuiles élevées en bandes anti-diagonales (au lieu de RT chunks) | +20 à +40 fps | moyen | ✅ |
+## État actuel
 
-## Pivot étape 6
+Optimisations implémentées :
 
-Le RT-chunk bake plein-carte aurait coûté ~95-170 MB de VRAM (XL = 6912×3456 px). Analyse plus fine : les sprites Image batchent automatiquement par texture en WebGL, donc les 20k+ sprites de top-texture/route/décor ne sont pas le bottleneck. Le vrai problème = les **Graphics** par-tuile élevée (chacun est un draw call unique en WebGL).
+| # | Optimisation | Statut | Repère code |
+|---|---|---|---|
+| 1 | Désactiver le drift du fog sur grandes cartes | ✅ | `configureFogDrift()` dans [`PhaserMapRenderer.ts`](src/lib/rendering/phaser/PhaserMapRenderer.ts) |
+| 2 | Throttle du `objectLayer.sort("depth")` pendant les déplacements | ✅ | [`PhaserMapRenderer.ts`](src/lib/rendering/phaser/PhaserMapRenderer.ts) |
+| 3 | Eau : moins de frames de shimmer sur grandes cartes | ✅ | `waterShimmerFrames` dans [`PhaserMapRenderer.ts`](src/lib/rendering/phaser/PhaserMapRenderer.ts) |
+| 4 | Index spatial pour le hover | ✅ | `getObjectsAtScreen()` / helpers de rendu |
+| 5 | Batch des tuiles élevées par bandes anti-diagonales | ✅ | `getElevatedBandGraphics()` vers la ligne 1594 |
+| 6 | Guard idempotent sur `renderMap` | ✅ | `renderMapMeasured()` vers la ligne 364 |
+| 7 | Signature séparée terrain / objets dynamiques | ✅ | `renderMapMeasured()` |
+| 8 | Cache des positions de tuiles avec objets | ✅ | `objectTilePositions` et `renderMapTileObjects()` |
 
-Solution : regrouper tous les Graphics de tuiles élevées en `Graphics` partagé par bande anti-diagonale `x+y`. Pour XL : ~287 bandes max (au lieu de 5-15k Graphics par-tuile). Z-order iso correct car les tuiles dans une même anti-diagonale ne se chevauchent jamais.
-
-Implémentation dans `getElevatedBandGraphics` ([PhaserMapRenderer.ts:1257](src/lib/rendering/phaser/PhaserMapRenderer.ts#L1257)).
-
-## Validation
+Validation historique :
 
 - `npx tsc --noEmit` ✅
 - `npx eslint` ✅
-- `npm run test:e2e` ✅ 10 passed
+- `npm run test:e2e` ✅
 
-## 🔥 Étape 7 — Vrai bottleneck identifié après mesure utilisateur
+La passe du 2026-05-31 n'a pas relancé ces commandes ; elle a seulement mis à jour ce suivi.
 
-Après mesure dans le panneau dev, le profil réel sur petite carte :
-- `phaser.frame`: 25.5 ms avg / 111.5 ms max
-- **`phaser.renderMap`: 89.6 ms avg / 178.7 ms max** ← appelé en boucle
-- **`phaser.setFog`: 41.2 ms avg / 82.4 ms max** ← cascade de renderMap
-- `phaser.setObjects`: 0.1 ms avg / 0.8 ms max
-- **TÂCHES/S: 16/s (1008 ms total)** ← main thread saturé
+## Décisions conservées
 
-**Diagnostic** : le polling dans [page.tsx:149](src/app/game/[id]/page.tsx#L149) déclenche `syncGame()` toutes les 1 s en local. Chaque sync produit un `gameState` avec nouvelle référence. La useEffect de [GameMap.tsx:222](src/components/game/map/GameMap.tsx#L222) appelle `renderer.renderMap()` à chaque tick — et `renderMap` finit toujours par `redrawCurrentFog()` qui rebuild tous les chunks de fog.
+### Batch des tuiles élevées
 
-→ **90 ms (renderMap) + 41 ms (setFog cascade) × 1 Hz = 13 % du main thread brûlé pour rien.**
+Le bake plein-carte en RenderTexture aurait coûté trop de VRAM sur XL. Le pivot retenu est de regrouper les `Graphics` de tuiles élevées par bande anti-diagonale `x + y`, ce qui réduit fortement le nombre de draw calls tout en gardant un z-order iso correct.
 
-**Fix** : guard idempotent dans le renderer ([PhaserMapRenderer.ts:319](src/lib/rendering/phaser/PhaserMapRenderer.ts#L319)). On calcule une signature courte (dimensions + terrain + objets + décor + routes par tuile) au début de `renderMapMeasured`. Si elle est identique au render précédent, retour immédiat. Coût de la signature : ~5 ms sur XL, comparaison string ~1 ms. ✅
+### RenderMap idempotent
 
-| # | Optimisation | Statut |
-|---|---|---|
-| 7 | Guard idempotent sur `renderMap` (signature courte) | ✅ |
-| 8 | Guard à deux niveaux (terrain stable / objets dynamiques) — split du signature | ✅ |
-| 9 | Cache positions tuiles avec objets — `renderMapTileObjects` skip le scan 20k | ✅ |
+Le renderer protège maintenant `renderMap()` contre les appels répétés avec une carte équivalente. C'était nécessaire parce que les syncs serveur produisent régulièrement de nouvelles références d'état, même quand le terrain n'a pas changé.
 
-## Limites rencontrées
+Le polling local n'est plus à 1 s : [`src/app/game/[id]/page.tsx`](src/app/game/[id]/page.tsx) utilise maintenant 3 s en mode observateur admin, 5 s via proxy Supabase local, et 10 s sinon.
 
-**Bake RenderTexture impossible** : Phaser 4.1.0 a retiré `RenderTexture.draw(gameObject)`. Seul `stamp(textureKey, ...)` reste. On ne peut donc plus baker dynamiquement les GameObjects dans une RT comme en Phaser 3. Alternatives connues mais lourdes à implémenter : `Camera.snapshot()` (async), génération de texture par Graphics via `generateTexture()`, ou pipeline custom.
+### RenderTexture
 
-**Bottleneck restant identifié** : `phaser.frame` ≈ 25 ms en lobby, ~46 ms en jeu actif. Le coût per-frame de Phaser (traversée du scene-graph avec 20k+ GameObjects sur XL) reste le facteur limitant pour atteindre 60 fps. Sans le bake, on est limité par l'API du renderer.
+Phaser 4.1.0 ne propose plus le workflow Phaser 3 basé sur `RenderTexture.draw(gameObject)`. Le bake dynamique reste donc non retenu pour l'instant. Alternatives possibles mais lourdes : `Camera.snapshot()` asynchrone, génération de textures par `Graphics.generateTexture()`, ou pipeline custom.
 
-## Pistes restantes (non implémentées)
+## Bottleneck restant
 
-- Réduire le nombre de GameObjects via TileSprite ou Phaser.Display.Blitter (refactor important).
-- Désactiver certaines features visuelles sur grandes cartes (water shimmer, decor blocking sprites).
-- Augmenter `setInterval(syncGame, ...)` au-delà de 1000ms en proxy local pour réduire la pression React.
+Le coût per-frame de Phaser reste le principal plafond : les grandes cartes gardent beaucoup de sprites et containers permanents, donc la traversée du scene graph pèse même quand `renderMap()` ne reconstruit plus la carte.
 
-## Notes d'implémentation
+Pistes restantes, par ordre de plausibilité :
 
-- Mesure avant/après via `DevPerformancePanel` (metric `phaser.frame`).
-- Conserver la lava animée et héros en sprites séparés au-dessus du bake.
-- Tester sur `/dev/rmg?size=XL` après chaque étape.
-- Ne PAS toucher la logique de jeu — uniquement le rendu Phaser.
+1. Réduire le nombre de GameObjects persistants avec `TileSprite`, `Blitter` ou une stratégie de chunks statiques.
+2. Continuer à sortir certains éléments visuels des grandes cartes quand ils ne changent pas souvent.
+3. Mesurer séparément les couches `mapLayer`, `roadLayer`, `decorLayer`, `objectLayer` et `fogLayer` dans `DevPerformancePanel`.
+4. Garder une option qualité/performance pour les très grandes cartes si le coût visuel reste trop élevé.
+
+## Règles pour la suite
+
+- Ne pas modifier les règles de mouvement, de brouillard ou de génération depuis ce chantier : uniquement le rendu.
+- Tester les changements sur `/dev/rmg?size=XL`.
+- Surveiller `phaser.frame`, `phaser.renderMap`, `phaser.setFog` et le nombre de tâches par seconde dans `DevPerformancePanel`.
+- Lancer `npx tsc --noEmit`, `npm run lint` et au moins `npm run test:e2e` après une optimisation significative.

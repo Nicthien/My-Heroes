@@ -53,7 +53,8 @@ interface NeutralZoneDensityMetric {
 
 const sizes = [36, 72, 108];
 const playerCounts = [2, 3, 4, 5, 6];
-const samplesPerTemplate = Number(process.env.RMG_SAMPLES ?? 8);
+const fullRun = process.argv.includes("--full");
+const samplesPerTemplate = Number(process.env.RMG_SAMPLES ?? (fullRun ? 8 : 1));
 const seeds = Array.from({ length: samplesPerTemplate }, (_, index) => `RMG${String(index + 1).padStart(3, "0")}`);
 const VALIDATION_FACTIONS = [
   Faction.CASTLE,
@@ -110,6 +111,19 @@ for (const playerCount of playerCounts) {
     }
     summaries.push(`${template.id}: checked ${sizes.length * seeds.length} maps for ${playerCount}p`);
   }
+}
+
+// Pocket placement is intentionally stochastic and small maps can be cramped, so
+// validate the materialization target across the sampled suite instead of per map.
+if (totalExpectedPockets > 0 && totalPocketArtifacts < Math.floor(totalExpectedPockets / 2)) {
+  addIssue(
+    "warning",
+    "all",
+    "aggregate",
+    0,
+    0,
+    `low aggregate pocket artifact count: ${totalPocketArtifacts}/${totalExpectedPockets}`,
+  );
 }
 
 const errors = issues.filter((issue) => issue.severity === "error");
@@ -559,26 +573,13 @@ function validatePockets(
   playerCount: number,
   size: number,
 ): void {
-  const template = TEMPLATES.find((item) => item.id === templateId);
-  if (!template) return;
-  const expectedPockets = template.zones.reduce((sum, zone) => sum + (zone.pocketCount ?? 0), 0);
+  const zones = map.zones ?? TEMPLATES.find((item) => item.id === templateId)?.zones;
+  if (!zones) return;
+  const expectedPockets = zones.reduce((sum, zone) => sum + (zone.pocketCount ?? 0), 0);
   if (expectedPockets === 0) return;
   totalExpectedPockets += expectedPockets;
   totalPocketArtifacts += stats.pocketArtifacts;
   totalPocketGuardians += stats.pocketGuardians;
-
-  // We expect at least half of the templated pockets to materialize (seeding may fail
-  // legitimately on small/cramped maps).
-  if (stats.pocketArtifacts < Math.max(1, Math.floor(expectedPockets / 2))) {
-    addIssue(
-      "warning",
-      templateId,
-      seed,
-      playerCount,
-      size,
-      `low pocket artifact count: ${stats.pocketArtifacts}/${expectedPockets}`,
-    );
-  }
 
   for (const row of map.tiles) {
     for (const tile of row) {

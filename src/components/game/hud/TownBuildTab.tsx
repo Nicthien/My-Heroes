@@ -126,6 +126,7 @@ export function TownBuildTab({
                       width={56}
                       height={56}
                       className="h-14 w-14 object-contain"
+                      style={{ height: "auto" }}
                       unoptimized
                       aria-hidden="true"
                     />

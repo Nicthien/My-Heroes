@@ -126,7 +126,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                       alt={t.name}
                       width={40}
                       height={40}
-                      className="h-full w-full object-contain"
+                      className="h-auto w-full object-contain"
                       style={{ imageRendering: "pixelated" }}
                       draggable={false}
                     />
@@ -163,7 +163,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                         alt={label}
                         width={40}
                         height={40}
-                        className="h-full w-full object-contain"
+                        className="h-auto w-full object-contain"
                         style={{ imageRendering: "pixelated" }}
                         draggable={false}
                       />

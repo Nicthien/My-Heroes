@@ -34,7 +34,7 @@ test.describe("Gameplay E2E", () => {
     await createSmallGame(page);
     await startPendingGame(page);
     await expectPlayableMap(page, consoleLogs);
-    await moveHeroFromCanvasCenter(page);
+    await moveHeroThroughActionApi(page);
     await dismissBlockingOverlays(page);
     await endTurn(page);
 
@@ -80,6 +80,7 @@ async function createSmallGame(page: Page) {
 
 async function startPendingGame(page: Page) {
   await expect(page.getByTestId("pending-lobby-panel")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("progressbar", { name: "Chargement de la carte" })).toBeHidden({ timeout: 30_000 });
   await page.getByTestId("start-game").click();
   await expect(page.getByTestId("end-turn")).toBeVisible({ timeout: 40_000 });
 }
@@ -97,36 +98,42 @@ async function expectPlayableMap(page: Page, consoleLogs: string[]) {
   await expect(page.getByText(/À vous|Fin tour|Fin du tour/).first()).toBeVisible();
 }
 
-async function moveHeroFromCanvasCenter(page: Page) {
+async function moveHeroThroughActionApi(page: Page) {
   const movementBefore = await readMovementLine(page);
   expect(movementBefore, "expected movement text before moving").not.toBeNull();
   if (!movementBefore) throw new Error("Expected movement text before moving.");
 
-  const canvasBox = await page.locator("canvas").first().boundingBox();
-  expect(canvasBox, "expected Phaser canvas before moving").not.toBeNull();
+  const gameId = getGameIdFromUrl(page);
+  const game = await fetchGameState(page, gameId);
+  const player = findPlayablePlayer(game);
+  const hero = player?.heroes?.[0];
+  expect(hero, "expected the gameplay user to have a hero").toBeTruthy();
+  if (!hero) throw new Error("Expected a hero to move.");
 
-  const centerX = canvasBox!.x + canvasBox!.width / 2;
-  const centerY = canvasBox!.y + canvasBox!.height / 2;
-  const candidateOffsets = [
-    { x: 180, y: 96 },
-    { x: -180, y: 96 },
-    { x: 0, y: 150 },
-    { x: 220, y: 0 },
-    { x: -220, y: 0 },
-  ];
+  const attempts = adjacentPositions(hero);
+  const failures: string[] = [];
+  for (const destination of attempts) {
+    const response = await postGameAction(page, gameId, {
+      type: "MOVE_HERO",
+      heroId: hero.id,
+      path: [
+        { x: hero.x, y: hero.y },
+        destination,
+      ],
+    });
 
-  for (const offset of candidateOffsets) {
-    const clickX = centerX + offset.x;
-    const clickY = centerY + offset.y;
-    await page.mouse.click(clickX, clickY);
-    await page.waitForTimeout(350);
-    await page.mouse.click(clickX, clickY);
+    if (response.ok) {
+      await expect.poll(() => readMovementLine(page), {
+        message: "expected hero movement to change after API move",
+        timeout: 10_000,
+      }).not.toBe(movementBefore);
+      return;
+    }
 
-    const changed = await movementChanged(page, movementBefore, 3_000);
-    if (changed) return;
+    failures.push(`${destination.x},${destination.y}: ${response.error ?? response.status}`);
   }
 
-  expect(await readMovementLine(page), "expected hero movement to change after map clicks").not.toBe(movementBefore);
+  throw new Error(`Unable to move hero to an adjacent tile.\n${failures.join("\n")}`);
 }
 
 async function endTurn(page: Page) {
@@ -154,15 +161,6 @@ async function readMovementLine(page: Page) {
   return bodyText.match(/MVT\s*:\s*[^\n]+/)?.[0]
     ?? bodyText.match(/Mouvement\s+\d+\s*\/\s*\d+/)?.[0]
     ?? null;
-}
-
-async function movementChanged(page: Page, movementBefore: string, timeout: number) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeout) {
-    if ((await readMovementLine(page)) !== movementBefore) return true;
-    await page.waitForTimeout(250);
-  }
-  return false;
 }
 
 function createSupabaseSessionCookies(session: unknown) {
@@ -208,3 +206,72 @@ function stringToBase64Url(value: string) {
     .replace(/\+/g, "-")
     .replace(/\//g, "_");
 }
+
+function getGameIdFromUrl(page: Page) {
+  const match = page.url().match(/\/game\/([^/?#]+)/);
+  if (!match) throw new Error(`Unable to read game id from URL: ${page.url()}`);
+  return decodeURIComponent(match[1]);
+}
+
+async function fetchGameState(page: Page, gameId: string) {
+  return page.evaluate(async (id) => {
+    const response = await fetch(`/api/games/${id}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`GET /api/games/${id} failed: ${response.status}`);
+    return response.json();
+  }, gameId) as Promise<GameApiState>;
+}
+
+async function postGameAction(page: Page, gameId: string, action: Record<string, unknown>) {
+  return page.evaluate(async ({ id, body }) => {
+    const response = await fetch(`/api/games/${id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok,
+      status: response.status,
+      error: typeof data?.error === "string" ? data.error : null,
+    };
+  }, { id: gameId, body: action });
+}
+
+function findPlayablePlayer(game: GameApiState) {
+  return game.players.find((player) => player.id === game.currentTurnPlayerId && player.heroes.length > 0)
+    ?? game.players.find((player) => !player.isAi && player.heroes.length > 0)
+    ?? game.players.find((player) => player.heroes.length > 0)
+    ?? null;
+}
+
+function adjacentPositions(hero: GameApiHero) {
+  const offsets = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+    { x: 1, y: 1 },
+    { x: -1, y: 1 },
+    { x: 1, y: -1 },
+    { x: -1, y: -1 },
+  ];
+
+  return offsets.map((offset) => ({ x: hero.x + offset.x, y: hero.y + offset.y }));
+}
+
+type GameApiState = {
+  currentTurnPlayerId?: string;
+  players: GameApiPlayer[];
+};
+
+type GameApiPlayer = {
+  id: string;
+  isAi?: boolean;
+  heroes: GameApiHero[];
+};
+
+type GameApiHero = {
+  id: string;
+  x: number;
+  y: number;
+};

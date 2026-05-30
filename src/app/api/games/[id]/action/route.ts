@@ -3,10 +3,7 @@ import { randomUUID } from "crypto";
 import { requireCurrentUser } from "@/lib/auth";
 import {
   UNIT_RULES,
-  canAfford,
-  getFactionBuildingRule,
   getFactionBuildingRules,
-  getGrowthForBuiltTownBuilding,
   subtractCost,
   tierForUnit,
 } from "@/lib/game/economy";
@@ -19,13 +16,11 @@ import {
   normalizeExternalDwellingState,
   type ExternalDwellingStateMap,
 } from "@/lib/game/external-dwellings";
-import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import {
   HERO_ARMY_STACK_LIMIT,
   UNIT_STACK_COUNT_CAP,
   addUnitsToStacks,
-  removeUnitsFromStack,
   sortedStacks,
 } from "@/lib/game/army-stacks";
 import { getCreature } from "@/lib/game/creature-catalog";
@@ -39,18 +34,8 @@ import {
   pickArtifactId,
   type ArtifactSlot,
 } from "@/lib/game/artifacts";
-import { AdventureBuildingType, BuildingType, Faction, GameMap, HeroClass, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
+import { AdventureBuildingType, BuildingType, Faction, GameMap, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import { normalizeMapLevel, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
-import {
-  CLASS_STARTING_STATS,
-  HERO_RECRUIT_COST_GOLD,
-  MAX_HEROES_PER_PLAYER,
-  getHeroTemplate,
-  getRecruitedHeroTemplateIds,
-  pickTavernOffer,
-  startingArmyForFaction,
-  type TavernOffer,
-} from "@/lib/game/heroes";
 import {
   canMoveAdventureStep,
   computeExtraHeroScoutingTiles,
@@ -58,156 +43,49 @@ import {
   computeVisibleTiles,
   getAdventurePathCost,
   getAdventureStepCost,
-  getDailyAdventureMovement,
   getPlayerVisionCenters,
   getRequiredAdventureMovement,
   getUsableAdventureMovement,
   isTileTraversable,
   normalizeMapMovement,
 } from "@/lib/game/engine";
-import { findTownBoatLaunchTile, isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
+import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
-import { SPELLS, getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
-import { SKILL_DEFINITIONS, countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "@/lib/game/skills";
+import { SPELLS, getHeroMana, type SpellId } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
-import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
-import { computeExchangeAmount, getMarketplaceCount } from "@/lib/game/market";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { buildActionLogInput, recordGameAction } from "@/lib/game/server/action-log";
-import { cancelPlayerTurnCompletion, completePlayerTurn } from "@/lib/game/server/turns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
-
-type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
-
-interface MinimalBuilding {
-  id: string;
-  x: number;
-  y: number;
-  buildingType?: string;
-  guardianPower?: number;
-}
-
-interface MinimalTown {
-  id: string;
-  gamePlayerId?: string | null;
-  x: number;
-  y: number;
-  mapLevel?: string | null;
-  level?: number;
-  townType?: string;
-  buildings?: string[];
-  garrison?: MinimalArmy[];
-  availableRecruits?: Record<string, number>;
-  tavernOffer?: TavernOffer[];
-  isNeutral?: boolean;
-  neutralGarrison?: unknown[];
-}
-
-interface MinimalResourceBuilding {
-  id: string;
-  buildingType: string;
-}
-
-interface MinimalGate {
-  id: string;
-  gamePlayerId?: string | null;
-  x: number;
-  y: number;
-  guardianPower?: number;
-  garrison?: MinimalArmy[];
-}
-
-interface MinimalBoat {
-  id: string;
-  ownerId?: string | null;
-  heroId?: string | null;
-  faction?: string | null;
-  x: number;
-  y: number;
-  mapLevel?: string | null;
-}
-
-interface MinimalTurn {
-  gamePlayerId: string;
-  turnNumber: number;
-  isCompleted: boolean;
-}
-
-interface MinimalArmy {
-  id: string;
-  unitType: UnitType;
-  count: number;
-  health: number;
-  maxHealth: number;
-  position: number;
-}
-
-interface MinimalHero {
-  id: string;
-  name?: string | null;
-  class?: string | null;
-  specialty?: string | null;
-  x: number;
-  y: number;
-  mapLevel?: string | null;
-  level?: number;
-  movement: number;
-  mana?: number | null;
-  hasSpellBook?: boolean;
-  knownSpellIds?: string[] | null;
-  attack?: number;
-  defense?: number;
-  morale?: number;
-  luck?: number;
-  artifacts?: unknown;
-  spellPower?: number;
-  knowledge?: number;
-  experience: number;
-  armies: MinimalArmy[];
-}
-
-interface MinimalPlayer {
-  id: string;
-  isAi?: boolean;
-  aiName?: string | null;
-  user?: { name?: string | null };
-  isAlive?: boolean;
-  turnOrder?: number;
-  faction?: string;
-  gold: number;
-  wood: number;
-  ore: number;
-  mercury: number;
-  crystals: number;
-  gems: number;
-  sulfur: number;
-  exploredTiles: string[];
-  heroes: MinimalHero[];
-  towns: MinimalTown[];
-  resourceBuildings: MinimalResourceBuilding[];
-}
-
-type MoveInteraction =
-  | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string; alreadyVisited?: boolean }
-  | { type: "TELEPORT"; buildingType: "stargate" | "subterranean_gate"; from: Position; to: Position; message?: string; destination: Position }
-  | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
-  | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }
-  | { type: "CAPTURE_BUILDING"; buildingType?: string; destination: Position }
-  | { type: "CAPTURE_TOWN"; destination: Position }
-  | { type: "CAPTURE_GATE"; gateId: string; destination: Position }
-  | { type: "STOP"; message: string; destination: Position };
-
-type HeroStatKey = "attack" | "defense" | "spellPower" | "knowledge";
-
-type AdventureBuildingChoice = {
-  value: HeroStatKey;
-  label: string;
-};
+import { handleAdventureAction } from "./adventureActions";
+import { handleArmyAction } from "./armyActions";
+import { handleArtifactAction } from "./artifactActions";
+import { handleBoatAction } from "./boatActions";
+import { handleCaptureAction } from "./captureActions";
+import { handleDevAction } from "./devActions";
+import { handleEconomyAction } from "./economyActions";
+import { handleGarrisonAction } from "./garrisonActions";
+import { handleRewardAction } from "./rewardActions";
+import { handleSkillAction } from "./skillActions";
+import { handleTownAction } from "./townActions";
+import { handleTurnAction } from "./turnActions";
+import type {
+  CaptureTownRow,
+  HeroStatKey,
+  MinimalArmy,
+  MinimalBoat,
+  MinimalBuilding,
+  MinimalGate,
+  MinimalHero,
+  MinimalPlayer,
+  MinimalTown,
+  MinimalTurn,
+  MoveInteraction,
+  SupabaseAdminClient,
+} from "./types";
 
 const ADVENTURE_SCHOOL_COST_GOLD = 1000;
 const CARTOGRAPHER_COST_GOLD = 10000;
@@ -246,104 +124,19 @@ export async function POST(
     if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
     if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
 
-    if (action.type === "DEV_GRANT_RESOURCES") {
-      const resources: Resources = {
-        gold: gamePlayer.gold + 1000,
-        wood: gamePlayer.wood + 1000,
-        ore: gamePlayer.ore + 1000,
-        mercury: gamePlayer.mercury + 1000,
-        crystals: gamePlayer.crystals + 1000,
-        gems: gamePlayer.gems + 1000,
-        sulfur: gamePlayer.sulfur + 1000,
-      };
-      await updatePlayerResources(supabase, gamePlayer.id, resources);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, resources });
-    }
-
-    if (action.type === "DEV_GRANT_HERO_XP") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const amount = 500;
-      const experience = hero.experience + amount;
-      await applyHeroExperienceGain(supabase, id, hero.id, experience);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, heroId: hero.id, experience, amount });
-    }
-
-    if (action.type === "DEV_GRANT_HERO_SKILLS") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const skills = Object.fromEntries(SKILL_DEFINITIONS.map((skill) => [skill.id, "expert"])) as HeroSkills;
-      const skillUpdate = await supabase.from("heroes").update({ skills }).eq("id", hero.id);
-      if (skillUpdate.error) return NextResponse.json({ error: "Impossible d'ajouter les compétences." }, { status: 500 });
-
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const latestMapState = await getLatestMapState(supabase, id, mapState);
-      const pendingMap = (latestMapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
-      if (pendingMap[hero.id]) {
-        const nextPending = { ...pendingMap };
-        delete nextPending[hero.id];
-        await supabase.from("games").update({
-          map_state: { ...latestMapState, pendingSkillChoices: nextPending },
-        }).eq("id", id);
-      }
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true, heroId: hero.id, skillCount: SKILL_DEFINITIONS.length });
-    }
-
-    if (action.type === "DEV_TELEPORT_HERO") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const destination = getActionPosition(action.position);
-      if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
-      const tile = mapData.tiles[destination.y]?.[destination.x];
-      if (!tile || !isTileTraversable(tile)) {
-        return NextResponse.json({ error: "Destination infranchissable" }, { status: 400 });
-      }
-
-      const { error: heroUpdateError } = await supabase
-        .from("heroes")
-        .update({ x: destination.x, y: destination.y })
-        .eq("id", hero.id);
-      if (heroUpdateError) {
-        return NextResponse.json({ error: `Erreur mise à jour héros: ${heroUpdateError.message}` }, { status: 500 });
-      }
-
-      const movedHeroes: MinimalHero[] = gamePlayer.heroes.map((item) =>
-        item.id === hero.id ? { ...hero, x: destination.x, y: destination.y } : item
-      );
-      const newlyVisible = computeVisibleTiles(
-        mapData,
-        getPlayerVisionCenters({
-          heroes: movedHeroes.map((item) => ({ position: { x: item.x, y: item.y } })),
-          towns: gamePlayer.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
-        }),
-        5
-      );
-      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-      for (const key of newlyVisible) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true, destination });
-    }
+    const devResponse = await handleDevAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      getActionPosition,
+      getLatestMapState,
+      logPlayerAction,
+      updatePlayerResources,
+    });
+    if (devResponse) return devResponse;
 
     const players = game.players as unknown as Array<{
       id: string;
@@ -363,79 +156,23 @@ export async function POST(
       return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
     }
 
-    if (action.type === "EQUIP_ARTIFACT") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      const result = equipHeroArtifact(hero, String(action.artifactId ?? ""), action.slot);
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, artifacts: result.artifacts });
-    }
-
-    if (action.type === "UNEQUIP_ARTIFACT") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      const result = unequipHeroArtifact(hero, action.slot);
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      const { error } = await supabase.from("heroes").update({ artifacts: result.artifacts }).eq("id", hero.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, artifacts: result.artifacts });
-    }
-
-    if (action.type === "TRANSFER_ARTIFACT") {
-      const fromHero = gamePlayer.heroes.find((item) => item.id === action.fromHeroId);
-      const toHero = gamePlayer.heroes.find((item) => item.id === action.toHeroId);
-      if (!fromHero || !toHero || fromHero.id === toHero.id) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, fromHero.id) || isHeroInActiveCombat(game.combats, toHero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-      if (!canTransferArtifactsBetweenHeroes(fromHero, toHero, gamePlayer.towns)) {
-        return NextResponse.json({ error: "Les héros doivent être adjacents ou dans le même château" }, { status: 400 });
-      }
-      const result = transferHeroArtifact(fromHero, toHero, String(action.artifactId ?? ""));
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      const { error: fromError } = await supabase.from("heroes").update({ artifacts: result.fromArtifacts }).eq("id", fromHero.id);
-      if (fromError) return NextResponse.json({ error: fromError.message }, { status: 500 });
-      const { error: toError } = await supabase.from("heroes").update({ artifacts: result.toArtifacts }).eq("id", toHero.id);
-      if (toError) return NextResponse.json({ error: toError.message }, { status: 500 });
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "COLLECT_ARTIFACT") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const targetPosition = getActionPosition(action.targetPosition);
-      if (!targetPosition) return NextResponse.json({ error: "Artefact invalide" }, { status: 400 });
-      const object = mapData.tiles[targetPosition.y]?.[targetPosition.x]?.object;
-      if (object?.type !== "artifact") return NextResponse.json({ error: "Artefact introuvable" }, { status: 404 });
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const collected = new Set<string>((mapState.collected as string[]) ?? []);
-      const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[]) ?? []);
-      if (collected.has(object.id)) return NextResponse.json({ error: "Artefact déjà collecté" }, { status: 400 });
-      if (Number(object.guardianPower ?? 0) > 0 && !defeatedArtifacts.has(object.id)) {
-        return NextResponse.json({ error: "L'artefact est gardé" }, { status: 400 });
-      }
-      const movement = await validateAndApplyArtifactApproach({ supabase, mapData, gamePlayer, hero, path: action.path, target: targetPosition });
-      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
-      const artifactId = pickArtifactId(object.subtype, `${id}:${object.id}`);
-      const artifact = getArtifact(artifactId);
-      if (!artifact) return NextResponse.json({ error: "Artefact inconnu" }, { status: 400 });
-      const artifacts = addArtifactToBag(hero.artifacts, artifactId);
-      const { error } = await supabase.from("heroes").update({ artifacts }).eq("id", hero.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      collected.add(object.id);
-      await supabase.from("games").update({ map_state: { ...mapState, collected: Array.from(collected), defeatedArtifacts: Array.from(defeatedArtifacts) } }).eq("id", id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "ARTIFACT", artifactId, label: artifact.name, destination: { x: hero.x, y: hero.y } } });
-    }
+    const artifactResponse = await handleArtifactAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      addArtifactToBag,
+      canTransferArtifactsBetweenHeroes,
+      equipHeroArtifact,
+      getActionPosition,
+      logPlayerAction,
+      transferHeroArtifact,
+      unequipHeroArtifact,
+      validateAndApplyArtifactApproach,
+    });
+    if (artifactResponse) return artifactResponse;
 
     if (action.type === "MOVE_HERO") {
       const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
@@ -721,1143 +458,188 @@ export async function POST(
       return NextResponse.json({ success: true, interaction, path: movePath, stoppedAt: firstStop ? lastPos : null });
     }
 
-    if (action.type === "EMBARK_BOAT") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Impossible d'embarquer dans le souterrain" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      if (boats.some((boat) => boat.heroId === hero.id)) return NextResponse.json({ error: "Ce héros est déjà embarqué" }, { status: 400 });
-      const boat = boats.find((item) => item.id === action.boatId);
-      if (!boat || boat.heroId) return NextResponse.json({ error: "Bateau indisponible" }, { status: 400 });
-      if (normalizeMapLevel(boat.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
-      const mapData = normalizeMapMovement(withActiveMapLayer(game.mapData as GameMap, SURFACE_LEVEL));
-      const boatPosition = { x: boat.x, y: boat.y };
-      const boatTile = mapData.tiles[boat.y]?.[boat.x];
-      if (boatTile?.terrain !== "water") return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, boatPosition)) return NextResponse.json({ error: "Le héros doit être adjacent au bateau" }, { status: 400 });
-      await supabase.from("heroes").update({ x: boat.x, y: boat.y, movement: 0 }).eq("id", hero.id);
-      await supabase.from("boats").update({ hero_id: hero.id, owner_player_id: gamePlayer.id }).eq("id", boat.id);
-      const explored = new Set(gamePlayer.exploredTiles ?? []);
-      for (const key of computeVisibleTiles(mapData, [boatPosition], 5)) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "EMBARK_BOAT", destination: boatPosition, message: "Embarquement effectue." } });
-    }
-
-    if (action.type === "DISEMBARK_BOAT") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (normalizeMapLevel(hero.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Impossible de debarquer dans le souterrain" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      const boat = boats.find((item) => item.heroId === hero.id);
-      if (!boat) return NextResponse.json({ error: "Ce héros n'est pas embarqué" }, { status: 400 });
-      if (normalizeMapLevel(boat.mapLevel) !== SURFACE_LEVEL) return NextResponse.json({ error: "Bateau invalide" }, { status: 400 });
-      const mapData = normalizeMapMovement(withActiveMapLayer(game.mapData as GameMap, SURFACE_LEVEL));
-      const destination = getActionPosition(action.position);
-      if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
-      const tile = mapData.tiles[destination.y]?.[destination.x];
-      if (!tile || tile.terrain === "water" || !isTileTraversable(tile)) return NextResponse.json({ error: "Debarquement impossible" }, { status: 400 });
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, destination)) return NextResponse.json({ error: "La rive est trop eloignee" }, { status: 400 });
-      if (isOccupiedByAnyHero(players, hero.id, destination)) return NextResponse.json({ error: "Destination occupee" }, { status: 400 });
-      await supabase.from("heroes").update({ x: destination.x, y: destination.y, movement: 0 }).eq("id", hero.id);
-      await supabase.from("boats").update({ hero_id: null, x: hero.x, y: hero.y, map_level: SURFACE_LEVEL }).eq("id", boat.id);
-      const explored = new Set(gamePlayer.exploredTiles ?? []);
-      for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "DISEMBARK_BOAT", destination, message: "Debarquement effectue." } });
-    }
-
-    if (action.type === "VISIT_ADVENTURE_BUILDING") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const found = findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
-      if (!found) return NextResponse.json({ error: "Bâtiment d'aventure introuvable" }, { status: 404 });
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
-        return NextResponse.json({ error: "Le héros doit être sur place pour visiter ce bâtiment" }, { status: 400 });
-      }
-
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-      const interaction = await handleAdventureBuildingVisit({
-        supabase,
-        gameId: id,
-        gamePlayer,
-        hero,
-        turnNumber: Number(game.turnNumber ?? 1),
-        mapData,
-        mapState,
-        object: found.object,
-        position: found.position,
-        explored,
-        choice: normalizeHeroStatChoice(action.choice),
-      });
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true, interaction });
-    }
-
-    if (action.type === "CAST_ADVENTURE_SPELL") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const spell = getSpell(String(action.spellId ?? ""));
-      if (!spell || spell.context !== "adventure") return NextResponse.json({ error: "Sort d'aventure invalide" }, { status: 400 });
-      if (hero.hasSpellBook === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
-      if (!heroKnowsSpell(hero, spell.id)) return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
-
-      const effectiveStats = getEffectiveHeroStatsFromValues(hero);
-      const mana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
-      const cost = getSpellCost(spell);
-      const hasDevInfiniteMana = action.devInfiniteManaHeroId === hero.id;
-      if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
-      if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });
-
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
-      const result = await applyAdventureSpell({
-        supabase,
-        gamePlayer,
-        players,
-        boats,
-        hero,
-        spellId: spell.id,
-        target: action.target,
-        mapData,
-        mapState,
-        explored,
-      });
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-
-      const nextMana = hasDevInfiniteMana ? mana : mana - cost;
-      if (!hasDevInfiniteMana) await supabase.from("heroes").update({ mana: nextMana }).eq("id", hero.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, mana: nextMana, interaction: result.interaction });
-    }
-
-    if (action.type === "CAPTURE_BUILDING") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const building = players.flatMap((player) => player.resourceBuildings)
-        .find((item) => item.id === action.buildingId)
-        ?? await getResourceBuilding(supabase, id, String(action.buildingId ?? ""));
-      if (!hero || !building) return NextResponse.json({ error: "Capture invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-      if (Number(building.guardianPower ?? 0) > 0) {
-        return NextResponse.json({ error: "Ce bâtiment est gardé" }, { status: 400 });
-      }
-
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const movement = await validateAndApplyActionPath({
-        supabase,
-        mapData,
-        gamePlayer,
-        hero,
-        path: action.path,
-        destination: { x: building.x, y: building.y },
-      });
-      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
-
-      await supabase.from("resource_buildings").update({ game_player_id: gamePlayer.id, guardian_power: 0 }).eq("id", building.id);
-      await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 150);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "CAPTURE_BUILDING", buildingType: building.buildingType } });
-    }
-
-    if (action.type === "CAPTURE_TOWN") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      let town = players.flatMap((player) => player.towns).find((item) => item.id === action.townId);
-      if (!town) {
-        const mapData = game.mapData as GameMap;
-        const pathDestination = getActionPosition(action.destination) ?? getActionPathDestination(action.path);
-        const heroPosition = hero ? { x: hero.x, y: hero.y } : null;
-        const mapTownTile = mapData.tiles
-          .flatMap((row) => row)
-          .find((tile) =>
-            tile.object?.type === "town" &&
-            (
-              tile.object.id === action.townId ||
-              tile.object.targetId === action.townId ||
-              (pathDestination && tile.x === pathDestination.x && tile.y === pathDestination.y) ||
-              (heroPosition && tile.x === heroPosition.x && tile.y === heroPosition.y)
-            )
-          );
-
-        let townRow = await findTownForCapture(supabase, id, String(action.townId ?? ""), [
-          mapTownTile ? { x: mapTownTile.x, y: mapTownTile.y } : null,
-          pathDestination,
-          heroPosition,
-        ]);
-        if (!townRow && mapTownTile) {
-          townRow = await createNeutralTownForMapTile(supabase, id, mapData, mapTownTile);
-        }
-        if (townRow?.is_neutral && (townRow.neutral_garrison?.length ?? 0) === 0) {
-          townRow = await ensureNeutralTownGarrison(supabase, townRow);
-        }
-
-        if (townRow) {
-          town = {
-            id: townRow.id,
-            gamePlayerId: townRow.game_player_id,
-            x: townRow.x,
-            y: townRow.y,
-            level: townRow.level,
-            townType: townRow.town_type,
-            buildings: townRow.buildings ?? [],
-            isNeutral: townRow.is_neutral,
-            neutralGarrison: townRow.neutral_garrison ?? [],
-          };
-        }
-      }
-      if (!hero || !town) return NextResponse.json({ error: "Chateau invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-      if (!town.isNeutral && town.gamePlayerId === gamePlayer.id) {
-        return NextResponse.json({ error: "Ce château vous appartient déjà" }, { status: 400 });
-      }
-      if (town.isNeutral && (town.neutralGarrison?.length ?? 0) > 0) {
-        return NextResponse.json({ error: "Ce château neutre est gardé" }, { status: 400 });
-      }
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const movement = await validateAndApplyActionPath({
-        supabase,
-        mapData,
-        gamePlayer,
-        hero,
-        path: action.path,
-        destination: { x: town.x, y: town.y },
-      });
-      if (!movement.ok) return NextResponse.json({ error: movement.error }, { status: 400 });
-
-      const capturedBuildings = (town.buildings ?? []) as string[];
-      const hasAnotherCapitol = gamePlayer.towns.some((item) => (item.buildings ?? []).includes(BuildingType.CAPITOL));
-      const townOwnershipUpdate: Record<string, unknown> = {
-        game_player_id: gamePlayer.id,
-        is_neutral: false,
-        neutral_garrison: [],
-      };
-      if (hasAnotherCapitol && capturedBuildings.includes(BuildingType.CAPITOL)) {
-        const demotedBuildings = capturedBuildings
-          .filter((item) => item !== BuildingType.CAPITOL)
-          .concat(capturedBuildings.includes(BuildingType.CITY_HALL) ? [] : [BuildingType.CITY_HALL]);
-        townOwnershipUpdate.buildings = demotedBuildings;
-        townOwnershipUpdate.level = getTownCenterLevel(demotedBuildings);
-      }
-      await supabase
-        .from("towns")
-        .update(townOwnershipUpdate)
-        .eq("id", town.id);
-      await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + 250);
-      await evaluateGameLifecycle(supabase, id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "CAPTURE" } });
-    }
-
-    if (action.type === "BUILD_BOAT") {
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      if (normalizeMapLevel(town.mapLevel) !== SURFACE_LEVEL) {
-        return NextResponse.json({ error: "Impossible de construire un bateau dans le souterrain" }, { status: 400 });
-      }
-      const buildings = (town.buildings ?? []) as string[];
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      if (!hasShipyardBuilding(townFaction, buildings)) return NextResponse.json({ error: "Construisez d'abord le Chantier naval" }, { status: 400 });
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const destination = findTownBoatLaunchTile(mapData, { x: town.x, y: town.y }, boats.map((boat) => ({ x: boat.x, y: boat.y })));
-      if (!destination) return NextResponse.json({ error: "Aucune eau côtière libre pour construire un bateau" }, { status: 400 });
-      const cost = { gold: 1000, wood: 10 };
-      const resources = playerResources(gamePlayer);
-      if (!canAfford(resources, cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-      await supabase.from("game_players").update(subtractCost(resources, cost)).eq("id", gamePlayer.id);
-      const { error: boatError } = await supabase.from("boats").insert({
-        game_id: id,
-        owner_player_id: gamePlayer.id,
-        hero_id: null,
-        faction: townFaction,
-        x: destination.x,
-        y: destination.y,
-        map_level: SURFACE_LEVEL,
-      });
-      if (boatError) return NextResponse.json({ error: `Erreur construction bateau: ${boatError.message}` }, { status: 500 });
-      const explored = new Set(gamePlayer.exploredTiles ?? []);
-      for (const key of computeVisibleTiles(mapData, [destination], 5)) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "BUILD_BOAT", destination, message: "Bateau construit." } });
-    }
-
-    if (action.type === "BUILD") {
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      const building = action.building as BuildingType;
-      const townFaction = ((town?.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      const rule = getFactionBuildingRule(townFaction, building);
-      if (!town || !rule) return NextResponse.json({ error: "Bâtiment invalide" }, { status: 400 });
-
-      const buildings = (town.buildings ?? []) as string[];
-      if (buildings.includes(building)) return NextResponse.json({ error: "Bâtiment déjà construit" }, { status: 400 });
-      if (isShipyardBuilding(townFaction, building) && !isTownCoastalForBoats(normalizeMapMovement(game.mapData as GameMap), { x: town.x, y: town.y })) {
-        return NextResponse.json({ error: "Le Chantier naval doit être construit dans une ville côtière" }, { status: 400 });
-      }
-      const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(buildings, requirement));
-      if (missingRequirement) return NextResponse.json({ error: "Prérequis manquant" }, { status: 400 });
-      if (
-        building === BuildingType.CAPITOL &&
-        gamePlayer.towns.some((item) => item.id !== town.id && (item.buildings ?? []).includes(BuildingType.CAPITOL))
-      ) {
-        return NextResponse.json({ error: "Un seul Capitole est autorisé par joueur" }, { status: 400 });
-      }
-      const resources = playerResources(gamePlayer);
-      if (!canAfford(resources, rule.cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-
-      await supabase.from("game_players").update(subtractCost(resources, rule.cost)).eq("id", gamePlayer.id);
-      const nextBuildings = [...buildings, building];
-      const townUpdate: Record<string, unknown> = {
-        buildings: nextBuildings,
-        level: getTownCenterLevel(nextBuildings),
-        last_built_turn: game.turnNumber,
-      };
-      const immediateGrowth = getGrowthForBuiltTownBuilding(townFaction, building);
-      if (Object.keys(immediateGrowth).length > 0) {
-        townUpdate.available_recruits = addRecruitGrowth(town.availableRecruits ?? {}, immediateGrowth);
-      }
-      if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
-        const townFaction = ((town.townType ?? gamePlayer.faction ?? "castle") as Faction);
-        townUpdate.tavern_offer = pickTavernOffer(townFaction, getRecruitedHeroTemplateIds(gamePlayer.heroes ?? []));
-      }
-      let { error: townErr } = await supabase.from("towns").update(townUpdate).eq("id", town.id);
-      if (townErr && "tavern_offer" in townUpdate) {
-        delete townUpdate.tavern_offer;
-        ({ error: townErr } = await supabase.from("towns").update(townUpdate).eq("id", town.id));
-      }
-      if (townErr) {
-        console.error("towns.update failed:", townErr, { townId: town.id, update: townUpdate });
-        return NextResponse.json({ error: `Erreur construction: ${townErr.message}` }, { status: 500 });
-      }
-
-      // Side-effects à la construction de certains bâtiments uniques
-      const mapStateForBuild = (game.mapState as Record<string, unknown>) ?? {};
-      let mapStatePatched = false;
-      const mapStateNext: Record<string, unknown> = { ...mapStateForBuild };
-
-      const mageGuildLevelMap: Partial<Record<BuildingType, number>> = {
-        [BuildingType.MAGE_GUILD]: 1,
-        [BuildingType.MAGE_GUILD_2]: 2,
-        [BuildingType.MAGE_GUILD_3]: 3,
-        [BuildingType.MAGE_GUILD_4]: 4,
-        [BuildingType.MAGE_GUILD_5]: 5,
-      };
-      const mgLevel = mageGuildLevelMap[building];
-      if (mgLevel) {
-        const slotsPerLevel: Record<number, number> = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 };
-        const hasLibrary = townFaction === Faction.TOWER && (town.buildings ?? []).includes(BuildingType.UNIQUE_2);
-        const count = slotsPerLevel[mgLevel] + (hasLibrary ? 1 : 0);
-        const newSpells = rollMageGuildSpellsForLevel(`${id}:${town.id}:mageguild:${mgLevel}`, count, mgLevel);
-        const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
-        const existing = townSpellLibraries[town.id] ?? [];
-        mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: [...existing, ...newSpells.filter((s) => !existing.includes(s))] };
-        mapStatePatched = true;
-      } else if (townFaction === Faction.TOWER && building === BuildingType.UNIQUE_2) {
-        const townSpellLibraries = (mapStateForBuild.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
-        const existing = townSpellLibraries[town.id];
-        if (existing) {
-          const extra = rollMageGuildSpells(`${id}:${town.id}:library`, 1).filter((s) => !existing.includes(s));
-          mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: [...existing, ...extra] };
-          mapStatePatched = true;
-        }
-      }
-
-      const artifactMerchantBuilding = getArtifactMerchantBuilding(townFaction);
-      if (artifactMerchantBuilding && building === artifactMerchantBuilding) {
-        const artifactOffer = rollTownArtifactOffer(`${id}:${town.id}:artmerchant`, 4);
-        const townArtifactOffers = (mapStateForBuild.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
-        mapStateNext.townArtifactOffers = { ...townArtifactOffers, [town.id]: artifactOffer };
-        mapStatePatched = true;
-      }
-
-      if (mapStatePatched) {
-        await supabase.from("games").update({ map_state: mapStateNext }).eq("id", id);
-      }
-
-      // Applique immédiatement les bonus de la nouvelle construction aux héros présents dans la ville
-      // (notamment l'apprentissage de sorts à la Guilde des mages, sans attendre une nouvelle visite).
-      const heroesInTown = (gamePlayer.heroes ?? []).filter((h) => h.x === town.x && h.y === town.y);
-      if (heroesInTown.length > 0) {
-        const updatedTown = { ...town, buildings: nextBuildings };
-        for (const heroInTown of heroesInTown) {
-          await applyOwnTownVisitBonuses({
-            supabase,
-            gameId: id,
-            mapState: mapStateNext,
-            hero: heroInTown,
-            town: updatedTown,
-            playerFaction: (gamePlayer.faction ?? Faction.CASTLE) as Faction,
-            turnNumber: Number(game.turnNumber ?? 1),
-          });
-        }
-      }
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "RECRUIT_HERO") {
-      const town = gamePlayer.towns.find((item) => item.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-
-      const buildings = (town.buildings ?? []) as string[];
-      if (!buildings.includes(BuildingType.TAVERN)) {
-        return NextResponse.json({ error: "Construisez d'abord la Taverne" }, { status: 400 });
-      }
-
-      const offer = (town.tavernOffer ?? []) as TavernOffer[];
-      const returningHeroId = typeof action.heroId === "string" ? action.heroId : null;
-      if (returningHeroId) {
-        const returningHero = ((gamePlayer as { tavernHeroes?: Array<{ heroId?: string }> }).tavernHeroes ?? [])
-          .find((hero) => hero.heroId === returningHeroId);
-        if (!returningHero) return NextResponse.json({ error: "Héros indisponible" }, { status: 400 });
-        if (gamePlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
-          return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} héros par joueur` }, { status: 400 });
-        }
-        const resources = playerResources(gamePlayer);
-        if (resources.gold < HERO_RECRUIT_COST_GOLD) {
-          return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-        }
-        const { data: armies } = await supabase
-          .from("armies")
-          .select("unit_type")
-          .eq("hero_id", returningHeroId);
-        const dailyMovement = getDailyAdventureMovement(
-          (armies ?? []).map((army) => ({ unitType: army.unit_type as UnitType }))
-        );
-
-        await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
-        await supabase.from("heroes").update({
-          status: "ACTIVE",
-          x: town.x,
-          y: town.y,
-          movement: dailyMovement,
-          max_movement: dailyMovement,
-          is_moving: false,
-        }).eq("id", returningHeroId).eq("game_player_id", gamePlayer.id);
-
-        await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-        return NextResponse.json({ success: true });
-      }
-
-      const picked = offer.find((entry) => entry.templateId === action.templateId);
-      if (!picked) return NextResponse.json({ error: "Héros indisponible" }, { status: 400 });
-
-      const template = getHeroTemplate(action.templateId);
-      if (!template) return NextResponse.json({ error: "Héros inconnu" }, { status: 400 });
-
-      if (gamePlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
-        return NextResponse.json({ error: `Maximum ${MAX_HEROES_PER_PLAYER} héros par joueur` }, { status: 400 });
-      }
-
-      const resources = playerResources(gamePlayer);
-      if (resources.gold < HERO_RECRUIT_COST_GOLD) {
-        return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-      }
-
-      const stats = CLASS_STARTING_STATS[template.class as HeroClass];
-      const army = startingArmyForFaction(template.faction);
-      const dailyMovement = getDailyAdventureMovement([{ unitType: army.unitType }]);
-
-      await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
-
-      const heroInsert: Record<string, unknown> = {
-        game_player_id: gamePlayer.id,
-        name: template.name,
-        hero_class: template.class,
-        specialty: template.specialty,
-        attack: stats.attack,
-        defense: stats.defense,
-        spell_power: stats.spellPower,
-        knowledge: stats.knowledge,
-        morale: stats.morale,
-        luck: stats.luck,
-        mana: stats.knowledge * 10,
-        has_spell_book: true,
-        known_spells: null,
-        artifacts: { inventory: [], equipment: {} },
-        x: town.x,
-        y: town.y,
-        movement: dailyMovement,
-        max_movement: dailyMovement,
-      };
-
-      let { data: heroRow, error: heroError } = await supabase
-        .from("heroes")
-        .insert(heroInsert)
-        .select("*")
-        .single();
-      if (heroError && isMissingSpellSchemaError(heroError)) {
-        delete heroInsert.mana;
-        delete heroInsert.has_spell_book;
-        delete heroInsert.known_spells;
-        delete heroInsert.morale;
-        delete heroInsert.luck;
-        delete heroInsert.artifacts;
-        ({ data: heroRow, error: heroError } = await supabase
-          .from("heroes")
-          .insert(heroInsert)
-          .select("*")
-          .single());
-      }
-      if (heroError || !heroRow) {
-        return NextResponse.json({ error: `Erreur création héros: ${heroError?.message ?? "inconnue"}` }, { status: 500 });
-      }
-
-      const unitRule = UNIT_RULES[army.unitType];
-      if (unitRule) {
-        await supabase.from("armies").insert({
-          hero_id: heroRow.id,
-          unit_type: army.unitType,
-          count: army.count,
-          health: unitRule.health * army.count,
-          max_health: unitRule.health,
-          position: 0,
-        });
-      }
-
-      const remaining = offer.filter((entry) => entry.templateId !== action.templateId);
-      await supabase.from("towns").update({ tavern_offer: remaining }).eq("id", town.id);
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "RECRUIT_UNIT") {
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      if (!rule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
-
-      const available = (town.availableRecruits?.[unitType] ?? 0);
-      if (available < count) return NextResponse.json({ error: "Pas assez d'unités disponibles" }, { status: 400 });
-
-      const totalCost = Object.fromEntries(Object.entries(rule.cost).map(([key, value]) => [key, (value ?? 0) * count]));
-      const resources = playerResources(gamePlayer);
-      if (!canAfford(resources, totalCost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-
-      await supabase.from("game_players").update(subtractCost(resources, totalCost)).eq("id", gamePlayer.id);
-      const nextGarrison = addUnitsToStackList(town.garrison ?? [], unitType, count, rule.health);
-      await supabase.from("towns").update({
-        available_recruits: { ...(town.availableRecruits ?? {}), [unitType]: available - count },
-        garrison: nextGarrison,
-      }).eq("id", town.id);
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "MERGE_HERO_STACKS") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const sourceStackId = String(action.sourceStackId ?? "");
-      const targetStackId = String(action.targetStackId ?? "");
-      if (!hero || !sourceStackId || !targetStackId || sourceStackId === targetStackId) {
-        return NextResponse.json({ error: "Fusion invalide" }, { status: 400 });
-      }
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const stacks = sortedStacks(hero.armies);
-      const source = stacks.find((stack) => stack.id === sourceStackId);
-      const target = stacks.find((stack) => stack.id === targetStackId);
-      if (!source || !target || source.unitType !== target.unitType) {
-        return NextResponse.json({ error: "Les stacks doivent contenir la même unité" }, { status: 400 });
-      }
-      const room = Math.max(0, UNIT_STACK_COUNT_CAP - target.count);
-      if (room <= 0) return NextResponse.json({ error: "Le stack cible est déjà plein" }, { status: 400 });
-      const moved = Math.min(source.count, room);
-      const sourceRemoval = removeUnitsFromStack(source, moved);
-      const next = stacks
-        .flatMap((stack): MinimalArmy[] => {
-          if (stack.id === source.id) {
-            return sourceRemoval.remaining.count > 0 ? [sourceRemoval.remaining] : [];
-          }
-          if (stack.id === target.id) {
-            const nextCount = target.count + moved;
-            return [{
-              ...target,
-              count: nextCount,
-              health: Math.min(nextCount * target.maxHealth, target.health + sourceRemoval.removedHealth),
-            }];
-          }
-          return [stack];
-        })
-        .map((stack, position) => ({ ...stack, position }));
-      await persistHeroArmyDiff(supabase, hero.id, stacks, next);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, moved });
-    }
-
-    if (action.type === "SPLIT_HERO_STACK") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const sourceStackId = String(action.sourceStackId ?? "");
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      if (!hero || !sourceStackId) return NextResponse.json({ error: "Séparation invalide" }, { status: 400 });
-      if (isHeroInActiveCombat(game.combats, hero.id)) {
-        return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-      }
-
-      const stacks = sortedStacks(hero.armies);
-      if (stacks.length >= HERO_ARMY_STACK_LIMIT) {
-        return NextResponse.json({ error: "L'armée du héros est pleine" }, { status: 400 });
-      }
-      const source = stacks.find((stack) => stack.id === sourceStackId);
-      if (!source || source.count <= 1 || count >= source.count) {
-        return NextResponse.json({ error: "Quantité invalide" }, { status: 400 });
-      }
-
-      const removal = removeUnitsFromStack(source, count);
-      const position = stacks.length;
-      const newStack: MinimalArmy = {
-        id: randomUUID(),
-        unitType: source.unitType,
-        count: removal.removed,
-        health: removal.removedHealth,
-        maxHealth: source.maxHealth,
-        position,
-      };
-      const next = sortedStacks(stacks.map((stack) => stack.id === source.id ? removal.remaining : stack).concat(newStack))
-        .map((stack, nextPosition) => ({ ...stack, position: nextPosition }));
-      await persistHeroArmyDiff(supabase, hero.id, stacks, next);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "UPGRADE_TROOPS") {
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const baseRule = UNIT_RULES[unitType];
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      if (!baseRule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
-
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      const upgradeBuilding = getFactionBuildingRules(townFaction).find((rule) => rule.replacesUnit === unitType);
-      const upgradedUnitType = upgradeBuilding?.unlocksUnit;
-      const upgradedRule = upgradedUnitType ? UNIT_RULES[upgradedUnitType] : undefined;
-      if (!upgradeBuilding || !upgradedUnitType || !upgradedRule) {
-        return NextResponse.json({ error: "Cette unité ne peut pas être améliorée ici" }, { status: 400 });
-      }
-      if (!(town.buildings ?? []).includes(upgradeBuilding.type)) {
-        return NextResponse.json({ error: "Bâtiment amélioré requis" }, { status: 400 });
-      }
-
-      const sourceHeroId = typeof action.heroId === "string" ? action.heroId : null;
-      const sourceHero = sourceHeroId ? gamePlayer.heroes.find((hero) => hero.id === sourceHeroId) : null;
-      if (sourceHeroId) {
-        if (!sourceHero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-        if (sourceHero.x !== town.x || sourceHero.y !== town.y) {
-          return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
-        }
-        if (isHeroInActiveCombat(game.combats, sourceHero.id)) {
-          return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
-        }
-      }
-
-      const garrison = town.garrison ?? [];
-      const source = sourceHero
-        ? sourceHero.armies.find((unit) => unit.unitType === unitType)
-        : garrison.find((unit) => unit.unitType === unitType);
-      if (!source || source.count < count) {
-        return NextResponse.json({ error: "Troupes insuffisantes" }, { status: 400 });
-      }
-
-      const upgradeCost = getUnitUpgradeCost(baseRule.cost, upgradedRule.cost);
-      const totalCost = Object.fromEntries(Object.entries(upgradeCost).map(([key, value]) => [key, (value ?? 0) * count]));
-      const resources = playerResources(gamePlayer);
-      if (!canAfford(resources, totalCost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-
-      if (sourceHero) {
-        const afterRemoval = removeUnitsFromStackList(sourceHero.armies, unitType, count, baseRule.health);
-        const capacity = addUnitsToStacks(afterRemoval, upgradedUnitType, count, upgradedRule.health, () => randomUUID());
-        if (capacity.remainder > 0) {
-          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
-        }
-        await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
-        await removeUnitsFromHeroArmy(supabase, source, count, baseRule.health);
-        await addUnitsToHeroArmy(supabase, sourceHero, upgradedUnitType, count, upgradedRule.health);
-      } else {
-        await updatePlayerResources(supabase, gamePlayer.id, subtractCost(resources, totalCost));
-        const nextGarrison = addUnitsToStackList(
-          removeUnitsFromStackList(garrison, unitType, count, baseRule.health),
-          upgradedUnitType,
-          count,
-          upgradedRule.health
-        );
-        await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
-      }
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "CLAIM_CREATURE_BANK_REWARD") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const creatureBanks = getCreatureBankStateMap(mapState);
-      const bankState = creatureBanks[String(action.bankId ?? "")];
-      const pendingReward = bankState?.pendingReward as PendingCreatureBankReward | undefined;
-      if (!pendingReward || bankState.claimed) {
-        return NextResponse.json({ error: "Aucune récompense de banque disponible" }, { status: 400 });
-      }
-      if (pendingReward.playerId !== gamePlayer.id || pendingReward.heroId !== hero.id) {
-        return NextResponse.json({ error: "Cette récompense appartient à un autre héros" }, { status: 403 });
-      }
-
-      const acceptedCreatures = normalizeCreatureRewardSelection(action.creatures, pendingReward.reward.creatures ?? []);
-      let rewardCapacityCheck = sortedStacks(hero.armies);
-      for (const [unitTypeValue, count] of Object.entries(acceptedCreatures)) {
-        const unitType = unitTypeValue as UnitType;
-        if (count <= 0) continue;
-        const rule = getUnitRule(unitType);
-        const result = addUnitsToStacks(rewardCapacityCheck, unitType, count, rule.health, () => randomUUID());
-        if (result.remainder > 0) {
-          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
-        }
-        rewardCapacityCheck = result.stacks;
-      }
-      const newStackTypes = Object.entries(acceptedCreatures)
-        .filter(([, count]) => count > 0)
-        .map(([unitType]) => unitType as UnitType)
-        .filter((unitType) => !hero.armies.some((army) => army.unitType === unitType));
-      const maxHeroStacks = HERO_ARMY_STACK_LIMIT;
-      if (hero.armies.length + newStackTypes.length > maxHeroStacks) {
-        return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
-      }
-
-      const resources = playerResources(gamePlayer);
-      const nextResources: Partial<Resources> = {};
-      if (pendingReward.reward.gold) nextResources.gold = resources.gold + pendingReward.reward.gold;
-      for (const [resource, amount] of Object.entries(pendingReward.reward.resources ?? {})) {
-        const key = resource as keyof Resources;
-        nextResources[key] = (resources[key] ?? 0) + Number(amount ?? 0);
-      }
-      if (Object.keys(nextResources).length > 0) {
-        await updatePlayerResources(supabase, gamePlayer.id, nextResources);
-      }
-      if (pendingReward.reward.experience) {
-        await applyHeroExperienceGain(supabase, id, hero.id, hero.experience + pendingReward.reward.experience);
-      }
-
-      for (const [unitTypeValue, count] of Object.entries(acceptedCreatures)) {
-        const unitType = unitTypeValue as UnitType;
-        if (count <= 0) continue;
-        const rule = getUnitRule(unitType);
-        await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
-      }
-
-      let nextHeroArtifacts = normalizeArtifactBag(hero.artifacts);
-      if (pendingReward.reward.artifactTokens?.length) {
-        const pickedArtifacts = pendingReward.reward.artifactTokens.map((token, index) =>
-          pickArtifactId(token, `${id}:${pendingReward.bankId}:${hero.id}:${index}`)
-        );
-        nextHeroArtifacts = {
-          ...nextHeroArtifacts,
-          inventory: [...nextHeroArtifacts.inventory, ...pickedArtifacts],
-        };
-        await supabase.from("heroes").update({ artifacts: nextHeroArtifacts }).eq("id", hero.id);
-      }
-      const latestMapState = await getLatestMapState(supabase, id, mapState);
-      await supabase.from("games").update({
-        map_state: {
-          ...latestMapState,
-          creatureBanks: {
-            ...((latestMapState.creatureBanks as typeof creatureBanks | undefined) ?? creatureBanks),
-            [pendingReward.bankId]: {
-              ...bankState,
-              defeated: true,
-              claimed: true,
-              pendingReward: null,
-            },
-          },
-        },
-      }).eq("id", id);
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "TRANSFER_GARRISON_TO_HERO") {
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
-      if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le héros doit être au château pour recevoir la garnison" }, { status: 400 });
-      }
-
-      const garrison = town.garrison ?? [];
-      const source = garrison.find((unit) => unit.unitType === unitType);
-      if (!source || source.count < count) {
-        return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
-      }
-      const capacity = addUnitsToStacks(sortedStacks(hero.armies), unitType, count, rule.health, () => randomUUID());
-      if (capacity.remainder > 0) {
-        return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
-      }
-
-      const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
-      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
-
-      await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "TRANSFER_HERO_TO_GARRISON") {
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      const town = gamePlayer.towns.find((item: { id: string }) => item.id === action.townId);
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      if (!rule || !town || !hero) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
-      if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le héros doit être au château pour déposer des unités" }, { status: 400 });
-      }
-
-      const source = hero.armies.find((army) => army.unitType === unitType);
-      if (!source || source.count < count) {
-        return NextResponse.json({ error: "Armee insuffisante" }, { status: 400 });
-      }
-
-      const nextGarrison = addUnitsToStackList(town.garrison ?? [], unitType, count, rule.health);
-      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
-
-      if (source.count === count) {
-        await supabase.from("armies").delete().eq("id", source.id);
-      } else {
-        await supabase.from("armies").update({
-          count: source.count - count,
-          health: Math.max(0, source.health - rule.health * count),
-        }).eq("id", source.id);
-      }
-
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO" || action.type === "TRANSFER_HERO_TO_GATE_GARRISON") {
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const gate = gates.find((item) => item.id === action.gateId);
-      if (!rule || !hero || !gate || gate.gamePlayerId !== gamePlayer.id) {
-        return NextResponse.json({ error: "Transfert de porte invalide" }, { status: 400 });
-      }
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
-        return NextResponse.json({ error: "Le héros doit être adjacent à la porte" }, { status: 400 });
-      }
-
-      if (action.type === "TRANSFER_GATE_GARRISON_TO_HERO") {
-        const source = (gate.garrison ?? []).find((unit) => unit.unitType === unitType);
-        if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
-        const capacity = addUnitsToStacks(sortedStacks(hero.armies), unitType, count, rule.health, () => randomUUID());
-        if (capacity.remainder > 0) {
-          return NextResponse.json({ error: "Pas assez de place dans l'armée du héros" }, { status: 400 });
-        }
-
-        if (source.count === count) {
-          await supabase.from("gate_stacks").delete().eq("id", source.id);
-        } else {
-          await supabase.from("gate_stacks").update({
-            count: source.count - count,
-            health: Math.max(0, source.health - rule.health * count),
-          }).eq("id", source.id);
-        }
-        await addUnitsToHeroArmy(supabase, hero, unitType, count, rule.health);
-      } else {
-        const source = hero.armies.find((army) => army.unitType === unitType);
-        if (!source || source.count < count) return NextResponse.json({ error: "Armee insuffisante" }, { status: 400 });
-
-        await addUnitsToGateGarrison(supabase, gate, unitType, count, rule.health);
-        await removeUnitsFromHeroArmy(supabase, source, count, rule.health);
-      }
-
-      await compactGateStackPositions(supabase, gate.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "CAPTURE_GATE") {
-      const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
-      const mapData = normalizeMapMovement(game.mapData as GameMap);
-      const gate = getEffectiveGates(gates, mapData).find((item) => item.id === action.gateId);
-      if (!hero || !gate) {
-        return NextResponse.json({ error: "Porte invalide" }, { status: 400 });
-      }
-      if (!areAdjacentOrSame({ x: hero.x, y: hero.y }, { x: gate.x, y: gate.y })) {
-        return NextResponse.json({ error: "Le héros doit être adjacent à la porte" }, { status: 400 });
-      }
-      if ((gate.garrison ?? []).some((unit) => unit.count > 0)) {
-        return NextResponse.json({ error: "La porte est gardée" }, { status: 400 });
-      }
-
-      await captureGate(supabase, id, gate, gamePlayer.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, interaction: { type: "CAPTURE_GATE", gateId: gate.id } });
-    }
-
-    if (action.type === "EXCHANGE_RESOURCES") {
-      const town = gamePlayer.towns.find((t) => t.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      const buildings = (town.buildings ?? []) as string[];
-      if (!buildings.includes(BuildingType.MARKET)) {
-        return NextResponse.json({ error: "Construisez d'abord le Marché" }, { status: 400 });
-      }
-      const from = String(action.from ?? "") as keyof Resources;
-      const to = String(action.to ?? "") as keyof Resources;
-      const fromAmount = Math.max(0, Math.floor(Number(action.amount ?? 0)));
-      if (from === to || fromAmount <= 0) return NextResponse.json({ error: "Échange invalide" }, { status: 400 });
-      const resources = playerResources(gamePlayer);
-      if ((resources[from] ?? 0) < fromAmount) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
-      const marketplaceCount = getMarketplaceCount({ towns: gamePlayer.towns });
-      const toAmount = computeExchangeAmount(from, to, fromAmount, marketplaceCount);
-      if (toAmount <= 0) return NextResponse.json({ error: "Conversion non supportée" }, { status: 400 });
-      const next = { ...resources, [from]: (resources[from] ?? 0) - fromAmount, [to]: (resources[to] ?? 0) + toAmount };
-      await updatePlayerResources(supabase, gamePlayer.id, next);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, gained: { resource: to, amount: toAmount } });
-    }
-
-    if (action.type === "SELL_CREATURES") {
-      const town = gamePlayer.towns.find((t) => t.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      const buildings = (town.buildings ?? []) as string[];
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      if (townFaction !== Faction.STRONGHOLD || !buildings.includes(BuildingType.UNIQUE_2)) {
-        return NextResponse.json({ error: "Cette ville n'a pas de Guilde des francs-tireurs" }, { status: 400 });
-      }
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      if (!rule) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
-      const garrison = town.garrison ?? [];
-      const source = garrison.find((u) => u.unitType === unitType);
-      if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
-      const unitGoldValue = Math.max(10, Math.floor((rule.cost.gold ?? 100) * 0.5));
-      const totalGold = unitGoldValue * count;
-      const nextGarrison = removeUnitsFromStackList(garrison, unitType, count, rule.health);
-      await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
-      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold + totalGold });
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, gold: totalGold });
-    }
-
-    if (action.type === "BUY_TOWN_ARTIFACT") {
-      const town = gamePlayer.towns.find((t) => t.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      const buildings = (town.buildings ?? []) as string[];
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      const artifactBuilding = getArtifactMerchantBuilding(townFaction);
-      if (!artifactBuilding || !buildings.includes(artifactBuilding)) {
-        return NextResponse.json({ error: "Cette ville n'a pas de Marchands d'artefacts" }, { status: 400 });
-      }
-      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le héros doit être au château pour acheter" }, { status: 400 });
-      }
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const townArtifactOffers = (mapState.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
-      const offer = townArtifactOffers[town.id] ?? [];
-      const artifactId = String(action.artifactId ?? "");
-      if (!offer.includes(artifactId)) return NextResponse.json({ error: "Artefact indisponible" }, { status: 400 });
-      const artifact = getArtifact(artifactId);
-      if (!artifact) return NextResponse.json({ error: "Artefact inconnu" }, { status: 400 });
-      const price = artifact.cost ?? 5000;
-      if (gamePlayer.gold < price) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
-      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - price });
-      const nextArtifacts = addArtifactToBag(hero.artifacts, artifactId);
-      await supabase.from("heroes").update({ artifacts: nextArtifacts }).eq("id", hero.id);
-      const nextOffer = offer.filter((id) => id !== artifactId);
-      await supabase.from("games").update({
-        map_state: { ...mapState, townArtifactOffers: { ...townArtifactOffers, [town.id]: nextOffer } },
-      }).eq("id", id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, artifact: artifact.name, price });
-    }
-
-    if (action.type === "LEARN_SKILL") {
-      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      const level = Number(action.level ?? 0);
-      const choice = String(action.skillId ?? "");
-      const mapState = (game.mapState as Record<string, unknown>) ?? {};
-      const pendingMap = (mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
-      const pending = pendingMap[hero.id] ?? [];
-      const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
-      const currentSkills = ((heroRow?.skills ?? {}) as HeroSkills);
-      let idx = pending.findIndex((entry) => entry.level === level);
-      let entry = idx >= 0 ? pending[idx] : null;
-      if (!entry) {
-        const expectedFromLevels = Math.max(0, Number(hero.level ?? 1) - 1);
-        const learnedFromLevels = countSkillLevels(currentSkills);
-        const repairLevel = learnedFromLevels + 2;
-        const repairedOptions = learnedFromLevels < expectedFromLevels && level === repairLevel
-          ? generateSkillChoices(currentSkills, `${id}:${hero.id}:level:${level}`)
-          : [];
-        if (repairedOptions.length > 0) {
-          entry = { level, options: repairedOptions };
-          idx = -1;
-        }
-      }
-      if (!entry) return NextResponse.json({ error: "Aucun choix de compétence en attente pour ce niveau" }, { status: 400 });
-      if (!entry.options.includes(choice as SkillId)) return NextResponse.json({ error: "Choix invalide" }, { status: 400 });
-      const skillChoice = choice as SkillId;
-      const current = currentSkills[skillChoice];
-      const next: "basic" | "advanced" | "expert" =
-        current === "expert" ? "expert" : current === "advanced" ? "expert" : current === "basic" ? "advanced" : "basic";
-      const nextSkills = { ...currentSkills, [skillChoice]: next };
-      const skillUpdate = await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
-      if (skillUpdate.error) {
-        console.error("LEARN_SKILL: failed to persist hero skills", skillUpdate.error);
-        return NextResponse.json({ error: "Impossible d'enregistrer la compétence (DB)" }, { status: 500 });
-      }
-      const remaining = idx >= 0 ? pending.filter((_, i) => i !== idx) : pending;
-      const nextPending = { ...pendingMap };
-      if (remaining.length > 0) nextPending[hero.id] = remaining;
-      else delete nextPending[hero.id];
-      await supabase.from("games").update({ map_state: { ...mapState, pendingSkillChoices: nextPending } }).eq("id", id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, skill: choice, level: next });
-    }
-
-    if (action.type === "BUY_WAR_MACHINE") {
-      const town = gamePlayer.towns.find((t) => t.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
-      }
-      const machine = String(action.machine ?? "ballista") as "ballista" | "firstAid" | "ammoCart";
-      const spec: Record<typeof machine, { cost: number; key: string; building: BuildingType | null; faction: Faction | null }> = {
-        ballista: { cost: 2500, key: "ballista", building: BuildingType.UNIQUE_3, faction: Faction.STRONGHOLD },
-        firstAid: { cost: 750, key: "firstAid", building: null, faction: null },
-        ammoCart: { cost: 1000, key: "ammoCart", building: null, faction: null },
-      };
-      const { cost, key, building, faction } = spec[machine];
-      if (building && faction && (townFaction !== faction || !(town.buildings ?? []).includes(building))) {
-        return NextResponse.json({ error: "Bâtiment requis manquant" }, { status: 400 });
-      }
-      if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
-      const { data: heroRow } = await supabase.from("heroes").select("war_machines").eq("id", hero.id).maybeSingle();
-      const wm = ((heroRow?.war_machines ?? {}) as Record<string, boolean>);
-      if (wm[key]) return NextResponse.json({ error: "Ce héros possède déjà cette machine" }, { status: 400 });
-      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
-      const wmUpdate = await supabase.from("heroes").update({ war_machines: { ...wm, [key]: true } }).eq("id", hero.id);
-      if (wmUpdate.error) {
-        console.error("BUY_WAR_MACHINE: failed to persist war machines", wmUpdate.error);
-        return NextResponse.json({ error: "Impossible d'enregistrer la machine de guerre (DB)" }, { status: 500 });
-      }
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "LEARN_MAGIC_SCHOOL") {
-      const town = gamePlayer.towns.find((t) => t.id === action.townId);
-      if (!town) return NextResponse.json({ error: "Ville invalide" }, { status: 400 });
-      const townFaction = ((town.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      if (townFaction !== Faction.CONFLUX || !(town.buildings ?? []).includes(BuildingType.UNIQUE_1)) {
-        return NextResponse.json({ error: "Cette ville n'a pas d'Université de magie" }, { status: 400 });
-      }
-      const hero = gamePlayer.heroes.find((h) => h.id === action.heroId);
-      if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
-      if (hero.x !== town.x || hero.y !== town.y) {
-        return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
-      }
-      const school = String(action.school ?? "");
-      const validSchools = ["fire_magic", "water_magic", "earth_magic", "air_magic"];
-      if (!validSchools.includes(school)) return NextResponse.json({ error: "École inconnue" }, { status: 400 });
-      const cost = 2000;
-      if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
-      const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
-      const currentSkills = ((heroRow?.skills ?? {}) as Record<string, "basic" | "advanced" | "expert">);
-      if (currentSkills[school]) return NextResponse.json({ error: "Ce héros connaît déjà cette école" }, { status: 400 });
-      if (Object.keys(currentSkills).length >= 8) return NextResponse.json({ error: "Maximum 8 compétences" }, { status: 400 });
-      await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
-      const nextSkills = { ...currentSkills, [school]: "basic" as const };
-      const schoolUpdate = await supabase.from("heroes").update({ skills: nextSkills }).eq("id", hero.id);
-      if (schoolUpdate.error) {
-        console.error("LEARN_MAGIC_SCHOOL: failed to persist hero skills", schoolUpdate.error);
-        return NextResponse.json({ error: "Impossible d'enregistrer l'école de magie (DB)" }, { status: 500 });
-      }
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true, school });
-    }
-
-    if (action.type === "CASTLE_GATE_TRANSFER") {
-      const fromTown = gamePlayer.towns.find((t) => t.id === action.fromTownId);
-      const toTown = gamePlayer.towns.find((t) => t.id === action.toTownId);
-      if (!fromTown || !toTown || fromTown.id === toTown.id) return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
-      const fromFaction = ((fromTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      const toFaction = ((toTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
-      if (fromFaction !== Faction.INFERNO || toFaction !== Faction.INFERNO) {
-        return NextResponse.json({ error: "La Porte du château ne relie que les villes Hadès" }, { status: 400 });
-      }
-      if (!(fromTown.buildings ?? []).includes(BuildingType.UNIQUE_1) || !(toTown.buildings ?? []).includes(BuildingType.UNIQUE_1)) {
-        return NextResponse.json({ error: "Les deux villes doivent posséder la Porte du château" }, { status: 400 });
-      }
-      const unitType = action.unitType as UnitType;
-      const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
-      const rule = UNIT_RULES[unitType];
-      if (!rule) return NextResponse.json({ error: "Unité invalide" }, { status: 400 });
-      const fromGarrison = fromTown.garrison ?? [];
-      const source = fromGarrison.find((u) => u.unitType === unitType);
-      if (!source || source.count < count) return NextResponse.json({ error: "Garnison insuffisante" }, { status: 400 });
-      const nextFromGarrison = removeUnitsFromStackList(fromGarrison, unitType, count, rule.health);
-      const nextToGarrison = addUnitsToStackList(toTown.garrison ?? [], unitType, count, rule.health);
-      await supabase.from("towns").update({ garrison: nextFromGarrison }).eq("id", fromTown.id);
-      await supabase.from("towns").update({ garrison: nextToGarrison }).eq("id", toTown.id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "END_TURN") {
-      await completePlayerTurn(supabase, id, Number(game.turnNumber), gamePlayer.id);
-      await runAiTurnsUntilHuman(supabase, id);
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action.type === "CANCEL_END_TURN") {
-      const result = await cancelPlayerTurnCompletion(supabase, id, Number(game.turnNumber), gamePlayer.id);
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      await logPlayerAction(supabase, game, id, gamePlayer, action);
-      return NextResponse.json({ success: true });
-    }
+    const boatResponse = await handleBoatAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      boats,
+      players,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      helpers: {
+        areAdjacentOrSame,
+        getActionPosition,
+        isOccupiedByAnyHero,
+        logPlayerAction,
+        playerResources,
+      },
+    });
+    if (boatResponse) return boatResponse;
+
+    const adventureResponse = await handleAdventureAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      players,
+      boats,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      helpers: {
+        applyAdventureSpell,
+        areAdjacentOrSame,
+        findAdventureBuildingById,
+        handleAdventureBuildingVisit,
+        logPlayerAction,
+        normalizeHeroStatChoice,
+      },
+    });
+    if (adventureResponse) return adventureResponse;
+
+    const captureResponse = await handleCaptureAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      players,
+      gates,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      helpers: {
+        areAdjacentOrSame,
+        captureGate,
+        createNeutralTownForMapTile,
+        ensureNeutralTownGarrison,
+        findTownForCapture,
+        getActionPathDestination,
+        getActionPosition,
+        getEffectiveGates,
+        getResourceBuilding,
+        logPlayerAction,
+        validateAndApplyActionPath,
+      },
+    });
+    if (captureResponse) return captureResponse;
+
+    const townResponse = await handleTownAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      helpers: {
+        addRecruitGrowth,
+        applyOwnTownVisitBonuses,
+        getArtifactMerchantBuilding,
+        isMissingSpellSchemaError,
+        isTownCoastalForBoats,
+        logPlayerAction,
+        playerResources,
+        rollMageGuildSpells,
+        rollMageGuildSpellsForLevel,
+        rollTownArtifactOffer,
+      },
+    });
+    if (townResponse) return townResponse;
+
+    const armyResponse = await handleArmyAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      heroInCombatError: HERO_IN_COMBAT_ERROR,
+      helpers: {
+        addUnitsToHeroArmy,
+        addUnitsToStackList,
+        logPlayerAction,
+        persistHeroArmyDiff,
+        playerResources,
+        removeUnitsFromHeroArmy,
+        removeUnitsFromStackList,
+        updatePlayerResources,
+      },
+    });
+    if (armyResponse) return armyResponse;
+
+    const rewardResponse = await handleRewardAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      helpers: {
+        addUnitsToHeroArmy,
+        getCreatureBankStateMap,
+        getLatestMapState,
+        logPlayerAction,
+        normalizeCreatureRewardSelection,
+        playerResources,
+        updatePlayerResources,
+      },
+    });
+    if (rewardResponse) return rewardResponse;
+
+    const garrisonResponse = await handleGarrisonAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      gates,
+      action,
+      helpers: {
+        addUnitsToGateGarrison,
+        addUnitsToHeroArmy,
+        addUnitsToStackList,
+        areAdjacentOrSame,
+        compactGateStackPositions,
+        logPlayerAction,
+        removeUnitsFromHeroArmy,
+        removeUnitsFromStackList,
+      },
+    });
+    if (garrisonResponse) return garrisonResponse;
+
+    const economyResponse = await handleEconomyAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      helpers: {
+        addArtifactToBag,
+        getArtifactMerchantBuilding,
+        logPlayerAction,
+        playerResources,
+        removeUnitsFromStackList,
+        updatePlayerResources,
+      },
+    });
+    if (economyResponse) return economyResponse;
+
+    const skillResponse = await handleSkillAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      helpers: {
+        logPlayerAction,
+        updatePlayerResources,
+      },
+    });
+    if (skillResponse) return skillResponse;
+
+    const turnResponse = await handleTurnAction({
+      supabase,
+      game,
+      gameId: id,
+      gamePlayer,
+      action,
+      logPlayerAction,
+    });
+    if (turnResponse) return turnResponse;
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
   } catch (err) {
@@ -1913,16 +695,6 @@ function getAffordableCount(resources: Resources, cost: Partial<Resources>, avai
     limit = Math.min(limit, Math.floor(owned / unitCost));
   }
   return Math.max(0, limit);
-}
-
-function getUnitUpgradeCost(baseCost: Partial<Resources>, upgradedCost: Partial<Resources>) {
-  const resources: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
-  return Object.fromEntries(
-    resources.map((resource) => [
-      resource,
-      Math.max(0, (upgradedCost[resource] ?? 0) - (baseCost[resource] ?? 0)),
-    ])
-  ) as Partial<Resources>;
 }
 
 function addRecruitGrowth(
@@ -3404,18 +2176,6 @@ function findTeleportLanding(map: GameMap, target: Position): Position | null {
     if (isTileTraversable(tile)) return position;
   }
   return null;
-}
-
-interface CaptureTownRow {
-  id: string;
-  game_player_id: string | null;
-  x: number;
-  y: number;
-  level?: number;
-  town_type?: string;
-  buildings?: string[];
-  neutral_garrison?: unknown[];
-  is_neutral?: boolean;
 }
 
 async function findTownForCapture(

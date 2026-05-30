@@ -293,7 +293,7 @@ function TownsList({ playerId }: { playerId: string }) {
             }}
             left={
               <div className={`grid h-10 w-10 place-items-center overflow-hidden rounded-lg border ${active ? "border-amber-300 bg-amber-700/40" : "border-amber-700/60 bg-stone-900/80"}`}>
-                <Image src={sprite} alt={town.name} width={40} height={40} className="h-full w-full object-contain" style={{ imageRendering: "pixelated" }} draggable={false} />
+                <Image src={sprite} alt={town.name} width={40} height={40} className="h-auto w-full object-contain" style={{ imageRendering: "pixelated" }} draggable={false} />
               </div>
             }
             title={town.name}
@@ -326,7 +326,7 @@ function MinesList({ playerId }: { playerId: string }) {
             left={
               <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg border border-amber-700/60 bg-stone-900/80">
                 {sprite ? (
-                  <Image src={sprite} alt={label} width={40} height={40} className="h-full w-full object-contain" style={{ imageRendering: "pixelated" }} draggable={false} />
+                  <Image src={sprite} alt={label} width={40} height={40} className="h-auto w-full object-contain" style={{ imageRendering: "pixelated" }} draggable={false} />
                 ) : (
                   <span className="text-lg font-black text-amber-300">?</span>
                 )}

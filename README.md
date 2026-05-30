@@ -36,6 +36,7 @@ npm run dev:web       # Lance seulement Next.js
 npm run dev:supabase  # Lance seulement Supabase local
 npm run db:reset      # Recree la base locale avec les migrations
 npm run dev:stop      # Arrete Supabase local
+npm run test:e2e:gameplay # Lance Supabase local, seed un user E2E, puis teste un vrai parcours de partie
 ```
 
 Le schema local est versionne dans [`supabase/migrations`](supabase/migrations). Le fichier

@@ -27,7 +27,9 @@
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:ai": "tsx scripts/validate-ai.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs",
-    "test:e2e": "playwright test"
+    "seed:e2e:gameplay": "node scripts/seed-e2e-gameplay.mjs --start-supabase",
+    "test:e2e": "playwright test",
+    "test:e2e:gameplay": "node scripts/run-e2e-gameplay.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

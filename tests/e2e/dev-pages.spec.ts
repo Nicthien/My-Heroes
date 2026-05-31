@@ -25,6 +25,8 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/admin-observer", expect: { selector: "[data-testid='admin-observer-panel']", description: "Admin observer panel" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
+  { path: "/dev/map-showcase?size=S", expect: { selector: "body", description: "Generated Phaser map showcase body" } },
+  { path: "/dev/map-showcase?size=S&fog=partial", expect: { selector: "body", description: "Generated Phaser partial fog map showcase body" } },
   { path: "/dev/rmg",          expect: { selector: "body",   description: "RMG preview body" } },
 ];
 

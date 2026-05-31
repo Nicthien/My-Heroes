@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPreferences";
-import { measureDevPerformance, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
+import { measureDevPerformance, recordDevPerformanceGauge, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
 import { UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
@@ -58,12 +58,17 @@ import {
   LAVA_TEXTURE_PREFIX,
   MAP_LAYER_BASE_DEPTH,
   MAP_LAYER_COVER_DEPTH,
+  DETAILED_ROAD_TEXTURE_MAX_TILE_COUNT,
   DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT,
   MAX_CAMERA_ZOOM,
   MIN_CAMERA_ZOOM,
   MOVEMENT_SOUNDS,
   REACHABLE_TILE_ALPHA,
   REACHABLE_TILE_COLOR,
+  STATIC_DECOR_VIEW_PADDING,
+  STATIC_DECOR_VIEW_BUCKET_SIZE,
+  STATIC_DECOR_VIRTUALIZATION_MIN_TILE_COUNT,
+  TERRAIN_MICRO_DETAIL_MAX_TILE_COUNT,
   TERRAIN_ANIMATION_FRAME_COUNT,
   TERRAIN_ANIMATION_INTERVAL_MS,
   TERRAIN_FACE_RENDER_ORDER,
@@ -194,6 +199,19 @@ type RenderedStaticObject = {
   badge?: RenderedBadge;
 };
 
+type StaticDecorRenderItem = {
+  id: string;
+  spritePath: string;
+  x: number;
+  y: number;
+  displayWidth: number;
+  displayHeight: number;
+  originX: number;
+  originY: number;
+  depth: number;
+  flipX?: boolean;
+};
+
 function getAdventureBuildingSpritePath(object: MapObjectData) {
   if (object.buildingType === "external_dwelling") {
     return MAP_SPRITES.externalDwellings[object.dwellingUnitType as keyof typeof MAP_SPRITES.externalDwellings]
@@ -244,6 +262,7 @@ class PhaserMapScene extends Phaser.Scene {
   private fogChunkRows = 0;
   private fogChunks: FogChunk[] = [];
   private fogTileStates: Uint8Array | null = null;
+  private pendingFogRedraw?: Phaser.Time.TimerEvent;
   private fogPlaneDepth = BASE_HEIGHT + FOG_PLANE_CLEARANCE;
   private fogStampTextureKeys = FOG_STAMP_TEXTURE_KEYS;
   private reachableOverlayObjects: Phaser.GameObjects.GameObject[] = [];
@@ -258,6 +277,10 @@ class PhaserMapScene extends Phaser.Scene {
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
   private renderedHeroes = new Map<string, RenderedHeroObject>();
   private renderedStaticObjects = new Map<string, RenderedStaticObject>();
+  private staticDecorItems: StaticDecorRenderItem[] = [];
+  private staticDecorItemsByBucket = new Map<string, StaticDecorRenderItem[]>();
+  private renderedStaticDecorSprites = new Map<string, Phaser.GameObjects.Image>();
+  private lastStaticDecorViewportKey = "";
   private heroDirections = new Map<string, HeroDirection>();
   private failedAssetKeys = new Set<string>();
   private isLoadingDynamicTextures = false;
@@ -266,6 +289,7 @@ class PhaserMapScene extends Phaser.Scene {
   private lastMovementSoundAt: Record<MovementSoundKind, number> = { horse: -Infinity, boat: -Infinity };
   private lastTerrainAnimationAt = 0;
   private lastWaterAnimationAt = 0;
+  private lastSceneGraphGaugeAt = 0;
   private lastHoverLabelAt = 0;
   private hoverLabelExpiresAt = 0;
   private fogDriftTweens: Phaser.Tweens.Tween[] = [];
@@ -355,7 +379,42 @@ class PhaserMapScene extends Phaser.Scene {
       this.clearHoverLabel();
     });
     this.createDirectionalAnimations();
+    this.recordSceneGraphGauges();
     this.readyCallback?.();
+  }
+
+  private getMeasuredLayers(): Array<{ name: string; layer: Phaser.GameObjects.Container }> {
+    return [
+      { name: "boardLayer", layer: this.boardLayer },
+      { name: "mapLayer", layer: this.mapLayer },
+      { name: "roadLayer", layer: this.roadLayer },
+      { name: "decorLayer", layer: this.decorLayer },
+      { name: "mapObjectLayer", layer: this.mapObjectLayer },
+      { name: "mapTileObjectLayer", layer: this.mapTileObjectLayer },
+      { name: "reachableLayer", layer: this.reachableLayer },
+      { name: "highlightLayer", layer: this.highlightLayer },
+      { name: "spellRevealLayer", layer: this.spellRevealLayer },
+      { name: "objectLayer", layer: this.objectLayer },
+      { name: "movementLabelLayer", layer: this.movementLabelLayer },
+      { name: "fogLayer", layer: this.fogLayer },
+      { name: "hoverLabelLayer", layer: this.hoverLabelLayer },
+    ];
+  }
+
+  recordSceneGraphGauges() {
+    let total = 0;
+    for (const { name, layer } of this.getMeasuredLayers()) {
+      if (!layer?.list) continue;
+      const count = layer.list.length;
+      total += count;
+      recordDevPerformanceGauge(`phaser.layer.${name}`, count, "objects");
+    }
+    if (this.staticDecorItems.length > 0) {
+      recordDevPerformanceGauge("phaser.staticDecor.total", this.staticDecorItems.length, "sprites");
+      recordDevPerformanceGauge("phaser.staticDecor.visible", this.renderedStaticDecorSprites.size, "sprites");
+      recordDevPerformanceGauge("phaser.staticDecor.buckets", this.staticDecorItemsByBucket.size, "buckets");
+    }
+    recordDevPerformanceGauge("phaser.objects.total", total, "objects");
   }
 
   renderMap(map: GameMap) {
@@ -400,6 +459,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogTileStates = null;
     this.fogChunkColumns = 0;
     this.fogChunkRows = 0;
+    this.cancelScheduledFogRedraw();
     this.fogLayer.removeAll(true);
     this.fogChunks = [];
     this.lastTerrainAnimationAt = 0;
@@ -416,6 +476,10 @@ class PhaserMapScene extends Phaser.Scene {
     }
     this.mapTileObjectSprites = [];
     this.objectLayer.removeAll(true);
+    this.staticDecorItems = [];
+    this.staticDecorItemsByBucket.clear();
+    this.renderedStaticDecorSprites.clear();
+    this.lastStaticDecorViewportKey = "";
     this.reachableOverlayObjects = [];
     this.highlightOverlayObjects = [];
     this.spellRevealOverlayObjects = [];
@@ -466,9 +530,9 @@ class PhaserMapScene extends Phaser.Scene {
     this.roadLayer.sort("depth");
     this.decorLayer.sort("depth");
     measureDevPerformance("phaser.renderMap.tileObjects", () => this.renderMapTileObjects());
-    measureDevPerformance("phaser.renderMap.fogChunks", () => this.rebuildFogChunks());
     measureDevPerformance("phaser.renderMap.objects", () => this.renderObjects());
-    measureDevPerformance("phaser.renderMap.fogRedraw", () => this.redrawCurrentFog());
+    this.scheduleFogRedrawAfterRender();
+    this.recordSceneGraphGauges();
   }
 
   private loadMissingMapTextures(map: GameMap) {
@@ -514,6 +578,8 @@ class PhaserMapScene extends Phaser.Scene {
   update(time: number) {
     const view = this.cameras.main.worldView;
 
+    this.updateStaticDecorViewport();
+
     if (this.waterShimmerFrames.length > 1 && time - this.lastWaterAnimationAt >= WATER_ANIMATION_INTERVAL_MS) {
       const nextFrameIndex = Math.floor(time / WATER_ANIMATION_INTERVAL_MS) % this.waterShimmerFrames.length;
       if (nextFrameIndex !== this.waterShimmerFrameIndex) {
@@ -545,6 +611,11 @@ class PhaserMapScene extends Phaser.Scene {
     if (this.objectLayerSortDirty) {
       this.objectLayer.sort("depth");
       this.objectLayerSortDirty = false;
+    }
+
+    if (time - this.lastSceneGraphGaugeAt >= 1000) {
+      this.lastSceneGraphGaugeAt = time;
+      this.recordSceneGraphGauges();
     }
   }
 
@@ -714,14 +785,19 @@ class PhaserMapScene extends Phaser.Scene {
     const connections = this.getRoadConnections(tile);
     const center = { x: isoX, y: isoY };
     const anchors = getRoadAnchorPoints(isoX, isoY);
+    const renderDetailedRoadTextures = this.shouldRenderDetailedRoadTextures();
 
     for (const side of connections) {
       const anchor = extendRoadPoint(center, anchors[side], 1.15);
       drawRoadSegment(_graphics, center, anchor, style);
-      this.drawRoadTextureStamp(center, anchor, isBridge ? "bridge" : road, tile.x, tile.y, side);
+      if (renderDetailedRoadTextures) {
+        this.drawRoadTextureStamp(center, anchor, isBridge ? "bridge" : road, tile.x, tile.y, side);
+      }
     }
 
-    this.drawRoadCenterStamp(center, isBridge ? "bridge" : road, connections);
+    if (renderDetailedRoadTextures) {
+      this.drawRoadCenterStamp(center, isBridge ? "bridge" : road, connections);
+    }
   }
 
   private getRoadConnections(tile: MapTile): RoadSide[] {
@@ -777,6 +853,133 @@ class PhaserMapScene extends Phaser.Scene {
     this.roadLayer.add(sprite);
   }
 
+  private shouldVirtualizeStaticDecor() {
+    if (!this.map) return false;
+    return this.map.width * this.map.height >= STATIC_DECOR_VIRTUALIZATION_MIN_TILE_COUNT;
+  }
+
+  private queueStaticDecorSprite(item: StaticDecorRenderItem) {
+    if (!this.shouldVirtualizeStaticDecor()) {
+      this.addStaticDecorSprite(item);
+      return;
+    }
+
+    this.staticDecorItems.push(item);
+    const bucketKey = this.getStaticDecorBucketKeyForWorld(item.x, item.y);
+    const bucket = this.staticDecorItemsByBucket.get(bucketKey);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      this.staticDecorItemsByBucket.set(bucketKey, [item]);
+    }
+  }
+
+  private addStaticDecorSprite(item: StaticDecorRenderItem) {
+    const sprite = this.add.image(item.x, item.y, item.spritePath);
+    sprite.setOrigin(item.originX, item.originY);
+    sprite.setDisplaySize(item.displayWidth, item.displayHeight);
+    sprite.setDepth(item.depth);
+    if (item.flipX) sprite.setFlipX(true);
+    this.objectLayer.add(sprite);
+    return sprite;
+  }
+
+  private updateStaticDecorViewport(force = false) {
+    if (!this.shouldVirtualizeStaticDecor()) return;
+
+    return measureDevPerformance("phaser.staticDecor.viewport", () => this.updateStaticDecorViewportMeasured(force));
+  }
+
+  private updateStaticDecorViewportMeasured(force = false) {
+    const viewportKey = this.getStaticDecorViewportKey();
+    if (!force && viewportKey === this.lastStaticDecorViewportKey) return;
+    this.lastStaticDecorViewportKey = viewportKey;
+
+    const view = this.getStaticDecorView();
+    const visibleIds = new Set<string>();
+    for (const item of this.getStaticDecorCandidates(view)) {
+      if (
+        item.x + item.displayWidth < view.left ||
+        item.x - item.displayWidth > view.right ||
+        item.y + item.displayHeight < view.top ||
+        item.y - item.displayHeight > view.bottom
+      ) {
+        continue;
+      }
+
+      visibleIds.add(item.id);
+      if (!this.renderedStaticDecorSprites.has(item.id)) {
+        const sprite = this.addStaticDecorSprite(item);
+        this.renderedStaticDecorSprites.set(item.id, sprite);
+      }
+    }
+
+    for (const [id, sprite] of Array.from(this.renderedStaticDecorSprites.entries())) {
+      if (visibleIds.has(id)) continue;
+      sprite.destroy();
+      this.renderedStaticDecorSprites.delete(id);
+    }
+
+    if (this.renderedStaticDecorSprites.size > 0) {
+      this.objectLayer.sort("depth");
+    }
+    this.recordSceneGraphGauges();
+  }
+
+  private getStaticDecorCandidates(view: ReturnType<PhaserMapScene["getStaticDecorView"]>) {
+    if (this.staticDecorItemsByBucket.size === 0) return this.staticDecorItems;
+
+    const minBucketX = Math.floor((view.left - STATIC_DECOR_VIEW_BUCKET_SIZE) / STATIC_DECOR_VIEW_BUCKET_SIZE);
+    const maxBucketX = Math.floor((view.right + STATIC_DECOR_VIEW_BUCKET_SIZE) / STATIC_DECOR_VIEW_BUCKET_SIZE);
+    const minBucketY = Math.floor((view.top - STATIC_DECOR_VIEW_BUCKET_SIZE) / STATIC_DECOR_VIEW_BUCKET_SIZE);
+    const maxBucketY = Math.floor((view.bottom + STATIC_DECOR_VIEW_BUCKET_SIZE) / STATIC_DECOR_VIEW_BUCKET_SIZE);
+    const candidates: StaticDecorRenderItem[] = [];
+
+    for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY++) {
+      for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX++) {
+        const bucket = this.staticDecorItemsByBucket.get(this.getStaticDecorBucketKey(bucketX, bucketY));
+        if (bucket) candidates.push(...bucket);
+      }
+    }
+
+    return candidates;
+  }
+
+  private getStaticDecorView() {
+    const view = this.cameras.main.worldView;
+    return {
+      left: view.x - STATIC_DECOR_VIEW_PADDING,
+      right: view.x + view.width + STATIC_DECOR_VIEW_PADDING,
+      top: view.y - STATIC_DECOR_VIEW_PADDING,
+      bottom: view.y + view.height + STATIC_DECOR_VIEW_PADDING,
+    };
+  }
+
+  private getStaticDecorViewportKey() {
+    const camera = this.cameras.main;
+    const view = this.getStaticDecorView();
+    return [
+      Math.floor(view.left / STATIC_DECOR_VIEW_BUCKET_SIZE),
+      Math.floor(view.top / STATIC_DECOR_VIEW_BUCKET_SIZE),
+      Math.ceil(view.right / STATIC_DECOR_VIEW_BUCKET_SIZE),
+      Math.ceil(view.bottom / STATIC_DECOR_VIEW_BUCKET_SIZE),
+      camera.width,
+      camera.height,
+      Math.round(camera.zoom * 100),
+    ].join(":");
+  }
+
+  private getStaticDecorBucketKeyForWorld(x: number, y: number) {
+    return this.getStaticDecorBucketKey(
+      Math.floor(x / STATIC_DECOR_VIEW_BUCKET_SIZE),
+      Math.floor(y / STATIC_DECOR_VIEW_BUCKET_SIZE)
+    );
+  }
+
+  private getStaticDecorBucketKey(bucketX: number, bucketY: number) {
+    return `${bucketX}:${bucketY}`;
+  }
+
   private renderDecor(
     decor: DecorItem,
     isoX: number,
@@ -798,12 +1001,18 @@ class PhaserMapScene extends Phaser.Scene {
         groundOffset: BLOCKING_DECOR_GROUND_OFFSET,
       };
       const groundY = isoY + metrics.groundOffset;
-      const sprite = this.add.image(isoX, groundY, spritePath);
       const origin = BLOCKING_DECOR_ORIGINS[kind] ?? DEFAULT_SPRITE_ORIGIN;
-      sprite.setOrigin(origin.originX, origin.originY);
-      sprite.setDisplaySize(metrics.size, metrics.size);
-      sprite.setDepth(groundY);
-      this.objectLayer.add(sprite);
+      this.queueStaticDecorSprite({
+        id: `decor:${isoX}:${isoY}:${kind}:${variant}`,
+        spritePath,
+        x: isoX,
+        y: groundY,
+        displayWidth: metrics.size,
+        displayHeight: metrics.size,
+        originX: origin.originX,
+        originY: origin.originY,
+        depth: groundY,
+      });
       return;
     }
 
@@ -846,12 +1055,19 @@ class PhaserMapScene extends Phaser.Scene {
   private renderNaturalWall(tile: MapTile, isoX: number, isoY: number) {
     const jitter = hashTile(tile.x, tile.y);
     const groundY = isoY;
-    const sprite = this.add.image(isoX, groundY, pickNaturalWallTreeSprite(tile));
-    sprite.setOrigin(MAP_OBJECT_ORIGIN_X, MAP_OBJECT_ORIGIN_Y);
-    sprite.setDisplaySize(66 + jitter * 8, 72 + jitter * 8);
-    sprite.setFlipX(jitter > 0.5);
-    sprite.setDepth(groundY);
-    this.objectLayer.add(sprite);
+    const sizeOffset = jitter * 8;
+    this.queueStaticDecorSprite({
+      id: `natural-wall:${tile.x}:${tile.y}`,
+      spritePath: pickNaturalWallTreeSprite(tile),
+      x: isoX,
+      y: groundY,
+      displayWidth: 66 + sizeOffset,
+      displayHeight: 72 + sizeOffset,
+      originX: MAP_OBJECT_ORIGIN_X,
+      originY: MAP_OBJECT_ORIGIN_Y,
+      depth: groundY,
+      flipX: jitter > 0.5,
+    });
   }
 
   private isUndergroundVoidTile(tile: MapTile) {
@@ -889,6 +1105,8 @@ class PhaserMapScene extends Phaser.Scene {
 
   private setFogMeasured(visibleTiles: Set<string>, exploredTiles: Set<string>, theme: FogTheme) {
     if (!this.map) return;
+    this.cancelScheduledFogRedraw();
+    const wasLimitedVisibility = this.visibleTiles ? !this.isFullMapTileSet(this.visibleTiles) : false;
     this.visibleTiles = new Set(visibleTiles);
     this.exploredTiles = new Set(exploredTiles);
     if (this.fogTheme !== theme) {
@@ -898,10 +1116,34 @@ class PhaserMapScene extends Phaser.Scene {
     }
     if (this.isLoadingDynamicTextures) return;
     const totalTiles = this.map.width * this.map.height;
-    if (!this.fogTileStates || this.fogTileStates.length !== totalTiles || this.fogChunks.length === 0) {
-      this.rebuildFogChunks();
+    if (this.isFullMapTileSet(visibleTiles)) {
+      const hadHiddenFog = wasLimitedVisibility || this.hasHiddenFogTiles();
+      this.fogLayer.removeAll(true);
+      this.fogChunks = [];
+      this.fogChunkColumns = 0;
+      this.fogChunkRows = 0;
       this.fogTileStates = new Uint8Array(totalTiles);
-      this.fogTileStates.fill(FOG_TILE_UNINITIALIZED);
+      this.fogTileStates.fill(FOG_TILE_VISIBLE);
+      if (hadHiddenFog) this.renderMapTileObjects();
+      this.recordSceneGraphGauges();
+      return;
+    }
+
+    const needsInitialFogBuild = !this.fogTileStates || this.fogTileStates.length !== totalTiles || this.fogChunks.length === 0;
+    if (needsInitialFogBuild) {
+      this.rebuildFogChunks();
+      const fogTileStates = new Uint8Array(totalTiles);
+      fogTileStates.fill(FOG_TILE_UNINITIALIZED);
+      for (let y = 0; y < this.map.height; y++) {
+        for (let x = 0; x < this.map.width; x++) {
+          fogTileStates[this.getFogTileIndex(x, y)] = this.getFogTileStateForSets(x, y, visibleTiles, exploredTiles);
+        }
+      }
+      this.fogTileStates = fogTileStates;
+      this.renderMapTileObjects();
+      this.redrawFogChunks(this.fogChunks);
+      this.recordSceneGraphGauges();
+      return;
     }
 
     const dirtyChunkIndexes = new Set<number>();
@@ -909,17 +1151,12 @@ class PhaserMapScene extends Phaser.Scene {
     for (let y = 0; y < this.map.height; y++) {
       for (let x = 0; x < this.map.width; x++) {
         const index = this.getFogTileIndex(x, y);
-        const key = `${x},${y}`;
-        const previousState = this.fogTileStates[index];
-        const nextState = visibleTiles.has(key)
-          ? FOG_TILE_VISIBLE
-          : exploredTiles.has(key)
-            ? FOG_TILE_EXPLORED
-            : FOG_TILE_UNEXPLORED;
+        const previousState = this.fogTileStates![index];
+        const nextState = this.getFogTileStateForSets(x, y, visibleTiles, exploredTiles);
 
         if (previousState === nextState) continue;
 
-        this.fogTileStates[index] = nextState;
+        this.fogTileStates![index] = nextState;
         const wasObjectRenderable = previousState === FOG_TILE_VISIBLE || previousState === FOG_TILE_EXPLORED;
         const isObjectRenderable = nextState === FOG_TILE_VISIBLE || nextState === FOG_TILE_EXPLORED;
         if (wasObjectRenderable !== isObjectRenderable) {
@@ -930,13 +1167,71 @@ class PhaserMapScene extends Phaser.Scene {
     }
 
     if (mapObjectsDirty) this.renderMapTileObjects();
-    if (dirtyChunkIndexes.size === 0) return;
+    if (dirtyChunkIndexes.size === 0) {
+      this.recordSceneGraphGauges();
+      return;
+    }
 
     const sortedChunkIndexes = Array.from(dirtyChunkIndexes).sort((a, b) => a - b);
-    for (const chunkIndex of sortedChunkIndexes) {
-      const chunk = this.fogChunks[chunkIndex];
-      if (chunk) this.redrawFogChunk(chunk);
+    this.redrawFogChunks(sortedChunkIndexes.map((chunkIndex) => this.fogChunks[chunkIndex]).filter((chunk): chunk is FogChunk => Boolean(chunk)));
+    this.recordSceneGraphGauges();
+  }
+
+  private getFogTileStateForSets(x: number, y: number, visibleTiles: Set<string>, exploredTiles: Set<string>): FogTileState {
+    const key = `${x},${y}`;
+    if (visibleTiles.has(key)) return FOG_TILE_VISIBLE;
+    return exploredTiles.has(key) ? FOG_TILE_EXPLORED : FOG_TILE_UNEXPLORED;
+  }
+
+  private redrawFogChunks(chunks: FogChunk[]) {
+    measureDevPerformance("phaser.fog.redrawChunks", () => {
+      for (const chunk of chunks) {
+        this.redrawFogChunk(chunk);
+      }
+    });
+  }
+
+  private shouldRenderFogLayer() {
+    if (!this.visibleTiles || !this.exploredTiles) return false;
+    return !this.isFullMapTileSet(this.visibleTiles);
+  }
+
+  private scheduleFogRedrawAfterRender() {
+    if (!this.shouldRenderFogLayer()) return;
+    this.cancelScheduledFogRedraw();
+    this.pendingFogRedraw = this.time.delayedCall(0, () => {
+      this.pendingFogRedraw = undefined;
+      if (this.shouldRenderFogLayer()) {
+        measureDevPerformance("phaser.fog.deferredRedraw", () => this.redrawCurrentFog());
+      }
+    });
+  }
+
+  private cancelScheduledFogRedraw() {
+    this.pendingFogRedraw?.remove(false);
+    this.pendingFogRedraw = undefined;
+  }
+
+  private isFullMapTileSet(tiles: Set<string>) {
+    if (!this.map) return false;
+    const totalTiles = this.map.width * this.map.height;
+    if (tiles.size < totalTiles) return false;
+
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        if (!tiles.has(`${x},${y}`)) return false;
+      }
     }
+
+    return true;
+  }
+
+  private hasHiddenFogTiles() {
+    if (!this.fogTileStates) return false;
+    for (const state of this.fogTileStates) {
+      if (state !== FOG_TILE_VISIBLE) return true;
+    }
+    return false;
   }
 
   private redrawCurrentFog() {
@@ -953,6 +1248,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.clearHighlights();
     this.highlightOverlayKey = key;
     this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.mapLayer, path, 0xffff00, 0.08, 0.9, 2, true);
+    this.recordSceneGraphGauges();
   }
 
   highlightPartialPath(reachable: Position[], unreachable: Position[], turnsLabel?: string) {
@@ -990,6 +1286,7 @@ class PhaserMapScene extends Phaser.Scene {
       text.setOrigin(0.5);
       this.movementLabelLayer.add(text);
     }
+    this.recordSceneGraphGauges();
   }
 
   highlightTiles(tiles: Position[], color = REACHABLE_TILE_COLOR, alpha = REACHABLE_TILE_ALPHA) {
@@ -1005,6 +1302,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.clearReachable();
     this.reachableOverlayKey = key;
     this.drawBatchedDiamondOverlays(this.reachableOverlayObjects, this.mapLayer, tiles, color, fillAlpha, strokeAlpha, strokeWidth, true);
+    this.recordSceneGraphGauges();
   }
 
   highlightTile(x: number, y: number, color = 0x00ff00) {
@@ -1013,6 +1311,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.clearHighlights();
     this.highlightOverlayKey = key;
     this.drawBatchedDiamondOverlays(this.highlightOverlayObjects, this.mapLayer, [{ x, y }], color, 0.08, 0.95, 2, true);
+    this.recordSceneGraphGauges();
   }
 
   clearHighlights() {
@@ -1021,6 +1320,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.highlightLayer.removeAll(true);
     this.movementLabelLayer.removeAll(true);
     this.highlightOverlayKey = "";
+    this.recordSceneGraphGauges();
   }
 
   setSpellRevealHighlights(tiles: Position[], color = 0x7dd3fc, alpha = 0.24, hints: SpellRevealHint[] = []) {
@@ -1031,6 +1331,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.spellRevealOverlayKey = key;
     this.drawBatchedDiamondOverlays(this.spellRevealOverlayObjects, this.spellRevealLayer, tiles, color, alpha, 0.95, 2);
     this.drawSpellRevealHints(hints);
+    this.recordSceneGraphGauges();
   }
 
   clearSpellRevealHighlights() {
@@ -1038,6 +1339,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.clearDepthSortedOverlays(this.spellRevealOverlayObjects);
     this.spellRevealLayer.removeAll(true);
     this.spellRevealOverlayKey = "";
+    this.recordSceneGraphGauges();
   }
 
   private drawSpellRevealHints(hints: SpellRevealHint[]) {
@@ -1090,6 +1392,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.clearDepthSortedOverlays(this.reachableOverlayObjects);
     this.reachableLayer.removeAll(true);
     this.reachableOverlayKey = "";
+    this.recordSceneGraphGauges();
   }
 
   centerOnTile(x: number, y: number) {
@@ -1115,12 +1418,14 @@ class PhaserMapScene extends Phaser.Scene {
   private centerOnWorldPoint(x: number, y: number) {
     const camera = this.cameras.main;
     camera.centerOn(x, y);
+    this.updateStaticDecorViewport(true);
   }
 
   panCamera(dx: number, dy: number) {
     const camera = this.cameras.main;
     camera.scrollX -= dx / camera.zoom;
     camera.scrollY -= dy / camera.zoom;
+    this.updateStaticDecorViewport();
   }
 
   zoomCamera(direction: number, screenX = this.cameras.main.width / 2, screenY = this.cameras.main.height / 2) {
@@ -1139,6 +1444,7 @@ class PhaserMapScene extends Phaser.Scene {
     camera.setZoom(nextZoom);
     camera.scrollX = anchorWorldX - originX - (screenX - originX) / nextZoom;
     camera.scrollY = anchorWorldY - originY - (screenY - originY) / nextZoom;
+    this.updateStaticDecorViewport(true);
   }
 
   getTileAtScreen(screenX: number, screenY: number): Position | null {
@@ -1345,7 +1651,8 @@ class PhaserMapScene extends Phaser.Scene {
     const topColor = TERRAIN_TOP[tile.terrain] ?? 0x333333;
     const sideLit = TERRAIN_SIDE_LIT[tile.terrain] ?? 0x333333;
     const sideDark = TERRAIN_SIDE_DARK[tile.terrain] ?? 0x333333;
-    const terrainTexture = pickTerrainTexture(tile);
+    const renderMicroDetails = this.shouldRenderTerrainMicroDetails();
+    const terrainTexture = this.shouldRenderDetailedTerrainTextures() ? pickTerrainTexture(tile) : null;
     const visibleSides = depth > 0 ? this.getVisibleTerrainSides(tile, depth) : null;
 
     if (depth > BASE_HEIGHT) {
@@ -1370,7 +1677,9 @@ class PhaserMapScene extends Phaser.Scene {
         coverGraphics.fillPath();
       }
 
-      drawTerrainSideDetails(coverGraphics, tile, visibleSides, isoX, isoY, depth);
+      if (renderMicroDetails) {
+        drawTerrainSideDetails(coverGraphics, tile, visibleSides, isoX, isoY, depth);
+      }
     }
 
     this.drawUndergroundPlayableVoidEdges(coverGraphics, tile, isoX, isoY, depth);
@@ -1382,12 +1691,12 @@ class PhaserMapScene extends Phaser.Scene {
     baseGraphics.fillPath();
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, isoY - depth);
     if (tile.terrain === TerrainType.WATER) {
-      drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
+      if (renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
     } else if (tile.terrain === TerrainType.LAVA) {
-      if (!renderedTopTexture) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
+      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
       this.addLavaAnimation(tile, isoX, isoY - depth);
     } else {
-      if (!renderedTopTexture) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
+      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
       if (!renderedTopTexture) {
         baseGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
         drawDiamondPath(baseGraphics, isoX, isoY - depth);
@@ -1525,6 +1834,7 @@ class PhaserMapScene extends Phaser.Scene {
     const tileGraphics = this.getElevatedBandGraphics(tile.x, tile.y, isoY);
     const tileDepth = isoY + 0.1;
     const topY = isoY - depth;
+    const renderMicroDetails = this.shouldRenderTerrainMicroDetails();
 
     if (visibleSides) {
       for (const face of TERRAIN_FACE_RENDER_ORDER) {
@@ -1543,7 +1853,9 @@ class PhaserMapScene extends Phaser.Scene {
         tileGraphics.fillPath();
       }
 
-      drawTerrainSideDetails(tileGraphics, tile, visibleSides, isoX, isoY, depth);
+      if (renderMicroDetails) {
+        drawTerrainSideDetails(tileGraphics, tile, visibleSides, isoX, isoY, depth);
+      }
     }
 
     // World-edge tiles also need their NE/NW back faces drawn for the rim
@@ -1575,12 +1887,12 @@ class PhaserMapScene extends Phaser.Scene {
 
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, topY, tileDepth + 0.01);
     if (tile.terrain === TerrainType.WATER) {
-      drawTileTexture(tileGraphics, tile, isoX, topY);
+      if (renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
     } else if (tile.terrain === TerrainType.LAVA) {
-      if (!renderedTopTexture) drawTileTexture(tileGraphics, tile, isoX, topY);
+      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
       this.addLavaAnimation(tile, isoX, topY, tileDepth + 0.01);
     } else {
-      if (!renderedTopTexture) drawTileTexture(tileGraphics, tile, isoX, topY);
+      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
       if (!renderedTopTexture) {
         tileGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
         drawDiamondPath(tileGraphics, isoX, topY);
@@ -1638,6 +1950,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
     this.mapTileObjectLayer.sort("depth");
     this.objectLayerSortDirty = true;
+    this.recordSceneGraphGauges();
   }
 
   private shouldRenderMapTileObject(tile: MapTile) {
@@ -1711,6 +2024,16 @@ class PhaserMapScene extends Phaser.Scene {
   private shouldRenderDetailedTerrainTextures() {
     if (!this.map) return true;
     return this.map.width * this.map.height <= DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT;
+  }
+
+  private shouldRenderTerrainMicroDetails() {
+    if (!this.map) return true;
+    return this.map.width * this.map.height <= TERRAIN_MICRO_DETAIL_MAX_TILE_COUNT;
+  }
+
+  private shouldRenderDetailedRoadTextures() {
+    if (!this.map) return true;
+    return this.map.width * this.map.height <= DETAILED_ROAD_TEXTURE_MAX_TILE_COUNT;
   }
 
   private addLavaAnimation(tile: MapTile, isoX: number, isoY: number, depth = isoY - 0.25) {
@@ -2381,6 +2704,7 @@ class PhaserMapScene extends Phaser.Scene {
 
     this.heroSpriteAnimations = nextHeroAnimations;
     this.objectLayer.sort("depth");
+    this.recordSceneGraphGauges();
   }
 
   private addGateSprite(isoX: number, isoY: number, object: MapObject, tile?: MapTile) {
@@ -3448,7 +3772,10 @@ class PhaserMapScene extends Phaser.Scene {
     this.fogChunkColumns = 0;
     this.fogChunkRows = 0;
 
-    if (!this.map) return;
+    if (!this.map) {
+      this.recordSceneGraphGauges();
+      return;
+    }
 
     this.fogChunkColumns = Math.ceil(this.map.width / FOG_CHUNK_SIZE);
     this.fogChunkRows = Math.ceil(this.map.height / FOG_CHUNK_SIZE);
@@ -3486,6 +3813,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
 
     this.fogLayer.sort("depth");
+    this.recordSceneGraphGauges();
   }
 
   private getFogChunkBounds(startX: number, startY: number, endX: number, endY: number): FogChunkBounds {
@@ -3637,6 +3965,7 @@ export class PhaserMapRenderer implements MapRenderer {
   private destroyed = false;
   private readyResolve: (() => void) | null = null;
   private frameMeasureStartedAt: number | null = null;
+  private lastSceneGraphGaugeAt = 0;
 
   async init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress) {
     this.destroyed = false;
@@ -3680,8 +4009,15 @@ export class PhaserMapRenderer implements MapRenderer {
       this.game.events.on("postrender", () => {
         const startedAt = this.frameMeasureStartedAt;
         this.frameMeasureStartedAt = null;
-        if (startedAt === null || typeof performance === "undefined") return;
-        recordDevPerformanceMeasure("phaser.frame", performance.now() - startedAt);
+        if (typeof performance === "undefined") return;
+        const now = performance.now();
+        if (startedAt !== null) {
+          recordDevPerformanceMeasure("phaser.frame", now - startedAt);
+        }
+        if (now - this.lastSceneGraphGaugeAt >= 1000) {
+          this.lastSceneGraphGaugeAt = now;
+          this.scene?.recordSceneGraphGauges();
+        }
       });
 
       await ready;

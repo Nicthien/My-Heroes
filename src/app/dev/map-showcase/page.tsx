@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { DevPerformancePanel, useDevPerformanceStats } from "@/components/game/hud/DevPerformancePanel";
 import GameMapComponent from "@/components/game/map/GameMap";
 import { AuthContext } from "@/lib/auth/client";
+import { generateMap } from "@/lib/game/engine";
 import { applyWorldEdge } from "@/lib/game/engine/world-edge";
 import { EXTERNAL_DWELLING_TYPE, getExternalDwellingLabel } from "@/lib/game/external-dwellings";
+import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   AdventureBuildingType,
@@ -26,6 +30,14 @@ import {
 const MOCK_USER_ID = "dev-map-user";
 const WIDTH = 36;
 const HEIGHT = 28;
+const PERF_MAP_SIZES = {
+  S: 36,
+  M: 72,
+  L: 108,
+  XL: 144,
+} as const;
+type PerfMapSize = keyof typeof PERF_MAP_SIZES;
+type PerfFogMode = "revealed" | "partial";
 const RESOURCE_BUILDING_Y = 23;
 const RESOURCE_PICKUP_Y = 25;
 const NEUTRAL_GATE_POSITION = { x: 21, y: 25 };
@@ -72,26 +84,75 @@ const mockAuthValue = {
 };
 
 export default function DevMapShowcasePage() {
+  return (
+    <Suspense fallback={<DevMapShowcaseShell />}>
+      <DevMapShowcaseContent />
+    </Suspense>
+  );
+}
+
+function DevMapShowcaseContent() {
+  const searchParams = useSearchParams();
+  const perfSize = parsePerfMapSize(searchParams.get("size"));
+  const perfFogMode = parsePerfFogMode(searchParams.get("fog"));
+  const devPerformanceStats = useDevPerformanceStats(Boolean(perfSize));
+  const modeLabel = perfSize
+    ? `Carte Phaser ${perfSize} ${PERF_MAP_SIZES[perfSize]}x${PERF_MAP_SIZES[perfSize]}${perfFogMode === "partial" ? " fog partiel" : ""}`
+    : "Carte de test visuelle";
+
   useEffect(() => {
     const store = useGameStore.getState();
-    store.setGameState(buildShowcaseState());
-    store.setDevRevealMap(true);
-    store.selectHero("showcase-hero-castle");
-    store.focusTile(23, 23);
+    const nextState = perfSize ? buildGeneratedPerfState(perfSize, perfFogMode) : buildShowcaseState();
+    store.setAdminObserverMode(false);
+    store.setDevRevealMap(!perfSize || perfFogMode !== "partial");
+    store.setActiveCombat(null);
+    store.setGameState(nextState);
+    store.selectHero(perfSize ? "perf-hero" : "showcase-hero-castle");
+    if (perfSize) {
+      const hero = nextState.players[0]?.heroes[0];
+      store.focusTile(hero?.position.x ?? Math.floor(nextState.map.width / 2), hero?.position.y ?? Math.floor(nextState.map.height / 2));
+      if (perfFogMode === "partial") {
+        window.setTimeout(() => useGameStore.getState().setDevRevealMap(false), 0);
+      }
+    } else {
+      store.focusTile(23, 23);
+    }
 
     return () => useGameStore.getState().resetGame();
-  }, []);
+  }, [perfFogMode, perfSize]);
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
       <main className="game-shell relative bg-[#11140f] text-stone-100">
         <GameMapComponent />
         <div className="pointer-events-none absolute left-4 top-4 border border-stone-700/70 bg-black/55 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-100 shadow-lg">
-          Carte de test visuelle
+          {modeLabel}
         </div>
+        {perfSize && (
+          <div className="pointer-events-auto absolute right-4 top-4 z-50 max-h-[calc(100vh-2rem)] w-80 overflow-y-auto rounded-xl border border-amber-500/60 bg-stone-950/95 px-4 pb-4 pt-1 text-amber-100 shadow-2xl shadow-black/70">
+            <DevPerformancePanel stats={devPerformanceStats} />
+          </div>
+        )}
       </main>
     </AuthContext.Provider>
   );
+}
+
+function DevMapShowcaseShell() {
+  return (
+    <main className="game-shell grid place-items-center bg-[#11140f] text-xs font-semibold uppercase tracking-[0.14em] text-amber-100">
+      Chargement de la carte...
+    </main>
+  );
+}
+
+function parsePerfMapSize(value: string | null): PerfMapSize | null {
+  if (value === "S" || value === "M" || value === "L" || value === "XL") return value;
+  return null;
+}
+
+function parsePerfFogMode(value: string | null): PerfFogMode {
+  return value === "partial" ? "partial" : "revealed";
 }
 
 function buildShowcaseState(): GameState {
@@ -221,6 +282,116 @@ function buildShowcaseState(): GameState {
     neutralArmies: [],
     gates,
   };
+}
+
+function buildGeneratedPerfState(size: PerfMapSize, fogMode: PerfFogMode): GameState {
+  const dimension = PERF_MAP_SIZES[size];
+  const map = generateMap({
+    width: dimension,
+    height: dimension,
+    seed: `PHASER-PERF-${size}`,
+    playerCount: 4,
+  });
+  const heroPosition = findFirstPassableTile(map);
+  const townPosition = findNearestPassableTile(map, heroPosition.x + 3, heroPosition.y + 3) ?? heroPosition;
+  const exploredTiles = fogMode === "partial"
+    ? getExploredPerfTiles(map, heroPosition)
+    : map.tiles.flat().map((tile) => `${SURFACE_LEVEL}:${tile.x},${tile.y}`);
+
+  return {
+    id: `dev-map-showcase-${size}`,
+    status: "ACTIVE",
+    maxPlayers: 4,
+    turnNumber: 1,
+    calendar: {
+      dayNumber: 1,
+      dayOfWeek: 1,
+      weekNumber: 1,
+      weekOfMonth: 1,
+      monthNumber: 1,
+      monthOfYear: 1,
+      yearNumber: 1,
+    },
+    currentTurnPlayerId: "p1",
+    map,
+    activeCombats: [],
+    players: [
+      {
+        id: "p1",
+        userId: MOCK_USER_ID,
+        name: "Dev",
+        isAi: false,
+        faction: Faction.CASTLE,
+        color: "#3b82f6",
+        resources: { gold: 22000, wood: 34, ore: 31, mercury: 12, crystals: 11, gems: 15, sulfur: 9 },
+        heroes: [
+          buildHero("perf-hero", "Catherine", HeroClass.KNIGHT, heroPosition, UnitType.CHAMPION, 18, 18),
+        ],
+        towns: [
+          buildTown("perf-town", "Chateau de test", Faction.CASTLE, townPosition.x, townPosition.y),
+        ],
+        resourceBuildings: [],
+        isAlive: true,
+        turnOrder: 0,
+        exploredTiles,
+        hasEndedTurn: false,
+      },
+      {
+        id: "p2",
+        userId: "ai-red",
+        name: "Red",
+        isAi: true,
+        faction: Faction.INFERNO,
+        color: "#ef4444",
+        resources: { gold: 8000, wood: 10, ore: 10, mercury: 5, crystals: 5, gems: 5, sulfur: 5 },
+        heroes: [],
+        towns: [],
+        resourceBuildings: [],
+        isAlive: true,
+        turnOrder: 1,
+        exploredTiles,
+        hasEndedTurn: false,
+      },
+    ],
+    neutralArmies: [],
+    gates: [],
+  };
+}
+
+function getExploredPerfTiles(map: GameMap, center: { x: number; y: number }) {
+  const radius = Math.max(12, Math.floor(Math.min(map.width, map.height) * 0.18));
+  const tiles: string[] = [];
+
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const distance = Math.abs(x - center.x) + Math.abs(y - center.y);
+      if (distance <= radius) {
+        tiles.push(`${SURFACE_LEVEL}:${x},${y}`);
+      }
+    }
+  }
+
+  return tiles;
+}
+
+function findFirstPassableTile(map: GameMap) {
+  const centerX = Math.floor(map.width / 2);
+  const centerY = Math.floor(map.height / 2);
+  return findNearestPassableTile(map, centerX, centerY) ?? { x: centerX, y: centerY };
+}
+
+function findNearestPassableTile(map: GameMap, startX: number, startY: number) {
+  const maxRadius = Math.max(map.width, map.height);
+  for (let radius = 0; radius <= maxRadius; radius++) {
+    for (let y = startY - radius; y <= startY + radius; y++) {
+      for (let x = startX - radius; x <= startX + radius; x++) {
+        if (Math.abs(x - startX) !== radius && Math.abs(y - startY) !== radius) continue;
+        const tile = map.tiles[y]?.[x];
+        if (tile?.isPassable && !tile.object) return { x, y };
+      }
+    }
+  }
+  return null;
 }
 
 function buildShowcaseMap(): GameMap {

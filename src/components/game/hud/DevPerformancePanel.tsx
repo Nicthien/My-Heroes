@@ -3,8 +3,10 @@
 import { type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useReportWebVitals } from "next/web-vitals";
 import {
+  getDevPerformanceGaugesSnapshot,
   getDevPerformanceMeasuresSnapshot,
   setDevPerformanceMetricsEnabled,
+  type DevPerformanceGauge,
   type DevPerformanceMeasure,
 } from "@/lib/dev/performanceMetrics";
 
@@ -40,6 +42,7 @@ export type DevPerformanceStats = {
   heapLimitMb: number | null;
   vitals: Record<string, DevWebVital>;
   measures: DevPerformanceMeasure[];
+  gauges: DevPerformanceGauge[];
 };
 type PerformanceWithMemory = Performance & {
   memory?: {
@@ -62,6 +65,7 @@ const DEFAULT_DEV_PERFORMANCE_STATS: DevPerformanceStats = {
   heapLimitMb: null,
   vitals: {},
   measures: [],
+  gauges: [],
 };
 
 export function getDevPanelVisible() {
@@ -195,6 +199,7 @@ export function useDevPerformanceStats(enabled: boolean) {
           longTaskTotal: 0,
           longTaskTotalMs: 0,
           measures: getDevPerformanceMeasuresSnapshot(),
+          gauges: getDevPerformanceGaugesSnapshot(),
           ...readHeapMemoryStats(),
         }));
         longTaskRef.current = { count: 0, durationMs: 0, totalCount: 0, totalDurationMs: 0 };
@@ -239,6 +244,7 @@ export function useDevPerformanceStats(enabled: boolean) {
           longTaskTotal: longTaskSnapshot.totalCount,
           longTaskTotalMs: longTaskSnapshot.totalDurationMs,
           measures: getDevPerformanceMeasuresSnapshot(),
+          gauges: getDevPerformanceGaugesSnapshot(),
           ...memoryStats,
         }));
 
@@ -295,6 +301,11 @@ function formatWebVitalValue(name: string, value: number) {
   if (name === "CLS") return value.toFixed(3);
   if (value >= 1000) return `${(value / 1000).toFixed(2)}s`;
   return `${value.toFixed(0)}ms`;
+}
+
+function formatGaugeValue(gauge: DevPerformanceGauge) {
+  const value = Number.isInteger(gauge.value) ? gauge.value.toString() : formatNumber(gauge.value, 1);
+  return gauge.unit ? `${value} ${gauge.unit}` : value;
 }
 
 function getVitalToneClasses(rating: string | undefined) {
@@ -420,6 +431,21 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
                 label={measure.name}
                 value={`${formatNumber(measure.avgMs, 1)} ms avg / ${formatNumber(measure.maxMs, 1)} ms max`}
                 description={`${measure.count} appel(s), ${formatNumber(measure.totalMs, 1)} ms cumules depuis l'ouverture du panneau.`}
+                onTooltip={showTooltip}
+                onTooltipClose={() => setTooltip(null)}
+              />
+            ))}
+          </div>
+        )}
+        {stats.gauges.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Compteurs Phaser</div>
+            {stats.gauges.slice(0, 12).map((gauge) => (
+              <DevPerformanceRow
+                key={gauge.name}
+                label={gauge.name}
+                value={formatGaugeValue(gauge)}
+                description={`Valeur instantanee mesuree par le renderer Phaser pour ${gauge.name}.`}
                 onTooltip={showTooltip}
                 onTooltipClose={() => setTooltip(null)}
               />

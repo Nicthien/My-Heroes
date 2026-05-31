@@ -6,10 +6,18 @@ export type DevPerformanceMeasure = {
   maxMs: number;
 };
 
+export type DevPerformanceGauge = {
+  name: string;
+  value: number;
+  unit?: string;
+};
+
 const MAX_MEASURE_NAMES = 24;
+const MAX_GAUGE_NAMES = 48;
 
 let enabled = false;
 let measures = new Map<string, { count: number; totalMs: number; maxMs: number }>();
+let gauges = new Map<string, { value: number; unit?: string }>();
 
 function canMeasure() {
   return enabled && typeof performance !== "undefined";
@@ -17,7 +25,10 @@ function canMeasure() {
 
 export function setDevPerformanceMetricsEnabled(nextEnabled: boolean) {
   enabled = nextEnabled;
-  if (!enabled) measures = new Map();
+  if (!enabled) {
+    measures = new Map();
+    gauges = new Map();
+  }
 }
 
 export function measureDevPerformance<T>(name: string, work: () => T): T {
@@ -46,6 +57,16 @@ export function recordDevPerformanceMeasure(name: string, durationMs: number) {
   });
 }
 
+export function recordDevPerformanceGauge(name: string, value: number, unit?: string) {
+  if (!canMeasure() || !Number.isFinite(value)) return;
+
+  if (!gauges.has(name) && gauges.size >= MAX_GAUGE_NAMES) {
+    const firstKey = gauges.keys().next().value;
+    if (firstKey) gauges.delete(firstKey);
+  }
+  gauges.set(name, { value, unit });
+}
+
 export function getDevPerformanceMeasuresSnapshot(): DevPerformanceMeasure[] {
   if (!enabled || measures.size === 0) return [];
 
@@ -56,4 +77,14 @@ export function getDevPerformanceMeasuresSnapshot(): DevPerformanceMeasure[] {
     avgMs: measure.count > 0 ? measure.totalMs / measure.count : 0,
     maxMs: measure.maxMs,
   })).sort((left, right) => right.totalMs - left.totalMs);
+}
+
+export function getDevPerformanceGaugesSnapshot(): DevPerformanceGauge[] {
+  if (!enabled || gauges.size === 0) return [];
+
+  return Array.from(gauges, ([name, gauge]) => ({
+    name,
+    value: gauge.value,
+    unit: gauge.unit,
+  })).sort((left, right) => right.value - left.value || left.name.localeCompare(right.name));
 }

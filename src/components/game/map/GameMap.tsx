@@ -155,7 +155,12 @@ export default function GameMapComponent() {
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
-  const revealMap = devRevealMap || adminObserverMode;
+  const forceDevPartialFog = Boolean(
+    gameState?.id.startsWith("dev-map-showcase-") &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("fog") === "partial"
+  );
+  const revealMap = forceDevPartialFog ? false : devRevealMap || adminObserverMode;
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const pendingAdventureSpell = useGameStore((state) => state.pendingAdventureSpell);
@@ -300,7 +305,7 @@ export default function GameMapComponent() {
 
     const currentPlayer = gameState.players.find(
       (player) => player.userId === session?.user?.id
-    );
+    ) ?? (gameState.id.startsWith("dev-map-showcase-") ? gameState.players.find((player) => !player.isAi) : undefined);
 
     initPromiseRef.current?.then(() => {
       if (rendererRef.current !== renderer || !renderer.isReady()) return;
@@ -345,7 +350,7 @@ export default function GameMapComponent() {
 
       let visibleTiles: Set<string>;
       let exploredTiles: Set<string>;
-      if (activeCombat || revealMap || currentPlayer?.isAlive === false) {
+      if (!forceDevPartialFog && (activeCombat || revealMap || currentPlayer?.isAlive === false)) {
         const allTiles = getAllTileKeys(renderMap.width, renderMap.height);
         visibleTiles = allTiles;
         exploredTiles = allTiles;
@@ -427,7 +432,7 @@ export default function GameMapComponent() {
         }, 150);
       }
     });
-  }, [activeMap, activeMapLevel, adminObserverMode, gameState, session?.user?.id, activeCombat, rendererReadyVersion, revealMap, selectedHeroId]);
+  }, [activeMap, activeMapLevel, adminObserverMode, gameState, session?.user?.id, activeCombat, rendererReadyVersion, revealMap, selectedHeroId, forceDevPartialFog]);
 
   useEffect(() => {
     if (!rendererRef.current?.isReady() || !gameState) return;

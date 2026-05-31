@@ -23,6 +23,8 @@ Optimisations implémentées :
 | 6 | Guard idempotent sur `renderMap` | ✅ | `renderMapMeasured()` vers la ligne 364 |
 | 7 | Signature séparée terrain / objets dynamiques | ✅ | `renderMapMeasured()` |
 | 8 | Cache des positions de tuiles avec objets | ✅ | `objectTilePositions` et `renderMapTileObjects()` |
+| 9 | Mode grande carte : désactiver les sprites de textures top-terrain au-delà de 96 x 96 tuiles | ✅ | `DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT` |
+| 10 | Mesures par phase du rebuild carte | ✅ | `phaser.renderMap.terrain`, `.water`, `.tileObjects`, `.fogChunks`, `.objects`, `.fogRedraw` |
 
 Validation historique :
 
@@ -30,7 +32,13 @@ Validation historique :
 - `npx eslint` ✅
 - `npm run test:e2e` ✅
 
-La passe du 2026-05-31 n'a pas relancé ces commandes ; elle a seulement mis à jour ce suivi.
+Validation 2026-05-31 après optimisation grande carte :
+
+- `npx tsc --noEmit` ✅
+- `npm run lint` ✅
+- `npm run test:e2e` ✅ 49 passed, 1 skipped
+- `npm run test:e2e:gameplay` ✅
+- `npm run validate:phaser` ⏸️ non exécuté : variables `PHASER_TEST_EMAIL` / `PHASER_TEST_PASSWORD` absentes
 
 ## Décisions conservées
 
@@ -48,6 +56,10 @@ Le polling local n'est plus à 1 s : [`src/app/game/[id]/page.tsx`](src/app/game
 
 Phaser 4.1.0 ne propose plus le workflow Phaser 3 basé sur `RenderTexture.draw(gameObject)`. Le bake dynamique reste donc non retenu pour l'instant. Alternatives possibles mais lourdes : `Camera.snapshot()` asynchrone, génération de textures par `Graphics.generateTexture()`, ou pipeline custom.
 
+### Mode grande carte
+
+Les cartes au-delà de 96 x 96 tuiles ne créent plus un sprite `Image` par texture de sommet de tuile. Le renderer garde les couleurs, routes, décors, objets, fog, eau et lava, mais évite des milliers de GameObjects statiques. Les petites et moyennes cartes conservent les textures détaillées.
+
 ## Bottleneck restant
 
 Le coût per-frame de Phaser reste le principal plafond : les grandes cartes gardent beaucoup de sprites et containers permanents, donc la traversée du scene graph pèse même quand `renderMap()` ne reconstruit plus la carte.
@@ -56,7 +68,7 @@ Pistes restantes, par ordre de plausibilité :
 
 1. Réduire le nombre de GameObjects persistants avec `TileSprite`, `Blitter` ou une stratégie de chunks statiques.
 2. Continuer à sortir certains éléments visuels des grandes cartes quand ils ne changent pas souvent.
-3. Mesurer séparément les couches `mapLayer`, `roadLayer`, `decorLayer`, `objectLayer` et `fogLayer` dans `DevPerformancePanel`.
+3. Utiliser les nouvelles mesures par phase pour décider si le prochain chantier doit cibler `terrain`, `fog` ou `objects`.
 4. Garder une option qualité/performance pour les très grandes cartes si le coût visuel reste trop élevé.
 
 ## Règles pour la suite

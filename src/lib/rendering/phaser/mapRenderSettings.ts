@@ -14,6 +14,7 @@ export const TERRAIN_ANIMATION_FRAME_COUNT = 6;
 export const TERRAIN_TEXTURE_WIDTH = 80;
 export const TERRAIN_TEXTURE_HEIGHT = 56;
 export const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
+export const DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT = 96 * 96;
 
 // Fog animation
 export const FOG_DRIFT_MAX_TILE_COUNT = 144 * 144;

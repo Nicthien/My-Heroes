@@ -414,7 +414,7 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
         {stats.measures.length > 0 && (
           <div className="space-y-1.5">
             <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Mesures carte</div>
-            {stats.measures.slice(0, 4).map((measure) => (
+            {stats.measures.slice(0, 8).map((measure) => (
               <DevPerformanceRow
                 key={measure.name}
                 label={measure.name}

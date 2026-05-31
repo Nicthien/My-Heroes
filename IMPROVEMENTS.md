@@ -9,15 +9,16 @@ Dernière validation documentée :
 
 | Vérification | Résultat |
 |---|---|
-| `npm run lint` | ✅ Aucun problème |
-| `npx tsc --noEmit` | ✅ Aucune erreur |
+| `npm run lint` | ✅ Passé le 2026-05-31 |
+| `npx tsc --noEmit` | ✅ Passé le 2026-05-31 |
 | `npm run validate:combat` | ✅ Passé |
 | `npm run validate:movement` | ✅ Passé |
 | `npm run validate:rmg` | ✅ Passé sans warning par défaut |
-| `npm run test:e2e:gameplay` | ✅ Passé |
+| `npm run test:e2e` | ✅ 49 passed, 1 skipped le 2026-05-31 |
+| `npm run test:e2e:gameplay` | ✅ Passé le 2026-05-31 |
 | Migration RLS + `schema.sql` | ✅ Cohérents, validés par `supabase db reset` |
 
-La passe du 2026-05-31 n'a pas relancé ces commandes ; elle a mis à jour le suivi documentaire après suppression des plans terminés.
+`npm run validate:phaser` reste dépendant de `PHASER_TEST_EMAIL` / `PHASER_TEST_PASSWORD` et n'a pas pu être lancé dans cette passe.
 
 ## Hygiène du dépôt
 

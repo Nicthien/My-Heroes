@@ -455,6 +455,9 @@ export default function DashboardPage() {
   const [rmgTuning, setRmgTuning] = useState<RmgTuning>(DEFAULT_RMG_TUNING);
   const [undergroundEnabled, setUndergroundEnabled] = useState(false);
   const [previewLevel, setPreviewLevel] = useState<MapLevelId>(SURFACE_LEVEL);
+  const [previewMap, setPreviewMap] = useState<GameMap | null>(null);
+  const [previewGenerationProgress, setPreviewGenerationProgress] = useState(0);
+  const [isPreviewGenerating, setIsPreviewGenerating] = useState(true);
   const router = useRouter();
   const templateOptions = useMemo(() => listTemplatesForPlayers(maxPlayers), [maxPlayers]);
   const selectedTemplateId = templateId !== "auto" && templateOptions.some((template) => template.id === templateId)
@@ -462,24 +465,71 @@ export default function DashboardPage() {
     : "auto";
   const effectiveTemplateId = selectedTemplateId === "auto" ? undefined : selectedTemplateId;
   const normalizedRmgTuning = useMemo(() => normalizeRmgTuning(rmgTuning), [rmgTuning]);
-  const previewMap = useMemo(
-    () =>
-      generateMap({
-        width: MAP_SIZES[mapSize],
-        height: MAP_SIZES[mapSize],
-        seed,
-        playerCount: maxPlayers,
-        templateId: effectiveTemplateId,
-        tuning: normalizedRmgTuning,
-        undergroundEnabled,
-      }),
+  const previewGenerationOptions = useMemo(
+    () => ({
+      width: MAP_SIZES[mapSize],
+      height: MAP_SIZES[mapSize],
+      seed,
+      playerCount: maxPlayers,
+      templateId: effectiveTemplateId,
+      tuning: normalizedRmgTuning,
+      undergroundEnabled,
+    }),
     [effectiveTemplateId, mapSize, maxPlayers, normalizedRmgTuning, seed, undergroundEnabled],
   );
+  useEffect(() => {
+    let cancelled = false;
+    let progressTimer: number | null = null;
+    let generationTimer: number | null = null;
+    let completionTimer: number | null = null;
+
+    const startTimer = window.setTimeout(() => {
+      if (cancelled) return;
+
+      setPreviewMap(null);
+      setIsPreviewGenerating(true);
+      setPreviewGenerationProgress(8);
+
+      progressTimer = window.setInterval(() => {
+        setPreviewGenerationProgress((current) => {
+          if (current < 35) return Math.min(35, current + 9);
+          if (current < 72) return Math.min(72, current + 6);
+          return Math.min(90, current + 3);
+        });
+      }, 140);
+
+      generationTimer = window.setTimeout(() => {
+        const nextMap = generateMap(previewGenerationOptions);
+        if (cancelled) return;
+
+        if (progressTimer) window.clearInterval(progressTimer);
+        setPreviewMap(nextMap);
+        setPreviewGenerationProgress(100);
+
+        completionTimer = window.setTimeout(() => {
+          if (!cancelled) setIsPreviewGenerating(false);
+        }, 120);
+      }, 80);
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (generationTimer) window.clearTimeout(generationTimer);
+      if (completionTimer) window.clearTimeout(completionTimer);
+      if (progressTimer) window.clearInterval(progressTimer);
+    };
+  }, [previewGenerationOptions]);
   const visiblePreviewMap = useMemo(
-    () => withActiveMapLayer(previewMap, undergroundEnabled ? previewLevel : SURFACE_LEVEL),
+    () => previewMap ? withActiveMapLayer(previewMap, undergroundEnabled ? previewLevel : SURFACE_LEVEL) : null,
     [previewLevel, previewMap, undergroundEnabled],
   );
-  const previewStats = useMemo(() => summarizeMap(visiblePreviewMap), [visiblePreviewMap]);
+  const previewStats = useMemo(() => visiblePreviewMap ? summarizeMap(visiblePreviewMap) : null, [visiblePreviewMap]);
+  const previewSeedLabel = previewMap?.seed ?? seed;
+  const previewSizeLabel = visiblePreviewMap
+    ? `${visiblePreviewMap.width}x${visiblePreviewMap.height}`
+    : `${MAP_SIZES[mapSize]}x${MAP_SIZES[mapSize]}`;
+  const previewTemplateLabel = previewMap?.templateId ?? selectedTemplateId;
   const isAdmin = session?.user?.role === "admin";
   const mustChangePassword = Boolean(session?.user?.mustChangePassword);
   const generateRandomSeed = () => {
@@ -1317,7 +1367,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
                   <div className="text-[11px] uppercase tracking-wider text-amber-200/50">
-                    Graine {previewMap.seed} - {visiblePreviewMap.width}x{visiblePreviewMap.height}{undergroundEnabled ? " - Souterrain activé" : ""}
+                    Graine {previewSeedLabel} - {previewSizeLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
                   </div>
                 </div>
                 {undergroundEnabled && (
@@ -1347,13 +1397,20 @@ export default function DashboardPage() {
                   Grand aperçu
                 </button>
               </div>
-              <RmgMapPreview
-                map={visiblePreviewMap}
-                minSize={260}
-                maxSize={360}
-                cellScale={4}
-                className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
-              />
+              {isPreviewGenerating || !visiblePreviewMap ? (
+                <RmgGenerationProgress
+                  progress={previewGenerationProgress}
+                  className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
+                />
+              ) : (
+                <RmgMapPreview
+                  map={visiblePreviewMap}
+                  minSize={260}
+                  maxSize={360}
+                  cellScale={4}
+                  className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
+                />
+              )}
             </div>
 
             {!isAdmin && (
@@ -1396,7 +1453,7 @@ export default function DashboardPage() {
                   <div>
                     <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
                     <p className="text-sm text-stone-400">
-                      Graine {previewMap.seed} - Modèle {previewMap.templateId}{undergroundEnabled ? " - Souterrain activé" : ""}
+                      Graine {previewSeedLabel} - Modèle {previewTemplateLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -1495,14 +1552,20 @@ export default function DashboardPage() {
                 </section>
 
                 <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <RmgMapPreview map={visiblePreviewMap} minSize={420} maxSize={1120} cellScale={8} />
+                  {isPreviewGenerating || !visiblePreviewMap || !previewStats ? (
+                    <RmgGenerationProgress progress={previewGenerationProgress} className="min-h-[520px] xl:col-span-2" />
+                  ) : (
+                    <>
+                      <RmgMapPreview map={visiblePreviewMap} minSize={420} maxSize={1120} cellScale={8} />
 
-                  <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
-                    <RmgLegend />
-                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
-                    <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
-                    <RmgStatBlock title="Details" values={previewStats.details} />
-                  </aside>
+                      <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
+                        <RmgLegend />
+                        <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
+                        <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
+                        <RmgStatBlock title="Details" values={previewStats.details} />
+                      </aside>
+                    </>
+                  )}
                 </section>
               </div>
             </div>
@@ -2063,6 +2126,35 @@ function RmgLegendItem({ label, color, round = false }: { label: string; color: 
         style={{ backgroundColor: color }}
       />
       <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+function RmgGenerationProgress({ progress, className = "" }: { progress: number; className?: string }) {
+  const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
+
+  return (
+    <div className={`flex min-h-[260px] min-w-0 items-center justify-center overflow-hidden border border-stone-800 bg-stone-900 p-6 ${className}`}>
+      <div className="w-full max-w-sm">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-200/80">G&eacute;n&eacute;ration de la carte</span>
+          <span className="font-mono text-sm font-bold text-amber-100">{safeProgress}%</span>
+        </div>
+        <div
+          role="progressbar"
+          aria-label={"G\u00e9n\u00e9ration de la carte"}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={safeProgress}
+          className="h-3 overflow-hidden rounded-sm border border-amber-600/50 bg-black/50 shadow-inner shadow-black"
+        >
+          <div
+            className="h-full bg-gradient-to-r from-amber-700 via-amber-400 to-yellow-200 transition-[width] duration-200 ease-out"
+            style={{ width: `${safeProgress}%` }}
+          />
+        </div>
+        <p className="mt-3 text-xs text-stone-400">Assemblage du terrain, des routes et des objectifs...</p>
+      </div>
     </div>
   );
 }

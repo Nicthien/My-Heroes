@@ -58,6 +58,7 @@ import {
   LAVA_TEXTURE_PREFIX,
   MAP_LAYER_BASE_DEPTH,
   MAP_LAYER_COVER_DEPTH,
+  DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT,
   MAX_CAMERA_ZOOM,
   MIN_CAMERA_ZOOM,
   MOVEMENT_SOUNDS,
@@ -444,28 +445,30 @@ class PhaserMapScene extends Phaser.Scene {
     // iso z-order correct (tiles in the same anti-diagonal don't overlap).
     this.elevatedGraphicsByBand = new Map();
 
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        const tile = map.tiles[y][x];
-        const iso = cartToIso(x, y);
-        this.renderTile(tile, iso.x, iso.y, terrainBase, terrainCover);
-        const depth = getTileDepth(tile);
-        if (tile.object?.type === "wall" && tile.object.subtype === "natural" && this.map?.activeLevel !== UNDERGROUND_LEVEL) {
-          this.renderNaturalWall(tile, iso.x, iso.y - depth);
+    measureDevPerformance("phaser.renderMap.terrain", () => {
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          const tile = map.tiles[y][x];
+          const iso = cartToIso(x, y);
+          this.renderTile(tile, iso.x, iso.y, terrainBase, terrainCover);
+          const depth = getTileDepth(tile);
+          if (tile.object?.type === "wall" && tile.object.subtype === "natural" && this.map?.activeLevel !== UNDERGROUND_LEVEL) {
+            this.renderNaturalWall(tile, iso.x, iso.y - depth);
+          }
+          if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth, decorGraphics);
         }
-        if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth, decorGraphics);
       }
-    }
+    });
 
-    this.renderWaterShimmer(map);
+    measureDevPerformance("phaser.renderMap.water", () => this.renderWaterShimmer(map));
     this.mapLayer.add(terrainCover);
     this.mapLayer.sort("depth");
     this.roadLayer.sort("depth");
     this.decorLayer.sort("depth");
-    this.renderMapTileObjects();
-    this.rebuildFogChunks();
-    this.renderObjects();
-    this.redrawCurrentFog();
+    measureDevPerformance("phaser.renderMap.tileObjects", () => this.renderMapTileObjects());
+    measureDevPerformance("phaser.renderMap.fogChunks", () => this.rebuildFogChunks());
+    measureDevPerformance("phaser.renderMap.objects", () => this.renderObjects());
+    measureDevPerformance("phaser.renderMap.fogRedraw", () => this.redrawCurrentFog());
   }
 
   private loadMissingMapTextures(map: GameMap) {
@@ -1460,7 +1463,7 @@ class PhaserMapScene extends Phaser.Scene {
     drawDiamondPath(tileGraphics, isoX, topY);
     tileGraphics.fillPath();
 
-    this.renderTerrainTopTexture(UNDERGROUND_VOID_TOP_TEXTURE, tile, isoX, topY, tileDepth + 0.01);
+    this.renderTerrainTopTexture(UNDERGROUND_VOID_TOP_TEXTURE, tile, isoX, topY, tileDepth + 0.01, this.mapLayer, true);
 
     tileGraphics.lineStyle(0.8, 0x384144, 0.42);
     drawDiamondPath(tileGraphics, isoX, topY);
@@ -1687,9 +1690,11 @@ class PhaserMapScene extends Phaser.Scene {
     isoX: number,
     isoY: number,
     depth = isoY - 0.25,
-    layer: Phaser.GameObjects.Container = this.mapLayer
+    layer: Phaser.GameObjects.Container = this.mapLayer,
+    forceDetailed = false
   ) {
     if (!texture) return false;
+    if (!forceDetailed && !this.shouldRenderDetailedTerrainTextures()) return false;
 
     const transform = getTerrainTopTextureTransform(tile);
     const sprite = this.add.image(isoX, isoY, texture.path);
@@ -1701,6 +1706,11 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDepth(depth);
     layer.add(sprite);
     return true;
+  }
+
+  private shouldRenderDetailedTerrainTextures() {
+    if (!this.map) return true;
+    return this.map.width * this.map.height <= DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT;
   }
 
   private addLavaAnimation(tile: MapTile, isoX: number, isoY: number, depth = isoY - 0.25) {

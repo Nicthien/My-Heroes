@@ -38,6 +38,13 @@ export function UnitModel({
   const attackClass = attacking
     ? `combat-unit-attacking-${attacking}-${unit.side}`
     : "";
+  const moraleIcon = unit.moraleTriggered
+    ? {
+        src: unit.moraleTriggered === "good" ? "/assets/sprites/artifacts/badge_courage.webp" : "/assets/sprites/artifacts/skull_helmet.webp",
+        glow: unit.moraleTriggered === "good" ? "bg-emerald-200/25" : "bg-red-300/25",
+        className: unit.moraleTriggered === "good" ? "combat-morale-icon-good" : "combat-morale-icon-bad",
+      }
+    : null;
 
   return (
     <span
@@ -85,6 +92,24 @@ export function UnitModel({
             height={40}
             unoptimized
             className={`${persistentLuckIcon ? "h-12 w-12" : "h-10 w-10"} relative object-contain drop-shadow-[0_2px_5px_rgba(0,0,0,0.75)]`}
+            style={{ height: "auto" }}
+          />
+        </span>
+      )}
+      {moraleIcon && (
+        <span
+          className={`${moraleIcon.className} absolute top-[-22px] grid h-10 w-10 -translate-x-1/2 place-items-center`}
+          style={{ left: `calc(50% - ${centeredOverlayOffsetX}px)` }}
+          aria-hidden="true"
+        >
+          <span className={`absolute inset-0 rounded-full ${moraleIcon.glow} blur-sm`} />
+          <Image
+            src={moraleIcon.src}
+            alt=""
+            width={40}
+            height={40}
+            unoptimized
+            className="relative h-10 w-10 object-contain drop-shadow-[0_2px_5px_rgba(0,0,0,0.75)]"
             style={{ height: "auto" }}
           />
         </span>

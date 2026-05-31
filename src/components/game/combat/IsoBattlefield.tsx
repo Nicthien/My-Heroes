@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CombatBoardUnit, GameState, PersistentCombat } from "@/lib/game/types";
+import type { CombatBoardUnit, CombatEnvironment, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { getCellKey, isSiegeLandingBlocked } from "@/lib/game/combat/siege";
 import {
@@ -85,6 +85,29 @@ function getCombatCursor(action: CombatHoverAction, currentUnit: CombatBoardUnit
   return abilities.includes("flying") ? GAME_CURSORS.combat.moveFly : COMBAT_CURSORS.move;
 }
 
+function resolveBattlefieldEnvironment(combat: PersistentCombat, gameState: GameState): CombatEnvironment {
+  const mapEnvironment = buildCombatEnvironment(gameState.map, combat.position);
+  const storedEnvironment = combat.boardState.environment;
+  if (!storedEnvironment) return mapEnvironment;
+
+  const usesLegacyBuildingTheme =
+    storedEnvironment.theme === "building" &&
+    (storedEnvironment.objectType === "building" || storedEnvironment.objectType === "adventure_building");
+  const usesLegacyRoadOrCoastTheme =
+    (storedEnvironment.theme === "road" || storedEnvironment.theme === "coast") &&
+    storedEnvironment.theme !== mapEnvironment.theme;
+
+  if (
+    (usesLegacyBuildingTheme || usesLegacyRoadOrCoastTheme) &&
+    storedEnvironment.terrain === mapEnvironment.terrain &&
+    storedEnvironment.objectType === mapEnvironment.objectType
+  ) {
+    return { ...storedEnvironment, road: mapEnvironment.road, theme: mapEnvironment.theme };
+  }
+
+  return storedEnvironment;
+}
+
 export function IsoBattlefield({
   combat,
   gameState,
@@ -146,8 +169,8 @@ export function IsoBattlefield({
   const revealDamageTimeoutsRef = useRef<number[]>([]);
   const attackTimeoutsRef = useRef<number[]>([]);
   const environment = useMemo(
-    () => combat.boardState.environment ?? buildCombatEnvironment(gameState.map, combat.position),
-    [combat.boardState.environment, combat.position, gameState.map]
+    () => resolveBattlefieldEnvironment(combat, gameState),
+    [combat, gameState]
   );
   const effectiveCurrentUnitId = displayedCurrentUnitId ?? combat.currentUnitId;
   const currentUnit = units.find((unit) => unit.id === effectiveCurrentUnitId);
@@ -612,7 +635,7 @@ export function IsoBattlefield({
             q={q}
             r={r}
           />
-          {feature && <TerrainModel feature={feature} />}
+          {feature && <TerrainModel feature={feature} environment={environment} />}
           {moatFeature && <SiegeMoatModel />}
         </button>
       );

@@ -95,6 +95,7 @@ export function assignMoraleToBoard(units: CombatBoardUnit[], context: MoraleCon
     unit.morale = computeUnitMorale(unit, sideUnits, context);
     unit.moraleApplied = false;
     unit.moraleBonus = false;
+    unit.moraleTriggered = undefined;
   }
 }
 
@@ -106,6 +107,7 @@ export function refreshMoraleForRound(units: CombatBoardUnit[], context: MoraleC
     morale: computeUnitMorale(unit, unit.side === "attacker" ? attackerSide : defenderSide, context),
     moraleApplied: false,
     moraleBonus: false,
+    moraleTriggered: undefined,
   }));
 }
 

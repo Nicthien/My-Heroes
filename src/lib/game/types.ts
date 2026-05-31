@@ -660,6 +660,7 @@ export interface CombatBoardUnit extends UnitStack {
   morale?: number;
   moraleApplied?: boolean;
   moraleBonus?: boolean;
+  moraleTriggered?: "good" | "bad";
   luck?: number;
   luckTriggered?: boolean;
 }
@@ -672,7 +673,16 @@ export interface CombatSideStatsSnapshot {
   skills?: Partial<Record<string, HeroSkillLevel>>;
 }
 
-export type CombatTerrainType = "rock" | "water";
+export type CombatTerrainType =
+  | "rock"
+  | "water"
+  | "bramble"
+  | "fallen_log"
+  | "deadwood"
+  | "root_snarl"
+  | "cactus"
+  | "crystal"
+  | "reed_thicket";
 
 export interface CombatTerrainFeature {
   type: CombatTerrainType;

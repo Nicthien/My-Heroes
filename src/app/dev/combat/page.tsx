@@ -227,6 +227,13 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     ? scenarioUnits.map((unit) => unit.id === "def-1" ? { ...unit, count: 0, health: 0 } : unit)
     : scenarioUnits
   ).map((unit) => (unit.id === "atk-1" ? { ...unit, luckTriggered: true } : unit));
+  const previewUnits = combatUnits.map((unit) =>
+    unit.id === "atk-2"
+      ? { ...unit, moraleTriggered: "good" as const }
+      : unit.id === "def-2"
+        ? { ...unit, moraleTriggered: "bad" as const }
+        : unit
+  );
   const fullTurnQueue = buildTurnQueue(combatUnits, 1);
   const phaseTurnQueue = getPhaseTurnQueue(fullTurnQueue, phase);
   const currentUnitId = phase === "tactics" ? null : phaseTurnQueue[0] ?? fullTurnQueue[0] ?? null;
@@ -244,6 +251,9 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
   const terrain = filterSiegeTerrain([
     { type: "rock" as const, q: 5, r: 2 },
     { type: "rock" as const, q: 7, r: 6 },
+    { type: "bramble" as const, q: 4, r: 3 },
+    { type: "fallen_log" as const, q: 8, r: 4 },
+    { type: "root_snarl" as const, q: 6, r: 7 },
     { type: "water" as const, q: 5, r: 5 },
     { type: "water" as const, q: 6, r: 5 },
   ], siegeFortifications);
@@ -263,7 +273,7 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     round: 1,
     position: { x: 4, y: 4 },
     boardState: {
-      units: combatUnits,
+      units: previewUnits,
       environment: buildCombatEnvironment(gameState.map, { x: 4, y: 4 }),
       terrain,
       ...(siegeFortifications ? { siege: siegeFortifications } : {}),

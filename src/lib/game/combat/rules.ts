@@ -57,6 +57,8 @@ export function normalizeCombatUnit(unit: CombatBoardUnit): CombatBoardUnit {
     luck: clampLuck(Number(unit.luck ?? 0)),
     luckTriggered: Boolean(unit.luckTriggered),
   };
+  if (unit.moraleTriggered === "good" || unit.moraleTriggered === "bad") normalized.moraleTriggered = unit.moraleTriggered;
+  else delete normalized.moraleTriggered;
   if (unit.defensePenalty !== undefined) normalized.defensePenalty = Math.max(0, Number(unit.defensePenalty));
   return normalized;
 }

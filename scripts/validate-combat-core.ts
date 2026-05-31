@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
 import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUnits, sideHasActivePlayerUnits } from "../src/lib/game/combat/concession";
+import { buildCombatEnvironment } from "../src/lib/game/combat/environment";
 import { findHexPath, getBlockedCombatCells, getOccupiedCombatCells, getReachableCombatCells } from "../src/lib/game/combat/movement";
 import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
 import { applyTowerVolleyInRound, createCastleSiegeState, damageSiegeWithCatapult, filterSiegeTerrain, isGateEffectivelyOpen } from "../src/lib/game/combat/siege";
@@ -15,7 +16,7 @@ import {
 } from "../src/lib/game/combat/rules";
 import { getTownWeeklyGrowth } from "../src/lib/game/economy";
 import { SPELLS_BY_ID, calculateSpellDamage, getHeroMaxMana } from "../src/lib/game/spells";
-import { BuildingType, CombatBoardUnit, CombatTruce, Faction, UnitType } from "../src/lib/game/types";
+import { BuildingType, CombatBoardUnit, CombatTruce, Faction, GameMap, TerrainType, UnitType } from "../src/lib/game/types";
 
 function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "side" | "q" | "r">): CombatBoardUnit {
   const count = params.count ?? 10;
@@ -48,6 +49,177 @@ function unit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "u
 
 function stats(attack = 0, defense = 0) {
   return { attack, defense };
+}
+
+function testCombatEnvironmentUsesBuildingTileTerrain() {
+  const map: GameMap = {
+    width: 1,
+    height: 1,
+    tiles: [[{
+      x: 0,
+      y: 0,
+      terrain: TerrainType.GRASS,
+      elevation: 0,
+      isPassable: true,
+      movementCost: 100,
+      object: {
+        id: "sawmill-1",
+        type: "building",
+        subtype: "sawmill",
+      },
+    }]],
+  };
+
+  const environment = buildCombatEnvironment(map, { x: 0, y: 0 });
+  assert.equal(environment.terrain, TerrainType.GRASS);
+  assert.equal(environment.theme, "grass");
+}
+
+function testCombatEnvironmentKeepsSnowOnRoadNearWater() {
+  const makeTile = (x: number, y: number, terrain: TerrainType) => ({
+    x,
+    y,
+    terrain,
+    elevation: 0,
+    isPassable: terrain !== TerrainType.WATER,
+    movementCost: terrain === TerrainType.WATER ? 999 : 100,
+  });
+  const map: GameMap = {
+    width: 3,
+    height: 3,
+    tiles: [
+      [makeTile(0, 0, TerrainType.GRASS), makeTile(1, 0, TerrainType.GRASS), makeTile(2, 0, TerrainType.GRASS)],
+      [makeTile(0, 1, TerrainType.GRASS), { ...makeTile(1, 1, TerrainType.SNOW), road: "dirt" }, makeTile(2, 1, TerrainType.WATER)],
+      [makeTile(0, 2, TerrainType.GRASS), makeTile(1, 2, TerrainType.GRASS), makeTile(2, 2, TerrainType.GRASS)],
+    ],
+  };
+
+  const environment = buildCombatEnvironment(map, { x: 1, y: 1 });
+  assert.equal(environment.terrain, TerrainType.SNOW);
+  assert.equal(environment.road, "dirt");
+  assert.equal(environment.hasNearbyWater, true);
+  assert.equal(environment.theme, "snow");
+}
+
+function testCombatBoardAddsOrganicBlockingTerrain() {
+  const randomValues = [
+    0.2, 0.1, 0.1, 0.5,
+    0.7, 0.4, 0.4, 0.2,
+    0.5,
+    0.0, 0.0, 0.0,
+    0.3, 0.3, 0.3,
+    0.6, 0.6, 0.6,
+    0.9, 0.9, 0.9,
+  ];
+  let randomIndex = 0;
+  const originalRandom = Math.random;
+  Math.random = () => randomValues[randomIndex++ % randomValues.length] ?? 0.5;
+  try {
+    const board = createCombatBoard(
+      {
+        id: "attacker",
+        playerId: "p1",
+        attack: 0,
+        defense: 0,
+        armies: [{ id: "a", unitType: UnitType.PIKEMAN, count: 1, health: 10, maxHealth: 10, position: 0 }],
+      },
+      {
+        id: "defender",
+        playerId: null,
+        attack: 0,
+        defense: 0,
+        armies: [{ id: "d", unitType: UnitType.PIKEMAN, count: 1, health: 10, maxHealth: 10, position: 0 }],
+      },
+      { environment: { terrain: TerrainType.GRASS, elevation: 0, nearbyTerrains: {}, hasNearbyWater: false, hasNearbyForest: false, hasNearbyMountain: false, theme: "grass" } },
+    );
+    assert.ok(board.boardState.terrain.some((feature) => feature.type !== "rock" && feature.type !== "water"));
+  } finally {
+    Math.random = originalRandom;
+  }
+}
+
+function testSnowCombatBoardAddsVisibleBlockingTerrain() {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const board = createCombatBoard(
+      {
+        id: "attacker",
+        playerId: "p1",
+        attack: 0,
+        defense: 0,
+        armies: [{ id: "a", unitType: UnitType.PIKEMAN, count: 1, health: 10, maxHealth: 10, position: 0 }],
+      },
+      {
+        id: "defender",
+        playerId: null,
+        attack: 0,
+        defense: 0,
+        armies: [{ id: "d", unitType: UnitType.PIKEMAN, count: 1, health: 10, maxHealth: 10, position: 0 }],
+      },
+      { environment: { terrain: TerrainType.SNOW, elevation: 0, road: "dirt", nearbyTerrains: { [TerrainType.WATER]: 1 }, hasNearbyWater: true, hasNearbyForest: false, hasNearbyMountain: false, theme: "snow" } },
+    );
+    assert.ok(board.boardState.terrain.some((feature) => feature.type !== "rock" && feature.type !== "water"));
+  } finally {
+    Math.random = originalRandom;
+  }
+}
+
+function testPositiveMoraleGrantsOnlyOneBonusAction() {
+  const griffin = unit({
+    id: "griffin",
+    unitType: UnitType.GRIFFIN,
+    side: "attacker",
+    q: 5,
+    r: 1,
+    count: 4,
+    health: 100,
+    maxHealth: 25,
+    morale: 3,
+  });
+  const pikeman = unit({
+    id: "pikeman",
+    unitType: UnitType.PIKEMAN,
+    side: "defender",
+    q: 6,
+    r: 1,
+    count: 50,
+    health: 500,
+    maxHealth: 10,
+  });
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const first = executeManualCombatAction({
+      units: [griffin, pikeman],
+      turnQueue: ["griffin", "pikeman"],
+      round: 1,
+      currentUnitId: "griffin",
+      action: { type: "ATTACK", targetUnitId: "pikeman" },
+      attackerStats: stats(),
+      defenderStats: stats(),
+    });
+    assert.equal(first.currentUnitId, "griffin");
+    assert.equal(first.units.find((item) => item.id === "griffin")?.moraleApplied, true);
+    assert.equal(first.units.find((item) => item.id === "griffin")?.moraleBonus, false);
+    assert.equal(first.units.find((item) => item.id === "griffin")?.moraleTriggered, "good");
+    assert.ok(first.log.some((line) => line.includes("moral positif")));
+
+    const second = executeManualCombatAction({
+      units: first.units,
+      turnQueue: first.turnQueue,
+      round: first.round,
+      currentUnitId: first.currentUnitId,
+      action: { type: "ATTACK", targetUnitId: "pikeman" },
+      attackerStats: stats(),
+      defenderStats: stats(),
+    });
+    assert.equal(second.currentUnitId, "pikeman");
+    assert.equal(second.units.find((item) => item.id === "griffin")?.moraleTriggered, undefined);
+    assert.equal(second.log.some((line) => line.includes("moral positif")), false);
+  } finally {
+    Math.random = originalRandom;
+  }
 }
 
 function testInitiativeOrder() {
@@ -714,6 +886,11 @@ function testUpgradedDwellingsKeepBaseGrowth() {
 }
 
 testInitiativeOrder();
+testCombatEnvironmentUsesBuildingTileTerrain();
+testCombatEnvironmentKeepsSnowOnRoadNearWater();
+testCombatBoardAddsOrganicBlockingTerrain();
+testSnowCombatBoardAddsVisibleBlockingTerrain();
+testPositiveMoraleGrantsOnlyOneBonusAction();
 testCombatTruceLifecycle();
 testWaitAndDefendTiming();
 testDamageFormulaCapsAndPartials();

@@ -291,6 +291,10 @@ export function getTileTopColor(
   if (reachable) return "#26382b";
   if (feature?.type === "water") return "#213a40";
   if (feature?.type === "rock") return "#3a3934";
+  if (feature?.type === "crystal") return "#313646";
+  if (feature?.type === "cactus") return "#37351f";
+  if (feature?.type === "reed_thicket") return "#263525";
+  if (feature) return "#2f3024";
   return getBattleTileBaseColor(environment.theme);
 }
 
@@ -311,5 +315,9 @@ export function getTileStrokeColor(
   if (reachable) return "rgba(104,177,104,0.58)";
   if (feature?.type === "water") return "rgba(107,172,190,0.68)";
   if (feature?.type === "rock") return "rgba(146,142,128,0.62)";
+  if (feature?.type === "crystal") return "rgba(154,169,216,0.62)";
+  if (feature?.type === "cactus") return "rgba(163,161,79,0.58)";
+  if (feature?.type === "reed_thicket") return "rgba(118,166,94,0.58)";
+  if (feature) return "rgba(135,128,91,0.56)";
   return "rgba(142,148,132,0.46)";
 }

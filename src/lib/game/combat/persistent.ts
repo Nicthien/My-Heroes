@@ -58,7 +58,7 @@ export function createCombatBoard(
   const attackerAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.attacker ?? 0));
   const defenderAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.defender ?? 0));
   const rowCount = getInitialCombatRows(attacker.armies.length, defender.armies.length);
-  const terrain = createCombatTerrain(rowCount);
+  const terrain = createCombatTerrain(rowCount, options.environment);
   addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain, attacker.luck);
   addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain, defender.luck);
   assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
@@ -241,7 +241,7 @@ export function executeManualCombatAction(params: {
   let didAct = false;
   let didWait = false;
   let deferredTurnQueue: string[] | null = null;
-  const units = params.units.map((unit) => normalizeCombatUnit({ ...unit, luckTriggered: false }));
+  const units = params.units.map((unit) => normalizeCombatUnit({ ...unit, luckTriggered: false, moraleTriggered: undefined }));
   let siege = closeGateIfClear(params.siege, units);
   const actor = units.find((unit) => unit.id === params.currentUnitId);
   if (!actor) return { units, turnQueue: params.turnQueue, currentUnitId: null, currentPlayerId: null, round: params.round, log, result: null, siege };
@@ -313,6 +313,7 @@ export function executeManualCombatAction(params: {
     const moraleRoll = rollMorale(actor.morale ?? 0);
     actor.moraleApplied = true;
     if (moraleRoll === "bad") {
+      actor.moraleTriggered = "bad";
       log.push(`${getUnitRule(actor.unitType).label} : moral negatif, le tour est saute.`);
       const livingUnits = units.filter((unit) => unit.count > 0);
       const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
@@ -329,6 +330,7 @@ export function executeManualCombatAction(params: {
     }
     if (moraleRoll === "good") {
       actor.moraleBonus = true;
+      actor.moraleTriggered = "good";
       log.push(`${getUnitRule(actor.unitType).label} : moral positif, action bonus.`);
     }
   }
@@ -435,15 +437,15 @@ export function executeManualCombatAction(params: {
     };
   }
 
+  const grantsBonus = !didWait && actor.moraleBonus && actor.count > 0;
+  if (grantsBonus) {
+    actor.moraleBonus = false;
+  }
   const livingUnits = refreshMoatPenalties(units.filter((unit) => unit.count > 0), siege);
   siege = closeGateIfClear(siege, livingUnits);
   const result = getCombatResult(livingUnits);
   if (result) return { units: livingUnits, turnQueue: [], currentUnitId: null, currentPlayerId: null, round: params.round, log, result, siege };
 
-  const grantsBonus = !didWait && actor.moraleBonus && actor.count > 0;
-  if (grantsBonus) {
-    actor.moraleBonus = false;
-  }
   const next = grantsBonus
     ? { units: livingUnits, turnQueue: params.turnQueue, currentUnitId: actor.id, round: params.round }
     : didWait
@@ -535,9 +537,10 @@ function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | nu
   return attackerAlive ? "attacker" : "defender";
 }
 
-function createCombatTerrain(rowCount = COMBAT_BASE_ROWS) {
+function createCombatTerrain(rowCount = COMBAT_BASE_ROWS, environment?: CombatEnvironment) {
   const terrain: CombatTerrainFeature[] = [];
   const occupied = new Set<string>();
+  const theme = environment?.theme ?? "grass";
   const addFeature = (type: CombatTerrainFeature["type"], q: number, r: number) => {
     const key = `${q},${r}`;
     if (!isInsideCombatCell(q, r) || q <= 1 || q >= COMBAT_COLS - 2 || occupied.has(key)) return false;
@@ -546,7 +549,13 @@ function createCombatTerrain(rowCount = COMBAT_BASE_ROWS) {
     return true;
   };
 
-  for (let pool = 0; pool < 2; pool++) {
+  const waterPoolCount =
+    theme === "water" || theme === "coast" || theme === "swamp"
+      ? 2
+      : environment?.hasNearbyWater
+        ? 1
+        : 0;
+  for (let pool = 0; pool < waterPoolCount; pool++) {
     let current = { q: 4 + Math.floor(Math.random() * 5), r: Math.min(rowCount - 1, 2 + Math.floor(Math.random() * 5)) };
     const size = 2 + Math.floor(Math.random() * 2);
     for (let index = 0; index < size; index++) {
@@ -556,11 +565,65 @@ function createCombatTerrain(rowCount = COMBAT_BASE_ROWS) {
     }
   }
 
+  const blockers = getCombatBlockerPool(theme);
+  const blockerCount = 3 + Math.floor(Math.random() * 3);
+  let visibleBlockerCount = 0;
+  for (let blocker = 0; blocker < blockerCount; blocker++) {
+    const type = blockers[Math.floor(Math.random() * blockers.length)] ?? "bramble";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (addFeature(type, 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * rowCount))) {
+        visibleBlockerCount++;
+        break;
+      }
+    }
+  }
+
+  const fallbackBlockerCells = [
+    { q: 3, r: 1 },
+    { q: COMBAT_COLS - 4, r: Math.min(rowCount - 2, 2) },
+    { q: 5, r: Math.min(rowCount - 1, 4) },
+    { q: COMBAT_COLS - 5, r: Math.min(rowCount - 1, 5) },
+  ];
+  for (const cell of fallbackBlockerCells) {
+    if (visibleBlockerCount >= 4) break;
+    const type = blockers[(cell.q + cell.r) % blockers.length] ?? "bramble";
+    if (addFeature(type, cell.q, cell.r)) {
+      visibleBlockerCount++;
+    }
+  }
+
   for (let rock = 0; rock < 4; rock++) {
     addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * rowCount));
   }
 
   return terrain;
+}
+
+function getCombatBlockerPool(theme: CombatEnvironment["theme"]): CombatTerrainFeature["type"][] {
+  switch (theme) {
+    case "forest":
+      return ["fallen_log", "deadwood", "root_snarl", "bramble"];
+    case "dirt":
+    case "road":
+    case "building":
+      return ["deadwood", "root_snarl", "bramble"];
+    case "sand":
+      return ["cactus", "fallen_log", "bramble"];
+    case "snow":
+      return ["deadwood", "fallen_log", "bramble"];
+    case "swamp":
+    case "coast":
+    case "water":
+      return ["reed_thicket", "root_snarl", "fallen_log"];
+    case "lava":
+    case "mountain":
+      return ["crystal", "deadwood", "rock"];
+    case "settlement":
+      return ["fallen_log", "deadwood", "bramble"];
+    case "grass":
+    default:
+      return ["bramble", "fallen_log", "root_snarl", "reed_thicket"];
+  }
 }
 
 export function resolveAutomaticCombat(

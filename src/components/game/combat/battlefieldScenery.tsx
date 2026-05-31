@@ -9,6 +9,111 @@ const HEX_CLIP_PATH =
   "polygon(50% 3.125%, 97.83% 28.125%, 97.83% 71.875%, 50% 96.875%, 2.17% 71.875%, 2.17% 28.125%)";
 
 const WATER_TILE_VARIANTS = 6;
+const TERRAIN_FEATURE_MODELS: Record<CombatTerrainFeature["type"], {
+  src: string;
+  width: number;
+  height: number;
+  top: number;
+  shadow: string;
+}> = {
+  rock: {
+    src: "/assets/sprites/map/boulder-cluster.webp",
+    width: 88,
+    height: 88,
+    top: -22,
+    shadow: "drop-shadow-[5px_8px_8px_rgba(0,0,0,0.55)]",
+  },
+  water: {
+    src: "",
+    width: 74,
+    height: 40,
+    top: 14,
+    shadow: "",
+  },
+  bramble: {
+    src: "/assets/sprites/map/grass-bramble-mound.webp",
+    width: 96,
+    height: 88,
+    top: -18,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.48)]",
+  },
+  fallen_log: {
+    src: "/assets/sprites/map/fallen-log-barricade.webp",
+    width: 104,
+    height: 86,
+    top: -16,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.5)]",
+  },
+  deadwood: {
+    src: "/assets/sprites/map/deadwood-thicket.webp",
+    width: 96,
+    height: 98,
+    top: -28,
+    shadow: "drop-shadow-[5px_10px_8px_rgba(0,0,0,0.52)]",
+  },
+  root_snarl: {
+    src: "/assets/sprites/map/dirt-root-snarl.webp",
+    width: 98,
+    height: 88,
+    top: -18,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.5)]",
+  },
+  cactus: {
+    src: "/assets/sprites/map/sand-cactus-cluster.webp",
+    width: 92,
+    height: 94,
+    top: -26,
+    shadow: "drop-shadow-[5px_10px_8px_rgba(0,0,0,0.5)]",
+  },
+  crystal: {
+    src: "/assets/sprites/map/underground-crystal-ribs.webp",
+    width: 100,
+    height: 98,
+    top: -28,
+    shadow: "drop-shadow-[5px_10px_8px_rgba(0,0,0,0.52)]",
+  },
+  reed_thicket: {
+    src: "/assets/sprites/map/swamp-reed-thicket.webp",
+    width: 94,
+    height: 92,
+    top: -22,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.48)]",
+  },
+};
+
+const SNOW_TERRAIN_FEATURE_MODELS: Partial<typeof TERRAIN_FEATURE_MODELS> = {
+  bramble: {
+    ...TERRAIN_FEATURE_MODELS.bramble,
+    src: "/assets/sprites/map/snow-bramble-mound.webp",
+  },
+  fallen_log: {
+    ...TERRAIN_FEATURE_MODELS.fallen_log,
+    src: "/assets/sprites/map/snow-deadwood-barrier.webp",
+    height: 96,
+    top: -26,
+  },
+  deadwood: {
+    ...TERRAIN_FEATURE_MODELS.deadwood,
+    src: "/assets/sprites/map/snow-deadwood-barrier.webp",
+  },
+  root_snarl: {
+    ...TERRAIN_FEATURE_MODELS.root_snarl,
+    src: "/assets/sprites/map/snow-shrub-wall.webp",
+    height: 94,
+    top: -24,
+  },
+  reed_thicket: {
+    ...TERRAIN_FEATURE_MODELS.reed_thicket,
+    src: "/assets/sprites/map/snow-shrub-wall.webp",
+  },
+};
+
+function getTerrainFeatureModel(feature: CombatTerrainFeature, environment: CombatEnvironment) {
+  if (environment.theme === "snow") {
+    return SNOW_TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS.rock;
+  }
+  return TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS.rock;
+}
 
 export function BattlefieldScenery({ environment }: { environment: CombatEnvironment }) {
   const preset = getSceneryPreset(environment);
@@ -39,7 +144,7 @@ export function BattlefieldScenery({ environment }: { environment: CombatEnviron
           />
         </span>
       ))}
-      {environment.theme === "road" && (
+      {(environment.road || environment.theme === "road") && (
         <span className="absolute bottom-[10%] left-1/2 h-28 w-[62rem] -translate-x-1/2 skew-x-[-18deg] rounded-[50%] bg-stone-700/45 shadow-[inset_0_0_22px_rgba(250,204,21,0.12)]" />
       )}
       {(environment.theme === "coast" || environment.theme === "water") && (
@@ -157,7 +262,7 @@ export function IsoTile({
   );
 }
 
-export function TerrainModel({ feature }: { feature: CombatTerrainFeature }) {
+export function TerrainModel({ feature, environment }: { feature: CombatTerrainFeature; environment: CombatEnvironment }) {
   // Deterministic per-tile variation so the same feature always picks the
   // same variant (no flicker on re-render).
   const seed = Math.abs(feature.q * 73856093 + feature.r * 19349663);
@@ -179,25 +284,29 @@ export function TerrainModel({ feature }: { feature: CombatTerrainFeature }) {
     );
   }
 
-  // Rock variant: vary scale, horizontal nudge and a slight mirror so clusters
-  // don't all look identical when several rocks sit nearby.
+  // Deterministic per-feature variation so clusters don't all look identical
+  // when several blockers sit nearby.
+  const model = getTerrainFeatureModel(feature, environment);
   const scale = 0.9 + ((seed >> 3) % 6) * 0.04;
   const nudgeX = (((seed >> 5) % 5) - 2) * 3;
   const flip = ((seed >> 7) & 1) === 1 ? -1 : 1;
   const rotate = (((seed >> 9) % 7) - 3) * 4;
   return (
     <span
-      className="pointer-events-none absolute left-1/2 top-[-22px] block h-[88px] w-[88px]"
+      className="pointer-events-none absolute left-1/2 block"
       style={{
+        top: model.top,
+        width: model.width,
+        height: model.height,
         transform: `translate(calc(-50% + ${nudgeX}px), 0) scale(${scale * flip}, ${scale}) rotate(${rotate}deg)`,
       }}
     >
       <Image
-        src="/assets/sprites/map/boulder-cluster.webp"
+        src={model.src}
         alt=""
         fill
-        sizes="88px"
-        className="absolute inset-0 h-full w-full object-contain drop-shadow-[5px_8px_8px_rgba(0,0,0,0.55)]"
+        sizes={`${model.width}px`}
+        className={`absolute inset-0 h-full w-full object-contain ${model.shadow}`}
         draggable={false}
       />
     </span>

@@ -87,7 +87,27 @@ export function formatRange(min: number, max: number) {
 }
 
 export function getTerrainTitle(feature: CombatTerrainFeature) {
-  return feature.type === "rock" ? "Rochers" : "Eau";
+  switch (feature.type) {
+    case "water":
+      return "Eau";
+    case "bramble":
+      return "Ronces";
+    case "fallen_log":
+      return "Tronc abattu";
+    case "deadwood":
+      return "Bois mort";
+    case "root_snarl":
+      return "Racines";
+    case "cactus":
+      return "Cactus";
+    case "crystal":
+      return "Cristaux";
+    case "reed_thicket":
+      return "Roseaux";
+    case "rock":
+    default:
+      return "Rochers";
+  }
 }
 
 export function getUnitTitle(unit: CombatBoardUnit) {

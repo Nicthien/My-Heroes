@@ -536,10 +536,26 @@ export async function POST(
       status: result ? "RESOLVED" : combat.status,
     })
     .eq("id", combatId)
+    .eq("updated_at", combat.updated_at)
     .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    const { data: refreshedCombat, error: refreshedError } = await supabase
+      .from("combats")
+      .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
+      .eq("id", combatId)
+      .eq("game_id", id)
+      .single();
+    if (refreshedError) return NextResponse.json({ error: refreshedError.message }, { status: 500 });
+    return NextResponse.json({
+      error: "État de combat périmé",
+      combat: toCombat(refreshedCombat),
+      result: refreshedCombat.result ?? null,
+      stale: true,
+    });
+  }
   if (result) {
     await persistResolvedCombat(supabase, combat, initialUnits, execution.units, execution.result);
     await evaluateGameLifecycle(supabase, id);
@@ -1320,9 +1336,11 @@ function executeActionThenNeutralTurns(params: {
   result = execution.result;
   log.push(...execution.log);
 
-  // Boucle les tours auto consécutifs (neutres ou IA) pour éviter au joueur de cliquer entre chaque.
+  // Only chain automated turns when this request itself started on an
+  // automated actor. After a player action, the client advances the next AI
+  // turn after the previous action animation has settled.
   let safetyCap = 30;
-  while (!result && currentUnitId && safetyCap-- > 0) {
+  while (!params.playerAction && !result && currentUnitId && safetyCap-- > 0) {
     const nextActor = units.find((unit) => unit.id === currentUnitId);
     if (!nextActor) break;
     const isAutomated = nextActor.ownerPlayerId === null || params.aiPlayerIds.has(nextActor.ownerPlayerId ?? "");

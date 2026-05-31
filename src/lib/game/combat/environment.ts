@@ -60,9 +60,13 @@ function getCombatEnvironmentTheme(params: {
   hasNearbyWater: boolean;
 }): CombatEnvironment["theme"] {
   if (params.objectType === "town" || params.objectType === "town_footprint") return "settlement";
-  if (params.objectType === "building" || params.objectType === "adventure_building") return "building";
-  if (params.road) return "road";
-  if (params.terrain !== TerrainType.WATER && params.hasNearbyWater) return "coast";
+  if (params.terrain === TerrainType.WATER) return "water";
+  if (
+    params.hasNearbyWater &&
+    (params.terrain === TerrainType.GRASS || params.terrain === TerrainType.DIRT || params.terrain === TerrainType.SAND)
+  ) {
+    return "coast";
+  }
 
   switch (params.terrain) {
     case TerrainType.FOREST:
@@ -79,8 +83,6 @@ function getCombatEnvironmentTheme(params: {
       return "lava";
     case TerrainType.MOUNTAIN:
       return "mountain";
-    case TerrainType.WATER:
-      return "water";
     case TerrainType.GRASS:
     default:
       return "grass";

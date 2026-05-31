@@ -221,6 +221,8 @@ export async function completePlayerTurn(
       const heroUpdate: Record<string, unknown> = {
         movement: dailyMovement,
         max_movement: dailyMovement,
+        // Adventure spell effects (fly / water_walk / disguise) expire at the start of the hero's next turn.
+        active_spell_effects: null,
       };
       const visitingMageGuildTown = mageGuildTowns.some(
         (town) => town.x === hero.x && town.y === hero.y

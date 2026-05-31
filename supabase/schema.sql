@@ -81,6 +81,7 @@ create table public.heroes (
   mana integer not null default 10,
   has_spell_book boolean not null default true,
   known_spells jsonb default null,
+  active_spell_effects jsonb default null,
   artifacts jsonb not null default '{"inventory":[],"equipment":{}}'::jsonb,
   skills jsonb not null default '{}'::jsonb,
   war_machines jsonb not null default '{}'::jsonb,

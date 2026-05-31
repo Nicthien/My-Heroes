@@ -80,6 +80,7 @@ export interface MinimalHero {
   mana?: number | null;
   hasSpellBook?: boolean;
   knownSpellIds?: string[] | null;
+  activeSpellEffects?: Array<{ spellId: string }> | null;
   attack?: number;
   defense?: number;
   morale?: number;

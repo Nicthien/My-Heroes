@@ -122,6 +122,7 @@ export function toHero(row: DbRow) {
     mana: row.mana ?? Number(row.knowledge ?? 1) * 10,
     hasSpellBook: row.has_spell_book ?? true,
     knownSpellIds: row.known_spells ?? null,
+    activeSpellEffects: (row.active_spell_effects ?? null) as Array<{ spellId: string }> | null,
     artifacts: normalizeArtifactBag(row.artifacts),
     skills: (row.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>,
     warMachines: (row.war_machines ?? {}) as { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean },

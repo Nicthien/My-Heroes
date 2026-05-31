@@ -346,6 +346,7 @@ export interface Hero {
   mana: number;
   hasSpellBook: boolean;
   knownSpellIds?: string[] | null;
+  activeSpellEffects?: Array<{ spellId: string }> | null;
   artifacts: HeroArtifactBag;
   skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
   warMachines?: { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean };
@@ -663,6 +664,9 @@ export interface CombatBoardUnit extends UnitStack {
   moraleTriggered?: "good" | "bad";
   luck?: number;
   luckTriggered?: boolean;
+  statusEffects?: import("./combat/effects").CombatStatusEffect[];
+  retaliationsThisRound?: number;
+  summoned?: boolean;
 }
 
 export type HeroSkillLevel = "basic" | "advanced" | "expert";
@@ -682,7 +686,9 @@ export type CombatTerrainType =
   | "root_snarl"
   | "cactus"
   | "crystal"
-  | "reed_thicket";
+  | "reed_thicket"
+  | "quicksand"
+  | "force_field";
 
 export interface CombatTerrainFeature {
   type: CombatTerrainType;

@@ -2,6 +2,16 @@ import type { CombatBoardUnit, CombatTerrainFeature } from "../types";
 import { getUnitRule } from "../units";
 import { LUCK_DAMAGE_MULTIPLIER, clampLuck, rollPositiveLuck } from "./luck";
 import { getHexDistance } from "./movement";
+import {
+  getDamageOverride,
+  getEffectiveAttackBonus,
+  getEffectiveDefenseBonus,
+  getEffectiveLuck,
+  getMeleeDamageTakenMultiplier,
+  getRangedDamageTakenMultiplier,
+  canShoot,
+  hasSlayer,
+} from "./effects";
 
 export const COMBAT_LONG_RANGE_HEXES = 6;
 
@@ -90,7 +100,7 @@ export function getAttackProfile(params: {
   }
 
   if (isShot) {
-    if (!actor.ranged || actor.shots <= 0 || distance <= 1 || params.actorAdjacentToEnemy) {
+    if (!actor.ranged || actor.shots <= 0 || distance <= 1 || params.actorAdjacentToEnemy || !canShoot(actor)) {
       return {
         actionLabel: "Hors portée",
         canStrike: false,
@@ -144,8 +154,13 @@ export function calculateCombatDamageRange(params: {
 
   const multiplier = getAttackDefenseMultiplier(attacker, defender, params.attackerStats, params.defenderStats);
   const skillMultiplier = getSkillDamageMultiplier(attacker, params.attackerStats, params.defenderStats, profile);
-  const minDamage = Math.max(1, Math.floor(attacker.count * attacker.minDamage * multiplier * profile.damagePenalty * skillMultiplier));
-  const maxDamage = Math.max(1, Math.floor(attacker.count * attacker.maxDamage * multiplier * profile.damagePenalty * skillMultiplier));
+  const slayerMultiplier = hasSlayer(attacker) ? 1.5 : 1;
+  const takenMultiplier = profile.isShot ? getRangedDamageTakenMultiplier(defender) : getMeleeDamageTakenMultiplier(defender);
+  const damageOverride = getDamageOverride(attacker);
+  const minPerUnit = damageOverride === "max" ? attacker.maxDamage : attacker.minDamage;
+  const maxPerUnit = damageOverride === "min" ? attacker.minDamage : attacker.maxDamage;
+  const minDamage = Math.max(1, Math.floor(attacker.count * minPerUnit * multiplier * profile.damagePenalty * skillMultiplier * slayerMultiplier * takenMultiplier));
+  const maxDamage = Math.max(1, Math.floor(attacker.count * maxPerUnit * multiplier * profile.damagePenalty * skillMultiplier * slayerMultiplier * takenMultiplier));
 
   return {
     minDamage,
@@ -177,12 +192,19 @@ export function rollCombatDamage(params: {
   });
   if (!profile.canStrike) return { damage: 0, baseDamagePerUnit: 0, kills: 0, luckTriggered: false, profile };
 
-  const baseDamagePerUnit = randomInt(attacker.minDamage, attacker.maxDamage, params.random);
-  const luckTriggered = rollPositiveLuck(attacker.luck ?? 0, params.random);
+  const damageOverride = getDamageOverride(attacker);
+  const baseDamagePerUnit = damageOverride === "max"
+    ? attacker.maxDamage
+    : damageOverride === "min"
+      ? attacker.minDamage
+      : randomInt(attacker.minDamage, attacker.maxDamage, params.random);
+  const luckTriggered = rollPositiveLuck(getEffectiveLuck(attacker), params.random);
   const multiplier = getAttackDefenseMultiplier(attacker, defender, params.attackerStats, params.defenderStats);
   const skillMultiplier = getSkillDamageMultiplier(attacker, params.attackerStats, params.defenderStats, profile);
   const luckMultiplier = luckTriggered ? LUCK_DAMAGE_MULTIPLIER : 1;
-  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty * skillMultiplier * luckMultiplier));
+  const slayerMultiplier = hasSlayer(attacker) ? 1.5 : 1;
+  const takenMultiplier = profile.isShot ? getRangedDamageTakenMultiplier(defender) : getMeleeDamageTakenMultiplier(defender);
+  const damage = Math.max(1, Math.floor(attacker.count * baseDamagePerUnit * multiplier * profile.damagePenalty * skillMultiplier * luckMultiplier * slayerMultiplier * takenMultiplier));
   return {
     damage,
     baseDamagePerUnit,
@@ -207,8 +229,11 @@ export function getAttackDefenseMultiplier(
   attackerStats: CombatSideStats,
   defenderStats: CombatSideStats
 ) {
-  const attackValue = getUnitRule(attacker.unitType).attack + attackerStats.attack;
-  const baseDefenseValue = Math.max(0, getUnitRule(defender.unitType).defense + defenderStats.defense - Math.max(0, defender.defensePenalty ?? 0));
+  const attackValue = getUnitRule(attacker.unitType).attack + attackerStats.attack + getEffectiveAttackBonus(attacker);
+  const baseDefenseValue = Math.max(
+    0,
+    getUnitRule(defender.unitType).defense + defenderStats.defense + getEffectiveDefenseBonus(defender) - Math.max(0, defender.defensePenalty ?? 0)
+  );
   const defenseValue = defender.defended ? Math.ceil(baseDefenseValue * 1.2) : baseDefenseValue;
   const diff = attackValue - defenseValue;
   if (diff > 0) return Math.min(5, 1 + 0.05 * diff);

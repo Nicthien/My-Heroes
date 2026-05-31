@@ -38,16 +38,23 @@ import { AdventureBuildingType, BuildingType, Faction, GameMap, MapObject, Posit
 import { normalizeMapLevel, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import {
   canMoveAdventureStep,
+  canMoveAdventureStepForMode,
   computeExtraHeroScoutingTiles,
   computeExtraTownVisionTiles,
   computeVisibleTiles,
   getAdventurePathCost,
+  getAdventurePathCostForMode,
   getAdventureStepCost,
+  getAdventureStepCostForMode,
   getPlayerVisionCenters,
   getRequiredAdventureMovement,
+  getRequiredAdventureMovementForMode,
   getUsableAdventureMovement,
   isTileTraversable,
   normalizeMapMovement,
+  resolveAdventureMovementMode,
+  type AdventureMovementMode,
+  type HeroAdventureSpellEffect,
 } from "@/lib/game/engine";
 import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
@@ -185,7 +192,12 @@ export async function POST(
       if (isHeroInActiveCombat(game.combats, hero.id)) {
         return NextResponse.json({ error: HERO_IN_COMBAT_ERROR }, { status: 400 });
       }
-      const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement);
+      const heroSpellEffects = ((hero as unknown as { activeSpellEffects?: HeroAdventureSpellEffect[] | null }).activeSpellEffects) ?? null;
+      const movementMode: AdventureMovementMode | undefined =
+        heroSpellEffects?.some((effect) => effect.spellId === "fly" || effect.spellId === "water_walk")
+          ? resolveAdventureMovementMode(mapData, { x: hero.x, y: hero.y }, heroSpellEffects)
+          : undefined;
+      const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement, movementMode);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
       const mapState = (game.mapState as Record<string, unknown>) ?? {};
@@ -213,7 +225,7 @@ export async function POST(
       }
       const stopPathIndex = firstStop?.stopBefore ? Math.max(0, firstStop.pathIndex - 1) : firstStop?.pathIndex;
       const movePath = typeof stopPathIndex === "number" ? action.path.slice(0, stopPathIndex + 1) : action.path;
-      const usedMovement = getPathMovementCost(mapData, movePath, (hero as unknown as { skills?: Record<string, string> }).skills);
+      const usedMovement = getPathMovementCost(mapData, movePath, (hero as unknown as { skills?: Record<string, string> }).skills, movementMode);
       const lastPos = movePath[movePath.length - 1];
       const { error: heroUpdateError } = await supabase.from("heroes").update({
         x: lastPos.x,
@@ -2446,6 +2458,21 @@ async function applyAdventureSpell({
     };
   }
 
+  if (spellId === "fly" || spellId === "water_walk" || spellId === "disguise") {
+    const existing = ((hero as unknown as { activeSpellEffects?: HeroAdventureSpellEffect[] | null }).activeSpellEffects) ?? [];
+    const nextEffects = [...existing.filter((effect) => effect.spellId !== spellId), { spellId }];
+    await supabase.from("heroes").update({ active_spell_effects: nextEffects }).eq("id", hero.id);
+    const message = spellId === "fly"
+      ? "Vol : le héros survole l'eau et les obstacles jusqu'à son prochain tour."
+      : spellId === "water_walk"
+        ? "Marche sur l'eau : le héros peut traverser l'eau jusqu'à son prochain tour."
+        : "Déguisement : l'armée du héros est masquée aux adversaires jusqu'à son prochain tour.";
+    return {
+      ok: true,
+      interaction: { type: "ADVENTURE_SPELL", spellId, message },
+    };
+  }
+
   return { ok: false, error: "Sort indisponible" };
 }
 
@@ -2800,8 +2827,8 @@ async function validateAndApplyActionPath({
   return { ok: true };
 }
 
-function getPathMovementCost(map: GameMap, path: Position[], skills?: Record<string, string>) {
-  const base = getAdventurePathCost(map, path);
+function getPathMovementCost(map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode) {
+  const base = mode ? getAdventurePathCostForMode(map, path, mode) : getAdventurePathCost(map, path);
   if (!skills) return base;
   const lvl = skills.pathfinding === "expert" ? 3 : skills.pathfinding === "advanced" ? 2 : skills.pathfinding === "basic" ? 1 : 0;
   if (lvl <= 0) return base;
@@ -2826,7 +2853,8 @@ function validateMovePath(
   map: GameMap,
   start: { x: number; y: number },
   path: Array<{ x: number; y: number }>,
-  movement: number
+  movement: number,
+  mode?: AdventureMovementMode
 ): { ok: true; usedMovement: number } | { ok: false; error: string } {
   if (!Array.isArray(path) || path.length < 2) return { ok: false, error: "Chemin invalide" };
   if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false, error: "Le chemin ne commence pas sur le héros" };
@@ -2835,14 +2863,17 @@ function validateMovePath(
   for (let i = 1; i < path.length; i++) {
     const previous = path[i - 1];
     const current = path[i];
-    if (!canMoveAdventureStep(map, previous, current)) {
+    const stepOk = mode ? canMoveAdventureStepForMode(map, previous, current, mode) : canMoveAdventureStep(map, previous, current);
+    if (!stepOk) {
       return { ok: false, error: "Chemin invalide" };
     }
-    const stepCost = getAdventureStepCost(map, previous, current);
+    const stepCost = mode ? getAdventureStepCostForMode(map, previous, current, mode) : getAdventureStepCost(map, previous, current);
     if (!Number.isFinite(stepCost)) return { ok: false, error: "Terrain infranchissable" };
     usedMovement += stepCost;
   }
-  const requiredMovement = getRequiredAdventureMovement(map, path as Position[]);
+  const requiredMovement = mode
+    ? getRequiredAdventureMovementForMode(map, path as Position[], mode)
+    : getRequiredAdventureMovement(map, path as Position[]);
   if (requiredMovement > movement) return { ok: false, error: "Deplacement insuffisant" };
   return { ok: true, usedMovement };
 }

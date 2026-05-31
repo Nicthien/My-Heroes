@@ -79,6 +79,21 @@ const TERRAIN_FEATURE_MODELS: Record<CombatTerrainFeature["type"], {
     top: -22,
     shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.48)]",
   },
+  // Spell-created obstacles reuse existing sprites until dedicated art exists.
+  quicksand: {
+    src: "/assets/sprites/map/swamp-reed-thicket.webp",
+    width: 94,
+    height: 92,
+    top: -22,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.48)]",
+  },
+  force_field: {
+    src: "/assets/sprites/map/underground-crystal-ribs.webp",
+    width: 100,
+    height: 98,
+    top: -28,
+    shadow: "drop-shadow-[5px_10px_8px_rgba(0,0,0,0.52)]",
+  },
 };
 
 const SNOW_TERRAIN_FEATURE_MODELS: Partial<typeof TERRAIN_FEATURE_MODELS> = {

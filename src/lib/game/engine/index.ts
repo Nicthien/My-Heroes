@@ -85,7 +85,28 @@ const ORTHOGONAL_BASE = 100;
 const DIAGONAL_BASE = 141;
 export const MINIMUM_ADVENTURE_STEP_COST = 50;
 export const BOAT_DAILY_MOVEMENT = 1500;
-export type AdventureMovementMode = "land" | "boat";
+export type AdventureMovementMode = "land" | "boat" | "fly" | "water_walk";
+
+/** Adventure spell effects that alter how a hero traverses the map this turn. */
+export interface HeroAdventureSpellEffect {
+  spellId: string;
+}
+
+/**
+ * Resolves the effective movement mode for a hero, accounting for active
+ * adventure spell effects (fly / water_walk make the hero amphibious). Falls
+ * back to the tile-inferred land/boat mode otherwise.
+ */
+export function resolveAdventureMovementMode(
+  map: GameMap,
+  from: Position,
+  effects: HeroAdventureSpellEffect[] | null | undefined
+): AdventureMovementMode {
+  const ids = new Set((effects ?? []).map((effect) => effect.spellId));
+  if (ids.has("fly")) return "fly";
+  if (ids.has("water_walk")) return "water_walk";
+  return inferMovementMode(map, from);
+}
 
 export function effectiveMovementCost(tile: MapTile): number {
   if (!isTileTraversable(tile)) return 999;
@@ -124,7 +145,10 @@ export function isLandTile(tile: MapTile | undefined): boolean {
 
 export function isTileTraversableForMode(tile: MapTile | undefined, mode: AdventureMovementMode): boolean {
   if (!isTileTraversable(tile)) return false;
-  return mode === "boat" ? isWaterTile(tile) : isLandTile(tile);
+  if (mode === "boat") return isWaterTile(tile);
+  // Fly and water_walk are amphibious: any traversable tile (land or water) is allowed.
+  if (mode === "fly" || mode === "water_walk") return true;
+  return isLandTile(tile);
 }
 
 function inferMovementMode(map: GameMap, from: Position): AdventureMovementMode {
@@ -309,7 +333,9 @@ export function getAdventureStepCostForMode(map: GameMap, from: Position, to: Po
   const targetTile = map.tiles[to.y]?.[to.x];
   if (!targetTile) return Number.POSITIVE_INFINITY;
 
-  const surfaceCost = effectiveMovementCost(targetTile);
+  // Water-walking on foot is slower across water tiles than sailing.
+  const waterWalkSurcharge = mode === "water_walk" && isWaterTile(targetTile) ? 1.5 : 1;
+  const surfaceCost = Math.round(effectiveMovementCost(targetTile) * waterWalkSurcharge);
   const isDiagonal = from.x !== to.x && from.y !== to.y;
   return isDiagonal ? Math.floor(surfaceCost * DIAGONAL_BASE / ORTHOGONAL_BASE) : surfaceCost;
 }

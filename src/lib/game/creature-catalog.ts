@@ -63,3 +63,20 @@ export const CREATURE_BY_TYPE = Object.fromEntries(
 export function getCreature(unitType: UnitType | string): CreatureCatalogEntry {
   return CREATURE_BY_TYPE[unitType as UnitType] ?? CREATURE_BY_TYPE[UnitType.PIKEMAN];
 }
+
+/**
+ * Returns the upgraded variant of a creature (same group + tier, higher upgradeLevel),
+ * mirroring the HoMM3 neutral "upgrade flag". Returns null when no upgrade exists
+ * (e.g. the `neutral` group has no upgrades), so callers keep the base creature.
+ */
+export function getUpgradedVariant(unitType: UnitType | string): UnitType | null {
+  const base = CREATURE_BY_TYPE[unitType as UnitType];
+  if (!base) return null;
+  const upgrade = CREATURES.find(
+    (creature) =>
+      creature.group === base.group &&
+      creature.tier === base.tier &&
+      creature.upgradeLevel > base.upgradeLevel,
+  );
+  return upgrade?.type ?? null;
+}

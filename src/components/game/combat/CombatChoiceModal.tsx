@@ -6,7 +6,7 @@ import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
-import { GameState, Hero, UnitStack, UnitType } from "@/lib/game/types";
+import { GameMap, GameState, Hero, MapObject, MapTile, UnitStack, UnitType, type MapLevelId } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
 
@@ -72,6 +72,17 @@ export default function CombatChoiceModal() {
     const combatPayload = data.combat ?? data;
     if (data.result) setCombatResult(data.result);
     if (mode === "MANUAL" && combatPayload) setActiveCombat(mapCombat(combatPayload));
+    // On an AUTO win, optimistically strip the defeated guardian/monster from the
+    // local map so it disappears immediately instead of lingering until the
+    // realtime round-trip re-syncs the map. Read the freshest state because the
+    // optimistic hero move above already produced a new gameState.
+    if (mode === "AUTO" && data.result?.winnerId === pendingCombat.attackerHeroId) {
+      const current = useGameStore.getState().gameState;
+      if (current) {
+        const cleared = withDefeatedTargetCleared(current, pendingCombat);
+        if (cleared !== current) setGameState(cleared);
+      }
+    }
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
   }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
 
@@ -209,6 +220,86 @@ function mapCombat(combat: Record<string, unknown>) {
 }
 
 type PendingCombat = NonNullable<ReturnType<typeof useGameStore.getState>["pendingCombat"]>;
+
+// Mirrors the server-side map cleanup (api.ts: a defeated monster's tile object
+// is removed, a beaten guardian's power drops to 0) but applies it optimistically
+// on the client so the threat vanishes the instant an AUTO combat is won.
+function withDefeatedTargetCleared(gameState: GameState, pending: PendingCombat): GameState {
+  const pos = pending.targetPosition ?? pending.destination ?? null;
+  const matches = (object: MapObject, x: number, y: number): boolean => {
+    const atPos = pos ? x === pos.x && y === pos.y : false;
+    switch (pending.targetType) {
+      case "monster":
+        return object.type === "monster" && object.id === pending.targetId;
+      case "creature_bank":
+        return object.type === "adventure_building" && object.id === pending.targetId;
+      case "artifact":
+        return object.type === "artifact" && (object.id === pending.targetId || atPos);
+      case "gate":
+        return object.type === "gate" && (object.id === pending.targetId || atPos);
+      case "building":
+        return object.type === "building" && (object.id === pending.targetId || atPos);
+      default:
+        return false;
+    }
+  };
+
+  let changed = false;
+  const clearTiles = (tiles: MapTile[][]): MapTile[][] => {
+    let outerChanged = false;
+    const next = tiles.map((row) => {
+      let rowChanged = false;
+      const nextRow = row.map((tile) => {
+        if (!tile.object || !matches(tile.object, tile.x, tile.y)) return tile;
+        rowChanged = true;
+        changed = true;
+        // A monster sprite is removed entirely; a guarded building/gate/artifact
+        // stays but loses its (now defeated) garrison threat indicator.
+        if (pending.targetType === "monster") {
+          const { object: _removed, ...rest } = tile;
+          void _removed;
+          return rest as MapTile;
+        }
+        return { ...tile, object: { ...tile.object, guardianPower: 0 } };
+      });
+      if (rowChanged) outerChanged = true;
+      return rowChanged ? nextRow : row;
+    });
+    return outerChanged ? next : tiles;
+  };
+
+  const nextTiles = clearTiles(gameState.map.tiles);
+  let nextLevels = gameState.map.levels;
+  if (gameState.map.levels) {
+    let levelsChanged = false;
+    const updated: NonNullable<GameMap["levels"]> = { ...gameState.map.levels };
+    for (const [levelId, layer] of Object.entries(gameState.map.levels)) {
+      if (!layer) continue;
+      const layerTiles = clearTiles(layer.tiles);
+      if (layerTiles !== layer.tiles) {
+        updated[levelId as MapLevelId] = { ...layer, tiles: layerTiles };
+        levelsChanged = true;
+      }
+    }
+    if (levelsChanged) nextLevels = updated;
+  }
+
+  if (!changed) return gameState;
+
+  // Flag the neutral army defeated so any re-attack guard / preview no longer
+  // treats it as an active target before the realtime sync lands.
+  const neutralArmies = pending.targetType === "monster" && gameState.neutralArmies
+    ? gameState.neutralArmies.map((army) =>
+        army.id === pending.targetId ? { ...army, status: "DEFEATED" } : army
+      )
+    : gameState.neutralArmies;
+
+  return {
+    ...gameState,
+    map: { ...gameState.map, tiles: nextTiles, levels: nextLevels },
+    neutralArmies,
+  };
+}
 
 function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat) {
   const attacker = findHero(gameState, pendingCombat.attackerHeroId);

@@ -2,7 +2,7 @@ import {
   GameState, Faction, HeroClass, UnitType, BuildingType,
   Hero, Town, Player, GameMap, MapTile, PersistentCombat,
   ResourceBuilding, ResourceBuildingType, TavernHeroOffer, NeutralArmy, AdventureBuildingType, Gate, MapObject, Boat,
-  AdventureBuildingState,
+  AdventureBuildingState, MapLevelId,
 } from "./types";
 import type { GameActionLogEntry } from "./server/action-log";
 import { normalizeArtifactBag } from "./artifacts";
@@ -10,7 +10,7 @@ import { isCreatureBankType } from "./creature-banks";
 import { isExternalDwellingType, normalizeExternalDwellingState } from "./external-dwellings";
 import { isSingleMapRewardBuilding } from "./adventure-buildings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
-import { normalizeMapLevel } from "./map-levels";
+import { normalizeMapLevel, positionLevel, SURFACE_LEVEL, UNDERGROUND_LEVEL } from "./map-levels";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
@@ -483,6 +483,39 @@ function buildExploredSet(
   return explored;
 }
 
+// Per-level explored set keyed by legacy `${x},${y}` coordinates. Unlike
+// buildExploredSet (which mixes all of the player's vision centers and is used
+// for the surface to preserve historical behavior), this filters explored tiles
+// and vision to a single map level so the underground layer is fogged on its own.
+function buildLayerExploredSet(
+  map: GameMap,
+  currentPlayer: Player | undefined,
+  revealMap: boolean,
+  level: MapLevelId
+) {
+  const explored = new Set<string>();
+  if (revealMap) {
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) explored.add(`${x},${y}`);
+    }
+    return explored;
+  }
+  if (!currentPlayer) return explored;
+
+  const prefix = `${level}:`;
+  for (const key of currentPlayer.exploredTiles ?? []) {
+    if (key.startsWith(prefix)) explored.add(key.slice(prefix.length));
+  }
+
+  const centers = getPlayerVisionCenters({
+    heroes: currentPlayer.heroes.filter((hero) => positionLevel(hero.position) === level),
+    towns: currentPlayer.towns.filter((town) => positionLevel(town.position) === level),
+  });
+  for (const key of computeVisibleTiles(map, centers, 5)) explored.add(key);
+
+  return explored;
+}
+
 function applyDynamicMapState(
   targetMap: GameMap,
   staticMap: GameMap,
@@ -515,7 +548,6 @@ function applyDynamicMapState(
       .filter((entry): entry is readonly [string, UnitType] => Boolean(entry[1]))
   );
   const gates = (mapState.gates as Gate[] | undefined) ?? [];
-  const exploredSet = buildExploredSet(targetMap, currentPlayer, revealMap);
   const allBuildings = players.flatMap((player) => player.resourceBuildings);
   const buildingsById = new Map<string, ResourceBuilding>(
     allBuildings.map((building) => [building.id, building])
@@ -528,10 +560,14 @@ function applyDynamicMapState(
     gates.map((gate) => [`${gate.position.x},${gate.position.y}`, gate])
   );
 
-  for (let y = 0; y < targetMap.height; y++) {
-    for (let x = 0; x < targetMap.width; x++) {
-      const tile = targetMap.tiles[y]?.[x] as MapTile | undefined;
-      const sourceTile = staticMap.tiles[y]?.[x] as MapTile | undefined;
+  const processLayer = (targetTiles: MapTile[][], staticTiles: MapTile[][], exploredSet: Set<string>) => {
+  for (let y = 0; y < targetTiles.length; y++) {
+    const targetRow = targetTiles[y];
+    const staticRow = staticTiles[y];
+    if (!targetRow || !staticRow) continue;
+    for (let x = 0; x < targetRow.length; x++) {
+      const tile = targetRow[x] as MapTile | undefined;
+      const sourceTile = staticRow[x] as MapTile | undefined;
       if (!tile || !sourceTile) continue;
 
       tile.object = sourceTile.object ? { ...sourceTile.object } : undefined;
@@ -626,6 +662,31 @@ function applyDynamicMapState(
         tile.movementCost = 999;
       }
     }
+  }
+  };
+
+  // The renderer draws map.levels[level].tiles via withActiveMapLayer, but the DB
+  // JSON round-trip de-aliases that array from the top-level map.tiles it was
+  // generated as a reference to. Clean each layer's own array so dynamic removals
+  // (defeated monsters, collected resources, captured gates) reach what's drawn.
+  const surfaceLayer = targetMap.levels?.[SURFACE_LEVEL];
+  const surfaceTargetTiles = surfaceLayer?.tiles ?? targetMap.tiles;
+  const surfaceStaticTiles = staticMap.levels?.[SURFACE_LEVEL]?.tiles ?? staticMap.tiles;
+  processLayer(surfaceTargetTiles, surfaceStaticTiles, buildExploredSet(targetMap, currentPlayer, revealMap));
+  // Re-point the top-level tiles at the surface array we just cleaned, so any
+  // consumer reading map.tiles directly stays in sync with the rendered surface.
+  if (surfaceLayer && surfaceTargetTiles !== targetMap.tiles) {
+    targetMap.tiles = surfaceTargetTiles;
+  }
+
+  const undergroundLayer = targetMap.levels?.[UNDERGROUND_LEVEL];
+  const undergroundStaticTiles = staticMap.levels?.[UNDERGROUND_LEVEL]?.tiles;
+  if (undergroundLayer && undergroundStaticTiles) {
+    processLayer(
+      undergroundLayer.tiles,
+      undergroundStaticTiles,
+      buildLayerExploredSet(targetMap, currentPlayer, revealMap, UNDERGROUND_LEVEL)
+    );
   }
 }
 

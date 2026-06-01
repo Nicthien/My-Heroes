@@ -849,9 +849,11 @@ function findPathInternal(
   end: Position,
   maxMovement: number
 ): Position[] {
-  const openSet = new MinPriorityQueue<{ pos: Position; g: number; path: Position[] }>();
+  const openSet = new MinPriorityQueue<{ pos: Position; g: number }>();
   const closedSet = new Set<string>();
-  const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
+  const startKey = `${start.x},${start.y}`;
+  const bestCost = new Map<string, number>([[startKey, 0]]);
+  const cameFrom = new Map<string, Position>();
 
   const heuristic = (a: Position, b: Position) => {
     const dx = Math.abs(a.x - b.x);
@@ -861,17 +863,13 @@ function findPathInternal(
     return diagonal * 70 + straight * 50;
   };
 
-  openSet.push({
-    pos: start,
-    g: 0,
-    path: [start],
-  }, heuristic(start, end));
+  openSet.push({ pos: start, g: 0 }, heuristic(start, end));
 
   while (openSet.length > 0) {
     const current = openSet.shift()!;
 
     if (current.pos.x === end.x && current.pos.y === end.y) {
-      return current.path;
+      return reconstructPath(cameFrom, current.pos);
     }
 
     const key = `${current.pos.x},${current.pos.y}`;
@@ -899,15 +897,30 @@ function findPathInternal(
       if (g >= (bestCost.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       bestCost.set(nKey, g);
-      openSet.push({
-        pos: neighbor,
-        g,
-        path: [...current.path, neighbor],
-      }, g + heuristic(neighbor, end));
+      cameFrom.set(nKey, current.pos);
+      openSet.push({ pos: neighbor, g }, g + heuristic(neighbor, end));
     }
   }
 
   return [];
+}
+
+/**
+ * Walks the `cameFrom` chain back from `end` to the start and returns the path
+ * in start→end order. Reconstructed once on success instead of carrying a full
+ * path array on every queued node.
+ */
+function reconstructPath(cameFrom: Map<string, Position>, end: Position): Position[] {
+  const path: Position[] = [end];
+  let cursor: Position | undefined = end;
+  while (cursor) {
+    const prev = cameFrom.get(`${cursor.x},${cursor.y}`);
+    if (!prev) break;
+    path.push(prev);
+    cursor = prev;
+  }
+  path.reverse();
+  return path;
 }
 
 export function findPathToAdjacent(
@@ -944,9 +957,10 @@ function findPathToAdjacentInternal(
   );
   if (goals.size === 0) return [];
 
-  const openSet = new MinPriorityQueue<{ pos: Position; g: number; path: Position[] }>();
+  const openSet = new MinPriorityQueue<{ pos: Position; g: number }>();
   const closedSet = new Set<string>();
   const bestCost = new Map<string, number>([[positionKey(start), 0]]);
+  const cameFrom = new Map<string, Position>();
 
   const heuristic = (a: Position) => {
     const dx = Math.max(0, Math.abs(a.x - target.x) - 1);
@@ -956,17 +970,13 @@ function findPathToAdjacentInternal(
     return diagonal * 70 + straight * 50;
   };
 
-  openSet.push({
-    pos: start,
-    g: 0,
-    path: [start],
-  }, heuristic(start));
+  openSet.push({ pos: start, g: 0 }, heuristic(start));
 
   while (openSet.length > 0) {
     const current = openSet.shift()!;
     const key = positionKey(current.pos);
 
-    if (goals.has(key)) return current.path;
+    if (goals.has(key)) return reconstructPath(cameFrom, current.pos);
     if (current.g > (bestCost.get(key) ?? Number.POSITIVE_INFINITY)) continue;
     if (closedSet.has(key)) continue;
     closedSet.add(key);
@@ -983,11 +993,8 @@ function findPathToAdjacentInternal(
       if (g >= (bestCost.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       bestCost.set(neighborKey, g);
-      openSet.push({
-        pos: neighbor,
-        g,
-        path: [...current.path, neighbor],
-      }, g + heuristic(neighbor));
+      cameFrom.set(neighborKey, current.pos);
+      openSet.push({ pos: neighbor, g }, g + heuristic(neighbor));
     }
   }
 
@@ -1097,7 +1104,23 @@ export function calculateIncome(player: Player): Resources {
   return { gold, wood, ore, mercury, crystals, gems, sulfur };
 }
 
+// Vision is a pure function of map bounds + centers + radius (it never reads
+// tile content), so identical calls — common when GameMap, the MiniMap, and the
+// object layer all derive the same player vision in one frame — can reuse a
+// cached result. Small bounded LRU to stay allocation-flat.
+const VISIBLE_TILES_CACHE_LIMIT = 8;
+const visibleTilesCache = new Map<string, Set<string>>();
+
 export function computeVisibleTiles(map: GameMap, centers: Position[], radius: number): Set<string> {
+  const cacheKey = `${map.width}x${map.height}|${radius}|${centers.map((c) => `${c.x},${c.y}`).join(";")}`;
+  const cached = visibleTilesCache.get(cacheKey);
+  if (cached) {
+    // Refresh recency and hand back a copy so callers stay free to mutate.
+    visibleTilesCache.delete(cacheKey);
+    visibleTilesCache.set(cacheKey, cached);
+    return new Set(cached);
+  }
+
   const visible = new Set<string>();
   for (const center of centers) {
     for (let dy = -radius; dy <= radius; dy++) {
@@ -1109,7 +1132,13 @@ export function computeVisibleTiles(map: GameMap, centers: Position[], radius: n
       }
     }
   }
-  return visible;
+
+  if (visibleTilesCache.size >= VISIBLE_TILES_CACHE_LIMIT) {
+    const oldest = visibleTilesCache.keys().next().value;
+    if (oldest !== undefined) visibleTilesCache.delete(oldest);
+  }
+  visibleTilesCache.set(cacheKey, visible);
+  return new Set(visible);
 }
 
 export function getPlayerVisionCenters(player: { heroes: { position: Position }[]; towns: { position: Position }[] }): Position[] {
@@ -1230,11 +1259,22 @@ export function processAction(state: GameState, action: GameAction): GameState {
       if (currentPlayer) {
         const newVisible = computeVisibleTiles(state.map, getPlayerVisionCenters(currentPlayer), 5);
         const exploredSet = new Set(currentPlayer.exploredTiles);
+        const added: string[] = [];
         for (const key of newVisible) {
-          exploredSet.add(key);
+          if (!exploredSet.has(key)) {
+            exploredSet.add(key);
+            added.push(key);
+          }
         }
-        const playerIndex = players.findIndex((p: Player) => p.id === state.currentTurnPlayerId);
-        players[playerIndex] = { ...players[playerIndex], exploredTiles: Array.from(exploredSet) };
+        // Only re-allocate the explored array when there are genuinely new
+        // tiles; append the delta instead of rebuilding from the full Set.
+        if (added.length > 0) {
+          const playerIndex = players.findIndex((p: Player) => p.id === state.currentTurnPlayerId);
+          players[playerIndex] = {
+            ...players[playerIndex],
+            exploredTiles: [...currentPlayer.exploredTiles, ...added],
+          };
+        }
       }
 
       return { ...state, players };

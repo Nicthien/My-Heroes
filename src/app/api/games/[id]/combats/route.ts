@@ -134,9 +134,10 @@ export async function POST(
     attackerPlayerId: gamePlayer.id,
     players,
     neutralArmies,
+    mapData,
   });
   const buildingDefender = !defender && body.targetType === "building"
-    ? await getBuildingDefender(supabase, id, String(body.targetId ?? ""))
+    ? await getBuildingDefender(supabase, id, String(body.targetId ?? ""), mapData)
     : null;
   const targetPosition = getTargetPosition(body);
   const townDefender = !defender && !buildingDefender && body.targetType === "town"
@@ -1188,7 +1189,8 @@ async function captureNeutralTown(
 async function getBuildingDefender(
   supabase: ReturnType<typeof createAdminClient>,
   gameId: string,
-  targetId: string
+  targetId: string,
+  mapData: GameMap
 ) {
   const { data: building, error } = await supabase
     .from("resource_buildings")
@@ -1199,7 +1201,20 @@ async function getBuildingDefender(
 
   if (error || !building || building.guardian_power <= 0) return null;
 
-  const count = Math.max(5, Math.ceil(Number(building.guardian_power) / 12));
+  const tile = mapData.tiles[building.y]?.[building.x];
+  const armies = createNeutralArmyStacksForTile(
+    { x: building.x, y: building.y, terrain: tile?.terrain },
+    Number(building.guardian_power),
+    building.id,
+  ).map((stack): UnitStack => ({
+    id: `${building.id}-stack-${stack.position}`,
+    unitType: stack.unitType,
+    count: stack.count,
+    health: stack.health,
+    maxHealth: stack.maxHealth,
+    position: stack.position,
+  }));
+
   return {
     id: building.id,
     playerId: null,
@@ -1207,14 +1222,7 @@ async function getBuildingDefender(
     neutralArmyId: null,
     attack: 1,
     defense: 1,
-    armies: [{
-      id: `${building.id}-guards`,
-      unitType: UnitType.PIKEMAN,
-      count,
-      health: count * 12,
-      maxHealth: 12,
-      position: 0,
-    }],
+    armies,
     x: building.x,
     y: building.y,
   };
@@ -1245,6 +1253,7 @@ function getDefender({
   attackerPlayerId,
   players,
   neutralArmies,
+  mapData,
 }: {
   targetId: string;
   targetType: string;
@@ -1268,6 +1277,7 @@ function getDefender({
     }>;
   }>;
   neutralArmies: Array<{ id: string; x: number; y: number; status: string; stacks: UnitStack[] }>;
+  mapData: GameMap;
 }) {
   if (targetType === "hero") {
     for (const player of players) {
@@ -1313,7 +1323,7 @@ function getDefender({
   if (targetType === "building") {
     const building = players.flatMap((player) => player.resourceBuildings).find((item) => item.id === targetId);
     if (!building || building.guardianPower <= 0) return null;
-    const count = Math.max(5, Math.ceil(building.guardianPower / 12));
+    const tile = mapData.tiles[building.y]?.[building.x];
     return {
       id: building.id,
       playerId: null,
@@ -1321,14 +1331,18 @@ function getDefender({
       neutralArmyId: null,
       attack: 1,
       defense: 1,
-      armies: [{
-        id: `${building.id}-guards`,
-        unitType: UnitType.PIKEMAN,
-        count,
-        health: count * 12,
-        maxHealth: 12,
-        position: 0,
-      }],
+      armies: createNeutralArmyStacksForTile(
+        { x: building.x, y: building.y, terrain: tile?.terrain },
+        building.guardianPower,
+        building.id,
+      ).map((stack): UnitStack => ({
+        id: `${building.id}-stack-${stack.position}`,
+        unitType: stack.unitType,
+        count: stack.count,
+        health: stack.health,
+        maxHealth: stack.maxHealth,
+        position: stack.position,
+      })),
       x: building.x,
       y: building.y,
     };

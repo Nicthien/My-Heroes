@@ -1,6 +1,6 @@
 import { MapTile, TerrainType, UnitType } from "./types";
 import { UNIT_RULES } from "./units";
-import { CREATURE_GROUPS } from "./creature-catalog";
+import { CREATURE_GROUPS, getCreature, getUpgradedVariant } from "./creature-catalog";
 import type { CreatureGroupKey } from "./creature-catalog";
 
 export interface NeutralArmyStackInput {
@@ -39,24 +39,55 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
   return TERRAIN_UNIT_POOLS[terrain as TerrainType] ?? TERRAIN_UNIT_POOLS[TerrainType.GRASS];
 }
 
+// Difficulty tuning for neutral guards. GUARD_STRENGTH_MULTIPLIER scales the budget
+// to offset aiValue being ~1.3× the legacy gold-cost basis the guardianPower values
+// were calibrated against. GUARD_BAND_LOW/HIGH bound which slice of the eligible
+// creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
+const GUARD_STRENGTH_MULTIPLIER = 1.3;
+const GUARD_BAND_LOW = 0.15;
+const GUARD_BAND_HIGH = 0.6;
+
+/**
+ * Builds a HoMM3-style homogeneous neutral guard: a single creature type is picked
+ * once, the total count is derived from the difficulty budget / the creature's
+ * aiValue, then that count is split across identical stacks (slots).
+ */
 export function createNeutralArmyStacksForTile(
-  tile: Pick<MapTile, "x" | "y" | "terrain">,
+  tile: Pick<MapTile, "x" | "y"> & { terrain?: TerrainType | string },
   guardianPower: number,
   armyId: string,
 ): NeutralArmyStackInput[] {
   const pool = getNeutralArmyUnitPool(tile.terrain);
   const budget = Math.max(120, Math.floor(guardianPower));
   const maxIndex = getMaxPoolIndex(pool, budget);
-  const stackCount = Math.min(getStackCount(budget), maxIndex + 1);
-  const weights = stackCount === 1 ? [1] : stackCount === 2 ? [0.65, 0.35] : [0.55, 0.3, 0.15];
   const seed = hashString(`${armyId}:${tile.x}:${tile.y}:${tile.terrain}:${budget}`);
-  const selected = selectUnitTypes(pool, maxIndex, stackCount, seed);
 
-  return selected.map((unitType, position) => {
-    const rule = UNIT_RULES[unitType];
-    const allocatedPower = Math.max(rule.power, Math.floor(budget * weights[position]));
-    const count = Math.max(1, Math.floor(allocatedPower / rule.power));
+  // Phase 1: draw a single creature type (once), biased toward the lower-mid of the
+  // eligible band. Picking cheaper-than-top creatures yields more units (so guards
+  // are not a thin handful of elites that die in two hits) while the band still
+  // scales up with the budget.
+  let unitType = selectSingleUnitType(pool, maxIndex, seed);
 
+  // HoMM3 upgrade flag: ~25% chance the whole troop becomes its upgraded variant.
+  // Use the well-mixed high bits so this roll is independent of the type selection.
+  if ((seed >>> 8) % 100 < 25) {
+    unitType = getUpgradedVariant(unitType) ?? unitType;
+  }
+
+  const rule = UNIT_RULES[unitType];
+  const aiValue = getCreature(unitType).aiValue;
+
+  // Phase 2: total count = (budget × difficulty multiplier) / AI value, then split
+  // into identical stacks. The multiplier compensates for aiValue being higher than
+  // the legacy gold-cost basis the guardianPower budgets were tuned against, so
+  // guards keep their intended strength.
+  const totalCount = Math.max(1, Math.round((budget * GUARD_STRENGTH_MULTIPLIER) / aiValue));
+  const stackCount = calculateStackCount(totalCount);
+  const baseCount = Math.floor(totalCount / stackCount);
+  const remainder = totalCount % stackCount;
+
+  return Array.from({ length: stackCount }, (_, position) => {
+    const count = baseCount + (position < remainder ? 1 : 0);
     return {
       unitType,
       count,
@@ -85,10 +116,13 @@ export function isUnitType(value: unknown): value is UnitType {
   return typeof value === "string" && value in UNIT_RULES;
 }
 
-function getStackCount(budget: number) {
-  if (budget >= 1800) return 3;
-  if (budget >= 700) return 2;
-  return 1;
+// Number of identical stacks the total count is split into. Tuned to avoid
+// single-unit stacks while keeping a HoMM3-like spread of slots.
+function calculateStackCount(totalCount: number) {
+  if (totalCount < 5) return 1;
+  if (totalCount < 20) return 2;
+  if (totalCount < 60) return 3;
+  return 4;
 }
 
 function getMaxPoolIndex(pool: UnitType[], budget: number) {
@@ -98,20 +132,16 @@ function getMaxPoolIndex(pool: UnitType[], budget: number) {
   return pool.length - 1;
 }
 
-function selectUnitTypes(pool: UnitType[], maxIndex: number, count: number, seed: number) {
-  const selected: UnitType[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const bandStart = Math.floor((i * (maxIndex + 1)) / count);
-    const bandEnd = Math.max(bandStart, Math.floor(((i + 1) * (maxIndex + 1)) / count) - 1);
-    let index = bandStart + ((seed + i * 17) % (bandEnd - bandStart + 1));
-
-    while (selected.includes(pool[index]) && index < maxIndex) index++;
-    while (selected.includes(pool[index]) && index > 0) index--;
-    selected.push(pool[index]);
-  }
-
-  return selected;
+// Picks one creature type from the lower-mid of the eligible band. The band already
+// scales up with the budget (getMaxPoolIndex), so staying below its top end keeps the
+// creature affordable enough to field a meaningful number of units instead of a few
+// elites — closer to the HoMM3 feel and to the legacy army sizes.
+function selectSingleUnitType(pool: UnitType[], maxIndex: number, seed: number): UnitType {
+  const lowerBound = Math.floor(maxIndex * GUARD_BAND_LOW);
+  const upperBound = Math.max(lowerBound, Math.floor(maxIndex * GUARD_BAND_HIGH));
+  const span = upperBound - lowerBound + 1;
+  const index = lowerBound + (seed % span);
+  return pool[index];
 }
 
 function hashString(value: string) {

@@ -23,7 +23,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Source of truth for a fresh install: `supabase/schema.sql`. Source of truth for incremental changes: `supabase/migrations/`.
 - After any schema change, update **both** so that fresh installs and existing databases stay aligned.
 - Never write authoritative SQL in `supabase/snippets/` — that path is gitignored (Supabase Studio scratchpad) and not part of the source tree.
-- Game tables currently have **no RLS** (everything goes through service-role API routes). The proposed RLS migration is drafted in `IMPROVEMENTS.md` — don't enable RLS piecemeal without applying the full set, or realtime subscriptions silently break.
+- Game tables have membership-based SELECT RLS applied via `supabase/migrations/20260530000100_enable_game_rls.sql` (mirrored in `supabase/schema.sql`); writes still go through service-role API routes. Any new game table must get its SELECT policy in both the migration and `schema.sql`, or realtime subscriptions silently break.
 
 # Localization
 

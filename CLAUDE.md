@@ -100,7 +100,7 @@ Key fields:
 
 ### API Routes (src/app/api/games/)
 
-All routes use `createAdminClient()` (Supabase service role, bypassing RLS) and gate access via `requireCurrentUser()`. There is no client direct-write path — the browser only subscribes to Supabase realtime for reads. See the RLS audit in `IMPROVEMENTS.md` for the proposed read-side hardening.
+All routes use `createAdminClient()` (Supabase service role, bypassing RLS) and gate access via `requireCurrentUser()`. There is no client direct-write path — the browser only subscribes to Supabase realtime for reads. SELECT-side RLS (membership-based) is applied via `supabase/migrations/20260530000100_enable_game_rls.sql` and mirrored in `supabase/schema.sql`.
 
 - POST /api/games - Create new game (map generation, player setup, neutral armies, resource buildings)
 - GET  /api/games - List authenticated user's games

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { autoResolveCombat } from "../src/lib/game/combat/autoResolve";
+import { applyLossesToArmies, autoResolveCombat } from "../src/lib/game/combat/autoResolve";
 import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUnits, sideHasActivePlayerUnits } from "../src/lib/game/combat/concession";
 import { buildCombatEnvironment } from "../src/lib/game/combat/environment";
 import { findHexPath, getBlockedCombatCells, getOccupiedCombatCells, getReachableCombatCells } from "../src/lib/game/combat/movement";
@@ -804,6 +804,42 @@ function testAutoResolveIsNotEasierAtEqualPower() {
   assert.ok(result.winnerLossRatio >= 0.6);
 }
 
+function testLopsidedAutoResolveIsCheapForTheStronger() {
+  const strong = {
+    id: "strong",
+    attack: 1,
+    defense: 1,
+    armies: [{ id: "s", unitType: UnitType.PIKEMAN, count: 100, health: 1000, maxHealth: 10, position: 0 }],
+  };
+  const weak = {
+    id: "weak",
+    attack: 1,
+    defense: 1,
+    armies: [{ id: "w", unitType: UnitType.PIKEMAN, count: 30, health: 300, maxHealth: 10, position: 0 }],
+  };
+  const result = autoResolveCombat(strong, weak);
+  assert.equal(result.winnerHeroId, "strong");
+  // A ~3x stronger army should walk away with light casualties (Lanchester),
+  // far below the old linear pressure * 0.7 (~0.21 here).
+  assert.ok(result.winnerLossRatio < 0.1, `expected light losses, got ${result.winnerLossRatio}`);
+}
+
+function testRangedUnitsAreShieldedByMelee() {
+  const armies = [
+    { id: "front", unitType: UnitType.PIKEMAN, count: 50, health: 500, maxHealth: 10, position: 0 },
+    { id: "back", unitType: UnitType.ARCHER, count: 50, health: 500, maxHealth: 10, position: 1 },
+  ];
+  // A moderate loss the melee line can fully absorb: archers must stay intact.
+  const shielded = applyLossesToArmies(armies, 0.3, false);
+  assert.equal(shielded.find((s) => s.id === "back")?.count, 50);
+  assert.ok((shielded.find((s) => s.id === "front")?.count ?? 0) < 50);
+
+  // Once the melee budget is exceeded, the overflow finally bites the archers.
+  const overrun = applyLossesToArmies(armies, 0.8, false);
+  assert.equal(overrun.find((s) => s.id === "front")?.count, 0);
+  assert.ok((overrun.find((s) => s.id === "back")?.count ?? 0) < 50);
+}
+
 function testCombatBoardNormalizesStackStats() {
   const board = createCombatBoard(
     {
@@ -914,6 +950,8 @@ testIndividualSurrenderCostUsesOnlyCurrentHeroUnits();
 testLastPlayerConcessionLeavesNoActiveSide();
 testCombatSpellImmunityAndMitigation();
 testAutoResolveIsNotEasierAtEqualPower();
+testLopsidedAutoResolveIsCheapForTheStronger();
+testRangedUnitsAreShieldedByMelee();
 testCombatBoardNormalizesStackStats();
 testPositiveLuckDoublesDamageAndMarksAttacker();
 testUpgradedDwellingsKeepBaseGrowth();

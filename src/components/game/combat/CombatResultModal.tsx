@@ -19,14 +19,18 @@ export default function CombatResultModal() {
   const myPlayer = gameState?.players.find((p) => p.userId === session?.user?.id);
   const iWon = Boolean(myPlayer && result.winnerPlayerId === myPlayer.id);
   const heroDied = Boolean(result.attackerDied && myPlayer && result.winnerPlayerId !== myPlayer.id);
+  // The result modal is only shown to combat participants, so "did not win" is a
+  // defeat. Keep the neutral fallback only for the rare uninvolved/spectator case.
+  const iLost = Boolean(myPlayer) && !iWon;
+  const defeat = heroDied || iLost;
   const bankReward = iWon ? result.creatureBankReward : null;
 
-  const borderColor = heroDied ? "border-red-700" : iWon ? "border-green-600" : "border-yellow-600";
-  const tagColor = heroDied ? "text-red-400" : iWon ? "text-green-400" : "text-yellow-500";
-  const titleColor = heroDied ? "text-red-100" : iWon ? "text-green-100" : "text-yellow-100";
-  const title = heroDied ? "Votre héros a péri au combat" : iWon ? "Victoire !" : "Combat terminé";
-  const tag = heroDied ? "Defaite" : iWon ? "Victoire" : "Resultat";
-  const buttonColor = heroDied ? "bg-red-800 hover:bg-red-700" : iWon ? "bg-green-800 hover:bg-green-700" : "bg-yellow-700 hover:bg-yellow-600";
+  const borderColor = defeat ? "border-red-700" : iWon ? "border-green-600" : "border-yellow-600";
+  const tagColor = defeat ? "text-red-400" : iWon ? "text-green-400" : "text-yellow-500";
+  const titleColor = defeat ? "text-red-100" : iWon ? "text-green-100" : "text-yellow-100";
+  const title = heroDied ? "Votre héros a péri au combat" : iWon ? "Victoire !" : iLost ? "Défaite" : "Combat terminé";
+  const tag = "Résultat du combat";
+  const buttonColor = defeat ? "bg-red-800 hover:bg-red-700" : iWon ? "bg-green-800 hover:bg-green-700" : "bg-yellow-700 hover:bg-yellow-600";
 
   const winnerName = getWinnerPlayerName(result, gameState);
 

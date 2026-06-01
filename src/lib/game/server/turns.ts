@@ -231,7 +231,12 @@ export async function completePlayerTurn(
         const knowledge = Number((hero as unknown as { knowledge?: number }).knowledge ?? 0);
         heroUpdate.mana = Math.max(0, knowledge * 10);
       }
-      await supabase.from("heroes").update(heroUpdate).eq("id", hero.id);
+      const { error: heroResetError } = await supabase.from("heroes").update(heroUpdate).eq("id", hero.id);
+      if (heroResetError) {
+        // A failed daily reset must not be silent: it leaves the hero with stale (often 0) movement
+        // while the day still advances, so surface it instead of swallowing the error.
+        console.error("heroes daily reset failed:", heroResetError, { heroId: hero.id });
+      }
 
       // First Aid skill : régénération d'armée chaque jour
       const firstAidLvl = ((hero.skills?.first_aid ?? null) as string | null);

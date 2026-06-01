@@ -416,6 +416,9 @@ export async function POST(
     if (attackerWon) {
       if (targetDefender.neutralArmyId) {
         await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", targetDefender.neutralArmyId);
+        // The defeated neutral army is fully wiped on an auto-win; clear its stacks so no
+        // orphaned units linger (mirrors the manual path in persistCombatOutcome).
+        await supabase.from("neutral_army_stacks").delete().eq("neutral_army_id", targetDefender.neutralArmyId);
         await supabase
           .from("gates")
           .update({ game_player_id: gamePlayer.id, guardian_power: 0 })

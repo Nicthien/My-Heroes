@@ -290,6 +290,12 @@ export function HUDContent() {
         };
       }),
     });
+
+    // The server may generate state the client can't replicate optimistically
+    // (tavern hero offer, mage guild spells, artifact merchant offers). Reconcile
+    // so freshly-built structures like the Tavern show their content immediately.
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
   };
 
   const handleBuildBoat = async () => {

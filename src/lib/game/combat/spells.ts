@@ -1,9 +1,9 @@
 import { getCreature } from "@/lib/game/creature-catalog";
 import { calculateSpellDamage, getSpell, type SpellDefinition, type SpellSchool } from "@/lib/game/spells";
-import { CombatBoardUnit, CombatSide, CombatTerrainFeature } from "@/lib/game/types";
+import { CombatBoardUnit, CombatSide, CombatTerrainFeature, UnitType } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { applyDamageToStack } from "./rules";
-import { getHexDistance, isInsideCombatCell, isTerrainBlocked } from "./movement";
+import { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isInsideCombatCell, isTerrainBlocked } from "./movement";
 import {
   hasMagicMirror,
   isImmuneToAllSpells,
@@ -312,6 +312,13 @@ const EFFECT_TARGETING: Record<string, SpellTargeting> = {
   sorrow: "enemy", blind: "enemy", forgetfulness: "enemy", berserk: "enemy", hypnotize: "enemy",
 };
 
+const SUMMONED_ELEMENTALS: Partial<Record<SpellDefinition["id"], UnitType>> = {
+  summon_air_elemental: UnitType.AIR_ELEMENTAL,
+  summon_earth_elemental: UnitType.EARTH_ELEMENTAL,
+  summon_fire_elemental: UnitType.FIRE_ELEMENTAL,
+  summon_water_elemental: UnitType.WATER_ELEMENTAL,
+};
+
 function buildSpellEffect(spell: SpellDefinition, caster: CombatSpellCaster): CombatStatusEffect | null {
   const duration = effectDuration(caster, spell);
   const mastery = masteryIndex(caster, spell); // 0..2
@@ -368,6 +375,7 @@ function executeEffectSpell(
   const living = units.filter((unit) => unit.count > 0);
 
   // Spells with dedicated handlers
+  if (spell.id in SUMMONED_ELEMENTALS) return applySummon(spell, units, action, caster, params.terrain ?? []);
   if (spell.id === "cure") return applyCure(spell, units, action, caster);
   if (spell.id === "dispel") return applyDispel(spell, units, action, caster);
   if (spell.id === "resurrection" || spell.id === "animate_dead") return applyResurrect(spell, units, action, caster);
@@ -400,6 +408,64 @@ function executeEffectSpell(
     affectedUnitIds: [target.id],
     result: null,
     requiresQueueRebuild,
+  };
+}
+
+function applySummon(
+  spell: SpellDefinition,
+  units: CombatBoardUnit[],
+  action: CombatSpellAction,
+  caster: CombatSpellCaster,
+  terrain: CombatTerrainFeature[]
+): CombatSpellExecution | CombatSpellFailure {
+  const unitType = SUMMONED_ELEMENTALS[spell.id];
+  if (!unitType) return { ok: false, error: "Sort non implemente" };
+
+  const anchor = action.targetUnitId
+    ? units.find((unit) => unit.id === action.targetUnitId && unit.count > 0)
+    : null;
+  if (anchor && anchor.side !== caster.side) return { ok: false, error: "Cible alliee requise" };
+
+  const preferred = Number.isInteger(action.q) && Number.isInteger(action.r)
+    ? { q: Number(action.q), r: Number(action.r) }
+    : anchor;
+  const placement = findSummonPlacement(caster.side, units, terrain, preferred);
+  if (!placement) return { ok: false, error: "Aucune case libre pour l'invocation" };
+
+  const rule = getUnitRule(unitType);
+  const count = getSummonedElementalCount(caster, spell);
+  const summoned: CombatBoardUnit = {
+    id: `${caster.heroId}-${spell.id}-${Date.now()}`,
+    unitType,
+    count,
+    health: count * rule.health,
+    maxHealth: rule.health,
+    position: getNextUnitPosition(units),
+    side: caster.side,
+    ownerPlayerId: caster.playerId,
+    heroId: caster.heroId,
+    participantId: null,
+    joinsRound: 1,
+    q: placement.q,
+    r: placement.r,
+    speed: rule.speed,
+    minDamage: rule.minDamage,
+    maxDamage: rule.maxDamage,
+    ranged: Boolean(rule.ranged),
+    shots: rule.shots ?? 0,
+    hasRetaliated: false,
+    defended: false,
+    waited: false,
+    summoned: true,
+  };
+
+  return {
+    ok: true,
+    units: [...units, summoned],
+    log: [`${spell.label} invoque ${count} ${rule.label}.`],
+    affectedUnitIds: [summoned.id],
+    result: null,
+    requiresQueueRebuild: true,
   };
 }
 
@@ -533,6 +599,80 @@ function placeNear(source: CombatBoardUnit, units: CombatBoardUnit[]): { q: numb
     }
   }
   return { q: source.q, r: source.r };
+}
+
+function getSummonedElementalCount(caster: CombatSpellCaster, spell: SpellDefinition) {
+  return Math.max(1, Math.floor(Math.max(1, caster.spellPower) * (2 + masteryIndex(caster, spell))));
+}
+
+function getNextUnitPosition(units: CombatBoardUnit[]) {
+  return units.reduce((max, unit) => Math.max(max, Number(unit.position ?? 0)), -1) + 1;
+}
+
+function findSummonPlacement(
+  side: CombatSide,
+  units: CombatBoardUnit[],
+  terrain: CombatTerrainFeature[],
+  preferred?: { q: number; r: number } | null
+): { q: number; r: number } | null {
+  if (preferred) {
+    const candidates = [preferred, ...getSummonNeighborCandidates(preferred, units)];
+    for (const cell of candidates) {
+      if (isFreeSummonCell(cell.q, cell.r, units, terrain)) return cell;
+    }
+  }
+
+  const columns = side === "attacker"
+    ? Array.from({ length: COMBAT_COLS }, (_, index) => index)
+    : Array.from({ length: COMBAT_COLS }, (_, index) => COMBAT_COLS - 1 - index);
+  const rows = getSummonRowOrder(getVisibleSummonRows(units, terrain));
+  for (const q of columns) {
+    for (const r of rows) {
+      if (isFreeSummonCell(q, r, units, terrain)) return { q, r };
+    }
+  }
+  return null;
+}
+
+function getSummonNeighborCandidates(source: { q: number; r: number }, units: CombatBoardUnit[]) {
+  const occupied = new Set(units.filter((unit) => unit.count > 0).map((unit) => `${unit.q},${unit.r}`));
+  const seen = new Set<string>();
+  const queue: Array<{ q: number; r: number }> = [source];
+  const candidates: Array<{ q: number; r: number }> = [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const next of getHexNeighbors(current.q, current.r)) {
+      const key = `${next.q},${next.r}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (getHexDistance(source, next) > 2) continue;
+      if (!occupied.has(key)) candidates.push(next);
+      queue.push(next);
+    }
+  }
+  return candidates.sort((a, b) => getHexDistance(source, a) - getHexDistance(source, b));
+}
+
+function getVisibleSummonRows(units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
+  const maxRow = [...units, ...terrain].reduce((max, item) => Math.max(max, Number(item.r ?? 0)), COMBAT_BASE_ROWS - 1);
+  return Math.max(COMBAT_BASE_ROWS, Math.min(COMBAT_ROWS, maxRow + 1));
+}
+
+function getSummonRowOrder(rowCount: number) {
+  const center = Math.floor(Math.min(rowCount, COMBAT_BASE_ROWS) / 2);
+  const rows: number[] = [];
+  for (let offset = 0; rows.length < rowCount && offset < COMBAT_ROWS; offset++) {
+    for (const r of [center + offset, center - offset]) {
+      if (r >= 0 && r < rowCount && !rows.includes(r)) rows.push(r);
+    }
+  }
+  return rows;
+}
+
+function isFreeSummonCell(q: number, r: number, units: CombatBoardUnit[], terrain: CombatTerrainFeature[]) {
+  return isInsideCombatCell(q, r) &&
+    !isTerrainBlocked(q, r, terrain) &&
+    !units.some((unit) => unit.count > 0 && unit.q === q && unit.r === r);
 }
 
 function getCombatResult(units: CombatBoardUnit[]): "attacker" | "defender" | null {

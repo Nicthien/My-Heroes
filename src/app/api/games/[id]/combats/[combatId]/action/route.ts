@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import { buildTurnQueue, executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
 import { applyTowerVolleyInRound, type SiegeState } from "@/lib/game/combat/siege";
 import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
 import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
@@ -255,6 +255,8 @@ export async function POST(
         skills: (caster.hero.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>,
       },
       action: action as CombatSpellAction,
+      terrain: boardState.terrain ?? [],
+      siege: boardState.siege ?? null,
       enemySkills: caster.side === "attacker"
         ? ((defenderHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>)
         : ((attackerHero?.skills ?? {}) as Partial<Record<string, "basic" | "advanced" | "expert">>),
@@ -265,9 +267,24 @@ export async function POST(
     const result = spellExecution.result
       ? buildManualCombatResult(spellExecution.result, initialUnits, spellExecution.units, combat)
       : null;
+    const nextTurnQueue = result
+      ? []
+      : spellExecution.requiresQueueRebuild
+        ? buildTurnQueue(spellExecution.units, combat.round ?? 1)
+        : (combat.turn_queue ?? []).filter((unitId: string) => spellExecution.units.some((unit) => unit.id === unitId && unit.count > 0));
+    const nextCurrentUnitId = result
+      ? null
+      : spellExecution.units.some((unit) => unit.id === combat.current_unit_id && unit.count > 0)
+        ? combat.current_unit_id
+        : nextTurnQueue[0] ?? null;
+    const nextCurrentPlayerId = result
+      ? null
+      : spellExecution.units.find((unit) => unit.id === nextCurrentUnitId)?.ownerPlayerId ?? null;
     const nextBoardState = {
       ...boardState,
       units: spellExecution.units,
+      terrain: spellExecution.terrain ?? boardState.terrain,
+      siege: spellExecution.siege ?? boardState.siege,
       spellCastsByRound: markHeroCombatSpellCast(boardState.spellCastsByRound, combat.round ?? 1, caster.heroId),
     };
     const actionLog = [...(combat.action_log ?? []), ...spellExecution.log];
@@ -275,6 +292,9 @@ export async function POST(
       .from("combats")
       .update({
         board_state: nextBoardState,
+        turn_queue: nextTurnQueue,
+        current_unit_id: nextCurrentUnitId,
+        current_player_id: nextCurrentPlayerId,
         action_log: actionLog,
         result,
         status: result ? "RESOLVED" : combat.status,
@@ -1282,10 +1302,12 @@ function executeActionThenNeutralTurns(params: {
       units,
       caster: choice.caster,
       action: choice.action,
+      terrain: params.terrain,
       enemySkills: enemy?.skills,
     });
     if (!execution.ok) return;
     units = execution.units;
+    if (execution.requiresQueueRebuild) turnQueue = buildTurnQueue(units, round);
     log.push(...execution.log);
     const cost = Math.max(0, choice.spell.cost.standard);
     aiManaDelta.set(hero.heroId, (aiManaDelta.get(hero.heroId) ?? 0) + cost);

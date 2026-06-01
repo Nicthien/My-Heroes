@@ -37,6 +37,26 @@ import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
+import {
+  RESOURCE_KEYS,
+  combatActionLabel,
+  combatHasPlayerHeroesOnBothSides,
+  combatInvolvesPlayer,
+  findActiveCombatParticipant,
+  getActiveCombatTruce,
+  getPlayerCombatSide,
+  getSideLosses,
+  hasPendingSurrenderNegotiation,
+  hasResources,
+  isMissingSkillsSchemaError,
+  isMissingSpellSchemaError,
+  isPrimaryCombatHero,
+  normalizeAcknowledgedPlayerIds,
+  normalizeSurrenderOffer,
+  playerResources,
+  type CombatTruceRow,
+  type SurrenderNegotiationRow,
+} from "./combatRouteHelpers";
 
 export async function POST(
   request: Request,
@@ -594,78 +614,6 @@ export async function POST(
   return NextResponse.json({ combat: mapped, result: mapped.result ?? null });
 }
 
-function combatInvolvesPlayer(
-  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string }> },
-  playerId: string
-) {
-  return (
-    combat.attacker_player_id === playerId ||
-    combat.defender_player_id === playerId ||
-    Boolean(combat.combat_participants?.some((participant) => participant.player_id === playerId))
-  );
-}
-
-function getPlayerCombatSide(
-  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: Array<{ player_id: string; side?: "attacker" | "defender" | null }> },
-  playerId: string
-): "attacker" | "defender" | null {
-  if (combat.attacker_player_id === playerId) return "attacker";
-  if (combat.defender_player_id === playerId) return "defender";
-  return combat.combat_participants?.find((participant) => participant.player_id === playerId)?.side ?? null;
-}
-
-function findActiveCombatParticipant(
-  combat: {
-    attacker_player_id: string;
-    defender_player_id?: string | null;
-    attacker_hero_id: string;
-    defender_hero_id?: string | null;
-    combat_participants?: CombatConcessionParticipant[];
-  },
-  units: CombatBoardUnit[],
-  playerId: string,
-  currentUnitId?: string | null
-): { playerId: string; heroId: string; side: "attacker" | "defender"; participantId: string | null; label: string } | null {
-  const currentUnit = units.find((unit) => unit.id === currentUnitId && unit.ownerPlayerId === playerId && unit.heroId && unit.count > 0);
-  const activeUnit = currentUnit ?? units.find((unit) => unit.ownerPlayerId === playerId && unit.heroId && unit.count > 0);
-  const side = activeUnit?.side ?? getPlayerCombatSide(combat, playerId);
-  if (!side) return null;
-  const participant = combat.combat_participants?.find((item) =>
-    item.player_id === playerId &&
-    item.side === side &&
-    (!activeUnit?.heroId || item.hero_id === activeUnit.heroId)
-  );
-  const heroId = activeUnit?.heroId ??
-    (side === "attacker" && combat.attacker_player_id === playerId ? combat.attacker_hero_id : null) ??
-    (side === "defender" && combat.defender_player_id === playerId ? combat.defender_hero_id ?? null : null) ??
-    participant?.hero_id ??
-    null;
-  if (!heroId) return null;
-  return {
-    playerId,
-    heroId,
-    side,
-    participantId: participant?.id ?? activeUnit?.participantId ?? null,
-    label: side === "attacker" ? "L'attaquant" : "Le defenseur",
-  };
-}
-
-function isPrimaryCombatHero(
-  combat: { attacker_hero_id: string; defender_hero_id?: string | null },
-  side: "attacker" | "defender",
-  heroId: string
-) {
-  return side === "attacker" ? combat.attacker_hero_id === heroId : combat.defender_hero_id === heroId;
-}
-
-function combatHasPlayerHeroesOnBothSides(
-  combat: { attacker_player_id: string; defender_player_id?: string | null; defender_hero_id?: string | null },
-  units: CombatBoardUnit[]
-) {
-  const attackerHasHero = Boolean(combat.attacker_player_id) || units.some((unit) => unit.side === "attacker" && unit.ownerPlayerId && unit.heroId);
-  const defenderHasHero = Boolean(combat.defender_player_id && combat.defender_hero_id) || units.some((unit) => unit.side === "defender" && unit.ownerPlayerId && unit.heroId);
-  return attackerHasHero && defenderHasHero;
-}
 
 async function deleteConsumedCombatParticipants(
   supabase: ReturnType<typeof createAdminClient>,
@@ -675,42 +623,6 @@ async function deleteConsumedCombatParticipants(
   const ids = Array.from(new Set(participantIds.filter((id): id is string => Boolean(id))));
   if (ids.length === 0) return;
   await supabase.from("combat_participants").delete().eq("combat_id", combatId).in("id", ids);
-}
-
-const RESOURCE_KEYS: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
-
-type SurrenderNegotiationRow = {
-  id: string;
-  combat_id: string;
-  surrendering_player_id: string;
-  surrendering_hero_id: string;
-  target_player_id: string;
-  side: "attacker" | "defender";
-  base_gold: number;
-  offer: Partial<Resources> | null;
-  refusal_count: number;
-  status: string;
-};
-
-type CombatTruceRow = {
-  id: string;
-  combat_id: string;
-  requested_by_player_id: string;
-  requested_by_hero_id: string;
-  side: "attacker" | "defender";
-  pause_until_turn: number;
-  acknowledged_player_ids?: unknown;
-  status: string;
-};
-
-function getActiveCombatTruce(
-  combat: { combat_truces?: CombatTruceRow[] },
-  gameTurnNumber: number
-): CombatTruceRow | null {
-  return combat.combat_truces?.find((truce) =>
-    truce.status === "ACTIVE" &&
-    Number(truce.pause_until_turn ?? 0) > gameTurnNumber
-  ) ?? null;
 }
 
 async function requestCombatTruce(params: {
@@ -792,10 +704,6 @@ async function acknowledgeCombatTruce(params: {
   const combat = await fetchMappedCombat(params.supabase, params.combatId);
   if (combat instanceof NextResponse) return combat;
   return NextResponse.json({ combat, result: null });
-}
-
-function normalizeAcknowledgedPlayerIds(value: unknown) {
-  return Array.isArray(value) ? Array.from(new Set(value.map(String))) : [];
 }
 
 async function createSurrenderNegotiation(params: {
@@ -1077,31 +985,6 @@ async function fetchMappedCombat(supabase: ReturnType<typeof createAdminClient>,
   return toCombat(data);
 }
 
-function hasPendingSurrenderNegotiation(combat: { combat_surrender_negotiations?: Array<{ status?: string }> }) {
-  return Boolean(combat.combat_surrender_negotiations?.some((negotiation) => negotiation.status === "PENDING"));
-}
-
-function normalizeSurrenderOffer(value: unknown, defaults: Partial<Resources> = {}): Resources {
-  const raw = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof Resources, unknown>>;
-  return RESOURCE_KEYS.reduce((offer, key) => {
-    const nextValue = Number(raw[key] ?? defaults[key] ?? 0);
-    offer[key] = Number.isFinite(nextValue) ? Math.max(0, Math.floor(nextValue)) : 0;
-    return offer;
-  }, {} as Resources);
-}
-
-function playerResources(player: { resources?: Partial<Record<keyof Resources, unknown>>; gold?: unknown; wood?: unknown; ore?: unknown; mercury?: unknown; crystals?: unknown; gems?: unknown; sulfur?: unknown }) {
-  const source = player.resources ?? player;
-  return RESOURCE_KEYS.reduce((resources, key) => {
-    resources[key] = Number(source[key] ?? 0);
-    return resources;
-  }, {} as Resources);
-}
-
-function hasResources(resources: Resources, cost: Resources) {
-  return RESOURCE_KEYS.every((key) => resources[key] >= cost[key]);
-}
-
 async function transferResources(
   supabase: ReturnType<typeof createAdminClient>,
   fromPlayerId: string,
@@ -1188,16 +1071,6 @@ async function fetchCombatHero(
       },
       error: null,
     };
-}
-
-function isMissingSpellSchemaError(error: { message?: string; details?: string | null; code?: string }) {
-  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("mana") || text.includes("has_spell_book") || text.includes("known_spells") || text.includes("morale") || text.includes("schema cache");
-}
-
-function isMissingSkillsSchemaError(error: { message?: string; details?: string | null; code?: string }) {
-  const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-  return text.includes("skills") || text.includes("war_machines");
 }
 
 function findCombatSpellCaster(params: {
@@ -1459,16 +1332,6 @@ function buildManualCombatResult(
     experienceGained: winnerSide === "attacker" ? 500 : 0,
     log: [`Victoire du camp ${winnerSide === "attacker" ? "attaquant" : "défenseur"}.`],
   };
-}
-
-function getSideLosses(side: "attacker" | "defender", before: CombatBoardUnit[], after: CombatBoardUnit[]) {
-  return before
-    .filter((unit) => unit.side === side)
-    .map((unit) => {
-      const next = after.find((item) => item.id === unit.id);
-      return { unitType: unit.unitType, lost: Math.max(0, unit.count - (next?.count ?? 0)) };
-    })
-    .filter((loss) => loss.lost > 0);
 }
 
 async function persistResolvedCombat(
@@ -1952,24 +1815,4 @@ async function logCombatAction(params: {
     summary: `Joueur ${combatActionLabel(actionType)}.`,
     details: { combatId: params.combatId, action: sanitizeActionForLog(params.action) },
   });
-}
-
-function combatActionLabel(actionType: string) {
-  const labels: Record<string, string> = {
-    ACCEPT_SURRENDER_NEGOTIATION: "accepte une reddition",
-    ACCEPT_TRUCE: "accepte une trêve",
-    ATTACK: "attaque en combat",
-    CAST_SPELL: "lance un sort en combat",
-    DEFEND: "défend en combat",
-    MOVE: "déplace une unité en combat",
-    NEGOTIATE_SURRENDER: "négocie une reddition",
-    REJECT_SURRENDER_NEGOTIATION: "refuse une reddition",
-    REJECT_TRUCE: "refuse une trêve",
-    REQUEST_TRUCE: "propose une trêve",
-    RETREAT: "bat en retraite",
-    SHOOT: "tire en combat",
-    SURRENDER: "se rend",
-    WAIT: "attend en combat",
-  };
-  return labels[actionType] ?? `effectue ${actionType} en combat`;
 }

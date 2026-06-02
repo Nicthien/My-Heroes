@@ -62,6 +62,43 @@ export function canAiWinAutoCombat(
   return result.winnerHeroId === attacker.id;
 }
 
+/**
+ * Estimates the fraction of the attacker's army lost in an auto-resolve win,
+ * reusing the same Lanchester model the real resolver applies. Returns 1 when
+ * the attacker would lose (caller already vetoes those via canAiWinAutoCombat).
+ */
+export function estimateAttackLossRatio(
+  attacker: Pick<AiHero, "id" | "armies" | "attack" | "defense" | "morale" | "luck">,
+  defender: {
+    id: string;
+    attack?: number;
+    defense?: number;
+    morale?: number;
+    luck?: number;
+    armies: UnitStack[];
+  },
+): number {
+  const result = autoResolveCombat(
+    {
+      id: attacker.id,
+      attack: Number(attacker.attack ?? 1),
+      defense: Number(attacker.defense ?? 1),
+      morale: Number(attacker.morale ?? 0),
+      luck: Number(attacker.luck ?? 0),
+      armies: attacker.armies,
+    },
+    {
+      id: defender.id,
+      attack: Number(defender.attack ?? 1),
+      defense: Number(defender.defense ?? 1),
+      morale: Number(defender.morale ?? 0),
+      luck: Number(defender.luck ?? 0),
+      armies: defender.armies,
+    },
+  );
+  return result.winnerHeroId === attacker.id ? result.winnerLossRatio : 1;
+}
+
 export function shouldAttackNeutral(hero: AiHero, defenderPower: number, requiredRatio: number) {
   return calculateHeroPower(hero) >= Math.max(1, defenderPower) * requiredRatio;
 }

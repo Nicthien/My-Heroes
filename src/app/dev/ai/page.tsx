@@ -8,6 +8,7 @@ import {
 } from "@/lib/game/ai/strategy/personality";
 import { buildAiContext } from "@/lib/game/ai/context";
 import { chooseAiObjective } from "@/lib/game/ai/utility";
+import { estimateAttackLossRatio } from "@/lib/game/ai/combat";
 import type { AiGame, AiPlayer } from "@/lib/game/ai/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { AdventureBuildingType, ResourceBuildingType, TerrainType, UnitType, type MapLevelId } from "@/lib/game/types";
@@ -25,6 +26,17 @@ export default function AiDevPage() {
   }));
 
   const decisions = useMemo(() => SCENARIOS.map(runScenario), []);
+  const lossDemo = useMemo(() => {
+    const strong = { id: "h", attack: 5, defense: 5, armies: [{ id: "a", unitType: UnitType.PIKEMAN, count: 100, health: 1000, maxHealth: 10, position: 0 }] };
+    const weak = { id: "d1", armies: [{ id: "g", unitType: UnitType.PIKEMAN, count: 10, health: 100, maxHealth: 10, position: 0 }] };
+    const even = { id: "d2", armies: [{ id: "g", unitType: UnitType.PIKEMAN, count: 92, health: 920, maxHealth: 10, position: 0 }] };
+    const lopsided = estimateAttackLossRatio(strong, weak);
+    const evenRatio = estimateAttackLossRatio(strong, even);
+    return [
+      { id: "lopsided", label: "Cible faible", ratio: lopsided, ok: lopsided < 0.2, note: "pertes minimes → l'IA engage" },
+      { id: "even", label: "Combat serré", ratio: evenRatio, ok: evenRatio > lopsided + 0.1, note: "pertes lourdes → l'IA hésite/évite si la cible est mineure" },
+    ];
+  }, []);
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: 24, color: "#1a1a1a" }}>
@@ -59,6 +71,31 @@ export default function AiDevPage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section style={{ marginBottom: 32 }} data-testid="ai-loss-awareness">
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Combat conscient des pertes</h2>
+        <p style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
+          Estimation Lanchester (<code>estimateAttackLossRatio</code>) : l&apos;IA chiffre ses pertes
+          attendues avant d&apos;engager, au lieu de la décision « gagne/perd » binaire.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {lossDemo.map((card) => (
+            <div
+              key={card.id}
+              data-testid={`ai-loss-${card.id}`}
+              data-loss-ratio={card.ratio.toFixed(3)}
+              data-decision-ok={card.ok ? "true" : "false"}
+              style={{ border: `1px solid ${card.ok ? "#3a7d44" : "#b3261e"}`, borderRadius: 8, padding: 12, background: "#fafafa" }}
+            >
+              <h3 style={{ fontSize: 16, marginBottom: 6 }}>{card.ok ? "✅" : "❌"} {card.label}</h3>
+              <ul style={{ fontSize: 13, lineHeight: 1.6 }}>
+                <li>Pertes attendues : <b>{Math.round(card.ratio * 100)}%</b></li>
+                <li>{card.note}</li>
+              </ul>
+            </div>
+          ))}
         </div>
       </section>
 

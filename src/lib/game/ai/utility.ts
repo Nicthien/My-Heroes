@@ -30,10 +30,12 @@ import {
   playerResources,
   tileKey,
 } from "./context";
-import { calculateHeroPower, calculateStacksPower, canAiWinAutoCombat, createBuildingGuardStacks } from "./combat";
+import { calculateHeroPower, calculateStacksPower, canAiWinAutoCombat, createBuildingGuardStacks, estimateAttackLossRatio } from "./combat";
 import { roleMultiplier } from "./roles";
 import { getGarrisonPickupStacks } from "./strategy/army-transfers";
 import { generateDefenseObjectives } from "./strategy/defense";
+import { jitterAmplitude, scoringJitter } from "./strategy/scoring-noise";
+import type { AiPersonality } from "./strategy/personality";
 import type { AiContext, AiHero, AiObjective, AiRole, AiUtilityScore } from "./types";
 
 const MINIMUM_AUTO_RESOLVE_ATTACK_RATIO = 1.13;
@@ -51,8 +53,9 @@ export function chooseAiObjective(context: AiContext, hero: AiHero, role: AiRole
     .sort((a, b) =>
       b.score - a.score ||
       a.objective.pathCost - b.objective.pathCost ||
-      a.objective.position.y - b.objective.position.y ||
-      a.objective.position.x - b.objective.position.x
+      // Départage non-spatial : un hash stable de l'id évite le biais haut-gauche
+      // (`y → x`) qui faisait zigzaguer l'IA de façon mécanique.
+      stableHash(a.objective.id) - stableHash(b.objective.id)
     );
 
   return scored[0] ?? null;
@@ -138,7 +141,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
     const pathCost = getAdventurePathCostAvoiding(context.map, path, [position]);
     if (path.length < 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
     const targetPower = calculateStacksPower(army.stacks);
-    objectives.push({
+    const defender = { id: army.id, attack: 1, defense: 1, armies: army.stacks };
+    objectives.push(attachLoss({
       type: "neutral_army",
       id: army.id,
       position,
@@ -146,13 +150,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
       pathCost,
       baseValue: 500 + targetPower * 0.45,
       targetPower,
-      canAutoWin: canAiWinAutoCombat(hero, {
-        id: army.id,
-        attack: 1,
-        defense: 1,
-        armies: army.stacks,
-      }),
-    });
+      canAutoWin: canAiWinAutoCombat(hero, defender),
+    }, hero, heroPower, defender));
   }
 
   for (const gate of context.game.gates ?? []) {
@@ -169,7 +168,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
       ? getAdventurePathCostAvoiding(context.map, objectivePath, [position])
       : getAdventurePathCost(context.map, objectivePath);
     if (objectivePath.length < 1 || !Number.isFinite(objectivePathCost) || objectivePathCost > hero.movement) continue;
-    objectives.push({
+    const defender = { id: gate.id, attack: 1, defense: 1, armies: stacks };
+    objectives.push(attachLoss({
       type: "gate",
       id: gate.id,
       position,
@@ -177,13 +177,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
       pathCost: objectivePathCost,
       baseValue: targetPower > 0 ? 900 + targetPower * 0.5 : 700,
       targetPower,
-      canAutoWin: targetPower <= 0 || canAiWinAutoCombat(hero, {
-        id: gate.id,
-        attack: 1,
-        defense: 1,
-        armies: stacks,
-      }),
-    });
+      canAutoWin: targetPower <= 0 || canAiWinAutoCombat(hero, defender),
+    }, hero, heroPower, targetPower > 0 ? defender : null));
   }
 
   for (const opponent of context.visibleOpponents) {
@@ -194,7 +189,15 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
       if (path.length < 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
       const targetPower = calculateHeroPower(target);
       const isPrimary = context.memory.primaryEnemyId === opponent.id;
-      objectives.push({
+      const defender = {
+        id: target.id,
+        attack: target.attack,
+        defense: target.defense,
+        morale: target.morale,
+        luck: target.luck,
+        armies: target.armies,
+      };
+      objectives.push(attachLoss({
         type: "enemy_hero",
         id: target.id,
         position,
@@ -204,15 +207,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
         targetPower,
         targetPlayerId: opponent.id,
         targetHeroId: target.id,
-        canAutoWin: canAiWinAutoCombat(hero, {
-          id: target.id,
-          attack: target.attack,
-          defense: target.defense,
-          morale: target.morale,
-          luck: target.luck,
-          armies: target.armies,
-        }),
-      });
+        canAutoWin: canAiWinAutoCombat(hero, defender),
+      }, hero, heroPower, defender));
     }
     for (const town of opponent.towns ?? []) {
       const position = { x: town.x, y: town.y };
@@ -225,7 +221,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
         : getAdventurePathCost(context.map, path);
       if (path.length < 1 || !Number.isFinite(pathCost) || pathCost > hero.movement) continue;
       const isPrimary = context.memory.primaryEnemyId === opponent.id;
-      objectives.push({
+      const defender = { id: town.id, attack: 1, defense: 1, armies: town.garrison ?? [] };
+      objectives.push(attachLoss({
         type: "enemy_town",
         id: town.id,
         position,
@@ -235,13 +232,8 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
         targetPower: garrisonPower,
         targetPlayerId: opponent.id,
         targetTownId: town.id,
-        canAutoWin: garrisonPower <= 0 || canAiWinAutoCombat(hero, {
-          id: town.id,
-          attack: 1,
-          defense: 1,
-          armies: town.garrison ?? [],
-        }),
-      });
+        canAutoWin: garrisonPower <= 0 || canAiWinAutoCombat(hero, defender),
+      }, hero, heroPower, garrisonPower > 0 ? defender : null));
     }
   }
 
@@ -522,6 +514,55 @@ function computeLandReachable(map: GameMap, start: Position): Set<string> {
   return seen;
 }
 
+// Annotates a winning combat objective with its expected army-loss ratio/value
+// (Lanchester model via estimateAttackLossRatio). No-op for unwinnable or
+// non-combat objectives so scoring stays unchanged there.
+function attachLoss(
+  objective: AiObjective,
+  hero: AiHero,
+  heroPower: number,
+  defender: Parameters<typeof estimateAttackLossRatio>[1] | null,
+): AiObjective {
+  if (!defender || objective.canAutoWin === false) return objective;
+  const ratio = estimateAttackLossRatio(hero, defender);
+  objective.expectedLossRatio = ratio;
+  objective.expectedLossValue = heroPower * ratio;
+  return objective;
+}
+
+// How much the AI dislikes army losses, per personality (weights the penalty).
+function lossAversion(personality: AiPersonality): number {
+  switch (personality) {
+    case "AGGRESSIVE": return 0.2;
+    case "ECONOMIC": return 0.55;
+    case "OPPORTUNIST": return 0.35;
+    default: return 0.4;
+  }
+}
+
+// Loss ratio above which a non-high-value win is rejected as Pyrrhic.
+function pyrrhicThreshold(personality: AiPersonality): number {
+  switch (personality) {
+    case "AGGRESSIVE": return 0.75;
+    case "ECONOMIC": return 0.35;
+    case "OPPORTUNIST": return 0.55;
+    default: return 0.5;
+  }
+}
+
+// Uses remembered intel to be cautious against a rival that recently beat us, and
+// to press an advantage when we clearly outgrow the strongest force we've seen.
+function opponentIntelMultiplier(context: AiContext, objective: AiObjective, heroPower: number): number {
+  if (objective.type !== "enemy_hero" && objective.type !== "enemy_town") return 1;
+  const intel = objective.targetPlayerId ? context.memory.opponentIntel?.[objective.targetPlayerId] : undefined;
+  if (!intel) return 1;
+  let multiplier = 1;
+  const turn = Number(context.game.turnNumber ?? 1);
+  if (intel.lostToAtTurn && turn - intel.lostToAtTurn <= 5) multiplier *= 0.5;
+  if (heroPower > intel.maxPowerSeen * 1.3) multiplier *= 1.2;
+  return multiplier;
+}
+
 function getObjectObjective(
   context: AiContext,
   hero: AiHero,
@@ -562,7 +603,8 @@ function getObjectObjective(
     const objectivePath = rawGuardianPower > 0 ? findPathToAdjacent(context.map, start, position, movement) : path;
     const objectivePathCost = rawGuardianPower > 0 ? getAdventurePathCostAvoiding(context.map, objectivePath, [position]) : pathCost;
     if (objectivePath.length < 1 || !Number.isFinite(objectivePathCost) || objectivePathCost > movement) return null;
-    return {
+    const defender = { id: object.id, attack: 1, defense: 1, armies: guardStacks };
+    return attachLoss({
       type: "resource_building",
       id: object.id,
       position,
@@ -573,13 +615,8 @@ function getObjectObjective(
       object,
       buildingType,
       guardianPower: rawGuardianPower,
-      canAutoWin: rawGuardianPower <= 0 || canAiWinAutoCombat(hero, {
-        id: object.id,
-        attack: 1,
-        defense: 1,
-        armies: guardStacks,
-      }),
-    };
+      canAutoWin: rawGuardianPower <= 0 || canAiWinAutoCombat(hero, defender),
+    }, hero, calculateHeroPower(hero), rawGuardianPower > 0 ? defender : null);
   }
 
   if (object.type === "adventure_building") {
@@ -614,16 +651,19 @@ function getObjectObjective(
 
   if (object.type === "town") {
     if (isTownOwnedByPlayer(context.player, position, object.id)) return null;
-    return {
+    const rawGuardianPower = Number(object.guardianPower ?? 0);
+    const guardStacks = rawGuardianPower > 0 ? createBuildingGuardStacks(object.id, rawGuardianPower) : [];
+    const defender = { id: object.id, attack: 1, defense: 1, armies: guardStacks };
+    return attachLoss({
       type: "neutral_town",
       id: object.targetId ?? object.id,
       position,
       path,
       pathCost,
       baseValue: NEUTRAL_TOWN_BASE_VALUE,
-      targetPower: Number(object.guardianPower ?? 0),
+      targetPower: rawGuardianPower,
       object,
-    };
+    }, hero, calculateHeroPower(hero), rawGuardianPower > 0 ? defender : null);
   }
 
   if (object.type === "monster") {
@@ -634,7 +674,8 @@ function getObjectObjective(
     const rawGuardianPower = Number(object.guardianPower ?? 0);
     const guardStacks = createBuildingGuardStacks(object.id, rawGuardianPower);
     const targetPower = calculateStacksPower(guardStacks);
-    return {
+    const defender = { id: object.id, attack: 1, defense: 1, armies: guardStacks };
+    return attachLoss({
       type: "neutral_army",
       id: object.id,
       position,
@@ -644,13 +685,8 @@ function getObjectObjective(
       targetPower,
       object,
       guardianPower: rawGuardianPower,
-      canAutoWin: canAiWinAutoCombat(hero, {
-        id: object.id,
-        attack: 1,
-        defense: 1,
-        armies: guardStacks,
-      }),
-    };
+      canAutoWin: canAiWinAutoCombat(hero, defender),
+    }, hero, calculateHeroPower(hero), defender);
   }
 
   return null;
@@ -775,11 +811,20 @@ function scoreObjective(
     if (heroPower < objective.targetPower * getRequiredPowerRatio(context, objective)) return null;
   }
 
+  // Combat conscient des pertes : véto des victoires à la Pyrrhus sur cibles
+  // mineures, modulé par la personnalité. Les villes (haute valeur) sont exemptées.
+  const lossRatio = objective.expectedLossRatio ?? 0;
+  if (lossRatio > 0) {
+    const highValue = objective.type === "enemy_town" || objective.type === "neutral_town";
+    if (lossRatio > pyrrhicThreshold(context.personality) && !highValue) return null;
+  }
+
   const needMultiplier = getNeedMultiplier(context, objective);
   const objectiveRoleMultiplier = roleMultiplier(role, objective.type);
   const threatPenalty = getThreatPenalty(context, objective.path, heroPower);
   const movementPenalty = objective.pathCost * 0.35;
   const guardianPenalty = Math.max(0, objective.targetPower - heroPower * 0.75) * 0.85;
+  const lossPenalty = (objective.expectedLossValue ?? 0) * lossAversion(context.personality);
   const postureExploreBoost = context.posture === "EXPLORE" ? 1.3 : 1;
   const explorationBoost = objective.type === "exploration"
     ? context.profile.explorationWeight * postureExploreBoost
@@ -792,10 +837,22 @@ function scoreObjective(
   // Multiplicateur d'opportunité : tout ce qui est proche, battable, et "rapporte" dépasse de loin l'exploration.
   // Sans ça l'IA ignore les mines voisines pour aller scouter au loin (comportement non-organique).
   const opportunityMul = opportunityMultiplier(context, objective, hero, heroPower);
-  const score = objective.baseValue * needMultiplier * objectiveRoleMultiplier * explorationBoost * aggressionBoost * conquestBoost * economyBoost * opportunityMul
+  const intelMultiplier = opponentIntelMultiplier(context, objective, heroPower);
+  // Hystérésis : on s'engage sur l'objectif déjà poursuivi plutôt que d'osciller.
+  const continuityBonus = context.memory.heroObjectives?.[hero.id] === objective.id ? 1.12 : 1;
+  const rawScore = (objective.baseValue * needMultiplier * objectiveRoleMultiplier * explorationBoost * aggressionBoost * conquestBoost * economyBoost * opportunityMul * intelMultiplier * continuityBonus)
     - movementPenalty
     - threatPenalty
-    - guardianPenalty;
+    - guardianPenalty
+    - lossPenalty;
+
+  // Imprévisibilité déterministe : un léger bruit seedé par (partie, héros, tour,
+  // objectif) casse les égalités et le style robotique, sans casser la rejouabilité.
+  const jitter = scoringJitter(
+    [context.game.id, hero.id, Number(context.game.turnNumber ?? 0), objective.id],
+    jitterAmplitude(context.personality),
+  );
+  const score = rawScore * jitter;
 
   if (score <= 0) return null;
   return {

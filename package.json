@@ -29,6 +29,8 @@
     "validate:rmg": "tsx scripts/validate-rmg.ts",
     "validate:rmg:full": "tsx scripts/validate-rmg.ts --full",
     "validate:ai": "tsx scripts/validate-ai.ts",
+    "calibrate:ai": "tsx scripts/calibrate-ai.ts",
+    "calibrate:combat": "tsx scripts/calibrate-combat.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs",
     "seed:e2e:gameplay": "node scripts/seed-e2e-gameplay.mjs --start-supabase",
     "test:e2e": "playwright test",

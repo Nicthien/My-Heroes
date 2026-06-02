@@ -214,6 +214,10 @@ export interface AiObjective {
   boatId?: string;
   /** Landing tile for a `disembark_boat` objective. */
   disembarkPosition?: Position;
+  /** Estimated fraction of the attacker's army lost on a winning engagement. */
+  expectedLossRatio?: number;
+  /** Estimated army-power value lost on a winning engagement. */
+  expectedLossValue?: number;
 }
 
 export interface AiUtilityScore {

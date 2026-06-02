@@ -15,7 +15,7 @@ import { createExternalDwellingState, isExternalDwellingType, normalizeExternalD
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { completePlayerTurn } from "@/lib/game/server/turns";
 import { recordGameAction } from "@/lib/game/server/action-log";
-import { AdventureBuildingType, GameMap, Position, Resources, UnitStack } from "@/lib/game/types";
+import { AdventureBuildingType, GameMap, MapObject, Position, Resources, UnitStack } from "@/lib/game/types";
 import { SPELLS } from "@/lib/game/spells";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
@@ -25,7 +25,7 @@ import { runAiEconomy } from "./economy";
 import { runAiCombatTurns } from "./combat-runner";
 import { assignHeroRole } from "./roles";
 import { chooseAiObjective } from "./utility";
-import { saveAiMemory } from "./strategy/memory";
+import { saveAiMemory, updateOpponentIntel } from "./strategy/memory";
 import { pickChampion } from "./strategy/champion";
 import { executeArmyTransfers, pickupNearbyGarrisonForHero } from "./strategy/army-transfers";
 import { selectPrimaryEnemy } from "./strategy/enemy";
@@ -137,6 +137,13 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
   }
   // Met à jour les plans multi-tours.
   initialContext.memory.multiTurnPlans = updateMultiTurnPlans(initialContext, initialContext.memory);
+  // Met à jour le renseignement sur les adversaires (puissance vue, dernière apparition).
+  initialContext.memory.opponentIntel = updateOpponentIntel(
+    initialContext.memory.opponentIntel,
+    game,
+    initialContext.visibleOpponents,
+    turnNumber,
+  );
 
   await runAiEconomy(supabase, game, player, initialContext);
   await maybeBuildBoat(supabase, initialContext);
@@ -163,6 +170,8 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
   const championOverride = initialContext.memory.championHeroId;
   const primaryEnemyOverride = initialContext.memory.primaryEnemyId;
   const plansOverride = initialContext.memory.multiTurnPlans;
+  const intelOverride = initialContext.memory.opponentIntel;
+  const heroObjectives: Record<string, string> = { ...initialContext.memory.heroObjectives };
   for (let heroIndex = 0; heroIndex < heroIds.length; heroIndex++) {
     for (let step = 0; step < MAX_HERO_OBJECTIVES_PER_TURN; step++) {
       freshGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
@@ -178,6 +187,8 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
       }
       context.memory.primaryEnemyId = primaryEnemyOverride;
       context.memory.multiTurnPlans = plansOverride;
+      context.memory.opponentIntel = intelOverride;
+      context.memory.heroObjectives = heroObjectives;
       lastContext = context;
       const role = assignHeroRole(context, hero, heroIndex);
       const score = chooseAiObjective(context, hero, role);
@@ -197,6 +208,17 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
         idleCount++;
         break;
       }
+      // Mémorise l'objectif poursuivi (hystérésis) et toute défaite subie (prudence).
+      heroObjectives[hero.id] = score.objective.id;
+      if (result.heroRemoved && score.objective.targetPlayerId) {
+        const prior = intelOverride[score.objective.targetPlayerId];
+        intelOverride[score.objective.targetPlayerId] = {
+          maxPowerSeen: prior?.maxPowerSeen ?? score.objective.targetPower,
+          lastSeenPower: prior?.lastSeenPower ?? score.objective.targetPower,
+          lastSeenTurn: prior?.lastSeenTurn ?? turnNumber,
+          lostToAtTurn: turnNumber,
+        };
+      }
       actionCount++;
       if (result.heroRemoved) break;
       await sleep(AI_MOVE_DELAY_MS);
@@ -206,11 +228,18 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
   if (lastContext) {
     const finalGame = await getGameWithRelations(supabase, game.id) as unknown as AiGame | null;
     const finalMapState = (finalGame?.mapState as Record<string, unknown> | undefined) ?? lastContext.mapState;
+    const livingHeroIds = new Set((lastContext.player.heroes ?? []).map((h) => h.id));
+    const prunedHeroObjectives: Record<string, string> = {};
+    for (const [heroId, objectiveId] of Object.entries(heroObjectives)) {
+      if (livingHeroIds.has(heroId)) prunedHeroObjectives[heroId] = objectiveId;
+    }
     const updatedMemory = {
       ...lastContext.memory,
       championHeroId: championOverride ?? lastContext.memory.championHeroId,
       primaryEnemyId: primaryEnemyOverride ?? lastContext.memory.primaryEnemyId,
       multiTurnPlans: plansOverride,
+      opponentIntel: intelOverride,
+      heroObjectives: prunedHeroObjectives,
       lastTurn: Number(game.turnNumber ?? 0),
     };
     await saveAiMemory(supabase, game.id, player.id, updatedMemory, finalMapState);
@@ -254,7 +283,7 @@ async function applyAiDecision(
   });
 
   if (objective.type === "resource") {
-    await collectResource(supabase, context, objective);
+    await collectResource(supabase, context, objective.object);
     await logAiAction(supabase, context.game, context.player, "COLLECT_RESOURCE", "adventure", `${context.player.aiName || "IA"} collecte des ressources.`, {
       objectId: objective.id,
       position: objective.position,
@@ -387,6 +416,11 @@ async function moveHeroToObjective(
   }).eq("id", hero.id);
   if (error) throw error;
 
+  // Ramassage en-route : on récupère une pile de ressources traversée plutôt que
+  // de « téléporter » par-dessus (la collecte de la case d'arrivée reste gérée
+  // par l'effet de l'objectif lui-même).
+  await collectResource(supabase, context, findEnRoutePickup(context, objective.path, destination) ?? undefined);
+
   await updateExploration(supabase, context, destination);
   return {
     moved: true,
@@ -489,22 +523,33 @@ function isPositionOccupiedByHero(context: AiContext, movingHeroId: string, posi
   );
 }
 
-async function collectResource(supabase: SupabaseAdmin, context: AiContext, objective: AiObjective) {
-  const object = objective.object;
+async function collectResource(supabase: SupabaseAdmin, context: AiContext, object: MapObject | undefined) {
   if (!object || context.collected.has(object.id)) return;
 
   const resourceType = normalizeResource(object.subtype);
   const amount = getResourcePileAmount(object);
-  const resources = playerResources(context.player);
-  const nextResources = { ...resources, [resourceType]: Number(resources[resourceType] ?? 0) + amount };
-  const nextCollected = Array.from(new Set([...context.collected, object.id]));
+  const nextAmount = Number(playerResources(context.player)[resourceType] ?? 0) + amount;
 
-  await supabase.from("game_players").update({
-    [resourceType]: nextResources[resourceType],
-  }).eq("id", context.player.id);
-  await supabase.from("games").update({
-    map_state: { ...context.mapState, collected: nextCollected },
-  }).eq("id", context.game.id);
+  // Mutate the context so chained collects in the same decision (en-route pile +
+  // destination pile) stay consistent instead of overwriting each other.
+  context.collected.add(object.id);
+  context.player[resourceType] = nextAmount;
+  context.mapState = { ...context.mapState, collected: Array.from(context.collected) };
+
+  await supabase.from("game_players").update({ [resourceType]: nextAmount }).eq("id", context.player.id);
+  await supabase.from("games").update({ map_state: context.mapState }).eq("id", context.game.id);
+}
+
+// First uncollected resource pile the path crosses before its final tile — the
+// loot a human grabs on the way instead of walking past it.
+function findEnRoutePickup(context: AiContext, path: Position[], destination: Position): MapObject | null {
+  for (let i = 1; i < path.length - 1; i++) {
+    const step = path[i];
+    if (step.x === destination.x && step.y === destination.y) continue;
+    const object = context.map.tiles[step.y]?.[step.x]?.object;
+    if (object?.type === "resource" && !context.collected.has(object.id)) return object;
+  }
+  return null;
 }
 
 async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContext, hero: AiHero, objective: AiObjective) {

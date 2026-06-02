@@ -7,6 +7,9 @@ const DEFEND_GARRISON_RESERVE_RATIO = 0.45;
 const ADJACENT = (ax: number, ay: number, bx: number, by: number) =>
   Math.max(Math.abs(ax - bx), Math.abs(ay - by)) <= 1;
 
+const CHEBYSHEV = (ax: number, ay: number, bx: number, by: number) =>
+  Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+
 export async function executeArmyTransfers(
   supabase: SupabaseAdmin,
   context: AiContext,
@@ -34,6 +37,21 @@ export async function executeArmyTransfers(
     if (champion && ADJACENT(hero.x, hero.y, champion.x, champion.y)) {
       await transferStacksToHero(supabase, hero, champion);
       continue;
+    }
+
+    // Relais : transférer à un allié adjacent strictement plus proche du champion,
+    // pour faire avancer les troupes le long d'une chaîne de héros.
+    if (champion) {
+      const relay = heroes.find((other) =>
+        other.id !== hero.id &&
+        other.id !== championId &&
+        ADJACENT(hero.x, hero.y, other.x, other.y) &&
+        CHEBYSHEV(other.x, other.y, champion.x, champion.y) < CHEBYSHEV(hero.x, hero.y, champion.x, champion.y)
+      );
+      if (relay) {
+        await transferStacksToHero(supabase, hero, relay);
+        continue;
+      }
     }
 
     if (context.posture === "DEFEND") {

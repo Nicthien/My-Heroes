@@ -9,13 +9,18 @@ import {
   rollAiPersonality,
 } from "../src/lib/game/ai/strategy/personality";
 import { chooseAiCombatSpell } from "../src/lib/game/ai/combat-spells";
-import { planAiTacticsPlacements } from "../src/lib/game/ai/combat-tactics";
+import { chooseAiCombatAction, planAiTacticsPlacements } from "../src/lib/game/ai/combat-tactics";
+import { getHexDistance } from "../src/lib/game/combat/movement";
 import { buildAiContext } from "../src/lib/game/ai/context";
 import { chooseAiObjective } from "../src/lib/game/ai/utility";
 import { getGarrisonPickupStacks } from "../src/lib/game/ai/strategy/army-transfers";
 import { canRecruitSingleStackHero } from "../src/lib/game/ai/strategy/recruit-hero";
 import { findGateObjectOnAnyLevel, getSubterraneanGateTarget } from "../src/lib/game/engine/level-transition";
 import { canBuildBoat, canEmbark } from "../src/lib/game/boats/boat-ops";
+import { estimateAttackLossRatio } from "../src/lib/game/ai/combat";
+import { scoringJitter } from "../src/lib/game/ai/strategy/scoring-noise";
+import { updateOpponentIntel } from "../src/lib/game/ai/strategy/memory";
+import { updateMultiTurnPlans } from "../src/lib/game/ai/strategy/planner";
 import { UNDERGROUND_LEVEL } from "../src/lib/game/map-levels";
 import { BuildingType, Faction, ResourceBuildingType, TerrainType, UnitType, type CombatBoardUnit } from "../src/lib/game/types";
 
@@ -1087,6 +1092,139 @@ test("AI sails toward a separated island when already embarked", () => {
     choice.objective.type === "sail" || choice.objective.type === "disembark_boat",
     `expected sail/disembark_boat, got ${choice.objective.type}`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Human-like AI improvements: loss-aware combat, jitter, intel, logistics
+// ---------------------------------------------------------------------------
+
+test("Loss estimate: lopsided win bleeds little, an even fight bleeds a lot", () => {
+  const strongHero = {
+    id: "h1",
+    attack: 5,
+    defense: 5,
+    armies: [{ id: "a1", unitType: UnitType.PIKEMAN, count: 100, health: 1000, maxHealth: 10, position: 0 }],
+  };
+  const weakDefender = {
+    id: "d1",
+    armies: [{ id: "g1", unitType: UnitType.PIKEMAN, count: 10, health: 100, maxHealth: 10, position: 0 }],
+  };
+  const evenDefender = {
+    id: "d2",
+    armies: [{ id: "g2", unitType: UnitType.PIKEMAN, count: 92, health: 920, maxHealth: 10, position: 0 }],
+  };
+  const lopsided = estimateAttackLossRatio(strongHero, weakDefender);
+  const even = estimateAttackLossRatio(strongHero, evenDefender);
+  assert(lopsided < 0.2, `lopsided win should bleed little, got ${lopsided}`);
+  assert(even > lopsided + 0.1, `even fight should bleed much more (got even ${even} vs lopsided ${lopsided})`);
+});
+
+test("Scoring jitter is deterministic and bounded", () => {
+  const a = scoringJitter(["g", "h1", 3, "obj"], 0.08);
+  const b = scoringJitter(["g", "h1", 3, "obj"], 0.08);
+  const c = scoringJitter(["g", "h1", 4, "obj"], 0.08);
+  assert(a === b, "same seed must give the same jitter");
+  assert(a >= 0.92 && a <= 1.08, `jitter out of bounds: ${a}`);
+  assert(a !== c, "different turn should usually shift the jitter");
+  assert(scoringJitter(["x"], 0) === 1, "zero amplitude must be a no-op");
+});
+
+test("Opponent intel records peak power and purges dead rivals", () => {
+  const opponent = {
+    id: "p2",
+    isAlive: true,
+    heroes: [{ id: "eh1", attack: 2, defense: 2, armies: [{ id: "ea", unitType: UnitType.PIKEMAN, count: 40, health: 400, maxHealth: 10, position: 0 }] }],
+    towns: [],
+  };
+  const game = {
+    players: [
+      { id: "p1", isAlive: true },
+      opponent,
+      { id: "p3", isAlive: false },
+    ],
+  };
+  const previous = {
+    p2: { maxPowerSeen: 9999, lastSeenPower: 9999, lastSeenTurn: 1 },
+    p3: { maxPowerSeen: 100, lastSeenPower: 100, lastSeenTurn: 1 },
+  };
+  const next = updateOpponentIntel(previous as never, game as never, [opponent] as never, 5);
+  assert(next.p2.maxPowerSeen === 9999, "should keep the highest power ever seen");
+  assert(next.p2.lastSeenTurn === 5, "should refresh last-seen turn");
+  assert(next.p2.lastSeenPower > 0, "should record current power");
+  assert(!next.p3, "dead rival intel must be purged");
+});
+
+test("AI routes a loaded secondary hero to the champion (mule logistics)", () => {
+  const tiles = Array.from({ length: 8 }, (_, y) =>
+    Array.from({ length: 8 }, (_, x) => ({ x, y, terrain: TerrainType.GRASS, movementCost: 100, isPassable: true, object: undefined })),
+  );
+  const exploredTiles: string[] = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) exploredTiles.push(`surface:${x},${y}`);
+  const army = (id: string, count: number) => [{ id, unitType: UnitType.PIKEMAN, count, health: count * 10, maxHealth: 10, position: 0 }];
+  const player = makeAiPlayer({
+    exploredTiles,
+    heroes: [
+      { id: "champion", x: 1, y: 1, mapLevel: "surface", movement: 1560, attack: 3, defense: 3, armies: army("c", 60) },
+      { id: "mule", x: 6, y: 6, mapLevel: "surface", movement: 1560, attack: 1, defense: 1, armies: army("m", 50) },
+    ],
+  });
+  const game = makeAiGame({ width: 8, height: 8, tiles }, player);
+  const context = buildAiContext(game as never, game.players[0] as never);
+  context.memory.championHeroId = "champion";
+  const plans = updateMultiTurnPlans(context, context.memory);
+  const mulePlan = plans.find((plan) => plan.heroId === "mule");
+  assert(!!mulePlan, "expected a plan for the mule hero");
+  assert(mulePlan!.goal === "RALLY_TO_CHAMPION", `expected RALLY_TO_CHAMPION, got ${mulePlan!.goal}`);
+});
+
+// ---------------------------------------------------------------------------
+// Tactical combat: retaliation awareness (G1) and shooter safety (G4)
+// ---------------------------------------------------------------------------
+
+function combatUnit(over: Partial<CombatBoardUnit> & { id: string; side: "attacker" | "defender"; q: number; r: number }): CombatBoardUnit {
+  return {
+    unitType: UnitType.PIKEMAN,
+    count: 10,
+    health: 100,
+    maxHealth: 10,
+    speed: 4,
+    ranged: false,
+    shots: 0,
+    ownerPlayerId: over.side === "attacker" ? "p1" : "p2",
+    heroId: over.side === "attacker" ? "h1" : "h2",
+    defended: false,
+    waited: false,
+    hasRetaliated: false,
+    joinsRound: 0,
+    minDamage: 1,
+    maxDamage: 2,
+    position: 0,
+    ...over,
+  } as CombatBoardUnit;
+}
+
+const COMBAT_STATS = { attacker: { attack: 1, defense: 1 }, defender: { attack: 1, defense: 1 } };
+
+test("Combat: AI prefers the target that won't retaliate", () => {
+  // Two equivalent adjacent enemies; one already retaliated this round (free hit),
+  // the other is fresh and hits back hard. The AI should strike the spent one.
+  const actor = combatUnit({ id: "me", side: "attacker", q: 5, r: 4, count: 10 });
+  const spent = combatUnit({ id: "spent", side: "defender", q: 6, r: 4, count: 50, health: 500, maxHealth: 10, minDamage: 6, maxDamage: 9, hasRetaliated: true });
+  const fresh = combatUnit({ id: "fresh", side: "defender", q: 5, r: 3, count: 50, health: 500, maxHealth: 10, minDamage: 6, maxDamage: 9, hasRetaliated: false });
+  const action = chooseAiCombatAction(actor, [actor, spent, fresh], [], COMBAT_STATS);
+  assert(action.type === "ATTACK", `expected ATTACK, got ${action.type}`);
+  assert(action.targetUnitId === "spent", `expected to hit the already-retaliated stack, got ${action.targetUnitId}`);
+});
+
+test("Combat: a blocked shooter repositions to a safe firing cell", () => {
+  // An archer is pinned by a melee stack it cannot kill; it should step away to
+  // shoot rather than swing in melee at reduced damage.
+  const archer = combatUnit({ id: "archer", side: "attacker", q: 5, r: 4, ranged: true, shots: 5, count: 10, minDamage: 1, maxDamage: 2 });
+  const blocker = combatUnit({ id: "blocker", side: "defender", q: 6, r: 4, count: 100, health: 1000, maxHealth: 10 });
+  const action = chooseAiCombatAction(archer, [archer, blocker], [], COMBAT_STATS);
+  assert(action.type === "MOVE", `expected MOVE to safety, got ${action.type}`);
+  const dest = { q: action.q ?? archer.q, r: action.r ?? archer.r };
+  assert(getHexDistance(dest, blocker) > 1, `archer should end out of melee contact, dist=${getHexDistance(dest, blocker)}`);
 });
 
 let failed = 0;

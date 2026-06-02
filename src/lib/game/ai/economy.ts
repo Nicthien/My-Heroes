@@ -29,6 +29,17 @@ export async function runAiEconomy(
       ...buildPriority.filter((b) => b !== BuildingType.TOWN_HALL && b !== BuildingType.TAVERN),
     ];
   }
+  // Tempo : à l'approche de la fin de semaine, on priorise les dwellings pour
+  // qu'ils contribuent à la croissance hebdomadaire à venir (jeu plus humain :
+  // on monte en puissance par vagues plutôt qu'au fil de l'eau).
+  const dayOfWeek = ((Number(game.turnNumber ?? 1) - 1) % 7) + 1;
+  if (dayOfWeek >= 6) {
+    const headSet = new Set<BuildingType>([BuildingType.TOWN_HALL, BuildingType.TAVERN]);
+    const head = buildPriority.filter((b) => headSet.has(b));
+    const dwellings = buildPriority.filter(isDwellingBuilding);
+    const rest = buildPriority.filter((b) => !headSet.has(b) && !isDwellingBuilding(b));
+    buildPriority = [...head, ...dwellings, ...rest];
+  }
   const built = await buildOneAffordableBuilding(supabase, game, player, buildPriority);
   if (built) {
     await recordGameAction(supabase, {
@@ -55,6 +66,15 @@ export async function runAiEconomy(
       details: { stacks: recruited },
     });
   }
+}
+
+function isDwellingBuilding(building: BuildingType): boolean {
+  return (
+    building === BuildingType.DWELLING_1 ||
+    building === BuildingType.DWELLING_2 ||
+    building === BuildingType.DWELLING_3 ||
+    building === BuildingType.DWELLING_4
+  );
 }
 
 async function buildOneAffordableBuilding(

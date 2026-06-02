@@ -29,6 +29,15 @@ export function updateMultiTurnPlans(
       // Si on a déjà exploré la zone cible, le plan est obsolète.
       if (context.explored.has(`${plan.targetX},${plan.targetY}`)) return false;
     }
+    if (plan.goal === "RALLY_TO_CHAMPION") {
+      // Valable tant que le champion existe et que ce n'est pas lui-même ; on
+      // rafraîchit la cible vers sa position courante (il bouge).
+      if (plan.heroId === memory.championHeroId) return false;
+      const champion = heroes.find((h) => h.id === memory.championHeroId);
+      if (!champion) return false;
+      plan.targetX = champion.x;
+      plan.targetY = champion.y;
+    }
     return true;
   });
 
@@ -41,6 +50,14 @@ export function updateMultiTurnPlans(
 
   const reinforcementPlan = pickReinforcementPlan(context, surviving, turn);
   if (reinforcementPlan) surviving.push(reinforcementPlan);
+
+  // Logistique : un héros secondaire portant une vraie armée fait route vers le
+  // champion pour la lui transférer (schéma "mule" multi-tours).
+  if (champion) {
+    for (const feederPlan of pickChampionFeederPlans(context, champion, surviving, turn)) {
+      surviving.push(feederPlan);
+    }
+  }
 
   // Si aucun ennemi n'est connu, donne un plan SCOUT_FRONTIER au héros secondaire
   // (ou au champion si on est seul) pour aller chercher l'inconnu activement.
@@ -76,6 +93,35 @@ function pickScoutHero(
   // Préfère un secondaire ; à défaut, le champion sert d'éclaireur en l'absence d'ennemi connu.
   const secondary = withoutPlan.find((h) => h.id !== championId);
   return secondary ?? withoutPlan[0];
+}
+
+const MULE_MIN_POWER = 400;
+
+// Secondary heroes carrying a meaningful army are routed to the champion so they
+// can hand their stacks over (multi-turn "mule" logistics). Heroes already next
+// to the champion are left to executeArmyTransfers.
+function pickChampionFeederPlans(
+  context: AiContext,
+  champion: AiHero,
+  existingPlans: AiMultiTurnPlan[],
+  turn: number,
+): AiMultiTurnPlan[] {
+  const plans: AiMultiTurnPlan[] = [];
+  for (const hero of context.player.heroes ?? []) {
+    if (hero.id === champion.id) continue;
+    if (existingPlans.some((plan) => plan.heroId === hero.id)) continue;
+    if (CHEBYSHEV(hero.x, hero.y, champion.x, champion.y) <= 1) continue;
+    if (calculateHeroPower(hero) < MULE_MIN_POWER) continue;
+    plans.push({
+      heroId: hero.id,
+      goal: "RALLY_TO_CHAMPION",
+      targetX: champion.x,
+      targetY: champion.y,
+      etaTurns: estimateEta(hero, champion),
+      expiresAtTurn: turn + 3,
+    });
+  }
+  return plans;
 }
 
 function pickReinforcementPlan(

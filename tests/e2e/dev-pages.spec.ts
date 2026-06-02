@@ -555,6 +555,11 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     for (const id of ["subterranean-gate", "embark-boat", "sail"]) {
       await expect(page.getByTestId(`ai-decision-${id}`)).toHaveAttribute("data-decision-ok", "true");
     }
+
+    // Loss-aware combat: lopsided win is cheap, even fight is flagged costly.
+    await expect(page.getByTestId("ai-loss-awareness")).toBeVisible();
+    await expect(page.getByTestId("ai-loss-lopsided")).toHaveAttribute("data-decision-ok", "true");
+    await expect(page.getByTestId("ai-loss-even")).toHaveAttribute("data-decision-ok", "true");
   });
 
   test("dashboard leaderboard lists top players with ranks", async ({ page }) => {

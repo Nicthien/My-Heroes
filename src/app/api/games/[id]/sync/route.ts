@@ -4,6 +4,7 @@ import { resumeAiActivityUntilHuman } from "@/lib/game/ai/simple-ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameSyncWithRelations } from "@/lib/supabase/game-db";
 import { computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "../shared";
+import { computeDbPlayerScore, type DbScorablePlayer } from "@/lib/game/score";
 
 export async function GET(
   request: Request,
@@ -44,6 +45,7 @@ export async function GET(
       mapState: game.mapState,
       players: players.map((item) => ({
         ...item,
+        score: computeDbPlayerScore(item as unknown as DbScorablePlayer),
         turnProgressRatio: computeTurnProgressRatio(item, Number(game.turnNumber ?? 0)),
       })),
       turns: game.turns,
@@ -70,6 +72,7 @@ export async function GET(
     mapState: game.mapState,
     players: players.map((item) => ({
       ...sanitizePlayerForViewer(item, player?.id),
+      score: computeDbPlayerScore(item as unknown as DbScorablePlayer),
       turnProgressRatio: computeTurnProgressRatio(item, Number(game.turnNumber ?? 0)),
       exploredTiles: item.id === player?.id ? (isSpectator ? allTileKeys : item.exploredTiles) : [],
     })),

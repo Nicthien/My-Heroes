@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { GameState, Player } from "@/lib/game/types";
-import { rankPlayers } from "@/lib/game/score";
+import { computePlayerScore, scorableFromPlayer } from "@/lib/game/score";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { PlayerProgressGauge, TurnStatusIcon } from "./topBar";
 import { PlayerScoreTooltip } from "./PlayerScoreTooltip";
@@ -17,8 +17,17 @@ export function PlayersListPanel({
   myPlayer: Player | undefined;
   embedded?: boolean;
 }) {
-  const ranked = rankPlayers(gameState.players);
+  // The server sends an authoritative total score per player (computed from full,
+  // un-sanitized data). Opponents' possessions are hidden by fog of war, so we
+  // can only build their per-category breakdown for the viewer's own player.
+  const scoreOf = (player: Player) =>
+    typeof player.score === "number" ? player.score : computePlayerScore(scorableFromPlayer(player)).total;
+  const ranked = [...gameState.players]
+    .map((player) => ({ player, total: scoreOf(player) }))
+    .sort((a, b) => b.total - a.total)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
   const rankByPlayerId = new Map(ranked.map((entry) => [entry.player.id, entry]));
+  const myBreakdown = myPlayer ? computePlayerScore(scorableFromPlayer(myPlayer)) : undefined;
   const playerCount = gameState.players.length;
 
   // Tooltip is fixed-positioned (anchored to the hovered row) so it escapes the
@@ -77,7 +86,8 @@ export function PlayersListPanel({
         })}
       {hovered && hoveredEntry && (
         <PlayerScoreTooltip
-          breakdown={hoveredEntry.breakdown}
+          total={hoveredEntry.total}
+          breakdown={hoveredEntry.player.id === myPlayer?.id ? myBreakdown : undefined}
           rank={hoveredEntry.rank}
           playerCount={playerCount}
           style={{ position: "fixed", top: hovered.top, right: hovered.right }}

@@ -5,6 +5,7 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
 import { HeroPanel } from "./HeroPanel";
+import { GameOverScreen } from "./GameOverScreen";
 import { PlayersListPanel } from "./PlayersListPanel";
 import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { CountDialog } from "./townDialogs";
@@ -160,24 +161,32 @@ export function HUDContent() {
 
   const handleLeaveGame = async () => {
     if (!gameState) return;
-    if (adminObserverMode || !myPlayer) {
+    const goToDashboard = () => {
       useGameStore.getState().resetGame();
       router.push("/dashboard");
+    };
+
+    if (adminObserverMode || !myPlayer) {
+      goToDashboard();
+      return;
+    }
+
+    // Finished games are deleted server-side once every human has left, so we
+    // notify the server on the way out (best-effort) before returning.
+    if (gameState.status === "COMPLETED" || gameState.status === "ABANDONED") {
+      await fetchWithSupabaseAuth(`/api/games/${gameState.id}/leave`, { method: "POST" });
+      goToDashboard();
       return;
     }
 
     if (myPlayer.turnOrder === 0 || gameState.status !== "PENDING") {
-      useGameStore.getState().resetGame();
-      router.push("/dashboard");
+      goToDashboard();
       return;
     }
 
     if (!window.confirm("Voulez-vous vraiment quitter cette partie ?")) return;
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/leave`, { method: "POST" });
-    if (response.ok) {
-      useGameStore.getState().resetGame();
-      router.push("/dashboard");
-    }
+    if (response.ok) goToDashboard();
   };
 
   const handleEndTurn = async () => {
@@ -190,6 +199,24 @@ export function HUDContent() {
 
     if (!response.ok) {
       setCombatMessage(await getApiErrorMessage(response, "Impossible de finir le tour."));
+      return;
+    }
+
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
+  };
+
+  const handleSurrender = async () => {
+    if (!myPlayer || gameState.status !== "ACTIVE" || !myPlayer.isAlive) return;
+    if (!window.confirm("Abandonner la partie ? Vous serez éliminé et ne pourrez plus jouer.")) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "SURRENDER_GAME" }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, "Impossible d'abandonner la partie."));
       return;
     }
 
@@ -893,6 +920,17 @@ export function HUDContent() {
   const activeReturnMax = activeReturnStack?.count ?? 0;
   const activeReturnCount = Math.min(Math.max(1, returnDialog?.count ?? 1), Math.max(1, activeReturnMax));
 
+  // A finished game replaces the whole HUD with the end-of-game review screen:
+  // no more top bar, panels or windows, so heroes/towns/mines can't be selected.
+  // Admin observers keep the regular HUD to inspect the final board.
+  if (gameState.status === "COMPLETED" && !adminObserverMode) {
+    return (
+      <div className="absolute inset-0 pointer-events-auto">
+        <GameOverScreen gameState={gameState} myPlayer={myPlayer} onLeave={handleLeaveGame} />
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 pointer-events-none">
       {/* Top bar */}
@@ -962,6 +1000,16 @@ export function HUDContent() {
             ) : myPlayer ? (
               <ResourceBar player={myPlayer} />
             ) : null}
+            {myPlayer && !adminObserverMode && gameState.status === "ACTIVE" && myPlayer.isAlive && (
+              <button
+                className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
+                onClick={handleSurrender}
+                title="Abandonner la partie"
+              >
+                <span className="text-sm font-black uppercase tracking-wider leading-none">Abandonner</span>
+                <span className="mt-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] leading-none text-amber-600/80">forfait</span>
+              </button>
+            )}
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}

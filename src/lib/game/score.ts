@@ -198,6 +198,59 @@ export function scorableFromPlayer(player: Player): ScorablePlayer {
   };
 }
 
+/**
+ * Player shape as returned by the Supabase relations mapper (`toGame`/`toPlayer`):
+ * flat resource fields, flat hero stats, camelCase army stacks. Used by the
+ * server to score players from authoritative (un-sanitized) data.
+ */
+export interface DbScorablePlayer {
+  gold?: number; wood?: number; ore?: number; mercury?: number; crystals?: number; gems?: number; sulfur?: number;
+  scoreStats?: unknown;
+  heroes?: Array<{
+    level?: number; experience?: number;
+    attack?: number; defense?: number; spellPower?: number; knowledge?: number;
+    artifacts?: { inventory?: string[]; equipment?: Record<string, unknown> };
+    armies?: Array<{ unitType: string; count: number }>;
+  }>;
+  towns?: Array<{ level?: number; buildings?: unknown[]; garrison?: Array<{ unitType: string; count: number }> }>;
+  resourceBuildings?: unknown[];
+}
+
+/** Adapter: build the normalized scorable from a Supabase-relations player row. */
+export function scorableFromDbPlayer(player: DbScorablePlayer): ScorablePlayer {
+  return {
+    towns: (player.towns ?? []).map((town) => ({ level: town.level, buildings: town.buildings })),
+    heroes: (player.heroes ?? []).map((hero) => ({
+      level: hero.level,
+      experience: hero.experience,
+      statTotal:
+        Number(hero.attack ?? 0) + Number(hero.defense ?? 0) + Number(hero.spellPower ?? 0) + Number(hero.knowledge ?? 0),
+      artifactCount:
+        (hero.artifacts?.inventory?.length ?? 0) + Object.keys(hero.artifacts?.equipment ?? {}).length,
+      armies: (hero.armies ?? []).map((stack) => ({ unitType: stack.unitType, count: stack.count })),
+    })),
+    garrisons: (player.towns ?? []).flatMap((town) =>
+      (town.garrison ?? []).map((stack) => ({ unitType: stack.unitType, count: stack.count }))
+    ),
+    mineCount: (player.resourceBuildings ?? []).length,
+    resources: {
+      gold: Number(player.gold ?? 0),
+      wood: Number(player.wood ?? 0),
+      ore: Number(player.ore ?? 0),
+      mercury: Number(player.mercury ?? 0),
+      crystals: Number(player.crystals ?? 0),
+      gems: Number(player.gems ?? 0),
+      sulfur: Number(player.sulfur ?? 0),
+    },
+    scoreStats: normalizeScoreStats(player.scoreStats),
+  };
+}
+
+/** Total score for a Supabase-relations player row (authoritative, full data). */
+export function computeDbPlayerScore(player: DbScorablePlayer): number {
+  return computePlayerScore(scorableFromDbPlayer(player)).total;
+}
+
 export interface RankedPlayer {
   player: Player;
   breakdown: ScoreBreakdown;

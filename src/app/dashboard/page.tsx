@@ -10,10 +10,17 @@ import {
   normalizeRmgTuning,
 } from "@/lib/game/engine/rmg-tuning";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
-import { GameMap, type MapLevelId } from "@/lib/game/types";
+import { GameMap, type MapLevelId, type VictoryConditionType } from "@/lib/game/types";
+import {
+  DEFAULT_GOLD_TARGET,
+  DEFAULT_TURN_LIMIT,
+  describeVictoryCondition,
+  normalizeVictoryCondition,
+} from "@/lib/game/victory";
 import { SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import { createClient } from "@/lib/supabase/browser";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { version as APP_VERSION } from "../../../package.json";
 import {
   CornerOrnaments,
   FleurDeLis,
@@ -55,6 +62,7 @@ interface GameInfo {
   mapWidth: number;
   mapHeight: number;
   createdAt?: string | null;
+  gameConfig?: { victory?: unknown } | null;
   players: PlayerInfo[];
 }
 
@@ -108,6 +116,12 @@ function formatAdminDate(value?: string | null, fallback = "-") {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
+}
+
+function buildVictoryPayload(type: VictoryConditionType, goldTarget: number, turnLimit: number) {
+  if (type === "GOLD") return { type, goldTarget };
+  if (type === "TURN_LIMIT") return { type, turnLimit };
+  return { type };
 }
 
 function formatGameAge(value?: string | null, now = Date.now()) {
@@ -222,6 +236,9 @@ export default function DashboardPage() {
   const [templateId, setTemplateId] = useState<string>("auto");
   const [rmgTuning, setRmgTuning] = useState<RmgTuning>(DEFAULT_RMG_TUNING);
   const [undergroundEnabled, setUndergroundEnabled] = useState(false);
+  const [victoryType, setVictoryType] = useState<VictoryConditionType>("DOMINATION");
+  const [goldTarget, setGoldTarget] = useState(DEFAULT_GOLD_TARGET);
+  const [turnLimit, setTurnLimit] = useState(DEFAULT_TURN_LIMIT);
   const [previewLevel, setPreviewLevel] = useState<MapLevelId>(SURFACE_LEVEL);
   const [previewMap, setPreviewMap] = useState<GameMap | null>(null);
   const [previewGenerationProgress, setPreviewGenerationProgress] = useState(0);
@@ -649,6 +666,7 @@ export default function DashboardPage() {
         templateId: effectiveTemplateId,
         rmgTuning: normalizedRmgTuning,
         undergroundEnabled,
+        victory: buildVictoryPayload(victoryType, goldTarget, turnLimit),
         ...(isAdmin ? {} : { faction: selectedFaction }),
       }),
     });
@@ -755,7 +773,12 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <FleurDeLis className="h-10 w-10 text-amber-400 drop-shadow" />
             <div>
-              <h1 className={`text-3xl font-black tracking-[0.15em] sm:text-4xl ${goldText}`}>MY HEROES</h1>
+              <h1 className={`text-3xl font-black tracking-[0.15em] sm:text-4xl ${goldText}`}>
+                MY HEROES
+                <span className="ml-2 align-super text-xs font-semibold tracking-normal text-amber-200/60">
+                  v{APP_VERSION}
+                </span>
+              </h1>
               <p className="text-sm uppercase tracking-wider text-amber-200/70 mt-1">
                 Bienvenue, {session?.user?.name}
               </p>
@@ -1013,6 +1036,12 @@ export default function DashboardPage() {
             updateRmgTuning={updateRmgTuning}
             undergroundEnabled={undergroundEnabled}
             setUndergroundEnabled={setUndergroundEnabled}
+            victoryType={victoryType}
+            setVictoryType={setVictoryType}
+            goldTarget={goldTarget}
+            setGoldTarget={setGoldTarget}
+            turnLimit={turnLimit}
+            setTurnLimit={setTurnLimit}
             showRmgTuning={showRmgTuning}
             setShowRmgTuning={setShowRmgTuning}
             showRmgPreview={showRmgPreview}
@@ -1287,7 +1316,7 @@ export default function DashboardPage() {
                         <div className="min-w-0">
                           <div className="font-bold text-amber-100">{game.name}</div>
                           <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                            {game.status} - Tour {game.turnNumber} - {game.players.length}/{game.maxPlayers} joueurs - {game.mapWidth}x{game.mapHeight}
+                            {game.status} - Tour {game.turnNumber} - {game.players.length}/{game.maxPlayers} joueurs - {game.mapWidth}x{game.mapHeight} - 🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory))}
                           </div>
                           <div className="mt-2 grid gap-1 text-xs text-amber-100/75 sm:grid-cols-2">
                             <div>Cree par: <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy)}</span></div>
@@ -1409,6 +1438,8 @@ export default function DashboardPage() {
                       <span className={`font-bold ${statusColor}`}>{statusLabel}</span>
                       <span className="mx-1 text-amber-700">◆</span>
                       {game.mapWidth}×{game.mapHeight}
+                      <span className="mx-1 text-amber-700">◆</span>
+                      🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory))}
                       {isAdmin && (
                         <>
                           <span className="mx-1 text-amber-700">◆</span>
@@ -1483,7 +1514,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <Leaderboard entries={leaderboard} />
+        <div className="mt-6">
+          <Leaderboard entries={leaderboard} />
+        </div>
       </div>
     </div>
   );

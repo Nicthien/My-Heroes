@@ -6,6 +6,8 @@ import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/game/types";
 import { normalizeRmgTuning } from "@/lib/game/engine/rmg-tuning";
+import { normalizeVictoryCondition } from "@/lib/game/victory";
+import type { VictoryCondition } from "@/lib/game/types";
 import { mapLevels, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -140,6 +142,7 @@ export async function POST(request: Request) {
       rmgTuning,
       undergroundEnabled = false,
       faction = "castle",
+      victory: victoryInput,
     } = body;
     const tuning = normalizeRmgTuning(rmgTuning);
 
@@ -176,6 +179,7 @@ export async function POST(request: Request) {
     prefixGateIds(mapData, objectIdPrefix);
     assignMonsterSubtypes(mapData);
     assignNeutralTownTraits(mapData);
+    const victory = buildVictoryForCreation(victoryInput, mapData);
     const profileName = await getProfileName(supabase, user.id);
 
     const gameInsert = {
@@ -185,7 +189,7 @@ export async function POST(request: Request) {
       map_height: size,
       status: "PENDING",
       map_data: mapData,
-      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled) },
+      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory },
       created_by_user_id: user.id,
       seed: mapData.seed,
       map_size: mapSize,
@@ -560,6 +564,48 @@ async function createNeutralTowns(
       neutral_garrison: createNeutralTownGarrison(f),
     });
   }
+}
+
+/**
+ * Resolve the victory condition chosen in the creation wizard into a stored
+ * {@link VictoryCondition}. For CAPTURE_TOWN we designate a target neutral town
+ * on the map here; if none exists the objective degrades to domination.
+ */
+function buildVictoryForCreation(raw: unknown, mapData: GameMap): VictoryCondition {
+  const input = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  if (input.type === "CAPTURE_TOWN") {
+    const target = pickCaptureTargetTown(mapData);
+    if (!target) {
+      console.warn("CAPTURE_TOWN victory requested but no neutral town found; falling back to domination.");
+      return { type: "DOMINATION" };
+    }
+    return normalizeVictoryCondition({ type: "CAPTURE_TOWN", targetTown: target.position, targetTownName: target.name });
+  }
+  return normalizeVictoryCondition(input);
+}
+
+/** Pick the neutral town closest to map center (surface preferred) as a capture objective. */
+function pickCaptureTargetTown(
+  mapData: GameMap,
+): { position: { x: number; y: number; mapLevel: string }; name?: string } | null {
+  const neutralTowns = allMapTiles(mapData).filter(
+    ({ tile }) => tile.object?.type === "town" && isNeutralTownObject(tile.object),
+  );
+  if (neutralTowns.length === 0) return null;
+
+  const surfaceTowns = neutralTowns.filter(({ mapLevel }) => mapLevel === SURFACE_LEVEL);
+  const pool = surfaceTowns.length > 0 ? surfaceTowns : neutralTowns;
+  const centerX = mapData.width / 2;
+  const centerY = mapData.height / 2;
+  const best = pool.reduce((closest, candidate) => {
+    const distance = (candidate.tile.x - centerX) ** 2 + (candidate.tile.y - centerY) ** 2;
+    return distance < closest.distance ? { candidate, distance } : closest;
+  }, { candidate: pool[0], distance: Infinity }).candidate;
+
+  return {
+    position: { x: best.tile.x, y: best.tile.y, mapLevel: best.mapLevel },
+    name: best.tile.object?.name,
+  };
 }
 
 function assignNeutralTownTraits(mapData: GameMap) {

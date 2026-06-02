@@ -24,6 +24,8 @@ import { getTownGoldProduction } from "@/lib/game/town-buildings";
 import { BuildingType, Faction, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { evaluateGameLifecycle } from "./lifecycle";
+import { recordRoundScoreSnapshots } from "./scoreHistory";
+import type { DbScorablePlayer } from "@/lib/game/score";
 
 interface MinimalTurn {
   gamePlayerId: string;
@@ -134,6 +136,15 @@ export async function completePlayerTurn(
     }).eq("id", gameId);
     return;
   }
+
+  // The round just closed (every alive player completed their turn): record one
+  // score point per player for the progression chart before the day advances.
+  await recordRoundScoreSnapshots(
+    supabase,
+    gameId,
+    turnNumber,
+    game.players as unknown as (DbScorablePlayer & { id: string })[],
+  );
 
   const nextTurnNumber = turnNumber + 1;
   const shouldApplyWeeklyGrowth = isStartOfWeek(nextTurnNumber);

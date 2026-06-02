@@ -8,7 +8,12 @@ import {
   ornateFramePolished,
 } from "@/components/game/hud/theme";
 import { RmgTuning } from "@/lib/game/engine/rmg-tuning";
-import { GameMap, type MapLevelId } from "@/lib/game/types";
+import { GameMap, type MapLevelId, type VictoryConditionType } from "@/lib/game/types";
+import {
+  GOLD_TARGET_BOUNDS,
+  TURN_LIMIT_BOUNDS,
+  VICTORY_CONDITION_META,
+} from "@/lib/game/victory";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { MAP_SIZES, type MapSizeKey, type PreviewStats, randomSeedValue } from "./dashboardConstants";
 import { FactionSelect } from "./FactionSelect";
@@ -48,6 +53,12 @@ export interface CreateGameWizardProps {
   updateRmgTuning: (key: keyof RmgTuning, value: number) => void;
   undergroundEnabled: boolean;
   setUndergroundEnabled: (value: boolean) => void;
+  victoryType: VictoryConditionType;
+  setVictoryType: (value: VictoryConditionType) => void;
+  goldTarget: number;
+  setGoldTarget: (value: number) => void;
+  turnLimit: number;
+  setTurnLimit: (value: number) => void;
   showRmgTuning: boolean;
   setShowRmgTuning: (updater: (value: boolean) => boolean) => void;
   showRmgPreview: boolean;
@@ -98,6 +109,12 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
     updateRmgTuning,
     undergroundEnabled,
     setUndergroundEnabled,
+    victoryType,
+    setVictoryType,
+    goldTarget,
+    setGoldTarget,
+    turnLimit,
+    setTurnLimit,
     showRmgTuning,
     setShowRmgTuning,
     showRmgPreview,
@@ -265,6 +282,68 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                   />
                   <span>Générer un souterrain</span>
                 </label>
+
+                <div className="rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
+                  <label htmlFor="victory-type" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                    Condition de victoire
+                  </label>
+                  <select
+                    id="victory-type"
+                    value={victoryType}
+                    onChange={(e) => setVictoryType(e.target.value as VictoryConditionType)}
+                    className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                  >
+                    {Object.values(VICTORY_CONDITION_META).map((meta) => (
+                      <option key={meta.type} value={meta.type}>{meta.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-[11px] leading-snug text-amber-200/55">
+                    {VICTORY_CONDITION_META[victoryType].description}
+                    {victoryType !== "DOMINATION" && " La domination reste une victoire de secours."}
+                  </p>
+
+                  {victoryType === "GOLD" && (
+                    <div className="mt-2">
+                      <label htmlFor="gold-target" className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-amber-200/70">
+                        Or à atteindre
+                      </label>
+                      <input
+                        id="gold-target"
+                        type="number"
+                        min={GOLD_TARGET_BOUNDS.min}
+                        max={GOLD_TARGET_BOUNDS.max}
+                        step={5000}
+                        value={goldTarget}
+                        onChange={(e) => setGoldTarget(Number(e.target.value))}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {victoryType === "TURN_LIMIT" && (
+                    <div className="mt-2">
+                      <label htmlFor="turn-limit" className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-amber-200/70">
+                        Nombre de tours
+                      </label>
+                      <input
+                        id="turn-limit"
+                        type="number"
+                        min={TURN_LIMIT_BOUNDS.min}
+                        max={TURN_LIMIT_BOUNDS.max}
+                        step={5}
+                        value={turnLimit}
+                        onChange={(e) => setTurnLimit(Number(e.target.value))}
+                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {victoryType === "CAPTURE_TOWN" && (
+                    <p className="mt-2 text-[11px] leading-snug text-amber-200/45">
+                      Une ville neutre proche du centre sera désignée comme cible à la création.
+                    </p>
+                  )}
+                </div>
 
                 <div className="rounded-lg border border-amber-700/40 bg-stone-950/60">
                   <button

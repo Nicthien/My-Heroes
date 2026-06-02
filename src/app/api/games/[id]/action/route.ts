@@ -144,7 +144,7 @@ export async function POST(
     const completedTurn = turns.find((turn) =>
       turn.gamePlayerId === gamePlayer.id && turn.turnNumber === game.turnNumber && turn.isCompleted
     );
-    if (completedTurn && action.type !== "END_TURN" && action.type !== "CANCEL_END_TURN") {
+    if (completedTurn && action.type !== "END_TURN" && action.type !== "CANCEL_END_TURN" && action.type !== "SURRENDER_GAME") {
       return NextResponse.json({ error: "Vous avez déjà terminé votre tour" }, { status: 403 });
     }
 

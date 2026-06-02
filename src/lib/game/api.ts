@@ -15,6 +15,7 @@ import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-a
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
 import { normalizeScoreStats } from "./score";
+import { normalizeVictoryCondition } from "./victory";
 
 interface ApiPlayer {
   id: string;
@@ -40,6 +41,7 @@ interface ApiPlayer {
   resourceBuildings?: ApiResourceBuilding[];
   turnProgressRatio?: number;
   scoreStats?: unknown;
+  score?: number;
 }
 
 interface ApiTurn {
@@ -329,6 +331,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
     hasEndedTurn: completedTurnPlayerIds.has(player.id),
     turnProgressRatio: player.turnProgressRatio,
     scoreStats: normalizeScoreStats(player.scoreStats),
+    score: player.score,
   }));
 }
 
@@ -711,6 +714,9 @@ export function mapApiToGameState(
 
   staticGameMaps.set(mapId, normalizedStaticMap);
 
+  // A finished game reveals the whole map for everyone (end-of-game review).
+  const revealMap = Boolean(options.revealMap) || data.status === "COMPLETED";
+
   const map = cloneGameMap(normalizedStaticMap);
   applyDynamicMapState(
     map,
@@ -719,7 +725,7 @@ export function mapApiToGameState(
     currentPlayer,
     neutralArmies,
     { ...((data.mapState as Record<string, unknown> | undefined) ?? {}), gates },
-    Boolean(options.revealMap)
+    revealMap
   );
 
   const adventureVisits = extractAdventureVisitState(data.mapState);
@@ -734,6 +740,7 @@ export function mapApiToGameState(
     calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
     winnerId: data.winnerId as string | undefined,
+    victoryCondition: normalizeVictoryCondition((data.gameConfig as Record<string, unknown> | null)?.victory),
     neutralArmies,
     gates,
     boats,
@@ -761,6 +768,9 @@ export function mergeGameDynamicState(
   const actionLog = mapActionLog(data);
   const currentPlayer = players.find((player) => player.userId === currentUserId);
 
+  // A finished game reveals the whole map for everyone (end-of-game review).
+  const revealMap = Boolean(options.revealMap) || data.status === "COMPLETED";
+
   applyDynamicMapState(
     baseGameState.map,
     staticMap,
@@ -768,7 +778,7 @@ export function mergeGameDynamicState(
     currentPlayer,
     neutralArmies,
     { ...((data.mapState as Record<string, unknown> | undefined) ?? {}), gates },
-    Boolean(options.revealMap)
+    revealMap
   );
 
   return {

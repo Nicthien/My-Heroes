@@ -905,7 +905,10 @@ export default function GameMapComponent() {
       return;
     }
     if (!rendererRef.current || !gameState) return;
-    if (gameState.status === "PENDING") {
+    // No board interaction outside an active game: PENDING lobby, or a finished
+    // game (COMPLETED/ABANDONED) where heroes, towns and mines are no longer
+    // selectable — only the end-of-game review screen remains.
+    if (gameState.status !== "ACTIVE") {
       pendingMoveRef.current = null;
       pendingAttackRef.current = null;
       isSyncingMoveRef.current = false;

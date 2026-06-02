@@ -883,6 +883,8 @@ export interface Player {
   hasEndedTurn: boolean;
   turnProgressRatio?: number;
   scoreStats?: import("./score").ScoreStats;
+  /** Authoritative total score computed server-side from full (un-sanitized) data. */
+  score?: number;
 }
 
 export type GameAction =
@@ -912,6 +914,7 @@ export type GameAction =
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }
   | { type: "END_TURN" }
+  | { type: "SURRENDER_GAME" }
   | { type: "DEV_GRANT_HERO_SKILLS"; heroId: string }
   | { type: "CANCEL_END_TURN" };
 
@@ -925,6 +928,25 @@ export interface CombatState {
   winnerId?: string;
 }
 
+/**
+ * Victory objective selected at game creation, persisted inside `game_config`.
+ * "DOMINATION" (last player with a hero or a town) is always evaluated as a
+ * fallback; the other types add an alternative, often faster, path to victory.
+ */
+export type VictoryConditionType = "DOMINATION" | "GOLD" | "TURN_LIMIT" | "CAPTURE_TOWN";
+
+export interface VictoryCondition {
+  type: VictoryConditionType;
+  /** GOLD: gold a player must accumulate to win. */
+  goldTarget?: number;
+  /** TURN_LIMIT: after this many rounds, the highest score wins. */
+  turnLimit?: number;
+  /** CAPTURE_TOWN: position of the town that must be captured to win. */
+  targetTown?: { x: number; y: number; mapLevel: string };
+  /** CAPTURE_TOWN: display name of the target town. */
+  targetTownName?: string;
+}
+
 export interface GameState {
   id: string;
   status: "PENDING" | "ACTIVE" | "COMPLETED" | "ABANDONED";
@@ -935,6 +957,7 @@ export interface GameState {
   calendar: GameCalendar;
   currentTurnPlayerId: string;
   winnerId?: string;
+  victoryCondition?: VictoryCondition;
   activeCombats?: PersistentCombat[];
   neutralArmies?: NeutralArmy[];
   gates?: Gate[];

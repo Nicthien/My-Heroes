@@ -214,6 +214,19 @@ create table public.turns (
   unique (game_id, game_player_id, turn_number)
 );
 
+create table public.score_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  game_id uuid not null references public.games(id) on delete cascade,
+  game_player_id uuid not null references public.game_players(id) on delete cascade,
+  turn_number integer not null,
+  score integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (game_id, game_player_id, turn_number)
+);
+
+create index score_snapshots_game_turn_idx
+  on public.score_snapshots (game_id, turn_number);
+
 create table public.game_action_logs (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete cascade,
@@ -388,6 +401,7 @@ alter table public.boats enable row level security;
 alter table public.neutral_armies enable row level security;
 alter table public.neutral_army_stacks enable row level security;
 alter table public.turns enable row level security;
+alter table public.score_snapshots enable row level security;
 alter table public.game_action_logs enable row level security;
 alter table public.combats enable row level security;
 alter table public.combat_participants enable row level security;
@@ -424,6 +438,7 @@ create policy "neutral_army_stacks visible to members" on public.neutral_army_st
   exists (select 1 from public.neutral_armies na where na.id = neutral_army_stacks.neutral_army_id and public.is_game_member(na.game_id))
 );
 create policy "turns visible to members" on public.turns for select to authenticated using (public.is_game_member(game_id));
+create policy "score_snapshots visible to members" on public.score_snapshots for select to authenticated using (public.is_game_member(game_id));
 create policy "game_action_logs visible to members" on public.game_action_logs for select to authenticated using (public.is_game_member(game_id));
 create policy "combats visible to members" on public.combats for select to authenticated using (public.is_game_member(game_id));
 create policy "combat_participants visible to members" on public.combat_participants for select to authenticated using (

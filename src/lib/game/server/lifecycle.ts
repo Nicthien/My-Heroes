@@ -1,29 +1,20 @@
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
-import { computePlayerScore, normalizeScoreStats, type ScorablePlayer } from "@/lib/game/score";
-import type { Resources } from "@/lib/game/types";
+import { computePlayerScore, scorableFromDbPlayer, type DbScorablePlayer } from "@/lib/game/score";
+import { evaluateVictory, normalizeVictoryCondition, type VictoryContenderSnapshot } from "@/lib/game/victory";
+import { recordRoundScoreSnapshots } from "./scoreHistory";
+
+type LifecycleTown = { x?: number; y?: number; mapLevel?: string };
 
 type LifecyclePlayer = {
   id: string;
   isAlive?: boolean;
   turnOrder?: number;
+  gold?: number;
   heroes?: unknown[];
-  towns?: unknown[];
+  towns?: LifecycleTown[];
 };
 
-type ScoreSourcePlayer = {
-  id: string;
-  userId?: string | null;
-  gold?: number; wood?: number; ore?: number; mercury?: number; crystals?: number; gems?: number; sulfur?: number;
-  scoreStats?: unknown;
-  heroes?: Array<{
-    level?: number; experience?: number;
-    attack?: number; defense?: number; spellPower?: number; knowledge?: number;
-    artifacts?: { inventory?: string[]; equipment?: Record<string, unknown> };
-    armies?: Array<{ unitType: string; count: number }>;
-  }>;
-  towns?: Array<{ level?: number; buildings?: unknown[]; garrison?: Array<{ unitType: string; count: number }> }>;
-  resourceBuildings?: unknown[];
-};
+type ScoreSourcePlayer = DbScorablePlayer & { id: string; userId?: string | null };
 
 type LifecycleTurn = {
   gamePlayerId: string;
@@ -37,6 +28,8 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
     return { status: game?.status ?? null, winnerId: game?.winnerId ?? null };
   }
 
+  const sourcePlayers = game.players as unknown as ScoreSourcePlayer[];
+  const victory = normalizeVictoryCondition((game.gameConfig as Record<string, unknown> | null)?.victory);
   const players = (game.players as unknown as LifecyclePlayer[]).filter((player) => player.isAlive);
   const eliminated = players.filter((player) => !hasPlayerSeat(player));
 
@@ -52,19 +45,28 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
   const eliminatedIds = new Set(eliminated.map((player) => player.id));
   const contenders = players.filter((player) => !eliminatedIds.has(player.id) && hasPlayerSeat(player));
 
-  if (contenders.length === 1) {
-    const winnerId = contenders[0].id;
-    await supabase
-      .from("games")
-      .update({
-        status: "COMPLETED",
-        winner_id: winnerId,
-        current_turn_player_id: null,
-        ai_runner_locked_at: null,
-      })
-      .eq("id", gameId);
-    await recordCompletedGameStats(supabase, game.players as unknown as ScoreSourcePlayer[], winnerId);
-    return { status: "COMPLETED", winnerId };
+  const turnNumber = Number(game.turnNumber ?? 1);
+  const turns = game.turns as LifecycleTurn[];
+  const scoreById = new Map(sourcePlayers.map((player) => [player.id, computePlayerScore(scorableFromDbPlayer(player)).total]));
+  const snapshots: VictoryContenderSnapshot[] = contenders.map((player) => ({
+    id: player.id,
+    gold: Number(player.gold ?? 0),
+    towns: (player.towns ?? []).map((town) => ({
+      x: Number(town.x ?? NaN),
+      y: Number(town.y ?? NaN),
+      mapLevel: town.mapLevel ?? "surface",
+    })),
+    score: scoreById.get(player.id) ?? 0,
+  }));
+
+  const outcome = evaluateVictory({
+    condition: victory,
+    contenders: snapshots,
+    turnNumber,
+    roundComplete: isRoundComplete(contenders, turnNumber, turns),
+  });
+  if (outcome.type === "completed") {
+    return finalizeGame(supabase, gameId, sourcePlayers, outcome.winnerId, turnNumber);
   }
 
   if (eliminatedIds.has(String(game.currentTurnPlayerId ?? ""))) {
@@ -78,47 +80,51 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
   return { status: "ACTIVE", winnerId: null };
 }
 
+/** Finalize the game as COMPLETED with the given winner (null = draw) and record stats. */
+async function finalizeGame(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  sourcePlayers: ScoreSourcePlayer[],
+  winnerId: string | null,
+  turnNumber: number,
+) {
+  await supabase
+    .from("games")
+    .update({
+      status: "COMPLETED",
+      winner_id: winnerId,
+      current_turn_player_id: null,
+      ai_runner_locked_at: null,
+    })
+    .eq("id", gameId);
+  // Capture the final score point so the progression chart includes the last
+  // round even when the game ends mid-round (a domination/objective win).
+  await recordRoundScoreSnapshots(supabase, gameId, turnNumber, sourcePlayers);
+  await recordCompletedGameStats(supabase, sourcePlayers, winnerId);
+  return { status: "COMPLETED" as const, winnerId };
+}
+
+/** True when every still-alive contender has completed their turn for `turnNumber`. */
+function isRoundComplete(contenders: LifecyclePlayer[], turnNumber: number, turns: LifecycleTurn[]) {
+  const completed = new Set(
+    (turns ?? [])
+      .filter((turn) => turn.turnNumber === turnNumber && turn.isCompleted)
+      .map((turn) => turn.gamePlayerId)
+  );
+  return contenders.length > 0 && contenders.every((player) => completed.has(player.id));
+}
+
 function hasPlayerSeat(player: LifecyclePlayer) {
   return (player.heroes?.length ?? 0) > 0 || (player.towns?.length ?? 0) > 0;
 }
 
-function scorableFromSource(player: ScoreSourcePlayer): ScorablePlayer {
-  const resources: Resources = {
-    gold: Number(player.gold ?? 0),
-    wood: Number(player.wood ?? 0),
-    ore: Number(player.ore ?? 0),
-    mercury: Number(player.mercury ?? 0),
-    crystals: Number(player.crystals ?? 0),
-    gems: Number(player.gems ?? 0),
-    sulfur: Number(player.sulfur ?? 0),
-  };
-  return {
-    towns: (player.towns ?? []).map((town) => ({ level: town.level, buildings: town.buildings })),
-    heroes: (player.heroes ?? []).map((hero) => ({
-      level: hero.level,
-      experience: hero.experience,
-      statTotal:
-        Number(hero.attack ?? 0) + Number(hero.defense ?? 0) + Number(hero.spellPower ?? 0) + Number(hero.knowledge ?? 0),
-      artifactCount:
-        (hero.artifacts?.inventory?.length ?? 0) + Object.keys(hero.artifacts?.equipment ?? {}).length,
-      armies: (hero.armies ?? []).map((stack) => ({ unitType: stack.unitType, count: stack.count })),
-    })),
-    garrisons: (player.towns ?? []).flatMap((town) =>
-      (town.garrison ?? []).map((stack) => ({ unitType: stack.unitType, count: stack.count }))
-    ),
-    mineCount: (player.resourceBuildings ?? []).length,
-    resources,
-    scoreStats: normalizeScoreStats(player.scoreStats),
-  };
-}
-
 /** Upsert cross-game leaderboard aggregates for every human player when a game completes. */
-async function recordCompletedGameStats(supabase: SupabaseAdmin, players: ScoreSourcePlayer[], winnerId: string) {
+async function recordCompletedGameStats(supabase: SupabaseAdmin, players: ScoreSourcePlayer[], winnerId: string | null) {
   for (const player of players) {
     const userId = player.userId ?? null;
     if (!userId) continue; // AI players are not ranked
 
-    const score = computePlayerScore(scorableFromSource(player)).total;
+    const score = computePlayerScore(scorableFromDbPlayer(player)).total;
     const won = player.id === winnerId;
 
     const { data: existing, error } = await supabase

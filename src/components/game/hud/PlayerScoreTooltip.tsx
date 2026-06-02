@@ -10,12 +10,16 @@ import { goldDivider, goldText, ornateFramePolished } from "./theme";
  * container); this component is purely presentational.
  */
 export function PlayerScoreTooltip({
+  total,
   breakdown,
   rank,
   playerCount,
   style,
 }: {
-  breakdown: ScoreBreakdown;
+  total: number;
+  /** Per-category detail. Only provided for the viewer's own player; opponents
+   * show the total alone, since their composition stays hidden by fog of war. */
+  breakdown?: ScoreBreakdown;
   rank: number;
   playerCount: number;
   style?: CSSProperties;
@@ -32,21 +36,25 @@ export function PlayerScoreTooltip({
         </span>
       </div>
       <div className={`my-1 ${goldDivider}`} />
-      <ul className="space-y-0.5">
-        {breakdown.categories
-          .filter((category) => category.points !== 0)
-          .map((category) => (
-            <li key={category.key} className="flex items-center justify-between text-[11px] text-amber-100/90">
-              <span>{category.label}</span>
-              <span className="font-bold tabular-nums">{category.points.toLocaleString("fr-FR")}</span>
-            </li>
-          ))}
-      </ul>
+      {breakdown ? (
+        <ul className="space-y-0.5">
+          {breakdown.categories
+            .filter((category) => category.points !== 0)
+            .map((category) => (
+              <li key={category.key} className="flex items-center justify-between text-[11px] text-amber-100/90">
+                <span>{category.label}</span>
+                <span className="font-bold tabular-nums">{category.points.toLocaleString("fr-FR")}</span>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] italic text-amber-200/55">Détail masqué par le brouillard de guerre.</p>
+      )}
       <div className={`my-1 ${goldDivider}`} />
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-black uppercase tracking-wider text-amber-200">Total</span>
         <span className={`text-sm font-black tabular-nums ${goldText}`}>
-          {breakdown.total.toLocaleString("fr-FR")}
+          {total.toLocaleString("fr-FR")}
         </span>
       </div>
     </div>

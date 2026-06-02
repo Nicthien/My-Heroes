@@ -28,6 +28,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/map-showcase?size=S", expect: { selector: "body", description: "Generated Phaser map showcase body" } },
   { path: "/dev/map-showcase?size=S&fog=partial", expect: { selector: "body", description: "Generated Phaser partial fog map showcase body" } },
   { path: "/dev/rmg",          expect: { selector: "body",   description: "RMG preview body" } },
+  { path: "/dev/leaderboard",  expect: { selector: "body",   description: "Leaderboard preview body" } },
 ];
 
 test.describe("Smoke — /dev/* preview pages render without errors", () => {
@@ -520,6 +521,16 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
 
     await page.getByRole("button", { name: "Terminer la phase de tactique" }).click();
     await expect(page.getByRole("button", { name: "Attendre" })).toBeEnabled();
+  });
+
+  test("dashboard leaderboard lists top players with ranks", async ({ page }) => {
+    await page.goto("/dev/leaderboard", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByText("Meilleurs joueurs")).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Meilleur score" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Leon Sticky-Fingers" })).toBeVisible();
+    await expect(page.getByText("🥇")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Joueur inconnu" })).toBeVisible();
   });
 
   test("town build tree modal shows construction dependencies", async ({ page }) => {

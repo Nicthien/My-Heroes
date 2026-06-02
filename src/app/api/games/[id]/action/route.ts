@@ -47,6 +47,7 @@ import { getUnitRule } from "@/lib/game/units";
 import { SPELLS, getHeroMana } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { buildActionLogInput, recordGameAction } from "@/lib/game/server/action-log";
+import { applyScoreDelta, scoreDeltaForAction } from "@/lib/game/server/score-stats";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 import { handleAdventureAction } from "./adventureActions";
@@ -420,6 +421,7 @@ async function logPlayerAction(
     actorName,
     action: action as never,
   }));
+  await applyScoreDelta(supabase, gamePlayer.id, scoreDeltaForAction(action));
 }
 
 function addRecruitGrowth(

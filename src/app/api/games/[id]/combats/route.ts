@@ -15,6 +15,7 @@ import {
 } from "@/lib/game/creature-banks";
 import { ARTIFACT_GUARDIAN_POWER, getArtifact, getEffectiveHeroStatsFromValues, isArtifactClass } from "@/lib/game/artifacts";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
+import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import { BuildingType, Faction, GameMap, UnitStack, UnitType } from "@/lib/game/types";
 import {
   areAdventurePositionsAdjacent,
@@ -449,6 +450,15 @@ export async function POST(
       await supabase.from("armies").delete().eq("hero_id", attacker.id);
       await supabase.from("heroes").delete().eq("id", attacker.id);
     }
+    await applyCombatScoreOutcome(
+      supabase,
+      {
+        attacker_player_id: gamePlayer.id,
+        defender_player_id: targetDefender.playerId ?? null,
+        defender_hero_id: targetDefender.heroId ?? null,
+      },
+      attackerWon ? "attacker" : "defender"
+    );
     await evaluateGameLifecycle(supabase, id);
   }
 

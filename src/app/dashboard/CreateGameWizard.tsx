@@ -133,7 +133,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
       onClick={close}
     >
       <div
-        className={`relative ${ornateFramePolished} my-auto w-full max-w-5xl p-4 sm:p-6`}
+        className={`relative ${ornateFramePolished} my-auto flex w-full max-w-5xl flex-col p-4 sm:min-h-[36rem] sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <CornerOrnaments />
@@ -148,7 +148,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
             <div className="mb-4">
               <FactionSelect selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-4">
               <button onClick={close} className={SECONDARY_BUTTON}>
                 Annuler
               </button>
@@ -354,18 +354,22 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-              <button onClick={close} className={SECONDARY_BUTTON}>
-                Annuler
-              </button>
-              {!isAdmin && (
-                <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
-                  Précédent
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
+              <div>
+                {!isAdmin && (
+                  <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
+                    Précédent
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={close} className={SECONDARY_BUTTON}>
+                  Annuler
                 </button>
-              )}
-              <button onClick={onCreate} disabled={creating} data-testid="create-game-submit" className={PRIMARY_BUTTON}>
-                {creating ? "Création..." : isAdmin ? "Créer" : "Commencer"}
-              </button>
+                <button onClick={onCreate} disabled={creating} data-testid="create-game-submit" className={PRIMARY_BUTTON}>
+                  {creating ? "Création..." : isAdmin ? "Créer" : "Commencer"}
+                </button>
+              </div>
             </div>
           </>
         )}

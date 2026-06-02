@@ -22,6 +22,7 @@
     "process:unit-sprites": "node scripts/process-unit-sprites.mjs",
     "validate:movement": "tsx scripts/validate-adventure-movement.ts",
     "validate:combat": "tsx scripts/validate-combat-core.ts",
+    "validate:score": "tsx scripts/validate-score.ts",
     "validate:visual-assets": "node scripts/validate-visual-assets.mjs",
     "validate:text-encoding": "node scripts/validate-text-encoding.mjs",
     "validate:rmg": "tsx scripts/validate-rmg.ts",

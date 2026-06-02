@@ -15,6 +15,16 @@ create table public.profiles (
 
 create unique index profiles_name_lower_unique on public.profiles (lower(name)) where name is not null;
 
+-- Cross-game aggregate leaderboard stats, one row per user (updated when a game completes).
+create table public.player_stats (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  games_played integer not null default 0,
+  games_won integer not null default 0,
+  best_score integer not null default 0,
+  total_score bigint not null default 0,
+  updated_at timestamptz not null default now()
+);
+
 create type public.game_status as enum ('PENDING', 'ACTIVE', 'COMPLETED', 'ABANDONED');
 
 create table public.games (
@@ -56,6 +66,7 @@ create table public.game_players (
   is_alive boolean not null default true,
   turn_order integer not null,
   explored_tiles jsonb not null default '[]',
+  score_stats jsonb not null default '{}',
   created_at timestamptz not null default now(),
   unique (game_id, user_id)
 );
@@ -316,6 +327,10 @@ alter publication supabase_realtime add table public.combat_truces;
 alter table public.profiles enable row level security;
 create policy "profiles readable by authenticated users" on public.profiles for select to authenticated using (true);
 create policy "users can update own profile" on public.profiles for update to authenticated using (auth.uid() = id);
+
+-- Leaderboard is public to all authenticated users; writes go through the service-role API only.
+alter table public.player_stats enable row level security;
+create policy "player_stats readable by authenticated users" on public.player_stats for select to authenticated using (true);
 
 -- ============================================================================
 -- RMG (Random Map Generator) — refonte map (templates, seed, zones, châteaux neutres)

@@ -35,6 +35,7 @@ import { HERO_ARMY_STACK_LIMIT } from "@/lib/game/army-stacks";
 import type { HeroSkills } from "@/lib/game/skills";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
+import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 import {
@@ -1419,6 +1420,8 @@ async function persistResolvedCombat(
       await applyCombatXp(supabase, combat.game_id, combat.defender_hero_id, before, after);
     }
   }
+
+  await applyCombatScoreOutcome(supabase, combat, winnerSide);
 }
 
 async function persistConcededCombat(

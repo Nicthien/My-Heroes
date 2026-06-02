@@ -882,6 +882,7 @@ export interface Player {
   exploredTiles: string[];
   hasEndedTurn: boolean;
   turnProgressRatio?: number;
+  scoreStats?: import("./score").ScoreStats;
 }
 
 export type GameAction =

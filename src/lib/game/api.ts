@@ -14,6 +14,7 @@ import { normalizeMapLevel, positionLevel, SURFACE_LEVEL, UNDERGROUND_LEVEL } fr
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
+import { normalizeScoreStats } from "./score";
 
 interface ApiPlayer {
   id: string;
@@ -38,6 +39,7 @@ interface ApiPlayer {
   towns: ApiTown[];
   resourceBuildings?: ApiResourceBuilding[];
   turnProgressRatio?: number;
+  scoreStats?: unknown;
 }
 
 interface ApiTurn {
@@ -326,6 +328,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
     exploredTiles: player.exploredTiles ?? [],
     hasEndedTurn: completedTurnPlayerIds.has(player.id),
     turnProgressRatio: player.turnProgressRatio,
+    scoreStats: normalizeScoreStats(player.scoreStats),
   }));
 }
 

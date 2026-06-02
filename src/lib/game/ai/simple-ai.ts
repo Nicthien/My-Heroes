@@ -1,7 +1,14 @@
 import { randomUUID } from "crypto";
 import { addVisit, createCampfireReward } from "@/lib/game/adventure-buildings";
 import { addUnitsToStacks, sortedStacks } from "@/lib/game/army-stacks";
-import { computeVisibleTiles, getAdventurePathCost, getPlayerVisionCenters, getUsableAdventureMovement, isTileTraversable, MINIMUM_ADVENTURE_STEP_COST } from "@/lib/game/engine";
+import { computeVisibleTiles, getAdventurePathCost, getPlayerVisionCenters, getUsableAdventureMovement, MINIMUM_ADVENTURE_STEP_COST } from "@/lib/game/engine";
+import { normalizeMapLevel, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
+import {
+  findGateObjectOnAnyLevel,
+  findTeleportLandingOnLayer,
+  getSubterraneanGateTarget,
+} from "@/lib/game/engine/level-transition";
+import { canDisembark, canEmbark } from "@/lib/game/boats/boat-ops";
 import { makeRng } from "@/lib/game/engine/rng";
 import { UNIT_RULES, tierForUnit, type ResourceCost } from "@/lib/game/economy";
 import { createExternalDwellingState, isExternalDwellingType, normalizeExternalDwellingState, type ExternalDwellingStateMap } from "@/lib/game/external-dwellings";
@@ -24,6 +31,7 @@ import { executeArmyTransfers, pickupNearbyGarrisonForHero } from "./strategy/ar
 import { selectPrimaryEnemy } from "./strategy/enemy";
 import { updateMultiTurnPlans } from "./strategy/planner";
 import { maybeRecruitHero } from "./strategy/recruit-hero";
+import { maybeBuildBoat } from "./strategy/build-boat";
 import { consumePendingSkillChoices } from "./strategy/skill-choice";
 import type { AiContext, AiDecision, AiGame, AiHero, AiObjective, AiPlayer } from "./types";
 
@@ -131,6 +139,7 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
   initialContext.memory.multiTurnPlans = updateMultiTurnPlans(initialContext, initialContext.memory);
 
   await runAiEconomy(supabase, game, player, initialContext);
+  await maybeBuildBoat(supabase, initialContext);
   await maybeRecruitHero(supabase, initialContext);
   await consumePendingSkillChoices(supabase, initialContext);
   // Transferts d'armée : héros secondaires adjacents au champion lui donnent leurs piles ;
@@ -162,7 +171,7 @@ async function runUtilityAiTurn(supabase: SupabaseAdmin, game: AiGame, player: A
       if (!freshGame || !freshPlayer || !hero || hero.movement < MINIMUM_ADVENTURE_STEP_COST) break;
       if (isHeroInActiveCombat(freshGame, hero.id)) break;
 
-      const context = buildAiContext(freshGame, freshPlayer);
+      const context = buildAiContext(freshGame, freshPlayer, normalizeMapLevel(hero.mapLevel));
       // Conserve les directives stratégiques durant tout le tour, même si la mémoire n'a pas encore été persistée.
       if (championOverride && (freshPlayer.heroes ?? []).some((h) => h.id === championOverride)) {
         context.memory.championHeroId = championOverride;
@@ -250,8 +259,8 @@ async function applyAiDecision(
       objectId: objective.id,
       position: objective.position,
     });
-  } else if (objective.type === "adventure_building") {
-    await visitAdventureBuilding(supabase, context, hero, objective);
+  } else if (objective.type === "adventure_building" || objective.type === "level_transition") {
+    await visitAdventureBuilding(supabase, context, movement.hero, objective);
     await logAiAction(supabase, context.game, context.player, "VISIT_ADVENTURE_BUILDING", "adventure", `${context.player.aiName || "IA"} visite un lieu d'aventure.`, {
       objectId: objective.id,
       position: objective.position,
@@ -269,6 +278,14 @@ async function applyAiDecision(
     return captureOrFightNeutralTown(supabase, context, movement.hero, objective);
   } else if (objective.type === "enemy_town") {
     return fightEnemyTown(supabase, context, movement.hero, objective);
+  } else if (objective.type === "embark_boat") {
+    return embarkBoat(supabase, context, movement.hero, objective);
+  } else if (objective.type === "sail") {
+    // The sail leg is movement-only; moveHeroToObjective already relocated the
+    // hero (the boat follows via hero_id, so the boats row is left untouched).
+    return { moved: true };
+  } else if (objective.type === "disembark_boat") {
+    return disembarkBoat(supabase, context, movement.hero, objective);
   } else if (objective.type === "pickup_garrison") {
     await pickupNearbyGarrisonForHero(supabase, context, movement.hero, objective.targetTownId);
     await logAiAction(supabase, context.game, context.player, "AI_PICKUP_GARRISON", "recruitment", `${context.player.aiName || "IA"} recupere une garnison.`, {
@@ -378,20 +395,98 @@ async function moveHeroToObjective(
 }
 
 async function updateExploration(supabase: SupabaseAdmin, context: AiContext, destination: Position) {
-  const explored = new Set(context.explored);
+  const level = context.activeLevel;
   const otherHeroes = (context.player.heroes ?? [])
-    .filter((hero) => hero.x !== destination.x || hero.y !== destination.y)
+    .filter((hero) => normalizeMapLevel(hero.mapLevel) === level && (hero.x !== destination.x || hero.y !== destination.y))
     .map((hero) => ({ position: { x: hero.x, y: hero.y } }));
+  const towns = (context.player.towns ?? [])
+    .filter((town) => normalizeMapLevel(town.mapLevel) === level)
+    .map((town) => ({ position: { x: town.x, y: town.y } }));
   const visible = computeVisibleTiles(
     context.map,
-    getPlayerVisionCenters({
-      heroes: [...otherHeroes, { position: destination }],
-      towns: context.player.towns.map((town) => ({ position: { x: town.x, y: town.y } })),
-    }),
+    getPlayerVisionCenters({ heroes: [...otherHeroes, { position: destination }], towns }),
     5,
   );
-  for (const key of visible) explored.add(key);
+  await persistExploredTiles(supabase, context, visible);
+}
+
+/**
+ * Merges newly visible tiles into the player's explored set on the active level,
+ * preserving the other level's tiles and writing the `${level}:${x},${y}` scheme
+ * used by the human flow. Starts from the fresh DB snapshot so concurrent-level
+ * exploration is never wiped.
+ */
+async function persistExploredTiles(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  visibleKeys: Iterable<string>,
+  level = context.activeLevel,
+) {
+  const explored = new Set(context.player.exploredTiles ?? []);
+  for (const key of visibleKeys) explored.add(key.includes(":") ? key : `${level}:${key}`);
   await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+}
+
+async function embarkBoat(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean }> {
+  const boat = context.boats.find((item) => item.id === objective.boatId);
+  const check = canEmbark({ hero, boat, boats: context.boats, mapData: context.map });
+  if (!check.ok || !boat) {
+    // The hero already advanced toward the boat this turn; embarking can resume next turn.
+    return { moved: true };
+  }
+  await supabase.from("heroes").update({ x: boat.x, y: boat.y, movement: 0 }).eq("id", hero.id);
+  await supabase.from("boats").update({ hero_id: hero.id, owner_player_id: context.player.id }).eq("id", boat.id);
+  await persistExploredTiles(supabase, context, computeVisibleTiles(context.map, [{ x: boat.x, y: boat.y }], 5));
+  await logAiAction(supabase, context.game, context.player, "EMBARK_BOAT", "movement", `${context.player.aiName || "IA"} embarque sur un bateau.`, {
+    heroId: hero.id,
+    boatId: boat.id,
+    position: { x: boat.x, y: boat.y },
+  });
+  return { moved: true };
+}
+
+async function disembarkBoat(
+  supabase: SupabaseAdmin,
+  context: AiContext,
+  hero: AiHero,
+  objective: AiObjective,
+): Promise<{ moved: boolean }> {
+  const destination = objective.disembarkPosition ?? objective.position;
+  const boat = context.boats.find((item) => item.heroId === hero.id);
+  const check = canDisembark({
+    hero,
+    boat,
+    destination,
+    mapData: context.map,
+    isOccupied: (position) => isPositionOccupiedByHero(context, hero.id, position),
+  });
+  if (!check.ok || !boat) return { moved: true };
+  await supabase.from("heroes").update({ x: destination.x, y: destination.y, movement: 0 }).eq("id", hero.id);
+  // The boat is freed at the hero's prior water tile (mirrors boatActions.ts).
+  await supabase.from("boats").update({ hero_id: null, x: hero.x, y: hero.y, map_level: SURFACE_LEVEL }).eq("id", boat.id);
+  await persistExploredTiles(supabase, context, computeVisibleTiles(context.map, [destination], 5));
+  await logAiAction(supabase, context.game, context.player, "DISEMBARK_BOAT", "movement", `${context.player.aiName || "IA"} débarque sur la côte.`, {
+    heroId: hero.id,
+    boatId: boat.id,
+    position: destination,
+  });
+  return { moved: true };
+}
+
+function isPositionOccupiedByHero(context: AiContext, movingHeroId: string, position: Position): boolean {
+  return (context.game.players ?? []).some((player) =>
+    (player.heroes ?? []).some((hero) =>
+      hero.id !== movingHeroId &&
+      hero.x === position.x &&
+      hero.y === position.y &&
+      normalizeMapLevel(hero.mapLevel) === context.activeLevel
+    )
+  );
 }
 
 async function collectResource(supabase: SupabaseAdmin, context: AiContext, objective: AiObjective) {
@@ -439,20 +534,24 @@ async function visitAdventureBuilding(supabase: SupabaseAdmin, context: AiContex
   }
 
   if (buildingType === AdventureBuildingType.OBSERVATORY) {
-    const explored = new Set(context.explored);
-    for (const key of computeVisibleTiles(context.map, [objective.position], 20)) explored.add(key);
-    await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+    await persistExploredTiles(supabase, context, computeVisibleTiles(context.map, [objective.position], 20));
   }
 
-  if (buildingType === AdventureBuildingType.STARGATE) {
-    const target = findStargateDestination(context.map, object.targetId);
-    const landing = target ? findTeleportLanding(context.map, target) : null;
-    if (landing) {
-      await supabase.from("heroes").update({ x: landing.x, y: landing.y }).eq("id", hero.id);
-      const explored = new Set(context.explored);
-      for (const key of computeVisibleTiles(context.map, [landing], 5)) explored.add(key);
-      await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", context.player.id);
+  if (buildingType === AdventureBuildingType.STARGATE || buildingType === AdventureBuildingType.SUBTERRANEAN_GATE) {
+    // Both teleport the hero to a paired object, possibly on the other map level.
+    const target = buildingType === AdventureBuildingType.SUBTERRANEAN_GATE
+      ? getSubterraneanGateTarget(context.fullMap, object)
+      : findGateObjectOnAnyLevel(context.fullMap, object.targetId);
+    if (target) {
+      const targetLayerMap = withActiveMapLayer(context.fullMap, target.level);
+      const landing = findTeleportLandingOnLayer(targetLayerMap, target.position);
+      if (landing) {
+        const nextMovement = getUsableAdventureMovement(targetLayerMap, landing, hero.movement);
+        await supabase.from("heroes").update({ x: landing.x, y: landing.y, map_level: target.level, movement: nextMovement }).eq("id", hero.id);
+        await persistExploredTiles(supabase, context, computeVisibleTiles(targetLayerMap, [landing], 5), target.level);
+      }
     }
+    return;
   }
 
   if (isExternalDwellingType(buildingType)) {
@@ -1146,34 +1245,6 @@ async function captureNeutralTown(supabase: SupabaseAdmin, townId: string, playe
     is_neutral: false,
     neutral_garrison: [],
   }).eq("id", townId).eq("is_neutral", true);
-}
-
-function findStargateDestination(map: GameMap, targetId: string | undefined): Position | null {
-  if (!targetId) return null;
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      if (tile.object?.type === "adventure_building" && tile.object.id === targetId) {
-        return { x: tile.x, y: tile.y };
-      }
-    }
-  }
-  return null;
-}
-
-function findTeleportLanding(map: GameMap, target: Position): Position | null {
-  const positions = [
-    target,
-    { x: target.x + 1, y: target.y },
-    { x: target.x - 1, y: target.y },
-    { x: target.x, y: target.y + 1 },
-    { x: target.x, y: target.y - 1 },
-  ];
-
-  for (const position of positions) {
-    const tile = map.tiles[position.y]?.[position.x];
-    if (isTileTraversable(tile)) return position;
-  }
-  return null;
 }
 
 function normalizeResource(resource: string | undefined): keyof Resources {

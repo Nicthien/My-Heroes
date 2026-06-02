@@ -1,4 +1,4 @@
-import type { BuildingType, Faction, GameMap, MapObject, Position, Resources, UnitStack, UnitType } from "@/lib/game/types";
+import type { BuildingType, Faction, GameMap, MapLevelId, MapObject, Position, Resources, UnitStack, UnitType } from "@/lib/game/types";
 import type { AiPersonality } from "./strategy/personality";
 import type { AiPlayerMemory, AiPosture } from "./strategy/memory";
 
@@ -16,7 +16,11 @@ export type AiObjectiveType =
   | "pickup_garrison"
   | "exploration"
   | "defend_town"
-  | "plan_waypoint";
+  | "plan_waypoint"
+  | "level_transition"
+  | "embark_boat"
+  | "sail"
+  | "disembark_boat";
 
 export interface AiArmy extends UnitStack {
   unitType: UnitType;
@@ -26,6 +30,7 @@ export interface AiHero {
   id: string;
   x: number;
   y: number;
+  mapLevel?: MapLevelId;
   movement: number;
   level?: number;
   attack?: number;
@@ -45,6 +50,7 @@ export interface AiTown {
   gamePlayerId?: string | null;
   x: number;
   y: number;
+  mapLevel?: MapLevelId;
   townType?: string;
   buildings?: string[];
   garrison?: AiArmy[];
@@ -59,6 +65,7 @@ export interface AiResourceBuilding {
   gamePlayerId?: string | null;
   x: number;
   y: number;
+  mapLevel?: MapLevelId;
   buildingType?: string;
   guardianPower?: number;
 }
@@ -89,6 +96,7 @@ export interface AiNeutralArmy {
   id: string;
   x: number;
   y: number;
+  mapLevel?: MapLevelId;
   status: string;
   stacks: AiArmy[];
 }
@@ -98,8 +106,19 @@ export interface AiGate {
   gamePlayerId?: string | null;
   x: number;
   y: number;
+  mapLevel?: MapLevelId;
   guardianPower?: number;
   garrison?: AiArmy[];
+}
+
+export interface AiBoat {
+  id: string;
+  ownerId?: string | null;
+  heroId?: string | null;
+  faction?: string | null;
+  x: number;
+  y: number;
+  mapLevel?: MapLevelId;
 }
 
 export interface AiCombat {
@@ -121,6 +140,7 @@ export interface AiGame {
   players: AiPlayer[];
   neutralArmies?: AiNeutralArmy[];
   gates?: AiGate[];
+  boats?: AiBoat[];
   combats?: AiCombat[];
 }
 
@@ -144,7 +164,14 @@ export interface AiThreat {
 export interface AiContext {
   game: AiGame;
   player: AiPlayer;
+  /** The map layer the current frame operates on (heroes/objectives/pathing). */
   map: GameMap;
+  /** The full multi-level map container (`.levels`) for cross-level logic. */
+  fullMap: GameMap;
+  /** Which map level `map` represents (surface by default). */
+  activeLevel: MapLevelId;
+  /** All boats in the game (surface only today). */
+  boats: AiBoat[];
   mapState: Record<string, unknown>;
   collected: Set<string>;
   visitedAdventureBuildings: Set<string>;
@@ -179,6 +206,14 @@ export interface AiObjective {
   buildingType?: string;
   guardianPower?: number;
   canAutoWin?: boolean;
+  /** Destination level for a `level_transition` objective. */
+  targetLevel?: MapLevelId;
+  /** The gate/stargate object to route to for a `level_transition`. */
+  gateObject?: MapObject;
+  /** Boat id for `embark_boat` / `sail` / `disembark_boat` objectives. */
+  boatId?: string;
+  /** Landing tile for a `disembark_boat` objective. */
+  disembarkPosition?: Position;
 }
 
 export interface AiUtilityScore {

@@ -1,4 +1,5 @@
 import { findPath, getAdventurePathCost } from "@/lib/game/engine";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
 import type { AiContext, AiHero, AiObjective } from "../types";
 import { calculateStacksPower } from "../combat";
 
@@ -14,6 +15,7 @@ export function generateDefenseObjectives(context: AiContext, hero: AiHero): AiO
   const objectives: AiObjective[] = [];
 
   for (const town of towns) {
+    if (normalizeMapLevel(town.mapLevel) !== context.activeLevel) continue;
     if (town.x === start.x && town.y === start.y) continue;
     const threat = nearestHumanThreat(context, town);
     if (!threat) continue;

@@ -21,11 +21,12 @@ import {
 } from "@/lib/game/types";
 
 const MOCK_USER_ID = "dev-user";
-type CombatPreviewScenario = "hero" | "mine" | "town" | "adventure";
+type CombatPreviewScenario = "hero" | "naval" | "mine" | "town" | "adventure";
 type CombatPreviewPhase = "start" | "tactics" | "mid" | "end" | "death" | "truce" | "truceAcked";
 
 const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
   { id: "hero", label: "Héros" },
+  { id: "naval", label: "Naval" },
   { id: "mine", label: "Mine" },
   { id: "town", label: "Chateau" },
   { id: "adventure", label: "Bâtiment" },
@@ -78,7 +79,15 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     }))
   );
 
-  if (scenario === "mine") {
+  if (scenario === "naval") {
+    // Heroes fighting from their boats: the combat tile is open water, which
+    // drives the dedicated naval combat decor.
+    for (let y = 3; y <= 5; y++) {
+      for (let x = 3; x <= 5; x++) {
+        tiles[y][x].terrain = TerrainType.WATER;
+      }
+    }
+  } else if (scenario === "mine") {
     tiles[4][4].object = {
       type: "building",
       id: "gold-mine-preview",
@@ -248,15 +257,27 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     siegeFortifications.gate = { ...siegeFortifications.gate, hp: 2 };
     siegeFortifications.towers = siegeFortifications.towers.map((tower, index) => ({ ...tower, hp: ([2, 1, 2] as const)[index] }));
   }
-  const terrain = filterSiegeTerrain([
-    { type: "rock" as const, q: 5, r: 2 },
-    { type: "rock" as const, q: 7, r: 6 },
-    { type: "bramble" as const, q: 4, r: 3 },
-    { type: "fallen_log" as const, q: 8, r: 4 },
-    { type: "root_snarl" as const, q: 6, r: 7 },
-    { type: "water" as const, q: 5, r: 5 },
-    { type: "water" as const, q: 6, r: 5 },
-  ], siegeFortifications);
+  // A naval deck only carries loose timber/spars and a few seawater puddles —
+  // mirror the real water-theme obstacle set instead of land rocks/brambles.
+  const terrain = filterSiegeTerrain(
+    scenario === "naval"
+      ? [
+          { type: "fallen_log" as const, q: 5, r: 2 },
+          { type: "fallen_log" as const, q: 8, r: 4 },
+          { type: "water" as const, q: 5, r: 5 },
+          { type: "water" as const, q: 6, r: 5 },
+        ]
+      : [
+          { type: "rock" as const, q: 5, r: 2 },
+          { type: "rock" as const, q: 7, r: 6 },
+          { type: "bramble" as const, q: 4, r: 3 },
+          { type: "fallen_log" as const, q: 8, r: 4 },
+          { type: "root_snarl" as const, q: 6, r: 7 },
+          { type: "water" as const, q: 5, r: 5 },
+          { type: "water" as const, q: 6, r: 5 },
+        ],
+    siegeFortifications
+  );
 
   const combat: PersistentCombat = {
     id: "dev-combat",

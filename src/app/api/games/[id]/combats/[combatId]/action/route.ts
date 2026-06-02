@@ -34,7 +34,7 @@ import { UNIT_RULES } from "@/lib/game/economy";
 import { HERO_ARMY_STACK_LIMIT } from "@/lib/game/army-stacks";
 import type { HeroSkills } from "@/lib/game/skills";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
-import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
+import { recordGameAction, recordTownCaptureFromCombat, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
@@ -1388,6 +1388,9 @@ async function persistResolvedCombat(
       await supabase.from("gate_stacks").delete().eq("gate_id", combat.gate_id);
     } else if (!combat.defender_player_id) {
       const capturedTown = await captureNeutralTownAt(supabase, combat);
+      if (capturedTown) {
+        await recordTownCaptureFromCombat(supabase, combat.game_id, combat.attacker_player_id);
+      }
       const creatureBankReward = capturedTown ? null : await findCreatureBankRewardForCombat(supabase, combat);
       if (creatureBankReward) {
         await markCreatureBankDefeated(supabase, combat.game_id, creatureBankReward);

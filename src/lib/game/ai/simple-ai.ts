@@ -325,6 +325,12 @@ async function fightEnemyTown(
     onAttackerWon: async () => captureEnemyTown(supabase, town.id, context.player.id),
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  if (result.attackerWon) {
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_TOWN", "capture", `${context.player.aiName || "IA"} capture un chateau.`, {
+      townId: town.id,
+      targetPlayerId: objective.targetPlayerId,
+    });
+  }
   await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
     targetType: objective.type,
     targetId: objective.id,
@@ -1048,6 +1054,12 @@ async function fightEnemyHero(
     },
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  if (result.attackerWon) {
+    await logAiAction(supabase, context.game, context.player, "COMBAT_WON", "combat", `${context.player.aiName || "IA"} vainc un heros ennemi.`, {
+      targetPlayerId: objective.targetPlayerId,
+      targetHeroId: objective.targetHeroId,
+    });
+  }
   await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
     targetType: objective.type,
     targetId: objective.id,
@@ -1092,6 +1104,12 @@ async function captureOrFightNeutralTown(
     onAttackerWon: async () => captureNeutralTown(supabase, town.id, context.player.id),
   });
   await evaluateGameLifecycle(supabase, context.game.id);
+  if (result.attackerWon) {
+    await logAiAction(supabase, context.game, context.player, "CAPTURE_TOWN", "capture", `${context.player.aiName || "IA"} capture un chateau neutre.`, {
+      townId: town.id,
+      position: objective.position,
+    });
+  }
   await logAiAction(supabase, context.game, context.player, "AI_AUTO_COMBAT", "combat", `${context.player.aiName || "IA"} resout un combat automatiquement.`, {
     targetType: objective.type,
     targetId: objective.id,

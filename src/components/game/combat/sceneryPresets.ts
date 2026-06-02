@@ -103,14 +103,26 @@ export function getSceneryPreset(environment: CombatEnvironment): SceneryPreset 
         trees: sparseTrees,
       };
     case "water":
+      // Naval battle fought on a ship's deck: open sea and sky at the horizon,
+      // with the wooden hull framing the lower corners (no land features).
+      return {
+        ...base,
+        background: "linear-gradient(180deg,#9fc2cf 0%,#5d8a9c 26%,#3a4f52 52%,#241a12 100%)",
+        sky: "linear-gradient(180deg,rgba(196,224,233,0.6),rgba(132,176,190,0.32) 45%,transparent)",
+        horizon: "linear-gradient(180deg,rgba(118,178,196,0.6),rgba(46,96,114,0.32),transparent)",
+        leftVignette: "radial-gradient(ellipse at bottom left,rgba(36,22,12,0.96),transparent 70%)",
+        rightVignette: "radial-gradient(ellipse at bottom right,rgba(30,18,10,0.96),transparent 72%)",
+        mountains: noMountains,
+        trees: [],
+      };
     case "coast":
       return {
         ...base,
         background: "linear-gradient(180deg,#7c969d 0%,#557884 32%,#264856 62%,#101923 100%)",
         horizon: "linear-gradient(180deg,rgba(56,110,127,0.54),rgba(28,73,91,0.3),transparent)",
         tree: "linear-gradient(160deg,#567a58,#173028)",
-        mountains: environment.theme === "water" ? noMountains : defaultMountains.slice(0, 2),
-        trees: environment.theme === "water" ? sparseTrees.slice(0, 1) : sparseTrees,
+        mountains: defaultMountains.slice(0, 2),
+        trees: sparseTrees,
       };
     case "road":
       return {
@@ -223,11 +235,14 @@ const BATTLE_TILE_TEXTURE_POOLS: Record<CombatEnvironment["theme"], string[]> = 
     "/assets/textures/terrain/dirt/dirt-dry.webp",
     "/assets/textures/terrain/dirt/dirt-rare-grass.webp",
   ],
+  // Boat / naval combat: the heroes fight on a ship's deck, so the battlefield
+  // floor is wooden planking rather than a sandy beach.
   water: [
-    "/assets/textures/terrain/sand/sand-clean.webp",
-    "/assets/textures/terrain/sand/sand-ripples.webp",
-    "/assets/textures/terrain/sand/sand-shells.webp",
-    "/assets/textures/terrain/sand/sand-dry.webp",
+    "/assets/textures/terrain/deck/deck-clean.webp",
+    "/assets/textures/terrain/deck/deck-weathered.webp",
+    "/assets/textures/terrain/deck/deck-knotted.webp",
+    "/assets/textures/terrain/deck/deck-wet.webp",
+    "/assets/textures/terrain/deck/deck-caulked.webp",
   ],
   coast: [
     "/assets/textures/terrain/sand/sand-clean.webp",
@@ -258,6 +273,8 @@ export function getBattleTileBaseColor(theme: CombatEnvironment["theme"]) {
     case "mountain":
       return "#373934";
     case "water":
+      // Naval combat floor is a wooden ship deck.
+      return "#3a2614";
     case "coast":
       return "#1e3640";
     case "road":

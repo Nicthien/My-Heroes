@@ -72,6 +72,7 @@ export function toPlayer(row: DbRow) {
     sulfur: row.sulfur,
     isReady: row.is_ready,
     isAlive: row.is_alive,
+    surrendered: row.surrendered ?? false,
     turnOrder: row.turn_order,
     exploredTiles: row.explored_tiles ?? [],
     heroes: activeHeroRows.map(toHero),

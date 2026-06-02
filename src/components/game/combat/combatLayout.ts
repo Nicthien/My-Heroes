@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatTerrainFeature, GameState, PersistentCombat } from "@/lib/game/types";
+import { CombatBoardUnit, CombatEnvironment, CombatTerrainFeature, GameState, PersistentCombat } from "@/lib/game/types";
 import { calculateCombatDamageRange, hasAdjacentEnemy } from "@/lib/game/combat/rules";
 import { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, findMeleeApproach, getHexDistance } from "@/lib/game/combat/movement";
 import { getUnitRule } from "@/lib/game/units";
@@ -86,7 +86,9 @@ export function formatRange(min: number, max: number) {
   return min === max ? String(min) : `${min}-${max}`;
 }
 
-export function getTerrainTitle(feature: CombatTerrainFeature) {
+export function getTerrainTitle(feature: CombatTerrainFeature, environment?: CombatEnvironment) {
+  if (environment?.theme === "water" && feature.type !== "water") return "Obstacle de pont";
+
   switch (feature.type) {
     case "water":
       return "Eau";

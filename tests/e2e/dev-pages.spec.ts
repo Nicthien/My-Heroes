@@ -167,6 +167,23 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     }
   });
 
+  test("combat naval preview floors the deck with ship planking", async ({ page }) => {
+    await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Naval" }).click();
+
+    // The naval theme is a fight on a ship's deck: every battle tile is floored
+    // with the wooden deck planking texture, not the sandy coast textures.
+    const deckTileCount = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>("span"))
+        .filter((span) => window.getComputedStyle(span).backgroundImage.includes("terrain/deck/deck-"))
+        .length
+    );
+    expect(deckTileCount).toBeGreaterThan(0);
+    await expect(page.locator('img[src*="naval-"]')).toHaveCount(2);
+    await expect(page.locator('img[src*="boulder-cluster.webp"]')).toHaveCount(0);
+    await expect(page.locator('img[src*="grass-bramble-mound.webp"]')).toHaveCount(0);
+  });
+
   test("pending HUD lobby panel is centered", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/dev/hud?status=pending", { waitUntil: "domcontentloaded" });

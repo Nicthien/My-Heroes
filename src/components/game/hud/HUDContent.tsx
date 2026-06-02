@@ -91,6 +91,8 @@ export function HUDContent() {
   const [upgradeDialog, setUpgradeDialog] = useState<{ townId: string; heroId?: string; unitType: UnitType; count: number } | null>(null);
   const [transferDialog, setTransferDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
+  // Admin observers can dismiss the end-of-game review to inspect the final board.
+  const [gameOverDismissed, setGameOverDismissed] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
@@ -199,24 +201,6 @@ export function HUDContent() {
 
     if (!response.ok) {
       setCombatMessage(await getApiErrorMessage(response, "Impossible de finir le tour."));
-      return;
-    }
-
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
-    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
-  };
-
-  const handleSurrender = async () => {
-    if (!myPlayer || gameState.status !== "ACTIVE" || !myPlayer.isAlive) return;
-    if (!window.confirm("Abandonner la partie ? Vous serez éliminé et ne pourrez plus jouer.")) return;
-    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "SURRENDER_GAME" }),
-    });
-
-    if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Impossible d'abandonner la partie."));
       return;
     }
 
@@ -806,7 +790,7 @@ export function HUDContent() {
     { id: "recruit", label: "Recruter", badge: recruitableUnits },
     { id: "garrison", label: "Garnison", badge: selectedTown?.garrison.length },
     ...(selectedTown?.buildings.includes(BuildingType.TAVERN)
-      ? [{ id: "tavern" as const, label: "Taverne", badge: selectedTown.tavernOffer?.length ?? 0 }]
+      ? [{ id: "tavern" as const, label: "Taverne", badge: (selectedTown.tavernOffer?.length ?? 0) + (myPlayer?.tavernHeroes?.length ?? 0) }]
       : []),
     ...(selectedTown?.buildings.includes(BuildingType.MARKET)
       ? [{ id: "market" as const, label: "Marché" }]
@@ -922,11 +906,17 @@ export function HUDContent() {
 
   // A finished game replaces the whole HUD with the end-of-game review screen:
   // no more top bar, panels or windows, so heroes/towns/mines can't be selected.
-  // Admin observers keep the regular HUD to inspect the final board.
-  if (gameState.status === "COMPLETED" && !adminObserverMode) {
+  // Admin observers also get the review (winner + ranking) but can dismiss it
+  // to keep inspecting the final board.
+  if (gameState.status === "COMPLETED" && (!adminObserverMode || !gameOverDismissed)) {
     return (
       <div className="absolute inset-0 pointer-events-auto">
-        <GameOverScreen gameState={gameState} myPlayer={myPlayer} onLeave={handleLeaveGame} />
+        <GameOverScreen
+          gameState={gameState}
+          myPlayer={myPlayer}
+          onLeave={handleLeaveGame}
+          onDismiss={adminObserverMode ? () => setGameOverDismissed(true) : undefined}
+        />
       </div>
     );
   }
@@ -993,23 +983,23 @@ export function HUDContent() {
                 >
                   {devPanel.fpsText}
                 </div>
-                <div className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100">
-                  Observation
-                </div>
+                {gameState.status === "COMPLETED" ? (
+                  <button
+                    onClick={() => setGameOverDismissed(false)}
+                    className="rounded-lg border border-amber-400/55 bg-amber-950/50 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-amber-100 transition hover:border-amber-300/70 hover:bg-amber-900/50"
+                    title="Voir le récapitulatif de fin de partie"
+                  >
+                    🏆 Partie terminée
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100">
+                    Observation
+                  </div>
+                )}
               </>
             ) : myPlayer ? (
               <ResourceBar player={myPlayer} />
             ) : null}
-            {myPlayer && !adminObserverMode && gameState.status === "ACTIVE" && myPlayer.isAlive && (
-              <button
-                className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
-                onClick={handleSurrender}
-                title="Abandonner la partie"
-              >
-                <span className="text-sm font-black uppercase tracking-wider leading-none">Abandonner</span>
-                <span className="mt-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] leading-none text-amber-600/80">forfait</span>
-              </button>
-            )}
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}

@@ -205,6 +205,8 @@ export default function DashboardPage() {
   const [showRmgTuning, setShowRmgTuning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
+  const [surrenderTarget, setSurrenderTarget] = useState<GameInfo | null>(null);
+  const [surrenderingGameId, setSurrenderingGameId] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileEmail, setProfileEmail] = useState("");
@@ -719,6 +721,37 @@ export default function DashboardPage() {
     if (showJoin) await loadOpenGames();
   };
 
+  const surrenderGame = async (game: GameInfo) => {
+    setSurrenderingGameId(game.id);
+    setDashboardMessage(null);
+
+    const response = await fetchWithAuth(`/api/games/${game.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "SURRENDER_GAME" }),
+    });
+
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setDashboardMessage({
+        kind: "error",
+        text: data?.error || "Impossible d'abandonner la partie.",
+      });
+      setSurrenderTarget(null);
+      setSurrenderingGameId(null);
+      return;
+    }
+
+    await loadMyGames();
+    if (isAdmin) await loadAdminData();
+    setSurrenderTarget(null);
+    setSurrenderingGameId(null);
+    setDashboardMessage({
+      kind: "success",
+      text: `Vous avez abandonné la partie "${game.name}".`,
+    });
+  };
+
   const deleteGame = async (game: GameInfo) => {
     setDeletingGameId(game.id);
     setDashboardMessage(null);
@@ -1127,6 +1160,55 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {surrenderTarget && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+            onClick={() => {
+              if (!surrenderingGameId) setSurrenderTarget(null);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="surrender-game-title"
+              className={`relative ${ornateFramePolished} w-full max-w-lg p-4 sm:p-6`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <CornerOrnaments />
+              <ParchmentBackground />
+              <h2 id="surrender-game-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+                Abandonner la partie
+              </h2>
+              <p className="text-sm leading-6 text-amber-100/85">
+                Vous allez abandonner <span className="font-black text-amber-100">{surrenderTarget.name}</span>. Vous serez éliminé et ne pourrez plus jouer. Cette action est définitive.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={surrenderingGameId === surrenderTarget.id}
+                  onClick={() => setSurrenderTarget(null)}
+                  className="rounded-md border border-amber-700/40 bg-stone-950/70 px-5 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  disabled={surrenderingGameId === surrenderTarget.id}
+                  onClick={() => surrenderGame(surrenderTarget).catch((error) => {
+                    console.error(error);
+                    setDashboardMessage({ kind: "error", text: "Impossible d'abandonner la partie." });
+                    setSurrenderTarget(null);
+                    setSurrenderingGameId(null);
+                  })}
+                  className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-5 py-2 text-sm font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {surrenderingGameId === surrenderTarget.id ? "Abandon..." : "Abandonner"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showAdmin && isAdmin && (
           <div
             className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
@@ -1453,6 +1535,18 @@ export default function DashboardPage() {
                       {game.players.length}/{game.maxPlayers}
                     </div>
                     <div className="mt-3 flex justify-end gap-2">
+                      {game.status === "ACTIVE" && myPlayer?.isAlive && (
+                        <button
+                          className="rounded-md border border-amber-700/40 bg-stone-950/70 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDashboardMessage(null);
+                            setSurrenderTarget(game);
+                          }}
+                        >
+                          Abandonner
+                        </button>
+                      )}
                       {isAdmin || isHost ? (
                         <button
                           className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800"

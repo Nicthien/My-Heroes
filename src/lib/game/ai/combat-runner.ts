@@ -1,7 +1,7 @@
 import { executeManualCombatAction } from "@/lib/game/combat/persistent";
 import type { SiegeState } from "@/lib/game/combat/siege";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
-import { recordGameAction } from "@/lib/game/server/action-log";
+import { recordGameAction, recordTownCaptureFromCombat } from "@/lib/game/server/action-log";
 import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { toCombat, type SupabaseAdmin } from "@/lib/supabase/game-db";
@@ -236,7 +236,9 @@ async function persistResolvedCombat(
       await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", combat.neutral_army_id);
     } else if (!combat.defender_player_id) {
       const capturedTown = await captureNeutralTownAt(supabase, combat);
-      if (!capturedTown) {
+      if (capturedTown) {
+        await recordTownCaptureFromCombat(supabase, combat.game_id, combat.attacker_player_id);
+      } else {
         await supabase
           .from("resource_buildings")
           .update({ game_player_id: combat.attacker_player_id, guardian_power: 0 })

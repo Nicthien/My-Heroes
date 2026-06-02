@@ -54,7 +54,7 @@ export function JoinGameWizard({
       onClick={onClose}
     >
       <div
-        className={`relative ${ornateFramePolished} my-auto w-full p-4 sm:p-6 ${step === 1 ? "max-w-5xl" : "max-w-4xl"}`}
+        className={`relative ${ornateFramePolished} my-auto flex w-full max-w-5xl flex-col p-4 sm:min-h-[36rem] sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <CornerOrnaments />
@@ -69,7 +69,7 @@ export function JoinGameWizard({
             <div className="mb-4">
               <FactionSelect selectedFaction={selectedFaction} onSelect={onSelectFaction} />
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-4">
               <button onClick={onClose} className={SECONDARY_BUTTON}>
                 Annuler
               </button>
@@ -121,19 +121,21 @@ export function JoinGameWizard({
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
               <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
                 Précédent
               </button>
-              <button onClick={onClose} className={SECONDARY_BUTTON}>
-                Fermer
-              </button>
-              <button
-                onClick={onRefresh}
-                className="rounded-md border border-amber-700/50 bg-stone-950/80 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100"
-              >
-                Actualiser
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={onClose} className={SECONDARY_BUTTON}>
+                  Annuler
+                </button>
+                <button
+                  onClick={onRefresh}
+                  className="rounded-md border border-amber-700/50 bg-stone-950/80 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100"
+                >
+                  Actualiser
+                </button>
+              </div>
             </div>
           </>
         )}

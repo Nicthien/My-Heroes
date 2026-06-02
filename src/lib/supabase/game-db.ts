@@ -5,6 +5,7 @@ import { normalizeArtifactBag } from "@/lib/game/artifacts";
 import { HERO_ROSTER } from "@/lib/game/heroes";
 import { type CombatBoardUnit, type Resources, UnitType } from "@/lib/game/types";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
+import { normalizeScoreStats } from "@/lib/game/score";
 
 export type SupabaseAdmin = ReturnType<typeof createAdminClient>;
 type DbRow = Record<string, unknown>;
@@ -77,6 +78,7 @@ export function toPlayer(row: DbRow) {
     tavernHeroes: tavernHeroRows.map(toTavernHero),
     towns: rows(row.towns).map(toTown),
     resourceBuildings: rows(row.resource_buildings).map(toResourceBuilding),
+    scoreStats: normalizeScoreStats(row.score_stats),
   };
 }
 

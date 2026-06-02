@@ -67,8 +67,8 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
         title="Carte"
         storageKey={scopeKey(gameId, playerId, "map")}
         defaultPosition={rightColumnDefault(RIGHT_COLUMN_TOP)}
-        className="w-64"
-        fallbackSize={{ width: 256, height: 210 }}
+        className="w-72"
+        fallbackSize={{ width: 288, height: 210 }}
         beforeReset={
           hasUnderground ? (
             <MapLevelHeaderToggle activeMapLevel={activeMapLevel} onChange={setActiveMapLevel} />
@@ -82,9 +82,9 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
         title="Joueurs"
         storageKey={scopeKey(gameId, playerId, "players")}
         defaultPosition={rightColumnDefault(PLAYERS_WINDOW_TOP)}
-        className="w-64"
+        className="w-72"
         bodyClassName="max-h-44 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
-        fallbackSize={{ width: 256, height: 210 }}
+        fallbackSize={{ width: 288, height: 210 }}
       >
         <PlayersListPanel gameState={gameState} myPlayer={me} embedded />
       </HudWindow>
@@ -94,9 +94,9 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
           title="Suivi"
           storageKey={scopeKey(gameId, playerId, "main")}
           defaultPosition={rightColumnDefault(OVERVIEW_WINDOW_TOP)}
-          className="w-64"
+          className="w-72"
           bodyClassName="flex min-h-0 flex-col"
-          fallbackSize={{ width: 256, height: 140 }}
+          fallbackSize={{ width: 288, height: 140 }}
           testId="hud-overview-window"
         >
           <div className="grid grid-cols-5 gap-1 border-b border-amber-700/30 p-2">

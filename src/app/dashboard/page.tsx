@@ -28,6 +28,8 @@ import { MAP_SIZES, randomSeedValue, summarizeMap } from "./dashboardConstants";
 import { FACTION_META } from "./factionMeta";
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
+import { Leaderboard } from "./Leaderboard";
+import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 
 interface PlayerInfo {
   id: string;
@@ -177,6 +179,7 @@ export default function DashboardPage() {
   const { data: session, status } = useSession();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
@@ -349,6 +352,17 @@ export default function DashboardPage() {
     setGames(Array.isArray(data) ? data : []);
   }, [fetchWithAuth, parseJsonResponse]);
 
+  const loadLeaderboard = useCallback(async () => {
+    const response = await fetchWithAuth("/api/leaderboard", { cache: "no-store" });
+    if (!response.ok) {
+      console.warn("loadLeaderboard failed", response.status);
+      setLeaderboard([]);
+      return;
+    }
+    const data = await parseJsonResponse(response);
+    setLeaderboard(Array.isArray(data) ? data : []);
+  }, [fetchWithAuth, parseJsonResponse]);
+
   const loadOpenGames = useCallback(async () => {
     const response = await fetchWithAuth("/api/games/open", { cache: "no-store" });
     if (!response.ok) {
@@ -396,7 +410,8 @@ export default function DashboardPage() {
     if (status !== "authenticated") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMyGames().catch(console.error);
-  }, [loadMyGames, status]);
+    loadLeaderboard().catch(console.error);
+  }, [loadMyGames, loadLeaderboard, status]);
 
   useEffect(() => {
     if (!showJoin) return;
@@ -1467,6 +1482,8 @@ export default function DashboardPage() {
             })}
           </div>
         </div>
+
+        <Leaderboard entries={leaderboard} />
       </div>
     </div>
   );

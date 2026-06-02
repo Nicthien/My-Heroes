@@ -2,6 +2,7 @@ import { executeManualCombatAction } from "@/lib/game/combat/persistent";
 import type { SiegeState } from "@/lib/game/combat/siege";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { recordGameAction } from "@/lib/game/server/action-log";
+import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
 import { toCombat, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { chooseAiCombatAction, planAiTacticsPlacements } from "./combat-tactics";
@@ -252,6 +253,8 @@ async function persistResolvedCombat(
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
   }
+
+  await applyCombatScoreOutcome(supabase, combat, winnerSide);
 }
 
 async function captureNeutralTownAt(

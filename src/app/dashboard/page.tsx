@@ -1,11 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { RmgMapPreview } from "@/components/game/map/RmgMapPreview";
 import { useSession, getSupabaseAccessToken, signOutWithLocalFallback } from "@/lib/auth/client";
-import { CREATURE_GROUPS } from "@/lib/game/creature-catalog";
 import { generateMap } from "@/lib/game/engine";
 import {
   DEFAULT_RMG_TUNING,
@@ -13,8 +10,8 @@ import {
   normalizeRmgTuning,
 } from "@/lib/game/engine/rmg-tuning";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
-import { GameMap, TerrainType, type MapLevelId } from "@/lib/game/types";
-import { UNDERGROUND_LEVEL, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
+import { GameMap, type MapLevelId } from "@/lib/game/types";
+import { SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import { createClient } from "@/lib/supabase/browser";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -26,14 +23,11 @@ import {
   ornateFrame,
   ornateFramePolished,
 } from "@/components/game/hud/theme";
-import {
-  GearIcon,
-  RmgGenerationProgress,
-  RmgLegend,
-  RmgStatBlock,
-  RmgTuningSlider,
-  SignOutIcon,
-} from "./dashboardRmgControls";
+import { GearIcon, SignOutIcon } from "./dashboardRmgControls";
+import { MAP_SIZES, randomSeedValue, summarizeMap } from "./dashboardConstants";
+import { FACTION_META } from "./factionMeta";
+import { CreateGameWizard } from "./CreateGameWizard";
+import { JoinGameWizard } from "./JoinGameWizard";
 
 interface PlayerInfo {
   id: string;
@@ -103,189 +97,6 @@ interface AdminGameInfo extends Omit<GameInfo, "players"> {
   players: AdminGamePlayerInfo[];
 }
 
-type FactionAlignment = "good" | "evil" | "barbarian";
-
-const FACTION_META: Record<
-  string,
-  { label: string; color: string; alignment: FactionAlignment; tagline: string; desc: string; emblem: string }
-> = {
-  castle: {
-    label: "Château",
-    color: "#3b82f6",
-    alignment: "good",
-    emblem: "♔",
-    tagline: "Nobles humains & créatures célestes",
-    desc: "Piquiers, archers, griffons, croisés, cavaliers et anges combattent au nom de la lumière.",
-  },
-  rampart: {
-    label: "Rempart",
-    color: "#22c55e",
-    alignment: "good",
-    emblem: "🌳",
-    tagline: "Elfes, nains et dragons",
-    desc: "Nains, elfes archers, pégases, druides, licornes et dragons d'or veillent sur la forêt.",
-  },
-  tower: {
-    label: "Tour",
-    color: "#8b5cf6",
-    alignment: "good",
-    emblem: "✦",
-    tagline: "Créatures liées à la magie",
-    desc: "Gremlins, golems, mages, génies et titans : la science arcanique au service du bien.",
-  },
-  inferno: {
-    label: "Hadès",
-    color: "#ef4444",
-    alignment: "evil",
-    emblem: "🔥",
-    tagline: "La ville des démons et des diables",
-    desc: "Lutins, gogs, cerbères, démons, magogs et diables surgis des Enfers.",
-  },
-  necropolis: {
-    label: "Nécropole",
-    color: "#6b7280",
-    alignment: "evil",
-    emblem: "☠",
-    tagline: "Morts-vivants et fantômes",
-    desc: "Squelettes, zombies, fantômes, vampires, liches et dragons-os ressuscités.",
-  },
-  dungeon: {
-    label: "Donjon",
-    color: "#7c3aed",
-    alignment: "evil",
-    emblem: "✸",
-    tagline: "Créatures maléfiques des profondeurs",
-    desc: "Troglodytes, harpies, gorgones, minotaures, manticores et dragons noirs.",
-  },
-  stronghold: {
-    label: "Bastion",
-    color: "#f97316",
-    alignment: "barbarian",
-    emblem: "⚔",
-    tagline: "Adeptes de la force brute",
-    desc: "Gobelins, orcs, ogres, rocs, cyclopes et puissants béhémoths.",
-  },
-  fortress: {
-    label: "Forteresse",
-    color: "#059669",
-    alignment: "barbarian",
-    emblem: "🐍",
-    tagline: "Poison, marécages et écailles",
-    desc: "Gnolls, hommes-lézards, mouches dragons, basilics, gorgones et hydres venimeuses.",
-  },
-};
-
-const ALIGNMENT_GROUPS: { key: FactionAlignment; label: string; accent: string }[] = [
-  { key: "good", label: "Les bons", accent: "text-sky-200" },
-  { key: "evil", label: "Les mauvais", accent: "text-rose-200" },
-  { key: "barbarian", label: "Les barbares", accent: "text-orange-200" },
-];
-
-const FACTION_FIRST_UNIT: Record<string, string | undefined> = Object.fromEntries(
-  CREATURE_GROUPS.map((group) => [group.key, group.units[0]]),
-);
-
-const MAP_SIZES = {
-  S: 36,
-  M: 72,
-  L: 108,
-  XL: 144,
-} as const;
-
-const RMG_TUNING_CONTROLS: {
-  key: keyof RmgTuning;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-}[] = [
-  { key: "resourceBudgetPercent", label: "Budget de ressources", min: 25, max: 250, step: 5 },
-  { key: "buildingPercent", label: "B\u00e2timents \u00e9conomiques", min: 0, max: 250, step: 5 },
-  { key: "looseResourcePercent", label: "Ressources libres", min: 0, max: 300, step: 5 },
-  { key: "monsterPercent", label: "Monstres gardiens", min: 0, max: 250, step: 5 },
-  { key: "adventurePercent", label: "B\u00e2timents d'aventure", min: 0, max: 250, step: 5 },
-];
-
-function factionLabel(faction: string) {
-  return FACTION_META[faction]?.label ?? faction;
-}
-
-function FactionPicker({
-  selectedFaction,
-  onSelect,
-}: {
-  selectedFaction: string;
-  onSelect: (faction: string) => void;
-}) {
-  return (
-    <div className="mb-4 space-y-3">
-      {ALIGNMENT_GROUPS.map((group) => (
-        <div key={group.key}>
-          <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(FACTION_META)
-              .filter(([, m]) => m.alignment === group.key)
-              .map(([key, meta]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => onSelect(key)}
-                  className={`rounded-lg border p-3 text-left transition ${
-                    selectedFaction === key
-                      ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                      : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50 hover:bg-amber-900/15"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex shrink-0 flex-col items-center gap-1">
-                      <Image
-                        src={`/assets/sprites/map/town-${key}.webp`}
-                        alt=""
-                        aria-hidden
-                        width={56}
-                        height={56}
-                        unoptimized
-                        className="h-14 w-14 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
-                        style={{ imageRendering: "pixelated" }}
-                      />
-                      {FACTION_FIRST_UNIT[key] && (
-                        <Image
-                          src={`/assets/sprites/units/${FACTION_FIRST_UNIT[key]}.webp`}
-                          alt=""
-                          aria-hidden
-                          width={48}
-                          height={48}
-                          unoptimized
-                          className="h-12 w-12 rounded-md object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
-                          style={{ imageRendering: "pixelated" }}
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base" aria-hidden>{meta.emblem}</span>
-                        <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                        <span className="text-sm font-bold text-amber-100">{meta.label}</span>
-                      </div>
-                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
-                      <div className="mt-1 text-xs leading-snug text-amber-200/60">{meta.desc}</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function randomSeedValue() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let value = "";
-  for (let i = 0; i < 8; i++) value += chars[Math.floor(Math.random() * chars.length)];
-  return value;
-}
 
 function formatAdminDate(value?: string | null, fallback = "-") {
   if (!value) return fallback;
@@ -368,7 +179,9 @@ export default function DashboardPage() {
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [showJoin, setShowJoin] = useState(false);
+  const [joinStep, setJoinStep] = useState<1 | 2>(1);
   const [showOptions, setShowOptions] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
@@ -935,13 +748,13 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
-              onClick={() => { setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); }}
+              onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); }}
               className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
               Nouvelle partie
             </button>
             <button
-              onClick={() => { setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
+              onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
               className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
             >
               Rejoindre
@@ -1163,435 +976,62 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Dialogue de création */}
+        {/* Assistant de création de partie */}
         {showCreate && (
-          <div
-            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
-            onClick={() => { setShowCreate(false); setShowRmgPreview(false); }}
-          >
-          <div
-            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-4 sm:p-6`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CornerOrnaments />
-            <ParchmentBackground />
-            <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Créer une partie</h2>
-            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Nom</label>
-                <input
-                  id="game-name"
-                  type="text"
-                  value={gameName}
-                  onChange={(e) => setGameName(e.target.value)}
-                  placeholder={`Partie de ${session?.user?.name}`}
-                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="max-players" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Joueurs max</label>
-                <select
-                  id="max-players"
-                  value={maxPlayers}
-                  onChange={(e) => setMaxPlayers(Number(e.target.value))}
-                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
-                >
-                  {[2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n}>{n} joueurs</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Taille de carte</label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {(["S", "M", "L", "XL"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setMapSize(s)}
-                    className={`rounded-lg border p-3 text-center transition ${
-                      mapSize === s
-                        ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
-                        : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50"
-                    }`}
-                  >
-                    <div className="text-lg font-black text-amber-100">{s}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-amber-200/70">
-                      {s === "S" ? "36×36" : s === "M" ? "72×72" : s === "L" ? "108×108" : "144×144"}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Modèle</label>
-                <select
-                  id="template"
-                  value={selectedTemplateId}
-                  onChange={(e) => setTemplateId(e.target.value)}
-                  className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
-                >
-                  <option value="auto">Auto</option>
-                  {templateOptions.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name} ({template.minPlayers}-{template.maxPlayers} joueurs)
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Graine</label>
-                <div className="flex gap-2">
-                  <input
-                    id="seed"
-                    type="text"
-                    value={seed}
-                    onChange={(e) => setSeed(e.target.value.toUpperCase() || randomSeedValue())}
-                    placeholder="Graine"
-                    maxLength={32}
-                    className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={generateRandomSeed}
-                    title="Graine aléatoire"
-                    className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 text-amber-100 hover:border-amber-400"
-                  >
-                    🎲
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <label className="mb-4 flex items-center gap-3 rounded-md border border-amber-700/40 bg-stone-950/60 p-3 text-sm font-bold text-amber-100">
-              <input
-                type="checkbox"
-                checked={undergroundEnabled}
-                onChange={(event) => {
-                  setUndergroundEnabled(event.target.checked);
-                  if (!event.target.checked) setPreviewLevel(SURFACE_LEVEL);
-                }}
-                className="h-4 w-4 accent-amber-500"
-              />
-              <span>Générer un souterrain</span>
-            </label>
-
-            <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60">
-              <button
-                type="button"
-                onClick={() => setShowRmgTuning((value) => !value)}
-                aria-expanded={showRmgTuning}
-                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-              >
-                <span>
-                  <span className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">R&eacute;glages de g&eacute;n&eacute;ration</span>
-                  <span className="block text-[11px] uppercase tracking-wider text-amber-200/50">
-                    Ressources {normalizedRmgTuning.resourceBudgetPercent}% - B&acirc;timents {normalizedRmgTuning.buildingPercent}% - Monstres {normalizedRmgTuning.monsterPercent}%
-                  </span>
-                </span>
-                <span className="shrink-0 rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-sm font-black text-amber-200">
-                  {showRmgTuning ? "-" : "+"}
-                </span>
-              </button>
-              {showRmgTuning && (
-                <div className="grid gap-3 border-t border-amber-700/30 p-3 md:grid-cols-2">
-                  {RMG_TUNING_CONTROLS.map((control) => (
-                    <RmgTuningSlider
-                      key={control.key}
-                      label={control.label}
-                      min={control.min}
-                      max={control.max}
-                      step={control.step}
-                      value={normalizedRmgTuning[control.key]}
-                      onChange={(value) => updateRmgTuning(control.key, value)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-4 rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
-                  <div className="text-[11px] uppercase tracking-wider text-amber-200/50">
-                    Graine {previewSeedLabel} - {previewSizeLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
-                  </div>
-                </div>
-                {undergroundEnabled && (
-                  <div className="flex rounded-md border border-amber-700/40 bg-black/30 p-1">
-                    {[
-                      { id: SURFACE_LEVEL, label: "Surface" },
-                      { id: UNDERGROUND_LEVEL, label: "Souterrain" },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setPreviewLevel(item.id)}
-                        className={`rounded px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                          previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-amber-200/55 hover:text-amber-100"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowRmgPreview(true)}
-                  className="shrink-0 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-100 transition hover:bg-amber-500/25"
-                >
-                  Grand aperçu
-                </button>
-              </div>
-              {isPreviewGenerating || !visiblePreviewMap ? (
-                <RmgGenerationProgress
-                  progress={previewGenerationProgress}
-                  className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
-                />
-              ) : (
-                <RmgMapPreview
-                  map={visiblePreviewMap}
-                  minSize={260}
-                  maxSize={360}
-                  cellScale={4}
-                  className="h-[360px] rounded-md border-amber-700/40 bg-stone-950/70"
-                />
-              )}
-            </div>
-
-            {!isAdmin && (
-              <>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Faction</label>
-                <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
-              </>
-            )}
-
-            <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
-              <button
-                onClick={createGame}
-                disabled={creating}
-                data-testid="create-game-submit"
-                className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {creating ? "Création..." : "Créer"}
-              </button>
-              <button
-                onClick={() => { setShowCreate(false); setShowRmgPreview(false); }}
-                className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-          {showRmgPreview && (
-            <div
-              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowRmgPreview(false);
-              }}
-            >
-              <div
-                className="my-auto flex h-[calc(100vh-2rem)] w-full max-w-[1500px] flex-col gap-4 border border-amber-700/40 bg-stone-950 p-4 text-stone-100 shadow-2xl shadow-black/60"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
-                  <div>
-                    <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
-                    <p className="text-sm text-stone-400">
-                      Graine {previewSeedLabel} - Modèle {previewTemplateLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {undergroundEnabled && (
-                      <div className="flex rounded border border-stone-700 bg-stone-900 p-1">
-                        {[
-                          { id: SURFACE_LEVEL, label: "Surface" },
-                          { id: UNDERGROUND_LEVEL, label: "Souterrain" },
-                        ].map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setPreviewLevel(item.id)}
-                            className={`h-7 rounded px-2 text-xs font-semibold ${
-                              previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-stone-300 hover:text-amber-100"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={generateRandomSeed}
-                      className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
-                    >
-                      Nouvelle graine
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowRmgPreview(false)}
-                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm font-semibold text-stone-200 hover:border-amber-500/60 hover:text-amber-100"
-                    >
-                      Fermer
-                    </button>
-                  </div>
-                </header>
-
-                <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Graine</span>
-                    <input
-                      value={seed}
-                      onChange={(event) => setSeed(event.target.value.toUpperCase() || randomSeedValue())}
-                      maxLength={32}
-                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 font-mono text-sm outline-none focus:border-amber-400"
-                    />
-                  </label>
-
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Taille</span>
-                    <select
-                      value={mapSize}
-                      onChange={(event) => setMapSize(event.target.value as keyof typeof MAP_SIZES)}
-                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
-                    >
-                      {Object.entries(MAP_SIZES).map(([key, value]) => (
-                        <option key={key} value={key}>
-                          {key} - {value}x{value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Joueurs</span>
-                    <select
-                      value={maxPlayers}
-                      onChange={(event) => setMaxPlayers(Number(event.target.value))}
-                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
-                    >
-                      {[2, 3, 4, 5, 6].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-stone-400">Modèle</span>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(event) => setTemplateId(event.target.value)}
-                      className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
-                    >
-                      <option value="auto">auto</option>
-                      {templateOptions.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.id}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </section>
-
-                <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  {isPreviewGenerating || !visiblePreviewMap || !previewStats ? (
-                    <RmgGenerationProgress progress={previewGenerationProgress} className="min-h-[520px] xl:col-span-2" />
-                  ) : (
-                    <>
-                      <RmgMapPreview map={visiblePreviewMap} minSize={420} maxSize={1120} cellScale={8} />
-
-                      <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
-                        <RmgLegend />
-                        <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
-                        <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
-                        <RmgStatBlock title="Details" values={previewStats.details} />
-                      </aside>
-                    </>
-                  )}
-                </section>
-              </div>
-            </div>
-          )}
-          </div>
+          <CreateGameWizard
+            step={createStep}
+            onStepChange={setCreateStep}
+            isAdmin={isAdmin}
+            userName={session?.user?.name}
+            gameName={gameName}
+            setGameName={setGameName}
+            maxPlayers={maxPlayers}
+            setMaxPlayers={setMaxPlayers}
+            mapSize={mapSize}
+            setMapSize={setMapSize}
+            seed={seed}
+            setSeed={setSeed}
+            selectedTemplateId={selectedTemplateId}
+            setTemplateId={setTemplateId}
+            templateOptions={templateOptions}
+            normalizedRmgTuning={normalizedRmgTuning}
+            updateRmgTuning={updateRmgTuning}
+            undergroundEnabled={undergroundEnabled}
+            setUndergroundEnabled={setUndergroundEnabled}
+            showRmgTuning={showRmgTuning}
+            setShowRmgTuning={setShowRmgTuning}
+            showRmgPreview={showRmgPreview}
+            setShowRmgPreview={setShowRmgPreview}
+            previewLevel={previewLevel}
+            setPreviewLevel={setPreviewLevel}
+            generateRandomSeed={generateRandomSeed}
+            isPreviewGenerating={isPreviewGenerating}
+            visiblePreviewMap={visiblePreviewMap}
+            previewStats={previewStats}
+            previewGenerationProgress={previewGenerationProgress}
+            previewSeedLabel={previewSeedLabel}
+            previewSizeLabel={previewSizeLabel}
+            previewTemplateLabel={previewTemplateLabel}
+            selectedFaction={selectedFaction}
+            setSelectedFaction={setSelectedFaction}
+            creating={creating}
+            onCreate={createGame}
+            onClose={() => { setShowCreate(false); setShowRmgPreview(false); }}
+          />
         )}
 
-        {/* Dialogue pour rejoindre une partie */}
+        {/* Assistant pour rejoindre une partie */}
         {showJoin && (
-          <div
-            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
-            onClick={() => setShowJoin(false)}
-          >
-          <div
-            className={`relative ${ornateFramePolished} my-auto w-full max-w-4xl p-4 sm:p-6`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CornerOrnaments />
-            <ParchmentBackground />
-            <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>Rejoindre une partie</h2>
-
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Votre faction</label>
-            <FactionPicker selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
-
-            {openGames.length === 0 ? (
-              <div className="py-4 text-center italic text-amber-200/50">Aucune partie en attente</div>
-            ) : (
-              <div className="space-y-2 mb-4">
-                {openGames.map((game) => (
-                  <div
-                    key={game.id}
-                    className="flex flex-col gap-3 rounded-md border border-amber-700/40 bg-stone-950/60 p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <div className="font-bold text-amber-100">{game.name}</div>
-                      <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                        {game.players.length}/{game.maxPlayers} joueurs
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {game.players.map((p, i) => (
-                        <div
-                          key={i}
-                          className="h-6 w-6 rounded-full ring-2 ring-amber-300/60"
-                          style={{ backgroundColor: p.color }}
-                          title={`${p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur"} - ${factionLabel(p.faction)}`}
-                        />
-                      ))}
-                      <button
-                        onClick={() => joinGame(game.id)}
-                        className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-1 text-sm font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
-                      >
-                        Rejoindre
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => loadOpenGames().catch(() => setOpenGames([]))}
-              className="mr-3 rounded-md border border-amber-700/50 bg-stone-950/80 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100"
-            >
-              Actualiser
-            </button>
-            <button
-              onClick={() => setShowJoin(false)}
-              className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100"
-            >
-              Fermer
-            </button>
-          </div>
-          </div>
+          <JoinGameWizard
+            step={joinStep}
+            onStepChange={setJoinStep}
+            selectedFaction={selectedFaction}
+            onSelectFaction={setSelectedFaction}
+            openGames={openGames}
+            onJoin={joinGame}
+            onRefresh={() => loadOpenGames().catch(() => setOpenGames([]))}
+            onClose={() => setShowJoin(false)}
+          />
         )}
 
         {deleteTarget && (
@@ -2032,51 +1472,3 @@ export default function DashboardPage() {
   );
 }
 
-function summarizeMap(map: GameMap) {
-  const terrain: Record<string, number> = {};
-  const objects: Record<string, number> = {};
-  let objectTotal = 0;
-  let roads = 0;
-  let bridges = 0;
-  let decor = 0;
-  let blockingDecor = 0;
-  let towns = 0;
-  let neutralTowns = 0;
-
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      terrain[tile.terrain] = (terrain[tile.terrain] ?? 0) + 1;
-      if (tile.road) {
-        roads++;
-        if (tile.terrain === TerrainType.WATER) bridges++;
-      }
-      if (tile.decor) {
-        decor++;
-        if (tile.decor.blocking) blockingDecor++;
-      }
-      if (tile.object) {
-        objectTotal++;
-        objects[tile.object.type] = (objects[tile.object.type] ?? 0) + 1;
-        if (tile.object.type === "town") {
-          towns++;
-          if (tile.object.subtype === "neutral") neutralTowns++;
-        }
-      }
-    }
-  }
-
-  return {
-    terrain,
-    objects,
-    objectTotal,
-    details: {
-      zones: map.zones?.length ?? 0,
-      roads,
-      bridges,
-      decor,
-      blockingDecor,
-      towns,
-      neutralTowns,
-    },
-  };
-}

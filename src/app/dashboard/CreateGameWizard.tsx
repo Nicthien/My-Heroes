@@ -1,0 +1,509 @@
+"use client";
+
+import { RmgMapPreview } from "@/components/game/map/RmgMapPreview";
+import {
+  CornerOrnaments,
+  ParchmentBackground,
+  goldText,
+  ornateFramePolished,
+} from "@/components/game/hud/theme";
+import { RmgTuning } from "@/lib/game/engine/rmg-tuning";
+import { GameMap, type MapLevelId } from "@/lib/game/types";
+import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
+import { MAP_SIZES, type MapSizeKey, type PreviewStats, randomSeedValue } from "./dashboardConstants";
+import { FactionSelect } from "./FactionSelect";
+import {
+  RmgGenerationProgress,
+  RmgLegend,
+  RmgStatBlock,
+  RmgTuningSlider,
+} from "./dashboardRmgControls";
+
+const RMG_TUNING_CONTROLS: { key: keyof RmgTuning; label: string; min: number; max: number; step: number }[] = [
+  { key: "resourceBudgetPercent", label: "Budget de ressources", min: 25, max: 250, step: 5 },
+  { key: "buildingPercent", label: "Bâtiments économiques", min: 0, max: 250, step: 5 },
+  { key: "looseResourcePercent", label: "Ressources libres", min: 0, max: 300, step: 5 },
+  { key: "monsterPercent", label: "Monstres gardiens", min: 0, max: 250, step: 5 },
+  { key: "adventurePercent", label: "Bâtiments d'aventure", min: 0, max: 250, step: 5 },
+];
+
+export interface CreateGameWizardProps {
+  step: 1 | 2;
+  onStepChange: (step: 1 | 2) => void;
+  isAdmin: boolean;
+  userName?: string | null;
+
+  gameName: string;
+  setGameName: (value: string) => void;
+  maxPlayers: number;
+  setMaxPlayers: (value: number) => void;
+  mapSize: MapSizeKey;
+  setMapSize: (value: MapSizeKey) => void;
+  seed: string;
+  setSeed: (value: string) => void;
+  selectedTemplateId: string;
+  setTemplateId: (value: string) => void;
+  templateOptions: { id: string; name: string; minPlayers: number; maxPlayers: number }[];
+  normalizedRmgTuning: RmgTuning;
+  updateRmgTuning: (key: keyof RmgTuning, value: number) => void;
+  undergroundEnabled: boolean;
+  setUndergroundEnabled: (value: boolean) => void;
+  showRmgTuning: boolean;
+  setShowRmgTuning: (updater: (value: boolean) => boolean) => void;
+  showRmgPreview: boolean;
+  setShowRmgPreview: (value: boolean) => void;
+  previewLevel: MapLevelId;
+  setPreviewLevel: (value: MapLevelId) => void;
+  generateRandomSeed: () => void;
+
+  isPreviewGenerating: boolean;
+  visiblePreviewMap: GameMap | null;
+  previewStats: PreviewStats | null;
+  previewGenerationProgress: number;
+  previewSeedLabel: string;
+  previewSizeLabel: string;
+  previewTemplateLabel: string;
+
+  selectedFaction: string;
+  setSelectedFaction: (value: string) => void;
+
+  creating: boolean;
+  onCreate: () => void;
+  onClose: () => void;
+}
+
+const PRIMARY_BUTTON =
+  "rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50";
+const SECONDARY_BUTTON =
+  "rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100";
+
+export function CreateGameWizard(props: CreateGameWizardProps) {
+  const {
+    step,
+    onStepChange,
+    isAdmin,
+    userName,
+    gameName,
+    setGameName,
+    maxPlayers,
+    setMaxPlayers,
+    mapSize,
+    setMapSize,
+    seed,
+    setSeed,
+    selectedTemplateId,
+    setTemplateId,
+    templateOptions,
+    normalizedRmgTuning,
+    updateRmgTuning,
+    undergroundEnabled,
+    setUndergroundEnabled,
+    showRmgTuning,
+    setShowRmgTuning,
+    showRmgPreview,
+    setShowRmgPreview,
+    previewLevel,
+    setPreviewLevel,
+    generateRandomSeed,
+    isPreviewGenerating,
+    visiblePreviewMap,
+    previewStats,
+    previewGenerationProgress,
+    previewSeedLabel,
+    previewSizeLabel,
+    previewTemplateLabel,
+    selectedFaction,
+    setSelectedFaction,
+    creating,
+    onCreate,
+    onClose,
+  } = props;
+
+  const close = () => {
+    onClose();
+    setShowRmgPreview(false);
+  };
+
+  // Faction is always the first step; admins skip it and configure the map directly.
+  const showFactionStep = !isAdmin && step === 1;
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+      onClick={close}
+    >
+      <div
+        className={`relative ${ornateFramePolished} my-auto w-full max-w-5xl p-4 sm:p-6`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CornerOrnaments />
+        <ParchmentBackground />
+        <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
+          Créer une partie {!isAdmin && <span className="text-sm font-bold text-amber-200/60">— Étape {step}/2</span>}
+        </h2>
+
+        {showFactionStep ? (
+          <>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Choisissez votre faction</label>
+            <div className="mb-4">
+              <FactionSelect selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button onClick={close} className={SECONDARY_BUTTON}>
+                Annuler
+              </button>
+              <button onClick={() => onStepChange(2)} className={PRIMARY_BUTTON}>
+                Suivant
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              {/* Réglages */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Nom</label>
+                    <input
+                      id="game-name"
+                      type="text"
+                      value={gameName}
+                      onChange={(e) => setGameName(e.target.value)}
+                      placeholder={`Partie de ${userName ?? ""}`}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="max-players" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Joueurs max</label>
+                    <select
+                      id="max-players"
+                      value={maxPlayers}
+                      onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                    >
+                      {[2, 3, 4, 5, 6].map((n) => (
+                        <option key={n} value={n}>{n} joueurs</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Taille de carte</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(["S", "M", "L", "XL"] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setMapSize(s)}
+                        className={`rounded-lg border p-2 text-center transition ${
+                          mapSize === s
+                            ? "border-amber-400 bg-amber-900/30 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)]"
+                            : "border-amber-700/30 bg-stone-950/60 hover:border-amber-500/50"
+                        }`}
+                      >
+                        <div className="text-base font-black text-amber-100">{s}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-amber-200/70">
+                          {s === "S" ? "36×36" : s === "M" ? "72×72" : s === "L" ? "108×108" : "144×144"}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Modèle</label>
+                    <select
+                      id="template"
+                      value={selectedTemplateId}
+                      onChange={(e) => setTemplateId(e.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value="auto">Auto</option>
+                      {templateOptions.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name} ({template.minPlayers}-{template.maxPlayers} joueurs)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Graine</label>
+                    <div className="flex gap-2">
+                      <input
+                        id="seed"
+                        type="text"
+                        value={seed}
+                        onChange={(e) => setSeed(e.target.value.toUpperCase() || randomSeedValue())}
+                        placeholder="Graine"
+                        maxLength={32}
+                        className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={generateRandomSeed}
+                        title="Graine aléatoire"
+                        className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 text-amber-100 hover:border-amber-400"
+                      >
+                        🎲
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-3 rounded-md border border-amber-700/40 bg-stone-950/60 p-2.5 text-sm font-bold text-amber-100">
+                  <input
+                    type="checkbox"
+                    checked={undergroundEnabled}
+                    onChange={(event) => {
+                      setUndergroundEnabled(event.target.checked);
+                      if (!event.target.checked) setPreviewLevel(SURFACE_LEVEL);
+                    }}
+                    className="h-4 w-4 accent-amber-500"
+                  />
+                  <span>Générer un souterrain</span>
+                </label>
+
+                <div className="rounded-lg border border-amber-700/40 bg-stone-950/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowRmgTuning((value) => !value)}
+                    aria-expanded={showRmgTuning}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                  >
+                    <span>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">R&eacute;glages de g&eacute;n&eacute;ration</span>
+                      <span className="block text-[11px] uppercase tracking-wider text-amber-200/50">
+                        Ressources {normalizedRmgTuning.resourceBudgetPercent}% - B&acirc;timents {normalizedRmgTuning.buildingPercent}% - Monstres {normalizedRmgTuning.monsterPercent}%
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-sm font-black text-amber-200">
+                      {showRmgTuning ? "-" : "+"}
+                    </span>
+                  </button>
+                  {showRmgTuning && (
+                    <div className="grid gap-3 border-t border-amber-700/30 p-3 md:grid-cols-2">
+                      {RMG_TUNING_CONTROLS.map((control) => (
+                        <RmgTuningSlider
+                          key={control.key}
+                          label={control.label}
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={normalizedRmgTuning[control.key]}
+                          onChange={(value) => updateRmgTuning(control.key, value)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Aperçu */}
+              <div className="flex flex-col rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
+                    <div className="truncate text-[11px] uppercase tracking-wider text-amber-200/50">
+                      Graine {previewSeedLabel} - {previewSizeLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
+                    </div>
+                  </div>
+                  {undergroundEnabled && (
+                    <div className="flex rounded-md border border-amber-700/40 bg-black/30 p-1">
+                      {[
+                        { id: SURFACE_LEVEL, label: "Surface" },
+                        { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setPreviewLevel(item.id)}
+                          className={`rounded px-2 py-1 text-[11px] font-black uppercase tracking-wider ${
+                            previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-amber-200/55 hover:text-amber-100"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowRmgPreview(true)}
+                    className="shrink-0 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-100 transition hover:bg-amber-500/25"
+                  >
+                    Grand aperçu
+                  </button>
+                </div>
+                {isPreviewGenerating || !visiblePreviewMap ? (
+                  <RmgGenerationProgress
+                    progress={previewGenerationProgress}
+                    className="h-[300px] flex-1 rounded-md border-amber-700/40 bg-stone-950/70 lg:h-auto lg:min-h-[300px]"
+                  />
+                ) : (
+                  <RmgMapPreview
+                    map={visiblePreviewMap}
+                    minSize={260}
+                    maxSize={360}
+                    cellScale={4}
+                    className="h-[300px] flex-1 rounded-md border-amber-700/40 bg-stone-950/70 lg:h-auto lg:min-h-[300px]"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+              <button onClick={close} className={SECONDARY_BUTTON}>
+                Annuler
+              </button>
+              {!isAdmin && (
+                <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
+                  Précédent
+                </button>
+              )}
+              <button onClick={onCreate} disabled={creating} data-testid="create-game-submit" className={PRIMARY_BUTTON}>
+                {creating ? "Création..." : isAdmin ? "Créer" : "Commencer"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {showRmgPreview && step === 1 && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            setShowRmgPreview(false);
+          }}
+        >
+          <div
+            className="my-auto flex h-[calc(100vh-2rem)] w-full max-w-[1500px] flex-col gap-4 border border-amber-700/40 bg-stone-950 p-4 text-stone-100 shadow-2xl shadow-black/60"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
+              <div>
+                <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
+                <p className="text-sm text-stone-400">
+                  Graine {previewSeedLabel} - Modèle {previewTemplateLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {undergroundEnabled && (
+                  <div className="flex rounded border border-stone-700 bg-stone-900 p-1">
+                    {[
+                      { id: SURFACE_LEVEL, label: "Surface" },
+                      { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPreviewLevel(item.id)}
+                        className={`h-7 rounded px-2 text-xs font-semibold ${
+                          previewLevel === item.id ? "bg-amber-500/25 text-amber-100" : "text-stone-300 hover:text-amber-100"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={generateRandomSeed}
+                  className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
+                >
+                  Nouvelle graine
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRmgPreview(false)}
+                  className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm font-semibold text-stone-200 hover:border-amber-500/60 hover:text-amber-100"
+                >
+                  Fermer
+                </button>
+              </div>
+            </header>
+
+            <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-stone-400">Graine</span>
+                <input
+                  value={seed}
+                  onChange={(event) => setSeed(event.target.value.toUpperCase() || randomSeedValue())}
+                  maxLength={32}
+                  className="h-9 rounded border border-stone-700 bg-stone-900 px-3 font-mono text-sm outline-none focus:border-amber-400"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-stone-400">Taille</span>
+                <select
+                  value={mapSize}
+                  onChange={(event) => setMapSize(event.target.value as MapSizeKey)}
+                  className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                >
+                  {Object.entries(MAP_SIZES).map(([key, value]) => (
+                    <option key={key} value={key}>
+                      {key} - {value}x{value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-stone-400">Joueurs</span>
+                <select
+                  value={maxPlayers}
+                  onChange={(event) => setMaxPlayers(Number(event.target.value))}
+                  className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                >
+                  {[2, 3, 4, 5, 6].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-stone-400">Modèle</span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(event) => setTemplateId(event.target.value)}
+                  className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
+                >
+                  <option value="auto">auto</option>
+                  {templateOptions.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+
+            <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              {isPreviewGenerating || !visiblePreviewMap || !previewStats ? (
+                <RmgGenerationProgress progress={previewGenerationProgress} className="min-h-[520px] xl:col-span-2" />
+              ) : (
+                <>
+                  <RmgMapPreview map={visiblePreviewMap} minSize={420} maxSize={1120} cellScale={8} />
+
+                  <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
+                    <RmgLegend />
+                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
+                    <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
+                    <RmgStatBlock title="Details" values={previewStats.details} />
+                  </aside>
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

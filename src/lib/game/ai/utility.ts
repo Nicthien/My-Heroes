@@ -3,14 +3,23 @@ import {
   findPathToAdjacent,
   getAdventurePathCost,
   getAdventurePathCostAvoiding,
+  getHeroAdventureMovementMode,
+  isLandTile,
   isTileTraversable,
+  isWaterTile,
 } from "@/lib/game/engine";
+import {
+  findGateObjectOnAnyLevel,
+  getSubterraneanGateTarget,
+} from "@/lib/game/engine/level-transition";
+import { mapLevels, normalizeMapLevel, SURFACE_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingExhaustion, getAdventureBuildingRule } from "@/lib/game/adventure-buildings";
 import { addUnitsToStacks, sortedStacks } from "@/lib/game/army-stacks";
 import { tierForUnit, UNIT_RULES, type ResourceCost } from "@/lib/game/economy";
 import { createExternalDwellingState, isExternalDwellingType, normalizeExternalDwellingState, type ExternalDwellingStateMap } from "@/lib/game/external-dwellings";
-import { ResourceBuildingType, type MapObject, type Position, type Resources } from "@/lib/game/types";
+import { AdventureBuildingType, ResourceBuildingType, type GameMap, type MapLevelId, type MapObject, type Position, type Resources } from "@/lib/game/types";
 import {
+  activeLevelExploredSet,
   countNewVisibleTiles,
   frontierScore,
   getResourceBuildingValue,
@@ -55,6 +64,7 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
   const heroPower = calculateHeroPower(hero);
 
   for (const town of context.player.towns ?? []) {
+    if (normalizeMapLevel(town.mapLevel) !== context.activeLevel) continue;
     if (ADJACENT(hero.x, hero.y, town.x, town.y)) continue;
     const pickupStacks = getGarrisonPickupStacks(town, context.posture === "DEFEND");
     const pickupPower = calculateStacksPower(pickupStacks);
@@ -121,6 +131,7 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
 
   for (const army of context.game.neutralArmies ?? []) {
     if (army.status !== "ACTIVE" || context.killedNeutralArmies.has(army.id)) continue;
+    if (normalizeMapLevel(army.mapLevel) !== context.activeLevel) continue;
     const position = { x: army.x, y: army.y };
     if (!context.explored.has(tileKey(position))) continue;
     const path = findPathToAdjacent(context.map, start, position, hero.movement);
@@ -146,6 +157,7 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
 
   for (const gate of context.game.gates ?? []) {
     if (gate.gamePlayerId === context.player.id) continue;
+    if (normalizeMapLevel(gate.mapLevel) !== context.activeLevel) continue;
     const position = { x: gate.x, y: gate.y };
     if (!context.explored.has(tileKey(position))) continue;
     const stacks = gate.garrison ?? [];
@@ -233,6 +245,14 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
     }
   }
 
+  for (const transition of generateLevelTransitionObjectives(context, hero, start)) {
+    objectives.push(transition);
+  }
+
+  for (const boatObjective of generateBoatObjectives(context, hero, start)) {
+    objectives.push(boatObjective);
+  }
+
   for (const defense of generateDefenseObjectives(context, hero)) {
     objectives.push(defense);
   }
@@ -259,6 +279,247 @@ function generateObjectives(context: AiContext, hero: AiHero): AiObjective[] {
   }
 
   return objectives;
+}
+
+// Routes a hero to a subterranean gate / stargate when the OTHER map level holds
+// worthwhile objectives (or is largely unexplored). The hero walks to the gate
+// on the active layer; visitAdventureBuilding performs the actual transition.
+function generateLevelTransitionObjectives(context: AiContext, hero: AiHero, start: Position): AiObjective[] {
+  const objectives: AiObjective[] = [];
+  const otherLevels = mapLevels(context.fullMap)
+    .map((layer) => layer.id)
+    .filter((level) => level !== context.activeLevel);
+  if (otherLevels.length === 0) return objectives;
+
+  // Pre-evaluate each other level once (bounded: one scan per level, not per gate).
+  const opportunity = new Map<MapLevelId, number>();
+  for (const level of otherLevels) opportunity.set(level, evaluateLayerOpportunity(context, level));
+
+  for (const row of context.map.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (!object || object.type !== "adventure_building") continue;
+      if (object.subtype !== AdventureBuildingType.STARGATE && object.subtype !== AdventureBuildingType.SUBTERRANEAN_GATE) continue;
+      const position = { x: tile.x, y: tile.y };
+      if (!context.explored.has(tileKey(position))) continue;
+
+      const target = object.subtype === AdventureBuildingType.SUBTERRANEAN_GATE
+        ? getSubterraneanGateTarget(context.fullMap, object)
+        : findGateObjectOnAnyLevel(context.fullMap, object.targetId);
+      if (!target || target.level === context.activeLevel) continue;
+      const value = opportunity.get(target.level) ?? 0;
+      if (value <= 0) continue;
+
+      const path = findPath(context.map, start, position, hero.movement);
+      if (path.length <= 1) continue;
+      const pathCost = getAdventurePathCost(context.map, path);
+      if (!Number.isFinite(pathCost) || pathCost > hero.movement) continue;
+
+      objectives.push({
+        type: "level_transition",
+        id: `level-transition:${object.id}`,
+        position,
+        path,
+        pathCost,
+        baseValue: value,
+        targetPower: 0,
+        object,
+        gateObject: object,
+        targetLevel: target.level,
+      });
+    }
+  }
+
+  return objectives;
+}
+
+// Best discovered reward on a given layer plus an exploration incentive when the
+// layer is largely unknown. Discounted to account for the extra hop/turn.
+function evaluateLayerOpportunity(context: AiContext, level: MapLevelId): number {
+  const layer = withActiveMapLayer(context.fullMap, level);
+  const explored = activeLevelExploredSet(context.player.exploredTiles, level);
+  let best = 0;
+  let unexplored = 0;
+  let total = 0;
+  for (const row of layer.tiles) {
+    for (const tile of row) {
+      total++;
+      if (!explored.has(`${tile.x},${tile.y}`)) {
+        unexplored++;
+        continue;
+      }
+      if (tile.object) best = Math.max(best, estimateObjectValue(context, tile.object));
+    }
+  }
+  const unexploredRatio = total > 0 ? unexplored / total : 0;
+  const explorationBonus = unexploredRatio > 0.5 ? 1500 : unexploredRatio > 0.2 ? 700 : 0;
+  return best * 0.6 + explorationBonus;
+}
+
+function estimateObjectValue(context: AiContext, object: MapObject): number {
+  switch (object.type) {
+    case "resource":
+      return getResourceValue(normalizeResource(object.subtype), getResourcePileAmount(object), context.resourceNeeds);
+    case "building":
+      return getResourceBuildingValue(object.subtype, context.resourceNeeds);
+    case "adventure_building":
+      return getAdventureBuildingBaseValue(object.subtype);
+    case "town":
+      return NEUTRAL_TOWN_BASE_VALUE * 0.5;
+    case "monster":
+      return 500 + Number(object.guardianPower ?? 0) * 0.45;
+    default:
+      return 0;
+  }
+}
+
+const BOAT_VALUE_DISCOUNT = 0.5;
+const NEIGHBOR8: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+];
+
+interface ValuableLandTarget {
+  id: string;
+  position: Position;
+  value: number;
+}
+
+// Generates embark / sail / disembark objectives so the AI can cross water to
+// reach land objectives separated from its current landmass. Surface only,
+// mirroring the boatActions.ts level guards.
+function generateBoatObjectives(context: AiContext, hero: AiHero, start: Position): AiObjective[] {
+  if (context.activeLevel !== SURFACE_LEVEL) return [];
+  const objectives: AiObjective[] = [];
+  const embarked = getHeroAdventureMovementMode(context.boats, hero.id) === "boat";
+
+  if (embarked) {
+    const boat = context.boats.find((item) => item.heroId === hero.id);
+    for (const target of collectValuableLandTargets(context)) {
+      const landing = findLandingForObjective(context, target.position);
+      if (!landing) continue;
+      const value = target.value * BOAT_VALUE_DISCOUNT;
+      if (value <= 0) continue;
+      // Already next to the shore: disembark this turn.
+      if (ADJACENT(hero.x, hero.y, landing.land.x, landing.land.y)) {
+        objectives.push({
+          type: "disembark_boat",
+          id: `disembark:${target.id}`,
+          position: landing.land,
+          path: [start],
+          pathCost: 0,
+          baseValue: value,
+          targetPower: 0,
+          boatId: boat?.id,
+          disembarkPosition: landing.land,
+        });
+        continue;
+      }
+      // Otherwise sail toward the water tile next to the shore; disembark next turn.
+      const sailPath = findPath(context.map, start, landing.water, hero.movement);
+      if (sailPath.length <= 1) continue;
+      const pathCost = getAdventurePathCost(context.map, sailPath);
+      if (!Number.isFinite(pathCost) || pathCost > hero.movement) continue;
+      objectives.push({
+        type: "sail",
+        id: `sail:${target.id}`,
+        position: landing.water,
+        path: sailPath,
+        pathCost,
+        baseValue: value,
+        targetPower: 0,
+        boatId: boat?.id,
+        disembarkPosition: landing.land,
+      });
+    }
+    return objectives;
+  }
+
+  // Not embarked: walk to an empty boat only when a worthwhile target sits on a
+  // landmass we cannot reach on foot.
+  const landReachable = computeLandReachable(context.map, start);
+  let bestSeparatedValue = 0;
+  for (const target of collectValuableLandTargets(context)) {
+    if (landReachable.has(`${target.position.x},${target.position.y}`)) continue;
+    bestSeparatedValue = Math.max(bestSeparatedValue, target.value);
+  }
+  if (bestSeparatedValue <= 0) return objectives;
+
+  for (const boat of context.boats) {
+    if (boat.heroId || normalizeMapLevel(boat.mapLevel) !== SURFACE_LEVEL) continue;
+    const approach = findPathToAdjacent(context.map, start, { x: boat.x, y: boat.y }, hero.movement);
+    if (approach.length < 1) continue;
+    const pathCost = getAdventurePathCost(context.map, approach);
+    if (!Number.isFinite(pathCost) || pathCost > hero.movement) continue;
+    objectives.push({
+      type: "embark_boat",
+      id: `embark:${boat.id}`,
+      position: { x: boat.x, y: boat.y },
+      path: approach,
+      pathCost,
+      baseValue: bestSeparatedValue * BOAT_VALUE_DISCOUNT,
+      targetPower: 0,
+      boatId: boat.id,
+    });
+  }
+
+  return objectives;
+}
+
+function collectValuableLandTargets(context: AiContext): ValuableLandTarget[] {
+  const targets: ValuableLandTarget[] = [];
+  for (const row of context.map.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (!object || !isLandTile(tile)) continue;
+      if (!context.explored.has(tileKey({ x: tile.x, y: tile.y }))) continue;
+      const value = estimateObjectValue(context, object);
+      if (value > 0) targets.push({ id: object.id, position: { x: tile.x, y: tile.y }, value });
+    }
+  }
+  return targets;
+}
+
+// A land tile adjacent to the objective to disembark onto, plus an adjacent water
+// tile to sail to. Never disembarks onto the objective tile itself (which may be
+// guarded), only beside it.
+function findLandingForObjective(context: AiContext, objectivePos: Position): { land: Position; water: Position } | null {
+  for (const [lx, ly] of NEIGHBOR8) {
+    const land = { x: objectivePos.x + lx, y: objectivePos.y + ly };
+    const landTile = context.map.tiles[land.y]?.[land.x];
+    if (!isTileTraversable(landTile) || !isLandTile(landTile)) continue;
+    for (const [wx, wy] of NEIGHBOR8) {
+      const water = { x: land.x + wx, y: land.y + wy };
+      const waterTile = context.map.tiles[water.y]?.[water.x];
+      if (isTileTraversable(waterTile) && isWaterTile(waterTile)) return { land, water };
+    }
+  }
+  return null;
+}
+
+// Flood-fills the land tiles reachable on foot from `start` (8-directional with
+// diagonal corner blocking) to tell whether a target requires a boat.
+function computeLandReachable(map: GameMap, start: Position): Set<string> {
+  const seen = new Set<string>();
+  if (!map.tiles[start.y]?.[start.x]) return seen;
+  seen.add(`${start.x},${start.y}`);
+  const queue: Position[] = [start];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const [dx, dy] of NEIGHBOR8) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      const key = `${nx},${ny}`;
+      if (seen.has(key)) continue;
+      const tile = map.tiles[ny]?.[nx];
+      if (!isTileTraversable(tile) || !isLandTile(tile)) continue;
+      if (dx !== 0 && dy !== 0 && (!isTileTraversable(map.tiles[current.y]?.[nx]) || !isTileTraversable(map.tiles[ny]?.[current.x]))) continue;
+      seen.add(key);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return seen;
 }
 
 function getObjectObjective(
@@ -566,6 +827,7 @@ function opportunityMultiplier(
     "gate",
     "neutral_town",
     "pickup_garrison",
+    "level_transition",
   ]);
   if (!graspableTypes.has(objective.type)) return 1;
 

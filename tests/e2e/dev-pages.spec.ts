@@ -29,6 +29,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/map-showcase?size=S&fog=partial", expect: { selector: "body", description: "Generated Phaser partial fog map showcase body" } },
   { path: "/dev/rmg",          expect: { selector: "body",   description: "RMG preview body" } },
   { path: "/dev/leaderboard",  expect: { selector: "body",   description: "Leaderboard preview body" } },
+  { path: "/dev/ai",           expect: { selector: "[data-testid='ai-navigation-decisions']", description: "AI navigation decisions panel" } },
 ];
 
 test.describe("Smoke — /dev/* preview pages render without errors", () => {
@@ -538,6 +539,22 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
 
     await page.getByRole("button", { name: "Terminer la phase de tactique" }).click();
     await expect(page.getByRole("button", { name: "Attendre" })).toBeEnabled();
+  });
+
+  test("AI dev page proves gate and boat navigation decisions", async ({ page }) => {
+    await page.goto("/dev/ai", { waitUntil: "domcontentloaded" });
+
+    const panel = page.getByTestId("ai-navigation-decisions");
+    await expect(panel).toBeVisible();
+
+    // The AI must descend through the subterranean gate, embark, and sail.
+    await expect(page.getByTestId("ai-decision-subterranean-gate")).toHaveAttribute("data-objective-type", "level_transition");
+    await expect(page.getByTestId("ai-decision-embark-boat")).toHaveAttribute("data-objective-type", "embark_boat");
+    await expect(page.getByTestId("ai-decision-sail")).toHaveAttribute("data-decision-ok", "true");
+
+    for (const id of ["subterranean-gate", "embark-boat", "sail"]) {
+      await expect(page.getByTestId(`ai-decision-${id}`)).toHaveAttribute("data-decision-ok", "true");
+    }
   });
 
   test("dashboard leaderboard lists top players with ranks", async ({ page }) => {

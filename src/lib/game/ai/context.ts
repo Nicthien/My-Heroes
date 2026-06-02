@@ -8,10 +8,16 @@ import {
   getPlayerVisionCenters,
   normalizeMapMovement,
 } from "@/lib/game/engine";
+import {
+  mapLevels,
+  normalizeMapLevel,
+  SURFACE_LEVEL,
+  withActiveMapLayer,
+} from "@/lib/game/map-levels";
 import { hasTownBuilding } from "@/lib/game/town-buildings";
-import { BuildingType, Faction, GameMap, MapObject, Position, Resources } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, MapLevelId, MapObject, Position, Resources } from "@/lib/game/types";
 import { calculateStacksPower } from "./combat";
-import type { AiContext, AiDifficulty, AiDifficultyProfile, AiGame, AiPlayer, AiThreat, AiTown } from "./types";
+import type { AiBoat, AiContext, AiDifficulty, AiDifficultyProfile, AiGame, AiPlayer, AiThreat, AiTown } from "./types";
 import { loadAiMemory } from "./strategy/memory";
 import { getPersonalityProfile, mergeDifficultyProfile } from "./strategy/personality";
 import { computePosture } from "./strategy/posture";
@@ -55,15 +61,26 @@ const DIFFICULTY_PROFILES: Record<AiDifficulty, AiDifficultyProfile> = {
   },
 };
 
-export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
-  const map = normalizeMapMovement(game.mapData as GameMap);
+export function buildAiContext(
+  game: AiGame,
+  player: AiPlayer,
+  activeLevel: MapLevelId = SURFACE_LEVEL,
+): AiContext {
+  // Normalize movement metadata on every layer in place, then bind `map` to the
+  // requested level so all pathing/objective code operates on a single layer.
+  const fullMap = game.mapData as GameMap;
+  for (const layer of mapLevels(fullMap)) normalizeMapMovement(withActiveMapLayer(fullMap, layer.id));
+  const map = withActiveMapLayer(fullMap, activeLevel);
+
   const mapState = ((game.mapState as Record<string, unknown> | undefined) ?? {});
-  const explored = new Set(player.exploredTiles ?? []);
+  // Working explored set: active-level-only, unprefixed `${x},${y}` keys so the
+  // existing fog/objective helpers keep working unchanged on the active layer.
+  const explored = activeLevelExploredSet(player.exploredTiles, activeLevel);
   const currentVisible = computeVisibleTiles(
     map,
     getPlayerVisionCenters({
-      heroes: (player.heroes ?? []).map((hero) => ({ position: { x: hero.x, y: hero.y } })),
-      towns: (player.towns ?? []).map((town) => ({ position: { x: town.x, y: town.y } })),
+      heroes: (player.heroes ?? []).filter((hero) => normalizeMapLevel(hero.mapLevel) === activeLevel).map((hero) => ({ position: { x: hero.x, y: hero.y } })),
+      towns: (player.towns ?? []).filter((town) => normalizeMapLevel(town.mapLevel) === activeLevel).map((town) => ({ position: { x: town.x, y: town.y } })),
     }),
     5,
   );
@@ -79,8 +96,8 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     .filter((candidate) => candidate.id !== player.id && candidate.isAlive)
     .map((candidate) => ({
       ...candidate,
-      heroes: (candidate.heroes ?? []).filter((hero) => explored.has(tileKey({ x: hero.x, y: hero.y }))),
-      towns: (candidate.towns ?? []).filter((town) => explored.has(tileKey({ x: town.x, y: town.y }))),
+      heroes: (candidate.heroes ?? []).filter((hero) => normalizeMapLevel(hero.mapLevel) === activeLevel && explored.has(tileKey({ x: hero.x, y: hero.y }))),
+      towns: (candidate.towns ?? []).filter((town) => normalizeMapLevel(town.mapLevel) === activeLevel && explored.has(tileKey({ x: town.x, y: town.y }))),
     }))
     .filter((candidate) => candidate.heroes.length > 0 || candidate.towns.length > 0);
 
@@ -91,6 +108,9 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     game,
     player,
     map,
+    fullMap,
+    activeLevel,
+    boats: (game.boats ?? []) as AiBoat[],
     mapState,
     collected: new Set((mapState.collected as string[] | undefined) ?? []),
     visitedAdventureBuildings: new Set((mapState.visitedAdventureBuildings as string[] | undefined) ?? []),
@@ -103,7 +123,7 @@ export function buildAiContext(game: AiGame, player: AiPlayer): AiContext {
     difficulty,
     profile,
     visibleOpponents,
-    threats: buildThreats(game, player.id, explored),
+    threats: buildThreats(game, player.id, explored, activeLevel),
     resourceNeeds: computeResourceNeeds(player, personalityProfile.buildPriority),
     memory,
     personality: memory.personality,
@@ -118,11 +138,12 @@ export function buildPriorityForPersonality(context: AiContext) {
   return getPersonalityProfile(context.personality).buildPriority;
 }
 
-function buildThreats(game: AiGame, playerId: string, explored: Set<string>): AiThreat[] {
+function buildThreats(game: AiGame, playerId: string, explored: Set<string>, activeLevel: MapLevelId): AiThreat[] {
   const threats: AiThreat[] = [];
 
   for (const army of game.neutralArmies ?? []) {
     if (army.status !== "ACTIVE") continue;
+    if (normalizeMapLevel(army.mapLevel) !== activeLevel) continue;
     const position = { x: army.x, y: army.y };
     if (!explored.has(tileKey(position))) continue;
     threats.push({
@@ -137,6 +158,7 @@ function buildThreats(game: AiGame, playerId: string, explored: Set<string>): Ai
   for (const player of game.players ?? []) {
     if (!player.isAlive || player.id === playerId) continue;
     for (const hero of player.heroes ?? []) {
+      if (normalizeMapLevel(hero.mapLevel) !== activeLevel) continue;
       const position = { x: hero.x, y: hero.y };
       if (!explored.has(tileKey(position))) continue;
       threats.push({
@@ -286,4 +308,23 @@ export function isTownOwnedByPlayer(player: AiPlayer, position: Position, townId
 
 export function tileKey(position: Position) {
   return `${position.x},${position.y}`;
+}
+
+/**
+ * Extracts the explored tiles for a single map level as unprefixed `${x},${y}`
+ * keys. Stored keys use the `${level}:${x},${y}` scheme; legacy unprefixed keys
+ * are treated as surface (mirrors normalizeExploredTileKey on the human side).
+ */
+export function activeLevelExploredSet(exploredTiles: string[] | undefined, level: MapLevelId): Set<string> {
+  const result = new Set<string>();
+  for (const raw of exploredTiles ?? []) {
+    const key = String(raw);
+    const separator = key.indexOf(":");
+    if (separator >= 0) {
+      if (normalizeMapLevel(key.slice(0, separator)) === level) result.add(key.slice(separator + 1));
+    } else if (level === SURFACE_LEVEL) {
+      result.add(key);
+    }
+  }
+  return result;
 }

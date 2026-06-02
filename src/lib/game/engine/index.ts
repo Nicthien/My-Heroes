@@ -9,7 +9,6 @@ import {
   Position,
   Resources,
   UnitStack,
-  Boat,
   MapLevelId,
 } from "../types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "../map-levels";
@@ -127,11 +126,13 @@ export function isTileTraversable(tile: MapTile | undefined): boolean {
   );
 }
 
-export function getHeroBoat(boats: Pick<Boat, "heroId">[] | undefined | null, heroId: string): Pick<Boat, "heroId"> | null {
+type HeroBoatRef = { heroId?: string | null };
+
+export function getHeroBoat<T extends HeroBoatRef>(boats: T[] | undefined | null, heroId: string): T | null {
   return boats?.find((boat) => boat.heroId === heroId) ?? null;
 }
 
-export function getHeroAdventureMovementMode(boats: Pick<Boat, "heroId">[] | undefined | null, heroId: string): AdventureMovementMode {
+export function getHeroAdventureMovementMode(boats: HeroBoatRef[] | undefined | null, heroId: string): AdventureMovementMode {
   return getHeroBoat(boats, heroId) ? "boat" : "land";
 }
 

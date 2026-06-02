@@ -14,7 +14,10 @@ import { buildAiContext } from "../src/lib/game/ai/context";
 import { chooseAiObjective } from "../src/lib/game/ai/utility";
 import { getGarrisonPickupStacks } from "../src/lib/game/ai/strategy/army-transfers";
 import { canRecruitSingleStackHero } from "../src/lib/game/ai/strategy/recruit-hero";
-import { ResourceBuildingType, TerrainType, UnitType, type CombatBoardUnit } from "../src/lib/game/types";
+import { findGateObjectOnAnyLevel, getSubterraneanGateTarget } from "../src/lib/game/engine/level-transition";
+import { canBuildBoat, canEmbark } from "../src/lib/game/boats/boat-ops";
+import { UNDERGROUND_LEVEL } from "../src/lib/game/map-levels";
+import { BuildingType, Faction, ResourceBuildingType, TerrainType, UnitType, type CombatBoardUnit } from "../src/lib/game/types";
 
 const tests: Array<{ name: string; fn: () => void }> = [];
 function test(name: string, fn: () => void) {
@@ -750,6 +753,340 @@ test("AI does not cast twice in same round", () => {
     spellCastsByRound: { "1": ["h1"] },
   });
   assert(choice === null, "should not cast twice");
+});
+
+// ---------------------------------------------------------------------------
+// Level transitions (subterranean gates / stargates) and boats
+// ---------------------------------------------------------------------------
+
+interface TestTile {
+  x: number;
+  y: number;
+  terrain: TerrainType;
+  movementCost: number;
+  isPassable: boolean;
+  object?: unknown;
+}
+
+function makeLayer(size: number, terrain: TerrainType, mutate?: (tile: TestTile) => void) {
+  return Array.from({ length: size }, (_, y) =>
+    Array.from({ length: size }, (_, x) => {
+      const isWater = terrain === TerrainType.WATER;
+      const tile: TestTile = { x, y, terrain, movementCost: 100, isPassable: true, object: undefined };
+      void isWater;
+      mutate?.(tile);
+      return tile;
+    }),
+  );
+}
+
+function makeTwoLevelMap(
+  size: number,
+  surfaceMutate?: (tile: TestTile) => void,
+  undergroundMutate?: (tile: TestTile) => void,
+) {
+  const surfaceTiles = makeLayer(size, TerrainType.GRASS, surfaceMutate);
+  const undergroundTiles = makeLayer(size, TerrainType.DIRT, undergroundMutate);
+  return {
+    width: size,
+    height: size,
+    tiles: surfaceTiles,
+    levels: {
+      surface: { id: "surface", width: size, height: size, tiles: surfaceTiles },
+      underground: { id: "underground", width: size, height: size, tiles: undergroundTiles },
+    },
+  };
+}
+
+function makeAiPlayer(overrides: Record<string, unknown>) {
+  return {
+    id: "p1",
+    userId: null,
+    isAi: true,
+    aiDifficulty: "normal",
+    isAlive: true,
+    faction: "castle",
+    gold: 0,
+    wood: 0,
+    ore: 0,
+    mercury: 0,
+    crystals: 0,
+    gems: 0,
+    sulfur: 0,
+    exploredTiles: [] as string[],
+    heroes: [] as unknown[],
+    towns: [] as unknown[],
+    resourceBuildings: [] as unknown[],
+    ...overrides,
+  };
+}
+
+function makeAiGame(mapData: unknown, player: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+  return {
+    id: "ai-level-boat-test",
+    status: "ACTIVE",
+    maxPlayers: 2,
+    turnNumber: 3,
+    currentTurnPlayerId: "p1",
+    mapData,
+    mapState: {},
+    players: [player],
+    neutralArmies: [],
+    gates: [],
+    boats: [],
+    combats: [],
+    ...overrides,
+  };
+}
+
+test("Subterranean gate resolves the opposite-level passable target", () => {
+  const map = makeTwoLevelMap(
+    8,
+    (tile) => {
+      if (tile.x === 3 && tile.y === 2) {
+        tile.object = {
+          type: "adventure_building",
+          id: "sg-surface",
+          subtype: "subterranean_gate",
+          targetId: "sg-under",
+          targetLevel: "underground",
+          targetPosition: { x: 4, y: 4, level: "underground" },
+        };
+      }
+    },
+    (tile) => {
+      if (tile.x === 4 && tile.y === 4) {
+        tile.object = {
+          type: "adventure_building",
+          id: "sg-under",
+          subtype: "subterranean_gate",
+          targetId: "sg-surface",
+          targetLevel: "surface",
+          targetPosition: { x: 3, y: 2, level: "surface" },
+        };
+      }
+    },
+  );
+  const gateObject = map.levels.surface.tiles[2][3].object as Parameters<typeof getSubterraneanGateTarget>[1];
+  const target = getSubterraneanGateTarget(map as never, gateObject);
+  assert(!!target, "expected a gate target");
+  assert(target!.level === UNDERGROUND_LEVEL, `expected underground target, got ${target!.level}`);
+  assert(target!.position.x === 4 && target!.position.y === 4, "expected target at (4,4)");
+});
+
+test("Stargate destination resolves on the underground layer (cross-level)", () => {
+  const map = makeTwoLevelMap(
+    8,
+    (tile) => {
+      if (tile.x === 1 && tile.y === 1) {
+        tile.object = { type: "adventure_building", id: "star-surface", subtype: "stargate", targetId: "star-under" };
+      }
+    },
+    (tile) => {
+      if (tile.x === 5 && tile.y === 5) {
+        tile.object = { type: "adventure_building", id: "star-under", subtype: "stargate", targetId: "star-surface" };
+      }
+    },
+  );
+  const found = findGateObjectOnAnyLevel(map as never, "star-under");
+  assert(!!found, "expected to find the stargate pair");
+  assert(found!.level === UNDERGROUND_LEVEL, `expected underground, got ${found!.level}`);
+  assert(found!.position.x === 5 && found!.position.y === 5, "expected destination at (5,5)");
+});
+
+test("AI context binds to the underground layer with level-scoped fog", () => {
+  const map = makeTwoLevelMap(8);
+  // Hero sits far from (0,0) so vision cannot re-reveal it on the underground frame.
+  const player = makeAiPlayer({
+    exploredTiles: ["surface:0,0", "underground:4,4"],
+    heroes: [{
+      id: "h1",
+      x: 7,
+      y: 7,
+      mapLevel: "underground",
+      movement: 1560,
+      attack: 1,
+      defense: 0,
+      morale: 0,
+      luck: 0,
+      armies: [{ id: "a1", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+    }],
+  });
+  const game = makeAiGame(map, player);
+  const context = buildAiContext(game as never, game.players[0] as never, UNDERGROUND_LEVEL);
+  assert(context.activeLevel === UNDERGROUND_LEVEL, "context should be on the underground level");
+  assert(context.map.tiles[4][4].terrain === TerrainType.DIRT, "map should be bound to the underground layer");
+  assert(context.explored.has("4,4"), "underground explored tile should be present");
+  assert(!context.explored.has("0,0"), "surface-only explored tile must be excluded on the underground frame");
+});
+
+test("canBuildBoat gates on shipyard, gold and coastal water", () => {
+  const map = makeTwoLevelMap(6, (tile) => {
+    // A small body of coastal water next to the town at (2,2).
+    if ((tile.x === 2 && tile.y === 3) || (tile.x === 3 && tile.y === 3) || (tile.x === 3 && tile.y === 2)) {
+      tile.terrain = TerrainType.WATER;
+    }
+  });
+  const town = { x: 2, y: 2, mapLevel: "surface", townType: "castle", buildings: [BuildingType.SHIPYARD] };
+  const resources = { gold: 2000, wood: 20, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 };
+  const ok = canBuildBoat({ town, faction: Faction.CASTLE, resources, mapData: map.levels.surface as never, boats: [] });
+  assert(ok.ok === true, `expected build allowed, got ${ok.ok === false ? ok.reason : "ok"}`);
+
+  const noShipyard = canBuildBoat({ town: { ...town, buildings: [] }, faction: Faction.CASTLE, resources, mapData: map.levels.surface as never, boats: [] });
+  assert(noShipyard.ok === false, "expected build refused without a shipyard");
+});
+
+test("canEmbark allows an adjacent empty boat but not from underground", () => {
+  const map = makeTwoLevelMap(6, (tile) => {
+    if (tile.x === 1 && tile.y === 2) tile.terrain = TerrainType.WATER;
+  });
+  const boat = { id: "b1", heroId: null, x: 1, y: 2, mapLevel: "surface" };
+  const surfaceHero = { id: "h1", x: 1, y: 1, mapLevel: "surface" };
+  const ok = canEmbark({ hero: surfaceHero, boat, boats: [boat], mapData: map.levels.surface as never });
+  assert(ok.ok === true, `expected embark allowed, got ${ok.ok === false ? ok.reason : "ok"}`);
+
+  const undergroundHero = { id: "h1", x: 1, y: 1, mapLevel: "underground" };
+  const blocked = canEmbark({ hero: undergroundHero, boat, boats: [boat], mapData: map.levels.surface as never });
+  assert(blocked.ok === false, "expected embark refused from the underground");
+});
+
+test("AI embarks a boat to reach a water-separated mine", () => {
+  const exploredTiles: string[] = [];
+  const heroLand = new Set(["1,1", "1,2", "2,1", "2,2"]);
+  const mineLand = new Set(["6,5", "6,6"]);
+  const tiles = Array.from({ length: 8 }, (_, y) =>
+    Array.from({ length: 8 }, (_, x) => {
+      exploredTiles.push(`surface:${x},${y}`);
+      const key = `${x},${y}`;
+      const isLand = heroLand.has(key) || mineLand.has(key);
+      return {
+        x,
+        y,
+        terrain: isLand ? TerrainType.GRASS : TerrainType.WATER,
+        movementCost: 100,
+        isPassable: true,
+        object: x === 6 && y === 6
+          ? { type: "building" as const, id: "island-mine", subtype: ResourceBuildingType.GOLD_MINE }
+          : undefined,
+      };
+    }),
+  );
+  const map = { width: 8, height: 8, tiles };
+  const player = makeAiPlayer({
+    exploredTiles,
+    heroes: [{
+      id: "h1",
+      x: 1,
+      y: 1,
+      mapLevel: "surface",
+      movement: 1560,
+      attack: 1,
+      defense: 0,
+      morale: 0,
+      luck: 0,
+      armies: [{ id: "a1", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+    }],
+  });
+  const game = makeAiGame(map, player, {
+    boats: [{ id: "b1", ownerId: null, heroId: null, faction: "castle", x: 3, y: 2, mapLevel: "surface" }],
+  });
+  const context = buildAiContext(game as never, game.players[0] as never);
+  const choice = chooseAiObjective(context, context.player.heroes[0] as never, "SCOUT");
+  if (!choice) throw new Error("expected AI to choose an objective");
+  assert(choice.objective.type === "embark_boat", `expected embark_boat, got ${choice.objective.type}`);
+  assert(choice.objective.boatId === "b1", `expected boat b1, got ${choice.objective.boatId}`);
+});
+
+test("AI descends through a subterranean gate toward an underground mine", () => {
+  const map = makeTwoLevelMap(
+    8,
+    (tile) => {
+      if (tile.x === 3 && tile.y === 2) {
+        tile.object = {
+          type: "adventure_building",
+          id: "sg-surface",
+          subtype: "subterranean_gate",
+          targetId: "sg-under",
+          targetLevel: "underground",
+          targetPosition: { x: 4, y: 4, level: "underground" },
+        };
+      }
+    },
+    (tile) => {
+      if (tile.x === 4 && tile.y === 5) {
+        tile.object = { type: "building", id: "deep-gold-mine", subtype: ResourceBuildingType.GOLD_MINE };
+      }
+    },
+  );
+  const exploredTiles: string[] = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) exploredTiles.push(`surface:${x},${y}`);
+  exploredTiles.push("underground:4,4", "underground:4,5", "underground:3,4", "underground:5,4");
+  const player = makeAiPlayer({
+    exploredTiles,
+    heroes: [{
+      id: "h1",
+      x: 2,
+      y: 2,
+      mapLevel: "surface",
+      movement: 1560,
+      attack: 1,
+      defense: 0,
+      morale: 0,
+      luck: 0,
+      armies: [{ id: "a1", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+    }],
+  });
+  const game = makeAiGame(map, player);
+  const context = buildAiContext(game as never, game.players[0] as never);
+  const choice = chooseAiObjective(context, context.player.heroes[0] as never, "SCOUT");
+  if (!choice) throw new Error("expected AI to choose an objective");
+  assert(choice.objective.type === "level_transition", `expected level_transition, got ${choice.objective.type}`);
+  assert(choice.objective.id === "level-transition:sg-surface", `expected gate objective, got ${choice.objective.id}`);
+});
+
+test("AI sails toward a separated island when already embarked", () => {
+  const exploredTiles: string[] = [];
+  const mineLand = new Set(["6,5", "6,6"]);
+  const tiles = Array.from({ length: 8 }, (_, y) =>
+    Array.from({ length: 8 }, (_, x) => {
+      exploredTiles.push(`surface:${x},${y}`);
+      return {
+        x,
+        y,
+        terrain: mineLand.has(`${x},${y}`) ? TerrainType.GRASS : TerrainType.WATER,
+        movementCost: 100,
+        isPassable: true,
+        object: x === 6 && y === 6
+          ? { type: "building" as const, id: "island-mine", subtype: ResourceBuildingType.GOLD_MINE }
+          : undefined,
+      };
+    }),
+  );
+  const player = makeAiPlayer({
+    exploredTiles,
+    heroes: [{
+      id: "h1",
+      x: 1,
+      y: 4,
+      mapLevel: "surface",
+      movement: 1560,
+      attack: 1,
+      defense: 0,
+      morale: 0,
+      luck: 0,
+      armies: [{ id: "a1", unitType: UnitType.PIKEMAN, count: 20, health: 200, maxHealth: 10, position: 0 }],
+    }],
+  });
+  const game = makeAiGame({ width: 8, height: 8, tiles }, player, {
+    boats: [{ id: "b1", ownerId: "p1", heroId: "h1", faction: "castle", x: 1, y: 4, mapLevel: "surface" }],
+  });
+  const context = buildAiContext(game as never, game.players[0] as never);
+  const choice = chooseAiObjective(context, context.player.heroes[0] as never, "SCOUT");
+  if (!choice) throw new Error("expected embarked AI to choose an objective");
+  assert(
+    choice.objective.type === "sail" || choice.objective.type === "disembark_boat",
+    `expected sail/disembark_boat, got ${choice.objective.type}`,
+  );
 });
 
 let failed = 0;

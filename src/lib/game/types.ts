@@ -878,6 +878,8 @@ export interface Player {
   towns: Town[];
   resourceBuildings: ResourceBuilding[];
   isAlive: boolean;
+  /** True when the player forfeited the game; such games are excluded from leaderboard stats. */
+  surrendered?: boolean;
   turnOrder: number;
   exploredTiles: string[];
   hasEndedTurn: boolean;

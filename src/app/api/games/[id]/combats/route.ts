@@ -453,6 +453,7 @@ export async function POST(
     await applyCombatScoreOutcome(
       supabase,
       {
+        game_id: id,
         attacker_player_id: gamePlayer.id,
         defender_player_id: targetDefender.playerId ?? null,
         defender_hero_id: targetDefender.heroId ?? null,

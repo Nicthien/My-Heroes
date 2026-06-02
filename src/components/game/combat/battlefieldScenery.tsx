@@ -9,13 +9,15 @@ const HEX_CLIP_PATH =
   "polygon(50% 3.125%, 97.83% 28.125%, 97.83% 71.875%, 50% 96.875%, 2.17% 71.875%, 2.17% 28.125%)";
 
 const WATER_TILE_VARIANTS = 6;
-const TERRAIN_FEATURE_MODELS: Record<CombatTerrainFeature["type"], {
+type TerrainFeatureModel = {
   src: string;
   width: number;
   height: number;
   top: number;
   shadow: string;
-}> = {
+};
+
+const TERRAIN_FEATURE_MODELS: Record<CombatTerrainFeature["type"], TerrainFeatureModel> = {
   rock: {
     src: "/assets/sprites/map/boulder-cluster.webp",
     width: 88,
@@ -96,6 +98,30 @@ const TERRAIN_FEATURE_MODELS: Record<CombatTerrainFeature["type"], {
   },
 };
 
+const NAVAL_BLOCKER_MODELS: TerrainFeatureModel[] = [
+  {
+    src: "/assets/sprites/combat/naval-cargo-crates.webp",
+    width: 108,
+    height: 88,
+    top: -16,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.5)]",
+  },
+  {
+    src: "/assets/sprites/combat/naval-rope-anchor.webp",
+    width: 112,
+    height: 72,
+    top: -8,
+    shadow: "drop-shadow-[5px_8px_7px_rgba(0,0,0,0.48)]",
+  },
+  {
+    src: "/assets/sprites/combat/naval-broken-spars.webp",
+    width: 116,
+    height: 82,
+    top: -12,
+    shadow: "drop-shadow-[5px_9px_7px_rgba(0,0,0,0.5)]",
+  },
+];
+
 const SNOW_TERRAIN_FEATURE_MODELS: Partial<typeof TERRAIN_FEATURE_MODELS> = {
   bramble: {
     ...TERRAIN_FEATURE_MODELS.bramble,
@@ -123,11 +149,43 @@ const SNOW_TERRAIN_FEATURE_MODELS: Partial<typeof TERRAIN_FEATURE_MODELS> = {
   },
 };
 
-function getTerrainFeatureModel(feature: CombatTerrainFeature, environment: CombatEnvironment) {
+function getTerrainFeatureModel(feature: CombatTerrainFeature, environment: CombatEnvironment, seed: number) {
+  if (environment.theme === "water" && feature.type !== "water") {
+    return NAVAL_BLOCKER_MODELS[seed % NAVAL_BLOCKER_MODELS.length];
+  }
   if (environment.theme === "snow") {
     return SNOW_TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS.rock;
   }
   return TERRAIN_FEATURE_MODELS[feature.type] ?? TERRAIN_FEATURE_MODELS.rock;
+}
+
+// Naval combats are fought on a ship's deck. The deck floor itself is the
+// wooden plank tile texture (see sceneryPresets); this backdrop adds the rest
+// of the vessel — mast, sail, rigging and the hull bulwark — framing the deck
+// with open sea beyond. Rendered behind the hex grid, like all other scenery.
+function ShipDeckScenery() {
+  return (
+    <>
+      {/* A distant sail far out at sea, on the horizon. */}
+      <span className="absolute left-[14%] top-[15%] h-12 w-9 opacity-60 [clip-path:polygon(50%_0,100%_100%,0_100%)] bg-[linear-gradient(160deg,rgba(228,238,242,0.82),rgba(120,150,162,0.6))]" />
+      {/* Rigging lines fanning from the masthead to the gunwale corners. */}
+      <span className="absolute left-1/2 top-[8%] h-[58%] w-[44%] origin-top -translate-x-1/2 skew-x-[26deg] border-l border-[rgba(20,12,6,0.45)]" />
+      <span className="absolute left-1/2 top-[8%] h-[58%] w-[44%] origin-top -translate-x-1/2 -skew-x-[26deg] border-r border-[rgba(20,12,6,0.45)]" />
+      {/* Mast rising behind the deck. */}
+      <span className="absolute left-1/2 top-[5%] h-44 w-3 -translate-x-1/2 rounded bg-[linear-gradient(90deg,#7a5230,#3c2614,#2a1a0d)] shadow-[0_0_12px_rgba(0,0,0,0.45)]" />
+      {/* Yard (horizontal spar) + the billowing sail hung from it. */}
+      <span className="absolute left-1/2 top-[13%] h-2 w-48 -translate-x-1/2 rounded bg-[linear-gradient(180deg,#7a5230,#2a1a0d)]" />
+      <span className="absolute left-1/2 top-[14%] h-20 w-36 -translate-x-1/2 rounded-b-[45%] bg-[linear-gradient(180deg,rgba(232,221,191,0.94),rgba(196,180,142,0.86)_60%,rgba(150,134,98,0.8))] shadow-[0_10px_18px_rgba(0,0,0,0.3)]" />
+      {/* Soft seams across the canvas sail. */}
+      <span className="absolute left-1/2 top-[14%] h-20 w-36 -translate-x-1/2 rounded-b-[45%] [background:repeating-linear-gradient(90deg,transparent_0,transparent_16px,rgba(90,70,40,0.25)_17px,transparent_18px)]" />
+      {/* Hull bulwark: a capped wooden rail along the stern (bottom) and the two
+          gunwale strakes running up the port/starboard edges of the deck. */}
+      <span className="absolute bottom-0 left-0 right-0 h-12 bg-[linear-gradient(180deg,#6b4527,#3a2412)] shadow-[inset_0_3px_0_rgba(255,255,255,0.1),0_-6px_14px_rgba(0,0,0,0.3)]" />
+      <span className="absolute bottom-10 left-0 right-0 h-2 bg-[linear-gradient(180deg,#8a5e36,#5a3a20)]" />
+      <span className="absolute bottom-0 left-0 top-[30%] w-12 bg-[linear-gradient(90deg,#5a3a20,rgba(58,36,18,0))]" />
+      <span className="absolute bottom-0 right-0 top-[30%] w-12 bg-[linear-gradient(270deg,#5a3a20,rgba(58,36,18,0))]" />
+    </>
+  );
 }
 
 export function BattlefieldScenery({ environment }: { environment: CombatEnvironment }) {
@@ -162,9 +220,10 @@ export function BattlefieldScenery({ environment }: { environment: CombatEnviron
       {(environment.road || environment.theme === "road") && (
         <span className="absolute bottom-[10%] left-1/2 h-28 w-[62rem] -translate-x-1/2 skew-x-[-18deg] rounded-[50%] bg-stone-700/45 shadow-[inset_0_0_22px_rgba(250,204,21,0.12)]" />
       )}
-      {(environment.theme === "coast" || environment.theme === "water") && (
+      {environment.theme === "coast" && (
         <span className="absolute bottom-[13%] left-[8%] h-28 w-[34rem] -skew-x-12 rounded-[50%] bg-cyan-300/18 shadow-[inset_0_0_34px_rgba(125,211,252,0.34)]" />
       )}
+      {environment.theme === "water" && <ShipDeckScenery />}
       {(environment.theme === "settlement" || environment.theme === "building") && (
         <span className="absolute right-[8%] top-[18%] h-36 w-44 bg-[linear-gradient(145deg,rgba(120,91,54,0.78),rgba(39,25,13,0.58))] shadow-[0_18px_32px_rgba(0,0,0,0.28)] [clip-path:polygon(12%_100%,12%_42%,28%_42%,28%_22%,50%_4%,72%_22%,72%_42%,88%_42%,88%_100%)]" />
       )}
@@ -301,7 +360,7 @@ export function TerrainModel({ feature, environment }: { feature: CombatTerrainF
 
   // Deterministic per-feature variation so clusters don't all look identical
   // when several blockers sit nearby.
-  const model = getTerrainFeatureModel(feature, environment);
+  const model = getTerrainFeatureModel(feature, environment, seed);
   const scale = 0.9 + ((seed >> 3) % 6) * 0.04;
   const nudgeX = (((seed >> 5) % 5) - 2) * 3;
   const flip = ((seed >> 7) & 1) === 1 ? -1 : 1;
@@ -320,6 +379,7 @@ export function TerrainModel({ feature, environment }: { feature: CombatTerrainF
         src={model.src}
         alt=""
         fill
+        unoptimized
         sizes={`${model.width}px`}
         className={`absolute inset-0 h-full w-full object-contain ${model.shadow}`}
         draggable={false}

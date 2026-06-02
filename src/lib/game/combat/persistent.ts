@@ -592,8 +592,11 @@ function createCombatTerrain(rowCount = COMBAT_BASE_ROWS, environment?: CombatEn
     }
   }
 
-  for (let rock = 0; rock < 4; rock++) {
-    addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * rowCount));
+  // Boulders make no sense on a wooden deck; every other theme scatters a few.
+  if (theme !== "water") {
+    for (let rock = 0; rock < 4; rock++) {
+      addFeature("rock", 3 + Math.floor(Math.random() * (COMBAT_COLS - 6)), Math.floor(Math.random() * rowCount));
+    }
   }
 
   return terrain;
@@ -613,8 +616,11 @@ function getCombatBlockerPool(theme: CombatEnvironment["theme"]): CombatTerrainF
       return ["deadwood", "fallen_log", "bramble"];
     case "swamp":
     case "coast":
-    case "water":
       return ["reed_thicket", "root_snarl", "fallen_log"];
+    case "water":
+      // Naval combat is fought on a ship's deck: the only "obstacles" are loose
+      // timber/spars (fallen_log), never reeds, roots or boulders.
+      return ["fallen_log"];
     case "lava":
     case "mountain":
       return ["crystal", "deadwood", "rock"];

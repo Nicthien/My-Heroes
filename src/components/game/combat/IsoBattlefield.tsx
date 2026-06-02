@@ -621,7 +621,7 @@ export function IsoBattlefield({
           }}
           onMouseEnter={() => setHoveredUnitId(unit?.id ?? null)}
           onMouseLeave={() => setHoveredUnitId((prev) => (prev === unit?.id ? null : prev))}
-          title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature) : `${q},${r}`}
+          title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature, environment) : `${q},${r}`}
         >
           <IsoTile
             feature={feature}

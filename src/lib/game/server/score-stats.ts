@@ -1,5 +1,6 @@
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 import { normalizeScoreStats, type ScoreStats } from "@/lib/game/score";
+import { recordCombatVictory } from "@/lib/game/server/action-log";
 
 type DbError = { code?: string; message?: string; details?: string | null };
 
@@ -70,6 +71,7 @@ export function scoreDeltaForAction(action: Record<string, unknown>): Partial<Sc
 }
 
 interface CombatScoreContext {
+  game_id: string;
   attacker_player_id: string;
   defender_player_id: string | null;
   defender_hero_id: string | null;
@@ -106,9 +108,16 @@ export async function applyCombatScoreOutcome(
 
   await applyScoreDelta(supabase, winnerPlayerId, deltas);
 
-  if (loserPlayerId && (await isPlayerEliminated(supabase, loserPlayerId))) {
+  const eliminatedPlayer = Boolean(loserPlayerId && (await isPlayerEliminated(supabase, loserPlayerId)));
+  if (eliminatedPlayer) {
     await applyScoreDelta(supabase, winnerPlayerId, { playersDefeated: 1 });
   }
+
+  // Key moment for the end-of-game chart (persistent/manual combats only).
+  await recordCombatVictory(supabase, combat.game_id, winnerPlayerId, {
+    defeatedHero: Boolean(deltas.heroesDefeated),
+    eliminatedPlayer,
+  });
 }
 
 /** A player is eliminated when they hold no active hero and no town. Mirrors lifecycle `hasPlayerSeat`. */

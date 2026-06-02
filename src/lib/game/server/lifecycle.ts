@@ -14,7 +14,7 @@ type LifecyclePlayer = {
   towns?: LifecycleTown[];
 };
 
-type ScoreSourcePlayer = DbScorablePlayer & { id: string; userId?: string | null };
+type ScoreSourcePlayer = DbScorablePlayer & { id: string; userId?: string | null; surrendered?: boolean };
 
 type LifecycleTurn = {
   gamePlayerId: string;
@@ -123,6 +123,7 @@ async function recordCompletedGameStats(supabase: SupabaseAdmin, players: ScoreS
   for (const player of players) {
     const userId = player.userId ?? null;
     if (!userId) continue; // AI players are not ranked
+    if (player.surrendered) continue; // forfeited games never count toward leaderboard stats
 
     const score = computePlayerScore(scorableFromDbPlayer(player)).total;
     const won = player.id === winnerId;

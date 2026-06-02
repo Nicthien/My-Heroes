@@ -11,6 +11,7 @@ const OUTPUT_HEIGHT = 64;
 const OUTPUT_SIDE_WIDTH = 128;
 const OUTPUT_SIDE_HEIGHT = 96;
 const OUT_DIR = path.join(process.cwd(), "public", "assets", "textures", "terrain");
+const DECK_BOARD_H = 15;
 
 const terrainCatalog = {
   grass: {
@@ -111,6 +112,19 @@ const terrainCatalog = {
       ["burnt-edge", ["burnt-edge", "embers"]],
     ],
   },
+  // Ship deck planking — used only as the floor for naval (on-boat) combats,
+  // so it has no iso side faces (combat hexes use the top texture only).
+  deck: {
+    base: ["#9a6738", "#b9854a", "#5f3c1f"],
+    sides: false,
+    variants: [
+      ["clean", ["planks"]],
+      ["weathered", ["planks", "dark-grain"]],
+      ["knotted", ["planks", "knots"]],
+      ["wet", ["planks", "wet-sheen"]],
+      ["caulked", ["planks", "caulk"]],
+    ],
+  },
 };
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -125,6 +139,7 @@ for (const [terrain, spec] of Object.entries(terrainCatalog)) {
     await writeTerrainTopTexture(svg, output, terrain);
     console.log(`Generated ${path.relative(process.cwd(), output)}`);
 
+    if (spec.sides === false) continue;
     for (const side of ["left", "right"]) {
       const sideSvg = terrainSideSvg(terrain, slug, spec.base, features, side);
       const sideOutput = path.join(terrainDir, `${terrain}-${slug}-side-${side}.webp`);
@@ -353,6 +368,74 @@ function featureLayer(seed, colors, features) {
   if (features.includes("embers")) out += embers(seed);
   if (features.includes("lava-flow")) out += lavaFlow(seed);
   if (features.includes("burnt-edge")) out += burntEdge();
+  if (features.includes("planks")) out += planks(seed, colors);
+  if (features.includes("knots")) out += knots(seed);
+  if (features.includes("caulk")) out += caulk();
+  if (features.includes("wet-sheen")) out += wetSheen(seed);
+  return out;
+}
+
+function planks(seed, colors) {
+  const rng = makeRng(seed + 5101);
+  const seam = shadeColor(colors[2], 0.6);
+  let out = "";
+  let board = 0;
+  for (let y = 4; y <= 124; y += DECK_BOARD_H) {
+    // Alternate faint board shading so neighbouring planks read apart.
+    if (board % 2 === 0) {
+      out += `<rect x="0" y="${f(y)}" width="256" height="${f(DECK_BOARD_H)}" fill="#000000" opacity=".06"/>`;
+    } else {
+      out += `<rect x="0" y="${f(y)}" width="256" height="${f(DECK_BOARD_H)}" fill="#ffffff" opacity=".035"/>`;
+    }
+    // Plank seam + thin top highlight to fake a bevelled edge.
+    out += `<rect x="0" y="${f(y)}" width="256" height="2" fill="${seam}" opacity=".5"/>`;
+    out += `<rect x="0" y="${f(y + 2)}" width="256" height="1" fill="#ffffff" opacity=".08"/>`;
+    // Lengthwise wood grain.
+    for (let i = 0; i < 6; i++) {
+      const gx = 8 + rng() * 240;
+      const gy = y + 3 + rng() * (DECK_BOARD_H - 5);
+      const len = 24 + rng() * 64;
+      out += `<path d="M${f(gx)} ${f(gy)} q${f(len * 0.5)} ${f(-2 + rng() * 4)} ${f(len)} 0" fill="none" stroke="#000000" stroke-width="${f(0.6 + rng() * 1)}" stroke-linecap="round" opacity="${f(0.07 + rng() * 0.1)}"/>`;
+    }
+    // Occasional butt joint between two boards.
+    if (rng() > 0.45) {
+      const bx = 36 + rng() * 184;
+      out += `<rect x="${f(bx)}" y="${f(y)}" width="2" height="${f(DECK_BOARD_H)}" fill="${seam}" opacity=".4"/>`;
+    }
+    board++;
+  }
+  return out;
+}
+
+function knots(seed) {
+  const rng = makeRng(seed + 5201);
+  let out = "";
+  for (let i = 0; i < 5; i++) {
+    const x = 30 + rng() * 196;
+    const y = 18 + rng() * 92;
+    const r = 3 + rng() * 3;
+    out += `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(r)}" ry="${f(r * 0.7)}" fill="#3a2412" opacity=".7"/>`;
+    out += `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(r * 1.9)}" ry="${f(r * 1.25)}" fill="none" stroke="#3a2412" stroke-width="1" opacity=".3"/>`;
+  }
+  return out;
+}
+
+function caulk() {
+  let out = "";
+  for (let y = 4; y <= 124; y += DECK_BOARD_H) {
+    out += `<rect x="0" y="${f(y - 0.5)}" width="256" height="2.6" fill="#16100a" opacity=".5"/>`;
+  }
+  return out;
+}
+
+function wetSheen(seed) {
+  const rng = makeRng(seed + 5301);
+  let out = "";
+  for (let i = 0; i < 6; i++) {
+    const x = 24 + rng() * 200;
+    const y = 20 + rng() * 84;
+    out += `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(16 + rng() * 26)}" ry="${f(3 + rng() * 4)}" fill="#bcd6e0" opacity="${f(0.08 + rng() * 0.08)}" transform="rotate(${f(-10 + rng() * 20)} ${f(x)} ${f(y)})"/>`;
+  }
   return out;
 }
 

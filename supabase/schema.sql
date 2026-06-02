@@ -64,6 +64,7 @@ create table public.game_players (
   sulfur integer not null default 50,
   is_ready boolean not null default false,
   is_alive boolean not null default true,
+  surrendered boolean not null default false,
   turn_order integer not null,
   explored_tiles jsonb not null default '[]',
   score_stats jsonb not null default '{}',

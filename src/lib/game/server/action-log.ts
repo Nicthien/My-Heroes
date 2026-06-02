@@ -150,6 +150,75 @@ export async function recordGameAction(supabase: SupabaseAdmin, input: RecordGam
   }
 }
 
+/** Resolve the current turn number and a display name/actor kind for a game player. */
+async function resolveActorContext(supabase: SupabaseAdmin, gameId: string, gamePlayerId: string) {
+  const { data: game } = await supabase.from("games").select("turn_number").eq("id", gameId).maybeSingle();
+  const { data: player } = await supabase
+    .from("game_players")
+    .select("ai_name, profiles(name)")
+    .eq("id", gamePlayerId)
+    .maybeSingle();
+  const profile = (player as { profiles?: { name?: string | null } | { name?: string | null }[] } | null)?.profiles;
+  const profileName = Array.isArray(profile) ? profile[0]?.name : profile?.name;
+  const aiName = (player as { ai_name?: string | null } | null)?.ai_name;
+  return {
+    turnNumber: Number(game?.turn_number ?? 0),
+    name: aiName || profileName || "Un joueur",
+    actorKind: (aiName ? "ai" : "player") as GameActionActorKind,
+  };
+}
+
+/**
+ * Log a CAPTURE_TOWN key moment for a town taken at the end of a persistent
+ * combat (where the capture happens in the resolution code, not via a player
+ * CAPTURE_TOWN action). Resolves the turn number and a display name itself, so
+ * call sites only need the game id and the capturing player id.
+ */
+export async function recordTownCaptureFromCombat(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  gamePlayerId: string,
+) {
+  const { turnNumber, name, actorKind } = await resolveActorContext(supabase, gameId, gamePlayerId);
+  await recordGameAction(supabase, {
+    gameId,
+    gamePlayerId,
+    actorKind,
+    turnNumber,
+    actionType: "CAPTURE_TOWN",
+    category: "capture",
+    summary: `${name} capture un chateau.`,
+  });
+}
+
+/**
+ * Log a COMBAT_WON key moment for the winner of a resolved (persistent) combat.
+ * `defeatedHero` distinguishes a duel against an enemy hero from a fight against
+ * neutral creatures; `eliminatedPlayer` marks a win that knocked a rival out.
+ */
+export async function recordCombatVictory(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  gamePlayerId: string,
+  outcome: { defeatedHero: boolean; eliminatedPlayer: boolean },
+) {
+  const { turnNumber, name, actorKind } = await resolveActorContext(supabase, gameId, gamePlayerId);
+  const summary = outcome.eliminatedPlayer
+    ? `${name} elimine un adversaire au combat.`
+    : outcome.defeatedHero
+      ? `${name} vainc un heros ennemi.`
+      : `${name} remporte un combat.`;
+  await recordGameAction(supabase, {
+    gameId,
+    gamePlayerId,
+    actorKind,
+    turnNumber,
+    actionType: "COMBAT_WON",
+    category: "combat",
+    summary,
+  });
+}
+
 export function buildActionLogInput(params: {
   gameId: string;
   gamePlayerId: string;

@@ -32,8 +32,9 @@ export async function handleTurnAction({
   if (action.type === "SURRENDER_GAME") {
     // Forfeit: drop the player's seat and release their mines, then let the
     // shared turn logic re-evaluate the lifecycle (possible winner) and advance
-    // off the now-dead player so the game never stalls.
-    await supabase.from("game_players").update({ is_alive: false }).eq("id", gamePlayer.id);
+    // off the now-dead player so the game never stalls. The `surrendered` flag
+    // keeps this game out of the player's leaderboard aggregates.
+    await supabase.from("game_players").update({ is_alive: false, surrendered: true }).eq("id", gamePlayer.id);
     await supabase
       .from("resource_buildings")
       .update({ game_player_id: null })

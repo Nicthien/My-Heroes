@@ -14,10 +14,10 @@ const SOURCE_ROWS = 8;
 const SOURCE_CROP_PADDING_X = 48;
 const SOURCE_CROP_PADDING_Y = 36;
 
-const FRAME_WIDTH = 52;
-const FRAME_HEIGHT = 52;
-const HERO_CONTENT_MAX_WIDTH = 36;
-const HERO_CONTENT_MAX_HEIGHT = 39;
+const FRAME_WIDTH = 104;
+const FRAME_HEIGHT = 104;
+const HERO_CONTENT_MAX_WIDTH = 72;
+const HERO_CONTENT_MAX_HEIGHT = 78;
 const WIDTH = FRAME_WIDTH * SOURCE_COLUMNS;
 const HEIGHT = FRAME_HEIGHT * SOURCE_ROWS;
 
@@ -90,7 +90,8 @@ async function writeFactionSheet(faction) {
     .png()
     .toBuffer();
 
-  await sharp(sheet).webp({ lossless: true, effort: 6 }).toFile(outFile);
+  const cleanedSheet = await clearLowAlpha(sheet);
+  await sharp(cleanedSheet).webp({ lossless: true, effort: 6 }).toFile(outFile);
 
   const metadata = await sharp(outFile).metadata();
   if (metadata.width !== WIDTH || metadata.height !== HEIGHT) {
@@ -162,6 +163,20 @@ async function removeBlackBackground(cell) {
       data[i + 2] = 0;
       data[i + 3] = 0;
     }
+  }
+
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+}
+
+async function clearLowAlpha(image) {
+  const { data, info } = await sharp(image).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] > 2) continue;
+    data[i] = 0;
+    data[i + 1] = 0;
+    data[i + 2] = 0;
+    data[i + 3] = 0;
   }
 
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();

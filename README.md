@@ -1,6 +1,6 @@
 # My Heroes
 
-Jeu video de strategie au tour par tour inspire de **Heroes of Might and Magic III**.
+Jeu video de strategie fantastique au tour par tour.
 
 ## Description
 

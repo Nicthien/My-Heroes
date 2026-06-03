@@ -1,0 +1,48 @@
+# Unraid deployment — pull the prebuilt app image and attach it to the
+# self-hosted Supabase stack. Use alongside the official Supabase compose:
+#
+#   docker compose \
+#     -f ./supabase-docker/docker-compose.yml \
+#     -f ./docker-compose.unraid.yml \
+#     up -d
+#
+# The app image is PULLED from a registry (built + pushed elsewhere), so there
+# is no `build:` here. NEXT_PUBLIC_* were baked at build time — see RELEASE.md.
+# Only the runtime, server-only secret and the (already-inlined, but harmless to
+# repeat) public values are passed here.
+#
+# Network strategy: PROXY. NEXT_PUBLIC_SUPABASE_URL is baked with a PRIVATE/LAN
+# URL (e.g. http://192.168.x.x:8000), so the browser routes Supabase calls
+# through the app's /api/supabase proxy (see src/lib/supabase/browser.ts).
+# SUPABASE_INTERNAL_URL below tells that proxy where to forward server-side —
+# over the shared docker network, Kong is reachable as http://kong:8000.
+# Supabase therefore never needs to be exposed publicly; only the app is
+# fronted by Zoraxy.
+
+services:
+  app:
+    image: ${REGISTRY_IMAGE:-docker.io/nicthien/my-heroes:latest}
+    container_name: my-heroes-app
+    restart: unless-stopped
+    # No host port needed if Zoraxy reaches it over the shared docker network;
+    # publish it too if you prefer Zoraxy to proxy via <unraid-ip>:3000.
+    ports:
+      - "3000:3000"
+    environment:
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      # Where the /api/supabase proxy forwards server-side: Kong on the shared
+      # docker network. This is what makes the PROXY strategy work.
+      SUPABASE_INTERNAL_URL: http://kong:8000
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_SITE_URL: ${SITE_URL}
+    networks:
+      - supabase
+    depends_on:
+      - kong
+
+networks:
+  supabase:
+    external: true
+    # Adjust to match the dir Supabase's compose runs from (docker network ls).
+    name: supabase-docker_default

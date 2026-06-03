@@ -2,6 +2,7 @@ import { Faction, UnitType } from "@/lib/game/types";
 import { UNIT_RULES, getFactionBuildingRule } from "@/lib/game/economy";
 import type { Locale } from "@/lib/i18n/types";
 import { unitTypeToEnglishLabel } from "@/lib/i18n/gameLabels";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 
 export const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 
@@ -89,7 +90,8 @@ export function buildingTypeLabel(building: string, faction: Faction = Faction.C
   return labels[building] || building;
 }
 
-export async function getApiErrorMessage(response: Response, fallback: string) {
+export async function getApiErrorMessage(response: Response, fallback: string, locale: Locale = "fr") {
   const data = await response.json().catch(() => null);
-  return typeof data?.error === "string" ? data.error : fallback;
+  if (typeof data?.error !== "string") return fallback;
+  return localizedServerMessage(data.error, locale) ?? data.error;
 }

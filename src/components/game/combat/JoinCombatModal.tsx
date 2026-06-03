@@ -5,9 +5,10 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 
 export default function JoinCombatModal() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
   const pendingJoinCombat = useGameStore((state) => state.pendingJoinCombat);
@@ -30,7 +31,7 @@ export default function JoinCombatModal() {
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      setCombatMessage(data?.error ?? t("combat.reinforceFailed"));
+      setCombatMessage(localizedServerMessage(data?.error, locale) ?? t("combat.reinforceFailed"));
       return;
     }
     const combatPayload = data?.combat ?? data;
@@ -38,7 +39,7 @@ export default function JoinCombatModal() {
     setCombatMessage(decision === "accept" ? t("combat.reinforceAccepted") : t("combat.reinforceRejected"));
     const refreshed = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshed) setGameState(refreshed);
-  }, [gameState, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, t]);
+  }, [gameState, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, t, locale]);
 
   const join = useCallback(async (side: "attacker" | "defender") => {
     if (!gameState || !pendingJoinCombat) return;
@@ -49,13 +50,13 @@ export default function JoinCombatModal() {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setCombatMessage(data?.error ?? t("combat.joinFailed"));
+      setCombatMessage(localizedServerMessage(data?.error, locale) ?? t("combat.joinFailed"));
       setPendingJoinCombat(null);
       return;
     }
     const data = await response.json();
     if (data.pending) {
-      setCombatMessage(data.message ?? t("combat.reinforceSent"));
+      setCombatMessage(localizedServerMessage(data.message, locale) ?? t("combat.reinforceSent"));
       setPendingJoinCombat(null);
       const refreshed = await refreshGameState(gameState.id, session?.user?.id);
       if (refreshed) setGameState(refreshed);
@@ -66,7 +67,7 @@ export default function JoinCombatModal() {
     setPendingJoinCombat(null);
     const refreshed = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshed) setGameState(refreshed);
-  }, [gameState, pendingJoinCombat, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, setPendingJoinCombat, t]);
+  }, [gameState, pendingJoinCombat, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, setPendingJoinCombat, t, locale]);
 
   useEffect(() => {
     if (!pendingJoinCombat) return;

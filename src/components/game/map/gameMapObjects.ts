@@ -8,6 +8,9 @@ import { getCombatHeroIds } from "@/lib/game/combat/active-heroes";
 import { RESOURCE_BUILDING_RULES } from "@/lib/game/economy";
 import { getPlayerVisionCenters } from "@/lib/game/engine";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { translate } from "@/lib/i18n/translate";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import type { Locale } from "@/lib/i18n/types";
 
 const RESOURCE_BUILDING_LABEL_BY_TYPE = new Map<string, string>(
   RESOURCE_BUILDING_RULES.map((rule) => [rule.type, rule.label])
@@ -20,6 +23,7 @@ export function buildObjects(
   selectedHeroId?: string | null,
   activeMapLevel: MapLevelId = SURFACE_LEVEL,
   activeMap = withActiveMapLayer(gameState.map, activeMapLevel),
+  locale: Locale = "fr",
 ): MapObjectData[] {
   const adventureVisits = gameState.adventureVisits;
   const exhaustionCtx = currentPlayer && adventureVisits ? {
@@ -138,7 +142,7 @@ export function buildObjects(
       y: boat.position.y,
       faction: String(boat.faction ?? "castle"),
       color: "#f8fafc",
-      name: "Bateau",
+      name: translate(locale, "build.boat"),
       onWater: true,
     });
   }
@@ -177,7 +181,7 @@ export function buildObjects(
           y,
           faction: tile.object.subtype ?? "neutral",
           color: "#a8a29e",
-          name: tile.object.name ?? "Chateau neutre",
+          name: tile.object.name ?? translate(locale, "map.neutralTown"),
         });
       }
     }
@@ -205,7 +209,7 @@ export function buildObjects(
           y,
           faction: owner?.faction as string ?? "",
           color: owner?.color ?? "",
-          name: RESOURCE_BUILDING_LABEL_BY_TYPE.get(buildingType ?? "") ?? buildingType ?? "",
+          name: localizedLabelFromId(buildingType ?? "", RESOURCE_BUILDING_LABEL_BY_TYPE.get(buildingType ?? "") ?? buildingType ?? "", locale),
           buildingType: tileObject.subtype,
           guardianPower: tileObject.guardianPower ?? building?.guardianPower ?? 0,
         });
@@ -226,7 +230,7 @@ export function buildObjects(
           buildingId: tile.object.id,
           subtype: tile.object.subtype,
         }) : { exhausted: false };
-        const baseDescription = getMapObjectHoverDescription(tile.object) ?? undefined;
+        const baseDescription = getMapObjectHoverDescription(tile.object, locale) ?? undefined;
         const description = exhaustion.exhausted
           ? (baseDescription ? `${baseDescription}\n${exhaustion.reason}` : exhaustion.reason)
           : baseDescription;
@@ -240,8 +244,8 @@ export function buildObjects(
           faction: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.faction as string ?? "") : "",
           color: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.color ?? "") : "",
           name: isExternalDwellingType(tile.object.subtype)
-            ? getExternalDwellingLabel(tile.object.targetId)
-            : tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype),
+            ? localizedLabelFromId(tile.object.targetId ?? "", getExternalDwellingLabel(tile.object.targetId), locale)
+            : tile.object.name ?? localizedLabelFromId(tile.object.subtype ?? "", getAdventureBuildingLabel(tile.object.subtype), locale),
           description,
           buildingType: tile.object.subtype,
           dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,
@@ -267,7 +271,7 @@ export function buildObjects(
       y: gate.position.y,
       faction: owner?.faction as string ?? "",
       color: owner?.color ?? "",
-      name: owner ? "Porte controlee" : "Porte neutre",
+      name: translate(locale, owner ? "map.gateOwned" : "map.gateNeutral"),
       guardianPower: gate.guardianPower,
     });
   }
@@ -289,7 +293,7 @@ export function buildObjects(
           y,
           faction: "",
           color: "",
-          name: tile.object.ownerId ? "Porte controlee" : "Porte neutre",
+          name: translate(locale, tile.object.ownerId ? "map.gateOwned" : "map.gateNeutral"),
           guardianPower: tile.object.guardianPower ?? 0,
         });
       }
@@ -308,7 +312,7 @@ export function buildObjects(
       y: combat.position.y,
       faction: "castle",
       color: "#f97316",
-      name: "Combat en cours",
+      name: translate(locale, "map.combatInProgress"),
     });
   }
 
@@ -327,7 +331,7 @@ export function buildObjects(
         y: hero.position.y,
         faction: player.faction as string,
         color: "#f97316",
-        name: "Héros en combat",
+        name: translate(locale, "game.combatMarker"),
       });
     }
   }

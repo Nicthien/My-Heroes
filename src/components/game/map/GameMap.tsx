@@ -37,6 +37,7 @@ import { buildObjects } from "./gameMapObjects";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 import { resourceLabel } from "@/lib/game/economy";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 
@@ -350,20 +351,21 @@ export default function GameMapComponent() {
 
       const mapReferenceChanged = renderedMapRef.current !== renderMap;
       if (mapReferenceChanged) {
-        reportMapLoading(91, "Construction du terrain...");
+        reportMapLoading(91, tRef.current("map.buildTerrain"));
       }
       // Incremental sync mutates the existing map object with dynamic tile.object
       // updates. Always let Phaser compare signatures so resources, monsters, and
       // gates re-render even when the GameMap reference stays stable.
+      renderer.setLocale(localeRef.current);
       renderer.renderMap(renderMap);
       if (mapReferenceChanged) {
-        reportMapLoading(94, "Placement des objets...");
+        reportMapLoading(94, tRef.current("map.placeObjects"));
         renderedMapRef.current = renderMap;
         lastFogVisibleRef.current = null;
         lastFogExploredRef.current = null;
       }
-      renderer.setObjects(buildObjects(gameState, currentPlayer, revealMap, selectedHeroId, activeMapLevel, renderMap));
-      reportMapLoading(95, "Calcul de la visibilite...");
+      renderer.setObjects(buildObjects(gameState, currentPlayer, revealMap, selectedHeroId, activeMapLevel, renderMap, localeRef.current));
+      reportMapLoading(95, tRef.current("map.computeVisibility"));
 
       let visibleTiles: Set<string>;
       let exploredTiles: Set<string>;
@@ -413,9 +415,9 @@ export default function GameMapComponent() {
         !areTileKeySetsEqual(lastFogVisibleRef.current, visibleTiles) ||
         !areTileKeySetsEqual(lastFogExploredRef.current, exploredTiles)
       ) {
-        reportMapLoading(97, "Application du brouillard de guerre...");
+        reportMapLoading(97, tRef.current("map.applyFog"));
         renderer.setFog(visibleTiles, exploredTiles, activeMapLevel === UNDERGROUND_LEVEL ? "underground" : "surface");
-        reportMapLoading(98, "Centrage de la camera...");
+        reportMapLoading(98, tRef.current("map.centerCamera"));
         lastFogVisibleRef.current = visibleTiles;
         lastFogExploredRef.current = exploredTiles;
       }
@@ -436,7 +438,7 @@ export default function GameMapComponent() {
       const loadingState = useGameStore.getState();
       if (loadingState.isLoading && completedLoadingNonceRef.current < loadingState.loadingNonce) {
         completedLoadingNonceRef.current = loadingState.loadingNonce;
-        loadingState.updateLoadingProgress(100, "Carte prete");
+        loadingState.updateLoadingProgress(100, tRef.current("map.ready"));
         if (loadingFinishTimeoutRef.current) {
           window.clearTimeout(loadingFinishTimeoutRef.current);
         }
@@ -809,38 +811,38 @@ export default function GameMapComponent() {
           heroId,
           buildingId: interaction.buildingId,
           buildingType: interaction.buildingType,
-          message: interaction.message ?? getAdventureBuildingLabel(interaction.buildingType),
+          message: localizedServerMessage(interaction.message, localeRef.current) ??getAdventureBuildingLabel(interaction.buildingType),
           choices: interaction.choices,
         });
-        setCombatMessage(interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+        setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??getAdventureBuildingLabel(interaction.buildingType));
         return true;
       }
       if (interaction.recruited) {
         const rule = UNIT_RULES[interaction.recruited.unitType];
         const label = rule ? localizedLabelFromId(interaction.recruited.unitType, rule.label, localeRef.current) : tRef.current("map.creatureFallback");
-        setCombatMessage(interaction.message ?? tRef.current("map.recruited", { count: interaction.recruited.count, label }));
+        setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??tRef.current("map.recruited", { count: interaction.recruited.count, label }));
       } else if (interaction.reward) {
         const parts = [];
         if (interaction.reward.gold) parts.push(tRef.current("map.plusGold", { n: interaction.reward.gold }));
         for (const [resource, amount] of Object.entries(interaction.reward.resources ?? {})) {
           parts.push(tRef.current("map.plusResource", { n: amount, res: resourceLabel(resource, localeRef.current) }));
         }
-        setCombatMessage(parts.length > 0 ? parts.join(", ") : interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+        setCombatMessage(parts.length > 0 ? parts.join(", ") : localizedServerMessage(interaction.message, localeRef.current) ??getAdventureBuildingLabel(interaction.buildingType));
       } else {
-        setCombatMessage(interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
+        setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??getAdventureBuildingLabel(interaction.buildingType));
       }
       return true;
     }
 
     if (interaction.type === "TELEPORT") {
-      setCombatMessage(interaction.message ?? tRef.current("map.teleported"));
+      setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??tRef.current("map.teleported"));
       setActiveMapLevel(normalizeMapLevel(interaction.to.level));
       renderedMapRef.current = null;
       rendererRef.current?.centerOnTile(interaction.to.x, interaction.to.y);
       return true;
     }
 
-    setCombatMessage(interaction.message ?? tRef.current("map.actionDone"));
+    setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??tRef.current("map.actionDone"));
     return true;
   }, [setActiveMapLevel, setCombatMessage, setPendingCombat]);
 
@@ -860,7 +862,7 @@ export default function GameMapComponent() {
         }),
       });
       if (!response.ok) {
-        setCombatMessage(await getApiErrorMessage(response));
+        setCombatMessage(await getApiErrorMessage(response, localeRef.current));
         return;
       }
       const data = await response.json();
@@ -904,7 +906,7 @@ export default function GameMapComponent() {
         body: JSON.stringify({ type: "COLLECT_ARTIFACT", heroId, targetPosition, path }),
       });
       if (!response.ok) {
-        setCombatMessage(await getApiErrorMessage(response));
+        setCombatMessage(await getApiErrorMessage(response, localeRef.current));
         return;
       }
       const data = await response.json();
@@ -991,7 +993,7 @@ export default function GameMapComponent() {
       })
         .then(async (response) => {
           if (!response.ok) {
-            setCombatMessage(await getApiErrorMessage(response));
+            setCombatMessage(await getApiErrorMessage(response, localeRef.current));
             return null;
           }
           return refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -1053,7 +1055,7 @@ export default function GameMapComponent() {
       })
         .then(async (response) => {
           if (!response.ok) {
-            setCombatMessage(await getApiErrorMessage(response));
+            setCombatMessage(await getApiErrorMessage(response, localeRef.current));
             rendererRef.current?.highlightTile(tile.x, tile.y, 0xff0000);
             setTimeout(() => rendererRef.current?.clearHighlights(), 650);
             return null;
@@ -1188,7 +1190,7 @@ export default function GameMapComponent() {
           if (!res.ok) {
             isSyncingMoveRef.current = false;
             useGameStore.getState().setMovePending(false);
-            setCombatMessage(await getApiErrorMessage(res));
+            setCombatMessage(await getApiErrorMessage(res, localeRef.current));
             return null;
           }
           return res.json();
@@ -1303,7 +1305,7 @@ export default function GameMapComponent() {
           })
             .then(async (response) => {
               if (!response.ok) {
-                setCombatMessage(await getApiErrorMessage(response));
+                setCombatMessage(await getApiErrorMessage(response, localeRef.current));
                 return null;
               }
               setCombatMessage("Porte controlee.");
@@ -1464,7 +1466,7 @@ export default function GameMapComponent() {
         })
           .then(async (response) => {
             if (!response.ok) {
-              setCombatMessage(await getApiErrorMessage(response));
+              setCombatMessage(await getApiErrorMessage(response, localeRef.current));
               return null;
             }
             return response.json();
@@ -1588,7 +1590,7 @@ export default function GameMapComponent() {
         })
           .then(async (response) => {
             if (!response.ok) {
-              const message = await getApiErrorMessage(response);
+              const message = await getApiErrorMessage(response, localeRef.current);
               console.warn("[CAPTURE_TOWN]", response.status, message);
               const normalizedMessage = message
                 .normalize("NFD")
@@ -1699,7 +1701,7 @@ export default function GameMapComponent() {
             if (!res.ok) {
               isSyncingMoveRef.current = false;
               useGameStore.getState().setMovePending(false);
-              setCombatMessage(await getApiErrorMessage(res));
+              setCombatMessage(await getApiErrorMessage(res, localeRef.current));
               return null;
             }
             return res.json();
@@ -1879,7 +1881,7 @@ export default function GameMapComponent() {
             if (!res.ok) {
               isSyncingMoveRef.current = false;
               useGameStore.getState().setMovePending(false);
-              setCombatMessage(await getApiErrorMessage(res));
+              setCombatMessage(await getApiErrorMessage(res, localeRef.current));
               return null;
             }
             return res.json();
@@ -1999,7 +2001,7 @@ export default function GameMapComponent() {
                   if (!response.ok) {
                     isSyncingMoveRef.current = false;
                     useGameStore.getState().setMovePending(false);
-                    setCombatMessage(await getApiErrorMessage(response));
+                    setCombatMessage(await getApiErrorMessage(response, localeRef.current));
                     return null;
                   }
                   return response.json();
@@ -2044,7 +2046,7 @@ export default function GameMapComponent() {
             })
               .then(async (response) => {
                 if (!response.ok) {
-                  setCombatMessage(await getApiErrorMessage(response));
+                  setCombatMessage(await getApiErrorMessage(response, localeRef.current));
                   return null;
                 }
                 setCombatMessage("Porte controlee.");
@@ -2225,7 +2227,7 @@ export default function GameMapComponent() {
         })
           .then(async (response) => {
             if (!response.ok) {
-              setCombatMessage(await getApiErrorMessage(response));
+              setCombatMessage(await getApiErrorMessage(response, localeRef.current));
               return null;
             }
             return response.json();
@@ -2369,7 +2371,7 @@ export default function GameMapComponent() {
             if (!res.ok) {
               isSyncingMoveRef.current = false;
               useGameStore.getState().setMovePending(false);
-              setCombatMessage(await getApiErrorMessage(res));
+              setCombatMessage(await getApiErrorMessage(res, localeRef.current));
               return null;
             }
             return res.json();
@@ -2573,7 +2575,7 @@ function GateGarrisonModal({
       }),
     });
     if (!response.ok) {
-      onMessage(await getApiErrorMessage(response));
+      onMessage(await getApiErrorMessage(response, locale));
       setPending(false);
       return;
     }
@@ -2730,15 +2732,15 @@ function GateStackList({
   );
 }
 
-async function getApiErrorMessage(response: Response) {
+async function getApiErrorMessage(response: Response, locale: Locale = "fr") {
   try {
     const data = await response.json();
-    if (typeof data?.error === "string") return data.error;
+    if (typeof data?.error === "string") return localizedServerMessage(data.error, locale) ?? data.error;
   } catch {
     // Fall through to the generic message when the API did not return JSON.
   }
 
-  return "Action impossible pour le moment.";
+  return localizedServerMessage("Action impossible pour le moment.", locale) ?? "Action impossible pour le moment.";
 }
 
 function normalizeRevealedTiles(value: unknown) {

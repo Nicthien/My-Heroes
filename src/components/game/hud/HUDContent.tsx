@@ -203,7 +203,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.endTurnFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.endTurnFailed"), locale));
       return;
     }
 
@@ -220,7 +220,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.cancelEndTurnFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.cancelEndTurnFailed"), locale));
       return;
     }
 
@@ -242,7 +242,7 @@ export function HUDContent() {
         useGameStore.getState().setGameState(refreshedState);
         return;
       }
-      setCombatMessage(await getApiErrorMessage(response, t("hud.startGameFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.startGameFailed"), locale));
       return;
     }
 
@@ -274,7 +274,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.buildFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.buildFailed"), locale));
       return;
     }
 
@@ -326,7 +326,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.boatBuildFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.boatBuildFailed"), locale));
       return;
     }
 
@@ -357,7 +357,7 @@ export function HUDContent() {
       }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.heroRecruitFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.heroRecruitFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -372,7 +372,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "EXCHANGE_RESOURCES", townId, from, to, amount }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.exchangeFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.exchangeFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -387,7 +387,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "BUY_TOWN_ARTIFACT", townId, heroId, artifactId }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.artifactBuyFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.artifactBuyFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -402,7 +402,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "SELL_CREATURES", townId, unitType, count }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.sellFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.sellFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -417,7 +417,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "LEARN_MAGIC_SCHOOL", townId, heroId, school }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.learnFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.learnFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -432,7 +432,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "BUY_WAR_MACHINE", townId, heroId, machine }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.buyFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.buyFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -447,7 +447,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "CASTLE_GATE_TRANSFER", fromTownId, toTownId, unitType, count }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed"), locale));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -485,7 +485,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.recruitFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.recruitFailed"), locale));
       return;
     }
 
@@ -555,7 +555,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.upgradeFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.upgradeFailed"), locale));
       return;
     }
 
@@ -624,7 +624,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed"), locale));
       return;
     }
 
@@ -679,7 +679,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed"), locale));
       return;
     }
 

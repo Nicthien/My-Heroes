@@ -1,4 +1,5 @@
 import { GameMap, Position } from "@/lib/game/types";
+import type { Locale } from "@/lib/i18n/types";
 
 export interface MapObjectData {
   type: "hero" | "boat" | "town" | "combat" | "building" | "adventure_building" | "gate";
@@ -34,6 +35,7 @@ export interface MapRenderer {
   init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress): Promise<void>;
   isReady(): boolean;
   renderMap(map: GameMap): void;
+  setLocale(locale: Locale): void;
   setObjects(objects: MapObjectData[]): void;
   setFog(visibleTiles: Set<string>, exploredTiles: Set<string>, theme?: FogTheme): void;
   animateHeroMovement(heroId: string, path: Position[]): Promise<void>;

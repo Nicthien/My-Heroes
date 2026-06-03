@@ -32,9 +32,14 @@ import {
 } from "@/components/game/hud/theme";
 import { GearIcon, SignOutIcon } from "./dashboardRmgControls";
 import { MAP_SIZES, randomSeedValue, summarizeMap } from "./dashboardConstants";
-import { FACTION_META, factionLabel } from "./factionMeta";
+import { factionLabel } from "./factionMeta";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import LanguageSelect from "@/components/i18n/LanguageSelect";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
+import type { Locale } from "@/lib/i18n/types";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { Leaderboard } from "./Leaderboard";
@@ -126,7 +131,7 @@ function buildVictoryPayload(type: VictoryConditionType, goldTarget: number, tur
   return { type };
 }
 
-function formatGameAge(value?: string | null, now = Date.now()) {
+function formatGameAge(value: string | null | undefined, now: number, t: TFn) {
   if (!value) return "-";
   const createdAt = new Date(value);
   if (Number.isNaN(createdAt.getTime())) return "-";
@@ -159,29 +164,29 @@ function formatGameAge(value?: string | null, now = Date.now()) {
   }
 
   const parts: string[] = [];
-  if (years > 0) parts.push(`${years} ${years > 1 ? "ans" : "an"}`);
-  if (months > 0) parts.push(`${months} mois`);
-  if (days > 0) parts.push(`${days} ${days > 1 ? "jours" : "jour"}`);
-  if (parts.length < 2 && hours > 0) parts.push(`${hours} ${hours > 1 ? "heures" : "heure"}`);
-  if (parts.length < 2 && minutes > 0) parts.push(`${minutes} ${minutes > 1 ? "minutes" : "minute"}`);
+  if (years > 0) parts.push(t(years > 1 ? "age.years" : "age.year", { n: years }));
+  if (months > 0) parts.push(t("age.months", { n: months }));
+  if (days > 0) parts.push(t(days > 1 ? "age.days" : "age.day", { n: days }));
+  if (parts.length < 2 && hours > 0) parts.push(t(hours > 1 ? "age.hours" : "age.hour", { n: hours }));
+  if (parts.length < 2 && minutes > 0) parts.push(t(minutes > 1 ? "age.minutes" : "age.minute", { n: minutes }));
 
-  return parts.slice(0, 3).join(", ") || "moins d'une minute";
+  return parts.slice(0, 3).join(", ") || t("age.lessThanMinute");
 }
 
-function adminPlayerName(player?: AdminCreatorInfo | null) {
+function adminPlayerName(player: AdminCreatorInfo | null | undefined, t: TFn) {
   if (!player) return "-";
-  if (player.isAi) return player.aiName || "IA";
-  return player.user?.name || player.email || player.user?.email || "Joueur";
+  if (player.isAi) return player.aiName || t("common.ai");
+  return player.user?.name || player.email || player.user?.email || t("common.player");
 }
 
-function playerName(player?: PlayerInfo | null) {
+function playerName(player: PlayerInfo | null | undefined, t: TFn) {
   if (!player) return "-";
-  if (player.isAi) return player.aiName || "IA";
-  return player.user?.name || player.email || player.user?.email || "Joueur";
+  if (player.isAi) return player.aiName || t("common.ai");
+  return player.user?.name || player.email || player.user?.email || t("common.player");
 }
 
-function playerStatusLabel(player: PlayerInfo) {
-  return player.turnStatus || "-";
+function playerStatusLabel(player: PlayerInfo, locale: Locale) {
+  return localizedServerMessage(player.turnStatus, locale) || "-";
 }
 
 function playerStatusClass(status?: string | null) {
@@ -410,7 +415,7 @@ export default function DashboardPage() {
       const data = !usersResponse.ok
         ? await parseJsonResponse(usersResponse)
         : await parseJsonResponse(gamesResponse);
-      setAdminMessage({ kind: "error", text: data?.error || "Impossible de charger l'administration." });
+      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.loadFailed") });
       setAdminUsers([]);
       setAdminGames([]);
       setAdminLoading(false);
@@ -422,7 +427,7 @@ export default function DashboardPage() {
     setAdminUsers(Array.isArray(usersData) ? usersData : []);
     setAdminGames(Array.isArray(gamesData) ? gamesData : []);
     setAdminLoading(false);
-  }, [fetchWithAuth, isAdmin, parseJsonResponse]);
+  }, [fetchWithAuth, isAdmin, parseJsonResponse, locale, t]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
@@ -450,10 +455,10 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAdminData().catch((error) => {
       console.error(error);
-      setAdminMessage({ kind: "error", text: "Impossible de charger l'administration." });
+      setAdminMessage({ kind: "error", text: t("admin.loadFailed") });
       setAdminLoading(false);
     });
-  }, [isAdmin, loadAdminData, showAdmin]);
+  }, [isAdmin, loadAdminData, showAdmin, t]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -506,7 +511,7 @@ export default function DashboardPage() {
     const response = await fetchWithAuth("/api/auth/password-changed", { method: "POST" });
     if (!response.ok) {
       const data = await parseJsonResponse(response);
-      setForcedPasswordError(data?.error || t("dashboard.pwFinalizeFailed"));
+      setForcedPasswordError(localizedServerMessage(data?.error, locale) || t("dashboard.pwFinalizeFailed"));
       setSavingForcedPassword(false);
       return;
     }
@@ -524,10 +529,10 @@ export default function DashboardPage() {
     const response = await fetchWithAuth(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
     if (!response.ok) {
       const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: data?.error || "Impossible de supprimer l'utilisateur." });
+      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userDeleteFailed") });
       return;
     }
-    setAdminMessage({ kind: "success", text: "Utilisateur supprime." });
+    setAdminMessage({ kind: "success", text: t("admin.userDeleted") });
     await loadAdminData();
   };
 
@@ -539,11 +544,11 @@ export default function DashboardPage() {
     setAdminMessage(null);
 
     if (!name || !email || !password) {
-      setAdminMessage({ kind: "error", text: "Pseudo, email et mot de passe sont requis." });
+      setAdminMessage({ kind: "error", text: t("admin.fieldsRequired") });
       return;
     }
     if (password.length < 6) {
-      setAdminMessage({ kind: "error", text: "Le mot de passe doit contenir au moins 6 caracteres." });
+      setAdminMessage({ kind: "error", text: t("admin.passwordMinLength") });
       return;
     }
 
@@ -562,7 +567,7 @@ export default function DashboardPage() {
 
     if (!response.ok) {
       const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: data?.error || "Impossible de creer l'utilisateur." });
+      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userCreateFailed") });
       setCreatingAdminUser(false);
       return;
     }
@@ -572,7 +577,7 @@ export default function DashboardPage() {
     setAdminNewUserPassword("");
     setAdminNewUserRole("user");
     setAdminNewUserMustChangePassword(true);
-    setAdminMessage({ kind: "success", text: "Utilisateur cree." });
+    setAdminMessage({ kind: "success", text: t("admin.userCreated") });
     setCreatingAdminUser(false);
     await loadAdminData();
   };
@@ -583,10 +588,10 @@ export default function DashboardPage() {
     const response = await fetchWithAuth(`/api/admin/games?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
     if (!response.ok) {
       const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: data?.error || "Impossible de supprimer la partie." });
+      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.gameDeleteFailed") });
       return;
     }
-    setAdminMessage({ kind: "success", text: "Partie supprimee." });
+    setAdminMessage({ kind: "success", text: t("admin.gameDeleted") });
     await Promise.all([loadAdminData(), loadMyGames()]);
   };
 
@@ -639,7 +644,7 @@ export default function DashboardPage() {
 
     if (!profileResponse.ok) {
       const data = await parseJsonResponse(profileResponse);
-      setProfileMessage({ kind: "error", text: data?.error || t("dashboard.options.profileUpdateFailed") });
+      setProfileMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("dashboard.options.profileUpdateFailed") });
       setSavingProfile(false);
       return;
     }
@@ -682,7 +687,7 @@ export default function DashboardPage() {
       const data = await parseJsonResponse(res);
       setDashboardMessage({
         kind: "error",
-        text: data?.error || "Impossible de creer la partie.",
+        text: localizedServerMessage(data?.error, locale) || t("dashboard.createGameFailed"),
       });
       console.warn("createGame failed", res.status, data);
     }
@@ -700,12 +705,12 @@ export default function DashboardPage() {
       router.push(`/game/${gameId}`);
     } else {
       const data = await res.json();
-      alert(data.error || "Erreur");
+      alert(localizedServerMessage(data.error, locale) || t("dashboard.genericError"));
     }
   };
 
   const leaveGame = async (gameId: string) => {
-    if (!confirm("Voulez-vous vraiment quitter cette partie ?")) return;
+    if (!confirm(t("dashboard.leaveConfirm"))) return;
 
     const response = await fetchWithAuth(`/api/games/${gameId}/leave`, {
       method: "POST",
@@ -713,7 +718,7 @@ export default function DashboardPage() {
 
     if (!response.ok) {
       const data = await response.json();
-      alert(data.error || "Impossible de quitter la partie");
+      alert(localizedServerMessage(data.error, locale) || t("dashboard.leaveFailed"));
       return;
     }
 
@@ -738,7 +743,7 @@ export default function DashboardPage() {
       const data = await parseJsonResponse(response);
       setDashboardMessage({
         kind: "error",
-        text: data?.error || t("dashboard.surrenderError"),
+        text: localizedServerMessage(data?.error, locale) || t("dashboard.surrenderError"),
       });
       setSurrenderTarget(null);
       setSurrenderingGameId(null);
@@ -767,7 +772,7 @@ export default function DashboardPage() {
       const data = await parseJsonResponse(response);
       setDashboardMessage({
         kind: "error",
-        text: data?.error || t("dashboard.deleteError"),
+        text: localizedServerMessage(data?.error, locale) || t("dashboard.deleteError"),
       });
       setDeleteTarget(null);
       setDeletingGameId(null);
@@ -1236,7 +1241,7 @@ export default function DashboardPage() {
             <ParchmentBackground />
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 id="admin-panel-title" className={`text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                Administration
+                {t("admin.title")}
               </h2>
               <div className="flex flex-wrap gap-2">
               <button
@@ -1245,14 +1250,14 @@ export default function DashboardPage() {
                 disabled={adminLoading}
                 className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-4 py-2 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {adminLoading ? "Chargement..." : "Actualiser"}
+                {adminLoading ? t("common.loading") : t("admin.refresh")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowAdmin(false)}
                 className="rounded-md border border-amber-700/40 bg-stone-950/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
               >
-                Fermer
+                {t("common.close")}
               </button>
               </div>
             </div>
@@ -1272,7 +1277,7 @@ export default function DashboardPage() {
 
               <section>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">Utilisateurs</h3>
+                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("admin.users")}</h3>
                 </div>
                 <form
                   onSubmit={createAdminUser}
@@ -1281,7 +1286,7 @@ export default function DashboardPage() {
                   <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_1fr_0.8fr_auto] lg:items-end">
                     <div>
                       <label htmlFor="admin-create-name" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        Pseudo
+                        {t("dashboard.options.name")}
                       </label>
                       <input
                         id="admin-create-name"
@@ -1294,7 +1299,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <label htmlFor="admin-create-email" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        Email
+                        {t("auth.register.email")}
                       </label>
                       <input
                         id="admin-create-email"
@@ -1307,7 +1312,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <label htmlFor="admin-create-password" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        Mot de passe
+                        {t("auth.register.password")}
                       </label>
                       <input
                         id="admin-create-password"
@@ -1320,7 +1325,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <label htmlFor="admin-create-role" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        Role
+                        {t("admin.role")}
                       </label>
                       <select
                         id="admin-create-role"
@@ -1328,8 +1333,8 @@ export default function DashboardPage() {
                         onChange={(event) => setAdminNewUserRole(event.target.value === "admin" ? "admin" : "user")}
                         className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
                       >
-                        <option value="user">Utilisateur</option>
-                        <option value="admin">Admin</option>
+                        <option value="user">{t("admin.roleUser")}</option>
+                        <option value="admin">{t("admin.roleAdmin")}</option>
                       </select>
                     </div>
                     <button
@@ -1337,7 +1342,7 @@ export default function DashboardPage() {
                       disabled={creatingAdminUser}
                       className="rounded-md border border-emerald-400/50 bg-emerald-950/60 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-100 transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {creatingAdminUser ? "Creation..." : "Creer"}
+                      {creatingAdminUser ? t("admin.creating") : t("admin.create")}
                     </button>
                   </div>
                   <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-amber-100/75">
@@ -1347,30 +1352,30 @@ export default function DashboardPage() {
                       onChange={(event) => setAdminNewUserMustChangePassword(event.target.checked)}
                       className="h-4 w-4 accent-amber-500"
                     />
-                    Demander le changement du mot de passe a la premiere connexion
+                    {t("admin.requirePasswordChange")}
                   </label>
                 </form>
                 <div className="overflow-x-auto rounded-md border border-amber-700/35">
                   <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
                     <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
                       <tr>
-                        <th className="px-3 py-2">Pseudo</th>
-                        <th className="px-3 py-2">Email</th>
-                        <th className="px-3 py-2">Role</th>
-                        <th className="px-3 py-2">Cree le</th>
-                        <th className="px-3 py-2">Derniere connexion</th>
-                        <th className="px-3 py-2">Parties</th>
-                        <th className="px-3 py-2 text-right">Actions</th>
+                        <th className="px-3 py-2">{t("dashboard.options.name")}</th>
+                        <th className="px-3 py-2">{t("auth.register.email")}</th>
+                        <th className="px-3 py-2">{t("admin.role")}</th>
+                        <th className="px-3 py-2">{t("admin.colCreatedAt")}</th>
+                        <th className="px-3 py-2">{t("dashboard.colLastLogin")}</th>
+                        <th className="px-3 py-2">{t("admin.colGames")}</th>
+                        <th className="px-3 py-2 text-right">{t("admin.colActions")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
                       {adminUsers.map((item) => (
                         <tr key={item.id}>
-                          <td className="px-3 py-2 font-semibold">{item.name || "Sans pseudo"}</td>
+                          <td className="px-3 py-2 font-semibold">{item.name || t("admin.noName")}</td>
                           <td className="px-3 py-2">{item.email || "-"}</td>
                           <td className="px-3 py-2">
-                            {item.role === "admin" ? "Admin" : "Utilisateur"}
-                            {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">mot de passe temporaire</span> : null}
+                            {item.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}
+                            {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">{t("admin.tempPassword")}</span> : null}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.createdAt)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.lastSignInAt, "Jamais")}</td>
@@ -1382,7 +1387,7 @@ export default function DashboardPage() {
                               onClick={() => deleteAdminUser(item).catch(console.error)}
                               className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              Supprimer
+                              {t("common.delete")}
                             </button>
                           </td>
                         </tr>
@@ -1390,7 +1395,7 @@ export default function DashboardPage() {
                       {adminUsers.length === 0 && (
                         <tr>
                           <td colSpan={7} className="px-3 py-6 text-center italic text-amber-200/50">
-                            Aucun utilisateur charge.
+                            {t("admin.noUsers")}
                           </td>
                         </tr>
                       )}
@@ -1400,7 +1405,7 @@ export default function DashboardPage() {
               </section>
 
               <section>
-                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">Parties</h3>
+                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("admin.games")}</h3>
                 <div className="space-y-2">
                   {adminGames.map((game) => (
                     <div key={game.id} className="rounded-md border border-amber-700/40 bg-stone-950/55 p-3">
@@ -1408,12 +1413,12 @@ export default function DashboardPage() {
                         <div className="min-w-0">
                           <div className="font-bold text-amber-100">{game.name}</div>
                           <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                            {game.status} - Tour {game.turnNumber} - {game.players.length}/{game.maxPlayers} joueurs - {game.mapWidth}x{game.mapHeight} - 🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory))}
+                            {t("admin.gameMeta", { status: game.status, turn: game.turnNumber, count: game.players.length, max: game.maxPlayers, w: game.mapWidth, h: game.mapHeight })} - 🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory), locale)}
                           </div>
                           <div className="mt-2 grid gap-1 text-xs text-amber-100/75 sm:grid-cols-2">
-                            <div>Cree par: <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy)}</span></div>
-                            <div>Cree le: {formatAdminDate(game.createdAt)}</div>
-                            <div>Derniere mise a jour: {formatAdminDate(game.updatedAt)}</div>
+                            <div>{t("admin.createdBy")} <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy, t)}</span></div>
+                            <div>{t("admin.createdAt")} {formatAdminDate(game.createdAt)}</div>
+                            <div>{t("admin.updatedAt")} {formatAdminDate(game.updatedAt)}</div>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1422,14 +1427,14 @@ export default function DashboardPage() {
                             onClick={() => router.push(`/game/${game.id}?admin=1`)}
                             className="rounded border border-cyan-400/50 bg-cyan-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-900"
                           >
-                            Observer
+                            {t("admin.observe")}
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteAdminGame(game).catch(console.error)}
                             className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900"
                           >
-                            Supprimer
+                            {t("common.delete")}
                           </button>
                         </div>
                       </div>
@@ -1437,28 +1442,28 @@ export default function DashboardPage() {
                         <div className="overflow-x-auto">
                           <div className="min-w-[760px]">
                             <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
-                              <div>Joueur</div>
-                              <div>Faction</div>
-                              <div>Rejoint le</div>
-                              <div>Derniere connexion</div>
-                              <div>Statut</div>
+                              <div>{t("leaderboard.player")}</div>
+                              <div>{t("dashboard.colFaction")}</div>
+                              <div>{t("admin.joinedAt")}</div>
+                              <div>{t("dashboard.colLastLogin")}</div>
+                              <div>{t("dashboard.colStatus")}</div>
                             </div>
                             <div className="divide-y divide-amber-900/35">
                               {game.players.map((player) => (
                                 <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
                                   <div className="min-w-0">
-                                    <span className="font-semibold text-amber-100">{adminPlayerName(player)}</span>
+                                    <span className="font-semibold text-amber-100">{adminPlayerName(player, t)}</span>
                                     {player.email && !player.isAi ? <span className="ml-2 text-amber-200/45">{player.email}</span> : null}
                                   </div>
-                                  <div>{FACTION_META[player.faction]?.label ?? player.faction}</div>
+                                  <div>{factionLabel(player.faction, locale)}</div>
                                   <div>{formatAdminDate(player.joinedAt)}</div>
-                                  <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, "Jamais")}</div>
-                                  <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>{playerStatusLabel(player)}</div>
+                                  <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, t("common.never"))}</div>
+                                  <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>{playerStatusLabel(player, locale)}</div>
                                 </div>
                               ))}
                               {game.players.length === 0 && (
                                 <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
-                                  Aucun joueur dans cette partie.
+                                  {t("dashboard.noPlayers")}
                                 </div>
                               )}
                             </div>
@@ -1469,7 +1474,7 @@ export default function DashboardPage() {
                   ))}
                   {adminGames.length === 0 && (
                     <div className="rounded-md border border-amber-700/35 bg-stone-950/35 px-3 py-6 text-center italic text-amber-200/50">
-                      Aucune partie chargee.
+                      {t("admin.noGames")}
                     </div>
                   )}
                 </div>
@@ -1535,7 +1540,7 @@ export default function DashboardPage() {
                       {isAdmin && (
                         <>
                           <span className="mx-1 text-amber-700">◆</span>
-                          &Acirc;ge {currentTime === null ? "-" : formatGameAge(game.createdAt, currentTime)}
+                          {t("admin.age")} {currentTime === null ? "-" : formatGameAge(game.createdAt, currentTime, t)}
                         </>
                       )}
                     </div>
@@ -1593,13 +1598,13 @@ export default function DashboardPage() {
                       </div>
                       <div className="divide-y divide-amber-900/35">
                         {game.players.map((player) => {
-                          const status = playerStatusLabel(player);
+                          const status = playerStatusLabel(player, locale);
                           return (
                             <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
-                              <div className="min-w-0 font-semibold text-amber-100">{playerName(player)}</div>
+                              <div className="min-w-0 font-semibold text-amber-100">{playerName(player, t)}</div>
                               <div>{factionLabel(player.faction, locale)}</div>
                               <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, t("common.never"))}</div>
-                              <div className={`font-semibold ${playerStatusClass(status)}`}>{status}</div>
+                              <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>{status}</div>
                             </div>
                           );
                         })}

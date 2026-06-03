@@ -6,6 +6,7 @@ import { TerrainType, type GameState, type MapObject, type Player, type Position
 import { computeVisibleTiles, getPlayerVisionCenters } from "@/lib/game/engine";
 import { normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.GRASS]: "#3f7f3b",
@@ -41,6 +42,7 @@ type ControlTile = {
 };
 
 export default function MiniMap() {
+  const { t } = useI18n();
   const { data: session } = useSession();
   const [showControlZones, setShowControlZones] = useState(true);
   const gameState = useGameStore((state) => state.gameState);
@@ -193,9 +195,9 @@ export default function MiniMap() {
       <div className="mt-1 flex items-center justify-between gap-2 px-0.5">
         <span
           className="min-w-0 text-[10px] font-bold uppercase tracking-wider text-amber-200/55"
-          title={`${visibility.explored.size}/${totalTiles} cases explorées`}
+          title={t("minimap.explored", { n: visibility.explored.size, total: totalTiles })}
         >
-          Exploration : {explorationPercent}%
+          {t("minimap.exploration", { pct: explorationPercent })}
         </span>
         <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-800/70 bg-black/35">
           <button

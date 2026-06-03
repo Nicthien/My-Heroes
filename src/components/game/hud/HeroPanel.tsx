@@ -29,6 +29,7 @@ import { goldDivider, ornateFramePolished } from "./theme";
 import { useDraggableWindow } from "./useDraggableWindow";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 
@@ -100,9 +101,9 @@ export function HeroPanel({
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? t("msg.actionImpossible"));
+    if (!response.ok) throw new Error(localizedServerMessage(data.error, locale) ?? t("msg.actionImpossible"));
     setPendingAdventureSpell(null);
-    if (typeof data?.interaction?.message === "string") setCombatMessage(data.interaction.message);
+    if (typeof data?.interaction?.message === "string") setCombatMessage(localizedServerMessage(data.interaction.message, locale));
     const revealedTiles = normalizeRevealedTiles(data?.interaction?.revealedTiles);
     const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
     if (revealedTiles.length > 0 && gameState) {
@@ -121,7 +122,7 @@ export function HeroPanel({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? t("msg.actionImpossible"));
+      setCombatMessage(localizedServerMessage(data.error, locale) ?? t("msg.actionImpossible"));
       return;
     }
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -137,7 +138,7 @@ export function HeroPanel({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? t("msg.actionImpossible"));
+      setCombatMessage(localizedServerMessage(data.error, locale) ?? t("msg.actionImpossible"));
       return;
     }
     if (data?.moved) setCombatMessage(t("hero.mergeResult", { n: data.moved }));

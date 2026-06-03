@@ -3,6 +3,19 @@
 import type { CSSProperties } from "react";
 import type { ScoreBreakdown } from "@/lib/game/score";
 import { goldDivider, goldText, ornateFramePolished } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+const SCORE_CAT_KEY: Record<string, TranslationKey> = {
+  towns: "score.cat.towns",
+  heroes: "score.cat.heroes",
+  army: "score.cat.army",
+  mines: "score.cat.mines",
+  artifacts: "score.cat.artifacts",
+  resources: "score.cat.resources",
+  defeated: "score.cat.defeated",
+  captures: "score.cat.captures",
+};
 
 /**
  * Detailed score card shown on hover over a player row in the Players panel.
@@ -24,6 +37,8 @@ export function PlayerScoreTooltip({
   playerCount: number;
   style?: CSSProperties;
 }) {
+  const { t, locale } = useI18n();
+  const numberLocale = locale === "en" ? "en-US" : "fr-FR";
   return (
     <div
       className={`${ornateFramePolished} pointer-events-none z-50 w-56 px-3 py-2 text-left shadow-xl shadow-black/60`}
@@ -32,7 +47,7 @@ export function PlayerScoreTooltip({
       <div className="flex items-baseline justify-between">
         <span className={`text-xs font-black uppercase tracking-wider ${goldText}`}>Score</span>
         <span className="text-[11px] font-bold text-amber-300/80">
-          Rang #{rank}/{playerCount}
+          {t("score.rank", { rank, count: playerCount })}
         </span>
       </div>
       <div className={`my-1 ${goldDivider}`} />
@@ -42,19 +57,19 @@ export function PlayerScoreTooltip({
             .filter((category) => category.points !== 0)
             .map((category) => (
               <li key={category.key} className="flex items-center justify-between text-[11px] text-amber-100/90">
-                <span>{category.label}</span>
-                <span className="font-bold tabular-nums">{category.points.toLocaleString("fr-FR")}</span>
+                <span>{SCORE_CAT_KEY[category.key] ? t(SCORE_CAT_KEY[category.key]) : category.label}</span>
+                <span className="font-bold tabular-nums">{category.points.toLocaleString(numberLocale)}</span>
               </li>
             ))}
         </ul>
       ) : (
-        <p className="text-[11px] italic text-amber-200/55">Détail masqué par le brouillard de guerre.</p>
+        <p className="text-[11px] italic text-amber-200/55">{t("score.detailHidden")}</p>
       )}
       <div className={`my-1 ${goldDivider}`} />
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-black uppercase tracking-wider text-amber-200">Total</span>
         <span className={`text-sm font-black tabular-nums ${goldText}`}>
-          {total.toLocaleString("fr-FR")}
+          {total.toLocaleString(numberLocale)}
         </span>
       </div>
     </div>

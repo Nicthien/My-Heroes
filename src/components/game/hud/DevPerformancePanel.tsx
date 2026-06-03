@@ -9,6 +9,10 @@ import {
   type DevPerformanceGauge,
   type DevPerformanceMeasure,
 } from "@/lib/dev/performanceMetrics";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
 const DEV_PANEL_COLLAPSED_KEY = "my-heroes:dev-panel-collapsed";
@@ -315,26 +319,26 @@ function getVitalToneClasses(rating: string | undefined) {
   return "border-amber-900/45 bg-black/25 text-amber-200/70";
 }
 
-function getWebVitalDescription(name: string) {
-  const descriptions: Record<string, string> = {
-    LCP: "Largest Contentful Paint: temps d'affichage du plus gros élément visible. Bon sous 2,5 s.",
-    INP: "Interaction to Next Paint: latence des interactions utilisateur. Bon sous 200 ms.",
-    CLS: "Cumulative Layout Shift: stabilité visuelle de la page. Bon sous 0,1.",
-    FCP: "First Contentful Paint: premier contenu visible rendu à l'écran. Bon sous 1,8 s.",
-    TTFB: "Time To First Byte: délai avant le premier octet de réponse. Bon sous 800 ms.",
+function getWebVitalDescription(name: string, t: TFn) {
+  const keys: Record<string, TranslationKey> = {
+    LCP: "perf.descLCP",
+    INP: "perf.descINP",
+    CLS: "perf.descCLS",
+    FCP: "perf.descFCP",
+    TTFB: "perf.descTTFB",
   };
-
-  return descriptions[name] ?? name;
+  return keys[name] ? t(keys[name]) : name;
 }
 
-function formatWebVitalRating(rating: string | undefined) {
-  if (rating === "good") return "bonne";
-  if (rating === "needs-improvement") return "à améliorer";
-  if (rating === "poor") return "mauvaise";
+function formatWebVitalRating(rating: string | undefined, t: TFn) {
+  if (rating === "good") return t("perf.ratingGood");
+  if (rating === "needs-improvement") return t("perf.ratingNeedsImprovement");
+  if (rating === "poor") return t("perf.ratingPoor");
   return "n/a";
 }
 
 export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
+  const { t } = useI18n();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const fpsTone = stats.fps >= 50 ? "good" : stats.fps >= 30 ? "warn" : "bad";
   const frameTone = stats.worstFrameMs <= SLOW_FRAME_MS ? "good" : stats.worstFrameMs <= 55 ? "warn" : "bad";
@@ -359,9 +363,9 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
 
   return (
     <>
-      <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label="Performances">
+      <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label={t("perf.title")}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">Performances</div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">{t("perf.title")}</div>
           <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">live</div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -369,68 +373,68 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
             label="FPS"
             value={fpsText}
             tone={stats.hasFrameSample ? fpsTone : "idle"}
-            description="Images par seconde estimées sur la dernière seconde. Viser 60; sous 30, le jeu paraît saccadé."
+            description={t("perf.descFps")}
             onTooltip={showTooltip}
             onTooltipClose={() => setTooltip(null)}
           />
           <DevPerformanceStat
-            label="Frame"
+            label={t("perf.labelFrame")}
             value={avgFrameText}
             tone={stats.hasFrameSample ? frameTone : "idle"}
-            description="Temps moyen entre deux frames. Environ 16,7 ms correspond à 60 FPS; 33 ms correspond à 30 FPS."
+            description={t("perf.descFrame")}
             onTooltip={showTooltip}
             onTooltipClose={() => setTooltip(null)}
           />
           <DevPerformanceStat
-            label="Pic"
+            label={t("perf.labelPeak")}
             value={worstFrameText}
             tone={stats.hasFrameSample ? frameTone : "idle"}
-            description="Frame la plus lente de l'échantillon. Les pics hauts indiquent un blocage ponctuel du rendu."
+            description={t("perf.descPeak")}
             onTooltip={showTooltip}
             onTooltipClose={() => setTooltip(null)}
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <DevPerformanceStat
-            label="Saccades"
+            label={t("perf.labelStutter")}
             value={droppedText}
             tone={stats.hasFrameSample ? droppedTone : "idle"}
-            description="Frames perdues estimées par seconde quand une frame dépasse 34 ms."
+            description={t("perf.descStutter")}
             onTooltip={showTooltip}
             onTooltipClose={() => setTooltip(null)}
           />
           <DevPerformanceStat
-            label="Tâches/s"
+            label={t("perf.labelTasks")}
             value={longTaskRateText}
             tone={!stats.hasFrameSample ? "idle" : stats.longTasks === 0 ? "good" : "warn"}
-            description="Long tasks détectées sur le thread principal par seconde. Chaque tâche dépasse 50 ms."
+            description={t("perf.descTasks")}
             onTooltip={showTooltip}
             onTooltipClose={() => setTooltip(null)}
           />
         </div>
         <DevPerformanceRow
-          label="Total tâches >50ms"
+          label={t("perf.labelTotalTasks")}
           value={`${stats.longTaskTotal} (${formatNumber(stats.longTaskTotalMs, 0)} ms)`}
-          description="Cumul des long tasks depuis l'ouverture du panneau. Utile pour repérer les blocages persistants."
+          description={t("perf.descTotalTasks")}
           onTooltip={showTooltip}
           onTooltipClose={() => setTooltip(null)}
         />
         <DevPerformanceRow
-          label="Mémoire JS"
+          label={t("perf.labelMemory")}
           value={memoryText}
-          description="Mémoire JavaScript utilisée par la page, puis limite disponible dans le navigateur."
+          description={t("perf.descMemory")}
           onTooltip={showTooltip}
           onTooltipClose={() => setTooltip(null)}
         />
         {stats.measures.length > 0 && (
           <div className="space-y-1.5">
-            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Mesures carte</div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">{t("perf.mapMeasures")}</div>
             {stats.measures.slice(0, 8).map((measure) => (
               <DevPerformanceRow
                 key={measure.name}
                 label={measure.name}
-                value={`${formatNumber(measure.avgMs, 1)} ms avg / ${formatNumber(measure.maxMs, 1)} ms max`}
-                description={`${measure.count} appel(s), ${formatNumber(measure.totalMs, 1)} ms cumules depuis l'ouverture du panneau.`}
+                value={t("perf.measureValue", { avg: formatNumber(measure.avgMs, 1), max: formatNumber(measure.maxMs, 1) })}
+                description={t("perf.measureDesc", { count: measure.count, total: formatNumber(measure.totalMs, 1) })}
                 onTooltip={showTooltip}
                 onTooltipClose={() => setTooltip(null)}
               />
@@ -439,13 +443,13 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
         )}
         {stats.gauges.length > 0 && (
           <div className="space-y-1.5">
-            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">Compteurs Phaser</div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">{t("perf.phaserCounters")}</div>
             {stats.gauges.slice(0, 12).map((gauge) => (
               <DevPerformanceRow
                 key={gauge.name}
                 label={gauge.name}
                 value={formatGaugeValue(gauge)}
-                description={`Valeur instantanee mesuree par le renderer Phaser pour ${gauge.name}.`}
+                description={t("perf.gaugeDesc", { name: gauge.name })}
                 onTooltip={showTooltip}
                 onTooltipClose={() => setTooltip(null)}
               />
@@ -455,9 +459,9 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
         <div className="space-y-1.5">
           <div
             className="cursor-help text-[10px] font-black uppercase tracking-wider text-amber-300/70"
-            onPointerEnter={showTooltip("Mesures Web Vitals remontées par Next.js. Elles aident à suivre le chargement, la réactivité et la stabilité visuelle.")}
+            onPointerEnter={showTooltip(t("perf.webVitalsDesc"))}
             onPointerLeave={() => setTooltip(null)}
-            onFocus={showTooltip("Mesures Web Vitals remontées par Next.js. Elles aident à suivre le chargement, la réactivité et la stabilité visuelle.")}
+            onFocus={showTooltip(t("perf.webVitalsDesc"))}
             onBlur={() => setTooltip(null)}
             tabIndex={0}
           >
@@ -466,9 +470,9 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
           <div className="grid grid-cols-5 gap-1.5">
             {vitalNames.map((name) => {
               const vital = stats.vitals[name];
-              const description = getWebVitalDescription(name);
+              const description = getWebVitalDescription(name, t);
               const valueText = vital ? formatWebVitalValue(name, vital.value) : "--";
-              const ratingText = vital ? ` Note actuelle: ${formatWebVitalRating(vital.rating)}.` : "";
+              const ratingText = vital ? t("perf.currentRating", { rating: formatWebVitalRating(vital.rating, t) }) : "";
 
               return (
                 <div

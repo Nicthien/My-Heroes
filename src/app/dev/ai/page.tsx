@@ -12,11 +12,14 @@ import { estimateAttackLossRatio } from "@/lib/game/ai/combat";
 import type { AiGame, AiPlayer } from "@/lib/game/ai/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { AdventureBuildingType, ResourceBuildingType, TerrainType, UnitType, type MapLevelId } from "@/lib/game/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { useMemo, useState } from "react";
 
 const DIFFICULTIES: Array<"simple" | "normal" | "hard"> = ["simple", "normal", "hard"];
 
 export default function AiDevPage() {
+  const { t } = useI18n();
   const [seed, setSeed] = useState("game-1");
   const [difficulty, setDifficulty] = useState<"simple" | "normal" | "hard">("normal");
 
@@ -33,20 +36,19 @@ export default function AiDevPage() {
     const lopsided = estimateAttackLossRatio(strong, weak);
     const evenRatio = estimateAttackLossRatio(strong, even);
     return [
-      { id: "lopsided", label: "Cible faible", ratio: lopsided, ok: lopsided < 0.2, note: "pertes minimes → l'IA engage" },
-      { id: "even", label: "Combat serré", ratio: evenRatio, ok: evenRatio > lopsided + 0.1, note: "pertes lourdes → l'IA hésite/évite si la cible est mineure" },
+      { id: "lopsided", labelKey: "devpage.ai.loss.lopsided.label" as TranslationKey, ratio: lopsided, ok: lopsided < 0.2, noteKey: "devpage.ai.loss.lopsided.note" as TranslationKey },
+      { id: "even", labelKey: "devpage.ai.loss.even.label" as TranslationKey, ratio: evenRatio, ok: evenRatio > lopsided + 0.1, noteKey: "devpage.ai.loss.even.note" as TranslationKey },
     ];
   }, []);
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: 24, color: "#1a1a1a" }}>
-      <h1 style={{ fontSize: 24, marginBottom: 16 }}>IA — Aperçu stratégique</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 16 }}>{t("devpage.ai.title")}</h1>
 
       <section style={{ marginBottom: 32 }} data-testid="ai-navigation-decisions">
-        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Décisions de navigation (souterrain &amp; mer)</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>{t("devpage.ai.navTitle")}</h2>
         <p style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
-          Scénarios déterministes vérifiant que l&apos;IA franchit les portes souterraines et utilise les bateaux.
-          Chaque carte est jouée par <code>chooseAiObjective</code> (logique pure, sans serveur).
+          {t("devpage.ai.navDescA")}<code>chooseAiObjective</code>{t("devpage.ai.navDescB")}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {decisions.map((decision) => {
@@ -60,13 +62,13 @@ export default function AiDevPage() {
                 style={{ border: `1px solid ${ok ? "#3a7d44" : "#b3261e"}`, borderRadius: 8, padding: 12, background: "#fafafa" }}
               >
                 <h3 style={{ fontSize: 16, marginBottom: 6 }}>
-                  {ok ? "✅" : "❌"} {decision.label}
+                  {ok ? "✅" : "❌"} {t(decision.labelKey)}
                 </h3>
-                <p style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>{decision.description}</p>
+                <p style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>{t(decision.descKey)}</p>
                 <ul style={{ fontSize: 13, lineHeight: 1.6 }}>
-                  <li>Objectif choisi : <b>{decision.objectiveType ?? "aucun"}</b></li>
-                  <li>Cible : <code>{decision.objectiveId ?? "—"}</code></li>
-                  <li>Attendu : {decision.expected.map((e) => <code key={e} style={{ marginRight: 6 }}>{e}</code>)}</li>
+                  <li>{t("devpage.ai.objectiveChosen")} <b>{decision.objectiveType ?? t("devpage.ai.none")}</b></li>
+                  <li>{t("devpage.ai.target")} <code>{decision.objectiveId ?? "—"}</code></li>
+                  <li>{t("devpage.ai.expected")} {decision.expected.map((e) => <code key={e} style={{ marginRight: 6 }}>{e}</code>)}</li>
                 </ul>
               </div>
             );
@@ -75,10 +77,9 @@ export default function AiDevPage() {
       </section>
 
       <section style={{ marginBottom: 32 }} data-testid="ai-loss-awareness">
-        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Combat conscient des pertes</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>{t("devpage.ai.lossTitle")}</h2>
         <p style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
-          Estimation Lanchester (<code>estimateAttackLossRatio</code>) : l&apos;IA chiffre ses pertes
-          attendues avant d&apos;engager, au lieu de la décision « gagne/perd » binaire.
+          {t("devpage.ai.lossDescA")}<code>estimateAttackLossRatio</code>{t("devpage.ai.lossDescB")}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {lossDemo.map((card) => (
@@ -89,10 +90,10 @@ export default function AiDevPage() {
               data-decision-ok={card.ok ? "true" : "false"}
               style={{ border: `1px solid ${card.ok ? "#3a7d44" : "#b3261e"}`, borderRadius: 8, padding: 12, background: "#fafafa" }}
             >
-              <h3 style={{ fontSize: 16, marginBottom: 6 }}>{card.ok ? "✅" : "❌"} {card.label}</h3>
+              <h3 style={{ fontSize: 16, marginBottom: 6 }}>{card.ok ? "✅" : "❌"} {t(card.labelKey)}</h3>
               <ul style={{ fontSize: 13, lineHeight: 1.6 }}>
-                <li>Pertes attendues : <b>{Math.round(card.ratio * 100)}%</b></li>
-                <li>{card.note}</li>
+                <li>{t("devpage.ai.expectedLosses")} <b>{Math.round(card.ratio * 100)}%</b></li>
+                <li>{t(card.noteKey)}</li>
               </ul>
             </div>
           ))}
@@ -100,10 +101,10 @@ export default function AiDevPage() {
       </section>
 
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Simulation de tirage de personnalités</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>{t("devpage.ai.persoSimTitle")}</h2>
         <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
           <label>
-            Seed :{" "}
+            {t("devpage.ai.seed")}{" "}
             <input
               value={seed}
               onChange={(e) => setSeed(e.target.value)}
@@ -111,7 +112,7 @@ export default function AiDevPage() {
             />
           </label>
           <label>
-            Difficulté :{" "}
+            {t("devpage.ai.difficulty")}{" "}
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as "simple" | "normal" | "hard")}
@@ -126,8 +127,8 @@ export default function AiDevPage() {
         <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 600 }}>
           <thead>
             <tr style={{ background: "#f0f0f0" }}>
-              <th style={cellStyle}>Joueur</th>
-              <th style={cellStyle}>Personnalité tirée</th>
+              <th style={cellStyle}>{t("devpage.ai.colPlayer")}</th>
+              <th style={cellStyle}>{t("devpage.ai.colPersonality")}</th>
             </tr>
           </thead>
           <tbody>
@@ -142,7 +143,7 @@ export default function AiDevPage() {
       </section>
 
       <section>
-        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Profils de personnalité</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>{t("devpage.ai.profilesTitle")}</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {AI_PERSONALITIES.map((p: AiPersonality) => {
             const profile = AI_PERSONALITY_PROFILES[p];
@@ -150,7 +151,7 @@ export default function AiDevPage() {
               <div key={p} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, background: "#fafafa" }}>
                 <h3 style={{ fontSize: 16, marginBottom: 8 }}>{p}</h3>
                 <p style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>
-                  Build : {profile.buildPriority.slice(0, 4).join(" → ")}
+                  {t("devpage.ai.build")} {profile.buildPriority.slice(0, 4).join(" → ")}
                 </p>
                 <ul style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
                   {Object.entries(profile.profileOverrides).map(([key, value]) => (
@@ -158,12 +159,12 @@ export default function AiDevPage() {
                   ))}
                 </ul>
                 <div style={{ fontSize: 12, color: "#666" }}>
-                  <div>Recrute héros : ×{profile.recruitHeroBias}</div>
-                  <div>Fusionne armée : ×{profile.mergeArmyBias}</div>
-                  <div>Ennemi principal : ×{profile.primaryEnemyAggressionBonus}</div>
+                  <div>{t("devpage.ai.recruitHero")} ×{profile.recruitHeroBias}</div>
+                  <div>{t("devpage.ai.mergeArmy")} ×{profile.mergeArmyBias}</div>
+                  <div>{t("devpage.ai.primaryEnemy")} ×{profile.primaryEnemyAggressionBonus}</div>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 12 }}>
-                  <strong>Skills :</strong>
+                  <strong>{t("devpage.ai.skills")}</strong>
                   <div>Combat ×{profile.skillPreference.combat} · Eco ×{profile.skillPreference.economy} · Magie ×{profile.skillPreference.magic} · Util ×{profile.skillPreference.utility}</div>
                 </div>
               </div>
@@ -197,8 +198,8 @@ interface ScenarioTile {
 
 interface Scenario {
   id: string;
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descKey: TranslationKey;
   expected: string[];
   activeLevel: MapLevelId;
   build: () => { game: AiGame; player: AiPlayer };
@@ -206,8 +207,8 @@ interface Scenario {
 
 interface ScenarioResult {
   id: string;
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descKey: TranslationKey;
   expected: string[];
   objectiveType: string | null;
   objectiveId: string | null;
@@ -284,8 +285,8 @@ function makeGame(mapData: unknown, player: AiPlayer, boats: unknown[] = []): Ai
 const SCENARIOS: Scenario[] = [
   {
     id: "subterranean-gate",
-    label: "Porte souterraine",
-    description: "Surface entièrement explorée, sans butin ; une mine d'or explorée attend de l'autre côté de la porte.",
+    labelKey: "devpage.ai.scenario.subterraneanGate.label",
+    descKey: "devpage.ai.scenario.subterraneanGate.desc",
     expected: ["level_transition"],
     activeLevel: SURFACE_LEVEL,
     build: () => {
@@ -316,8 +317,8 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "embark-boat",
-    label: "Embarquement",
-    description: "Une mine d'or sur une île séparée, avec un bateau vide à quai près du héros.",
+    labelKey: "devpage.ai.scenario.embarkBoat.label",
+    descKey: "devpage.ai.scenario.embarkBoat.desc",
     expected: ["embark_boat"],
     activeLevel: SURFACE_LEVEL,
     build: () => {
@@ -337,8 +338,8 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "sail",
-    label: "Navigation",
-    description: "Héros déjà embarqué au large : il met le cap sur la côte de l'île à la mine.",
+    labelKey: "devpage.ai.scenario.sail.label",
+    descKey: "devpage.ai.scenario.sail.desc",
     expected: ["sail", "disembark_boat"],
     activeLevel: SURFACE_LEVEL,
     build: () => {
@@ -375,8 +376,8 @@ function runScenario(scenario: Scenario): ScenarioResult {
     const choice = chooseAiObjective(context, context.player.heroes[0], "SCOUT");
     return {
       id: scenario.id,
-      label: scenario.label,
-      description: scenario.description,
+      labelKey: scenario.labelKey,
+      descKey: scenario.descKey,
       expected: scenario.expected,
       objectiveType: choice?.objective.type ?? null,
       objectiveId: choice?.objective.id ?? null,
@@ -384,8 +385,8 @@ function runScenario(scenario: Scenario): ScenarioResult {
   } catch {
     return {
       id: scenario.id,
-      label: scenario.label,
-      description: scenario.description,
+      labelKey: scenario.labelKey,
+      descKey: scenario.descKey,
       expected: scenario.expected,
       objectiveType: null,
       objectiveId: null,

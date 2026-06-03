@@ -943,9 +943,9 @@ export function HUDContent() {
                 MY HEROES
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/70 md:text-xs">
-                <span>An {gameState.calendar.yearNumber} · Mois {gameState.calendar.monthOfYear}</span>
+                <span>{t("hud.calYear", { n: gameState.calendar.yearNumber })} · {t("hud.calMonth", { n: gameState.calendar.monthOfYear })}</span>
                 <span className="mx-1 text-amber-700">◆</span>
-                <span>Sem. {gameState.calendar.weekOfMonth} · Jour {gameState.calendar.dayOfWeek}</span>
+                <span>{t("hud.calWeek", { n: gameState.calendar.weekOfMonth })} · {t("hud.calDay", { n: gameState.calendar.dayOfWeek })}</span>
               </div>
             </div>
             <div className="desktop-only">

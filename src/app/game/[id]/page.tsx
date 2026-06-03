@@ -86,36 +86,36 @@ export default function GamePage() {
       const requestId = ++loadRequestIdRef.current;
 
       try {
-        useGameStore.getState().updateLoadingProgress(18, "Synchronisation de la partie...");
+        useGameStore.getState().updateLoadingProgress(18, tRef.current("game.loadingSync"));
         const res = await fetchWithSupabaseAuth(`/api/games/${gameId}${adminRequested ? "?admin=1&resumeAi=1" : ""}`, { cache: "no-store" });
         if (cancelled || requestId !== loadRequestIdRef.current) return;
 
         if (res.ok) {
-          useGameStore.getState().updateLoadingProgress(38, "Lecture des donnees de carte...");
+          useGameStore.getState().updateLoadingProgress(38, tRef.current("game.loadingReadMap"));
           const data = await res.json();
 
           if (!data.mapData) {
-            useGameStore.getState().updateLoadingProgress(48, "Generation de la carte...");
+            useGameStore.getState().updateLoadingProgress(48, tRef.current("game.loadingGenMap"));
             const { generateMap } = await import("@/lib/game/engine");
             data.mapData = generateMap(data.mapWidth, data.mapHeight);
           }
 
-          useGameStore.getState().updateLoadingProgress(62, "Preparation de la partie...");
+          useGameStore.getState().updateLoadingProgress(62, tRef.current("game.loadingPrepare"));
           const responseIsAdminObserver = data.viewerMode === "admin";
           useGameStore.getState().setAdminObserverMode(responseIsAdminObserver);
           const nextGameState = mapApiToGameState(data, userId, { revealMap: devRevealMap || responseIsAdminObserver });
           if (nextGameState.id === gameId) {
             setGameState(nextGameState);
             writeCachedGameState(nextGameState, userId, getCachedStaticGameMap(gameId), { revealMap: devRevealMap || responseIsAdminObserver });
-            useGameStore.getState().updateLoadingProgress(72, "Initialisation du rendu...");
+            useGameStore.getState().updateLoadingProgress(72, tRef.current("game.loadingRender"));
           }
         } else {
           useGameStore.getState().resetGame();
-          setError("Partie non trouvee");
+          setError(tRef.current("game.notFound"));
         }
       } catch {
         if (cancelled) return;
-        setError("Erreur de chargement");
+        setError(tRef.current("game.loadError"));
       }
 
       if (!cancelled && !useGameStore.getState().gameState) {
@@ -147,7 +147,7 @@ export default function GamePage() {
         syncFailureCountRef.current += 1;
         nextSyncAllowedAtRef.current = Date.now() + Math.min(30_000, 2_000 * syncFailureCountRef.current);
         if (!cancelled && !useGameStore.getState().gameState) {
-          setError("Erreur de chargement");
+          setError(tRef.current("game.loadError"));
         }
       } finally {
         syncInFlightRef.current = false;
@@ -271,7 +271,7 @@ export default function GamePage() {
             <div className="mb-3 flex items-end justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-amber-300/80">
-                  Chargement
+                  {t("game.loadingHeader")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-white">
                   {loadingMessage}
@@ -285,7 +285,7 @@ export default function GamePage() {
             <div
               className="h-3 overflow-hidden rounded-full border border-amber-700/40 bg-black/60"
               role="progressbar"
-              aria-label="Chargement de la carte"
+              aria-label={t("game.loadingMapAria")}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={progressValue}

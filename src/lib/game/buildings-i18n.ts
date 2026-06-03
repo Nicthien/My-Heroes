@@ -93,6 +93,33 @@ const BUILDING_DESC_EN: Record<string, string> = {
   "Signale la côte et prépare un bonus de navigation.": "Marks the coast and prepares a navigation bonus.",
   "Transforme les créatures vivantes en squelettes.": "Turns living creatures into skeletons.",
   "Téléporte le héros vers la Stargate liée.": "Teleports the hero to the linked Stargate.",
+
+  // Creature bank descriptions (FR source in creature-banks.ts)
+  "Autel elementaire defendu par des gardiens magiques.": "Elemental altar defended by magical guardians.",
+  "Camp de pillards protégé par des voleurs et nomades.": "Raider camp protected by thieves and nomads.",
+  "Sanctuaire souterrain aux regards mortels.": "Underground sanctuary of deadly gazes.",
+  "Tour noire gardée par des dragons.": "Black tower guarded by dragons.",
+  "Cimetiere maudit rempli de morts-vivants.": "Cursed graveyard full of undead.",
+  "Tombe ancienne aux tresors ensevelis.": "Ancient tomb with buried treasures.",
+  "Reserve fortifiée remplie de projectiles et minerais.": "Fortified stockpile full of projectiles and ore.",
+  "Épave échouée gardée par un équipage hostile.": "Beached wreck guarded by a hostile crew.",
+  "Nid bourdonnant des marais.": "Buzzing swamp nest.",
+  "Tresor mythique protégé par plusieurs dragons.": "Mythical treasure protected by several dragons.",
+  "Tresorerie naine blinde de coffres.": "Dwarven treasury packed with chests.",
+  "Atelier bruyant rempli de prototypes.": "Noisy workshop full of prototypes.",
+  "Rocher-nid de griffons royaux.": "Nesting rock of royal griffins.",
+  "Cache infernale pleine de soufre et d'or vole.": "Infernal cache full of sulfur and stolen gold.",
+  "Tour blanche protegee par des mages.": "White tower protected by mages.",
+  "Manoir occulte de vampires.": "Occult vampire mansion.",
+  "Depot pierreux de meduses.": "Stony medusa depot.",
+  "Banque gardée par des nagas.": "Bank guarded by nagas.",
+  "Caverne côtière remplie de butin.": "Coastal cavern full of loot.",
+  "Tour ecarlate protegee par des dragons rouges.": "Scarlet tower protected by red dragons.",
+  "Ruines gardees par des soldats oublies.": "Ruins guarded by forgotten soldiers.",
+  "Navire brise charge de tresors.": "Broken ship laden with treasures.",
+  "Banc de sable protégé par des créatures marines.": "Sandbank protected by sea creatures.",
+  "Temple marin consacre aux serpents des abysses.": "Sea temple devoted to the serpents of the abyss.",
+  "Poste de pillards rapides.": "Outpost of fast raiders.",
 };
 
 export function localizedBuildingDescription(description: string, locale: Locale): string {

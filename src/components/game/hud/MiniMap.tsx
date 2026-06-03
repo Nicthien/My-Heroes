@@ -202,8 +202,8 @@ export default function MiniMap() {
         <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-800/70 bg-black/35">
           <button
             type="button"
-            aria-label="Dezoomer"
-            title="Dezoomer"
+            aria-label={t("minimap.zoomOut")}
+            title={t("minimap.zoomOut")}
             className="grid h-7 w-8 place-items-center border-r border-amber-800/60 text-base font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
             onClick={() => zoomMap(-1)}
           >
@@ -211,8 +211,8 @@ export default function MiniMap() {
           </button>
           <button
             type="button"
-            aria-label="Zoomer"
-            title="Zoomer"
+            aria-label={t("minimap.zoomIn")}
+            title={t("minimap.zoomIn")}
             className="grid h-7 w-8 place-items-center text-base font-black leading-none text-amber-100 transition hover:bg-amber-900/50 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
             onClick={() => zoomMap(1)}
           >

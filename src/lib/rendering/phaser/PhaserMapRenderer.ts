@@ -3,6 +3,7 @@ import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPref
 import { measureDevPerformance, recordDevPerformanceGauge, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
 import { UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
+import { translate } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
@@ -310,9 +311,9 @@ class PhaserMapScene extends Phaser.Scene {
   }
 
   preload() {
-    this.loadingProgressCallback?.(84, "Chargement des graphismes...");
+    this.loadingProgressCallback?.(84, translate(this.locale, "map.loadGraphics"));
     this.load.on("progress", (value: number) => {
-      this.loadingProgressCallback?.(84 + value * 5, "Chargement des graphismes...");
+      this.loadingProgressCallback?.(84 + value * 5, translate(this.locale, "map.loadGraphics"));
     });
     this.load.on("loaderror", (file: FailedLoaderFile) => {
       const key = this.getFailedAssetKey(file);
@@ -322,7 +323,7 @@ class PhaserMapScene extends Phaser.Scene {
     });
     this.load.once("complete", () => {
       this.ensureFallbackTextures();
-      this.loadingProgressCallback?.(89, "Preparation de la scene...");
+      this.loadingProgressCallback?.(89, translate(this.locale, "map.prepScene"));
     });
 
     for (const path of MAP_SPRITE_PATHS) {
@@ -3863,6 +3864,7 @@ class PhaserMapScene extends Phaser.Scene {
 export class PhaserMapRenderer implements MapRenderer {
   private game: Phaser.Game | null = null;
   private scene: PhaserMapScene | null = null;
+  private locale: Locale = "fr";
   private initialized = false;
   private destroyed = false;
   private readyResolve: (() => void) | null = null;
@@ -3871,11 +3873,12 @@ export class PhaserMapRenderer implements MapRenderer {
 
   async init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress) {
     this.destroyed = false;
-    onLoadingProgress?.(82, "Creation du canvas...");
+    onLoadingProgress?.(82, translate(this.locale, "map.createCanvas"));
     container.querySelectorAll("canvas").forEach((canvas) => canvas.remove());
 
     const scene = new PhaserMapScene();
     this.scene = scene;
+    scene.locale = this.locale;
     scene.loadingProgressCallback = onLoadingProgress;
 
     const ready = new Promise<void>((resolve) => {
@@ -3947,6 +3950,7 @@ export class PhaserMapRenderer implements MapRenderer {
   }
 
   setLocale(locale: Locale) {
+    this.locale = locale;
     if (this.scene) this.scene.locale = locale;
   }
 

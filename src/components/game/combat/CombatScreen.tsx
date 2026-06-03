@@ -559,7 +559,7 @@ export default function CombatScreen() {
               Cible: {pendingTargetSpell.label}
             </button>
           )}
-          {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label="Livre de sorts combat" disabled={isTacticsPhaseActive} />}
+          {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label={t("combat.spellBookLabel")} disabled={isTacticsPhaseActive} />}
           <CombatAudioControl />
           <button
             type="button"

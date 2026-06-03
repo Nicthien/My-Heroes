@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RmgMapPreview, OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { generateMap } from "@/lib/game/engine";
 import { listTemplatesForPlayers } from "@/lib/game/engine/template";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL, withActiveMapLayer } from "@/lib/game/map-levels";
@@ -28,6 +29,7 @@ export default function RmgPreviewPage() {
 }
 
 function RmgPreviewContent() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const [seed, setSeed] = useState(() => initialSeed(searchParams));
   const [size, setSize] = useState<SizeKey>(() => initialSize(searchParams));
@@ -64,21 +66,21 @@ function RmgPreviewContent() {
       <div className="mx-auto flex h-full max-w-[1500px] flex-col gap-4 px-4 py-4">
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-normal">Aperçu RMG</h1>
-            <p className="text-sm text-stone-400">Graine {map.seed} · Modèle {map.templateId}</p>
+            <h1 className="text-xl font-semibold tracking-normal">{t("devpage.rmg.title")}</h1>
+            <p className="text-sm text-stone-400">{t("devpage.rmg.seedTemplate", { seed: map.seed ?? "", template: map.templateId ?? "" })}</p>
           </div>
           <button
             type="button"
             onClick={() => setSeed(randomSeed())}
             className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
           >
-            Nouvelle graine
+            {t("devpage.rmg.newSeed")}
           </button>
         </header>
 
         <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto_auto_auto]">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Graine</span>
+            <span className="text-stone-400">{t("devpage.rmg.seed")}</span>
             <input
               value={seed}
               onChange={(event) => setSeed(event.target.value.toUpperCase())}
@@ -87,7 +89,7 @@ function RmgPreviewContent() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Taille</span>
+            <span className="text-stone-400">{t("devpage.rmg.size")}</span>
             <select
               value={size}
               onChange={(event) => setSize(event.target.value as SizeKey)}
@@ -102,7 +104,7 @@ function RmgPreviewContent() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Joueurs</span>
+            <span className="text-stone-400">{t("devpage.rmg.players")}</span>
             <select
               value={playerCount}
               onChange={(event) => setPlayerCount(Number(event.target.value))}
@@ -117,7 +119,7 @@ function RmgPreviewContent() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Modèle</span>
+            <span className="text-stone-400">{t("devpage.rmg.template")}</span>
             <select
               value={selectedTemplateId}
               onChange={(event) => setTemplateId(event.target.value)}
@@ -133,7 +135,7 @@ function RmgPreviewContent() {
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Sous-sol</span>
+            <span className="text-stone-400">{t("devpage.rmg.underground")}</span>
             <button
               type="button"
               onClick={() => {
@@ -142,12 +144,12 @@ function RmgPreviewContent() {
               }}
               className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none hover:border-amber-400"
             >
-              {undergroundEnabled ? "Active" : "Inactif"}
+              {undergroundEnabled ? t("devpage.rmg.active") : t("devpage.rmg.inactive")}
             </button>
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-stone-400">Niveau</span>
+            <span className="text-stone-400">{t("devpage.rmg.level")}</span>
             <select
               value={previewLevel}
               disabled={!undergroundEnabled}
@@ -165,10 +167,10 @@ function RmgPreviewContent() {
 
           <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
             <Legend />
-            <StatBlock title="Terrain" values={stats.terrain} total={visibleMap.width * visibleMap.height} />
-            <StatBlock title="Objets" values={stats.objects} total={stats.objectTotal} />
-            <StatBlock title="Details" values={stats.details} />
-            <StatBlock title="Poches" values={stats.pockets} />
+            <StatBlock title={t("devpage.rmg.statTerrain")} values={stats.terrain} total={visibleMap.width * visibleMap.height} />
+            <StatBlock title={t("devpage.rmg.statObjects")} values={stats.objects} total={stats.objectTotal} />
+            <StatBlock title={t("devpage.rmg.statDetails")} values={stats.details} />
+            <StatBlock title={t("devpage.rmg.statPockets")} values={stats.pockets} />
             <ZoneDensityBlock zones={stats.zoneDensity} />
           </aside>
         </section>
@@ -178,37 +180,39 @@ function RmgPreviewContent() {
 }
 
 function RmgPreviewShell() {
+  const { t } = useI18n();
   return (
     <main className="h-screen overflow-hidden bg-stone-950 text-stone-100">
       <div className="mx-auto flex h-full max-w-[1500px] items-center justify-center px-4 py-4">
-        <div className="text-sm font-semibold uppercase tracking-wider text-stone-400">Chargement de l&apos;aperçu...</div>
+        <div className="text-sm font-semibold uppercase tracking-wider text-stone-400">{t("devpage.rmg.loading")}</div>
       </div>
     </main>
   );
 }
 
 function Legend() {
-  const terrainItems = [
-    ["Eau", TERRAIN_COLOR.water],
-    ["Plage", TERRAIN_COLOR.sand],
-    ["Prairie", TERRAIN_COLOR.grass],
-    ["Foret", TERRAIN_COLOR.forest],
-    ["Montagne", TERRAIN_COLOR.mountain],
-    ["Marais", TERRAIN_COLOR.swamp],
-    ["Pont", "#8b5a2b"],
+  const { t } = useI18n();
+  const terrainItems: Array<[string, string]> = [
+    [t("devpage.rmg.terrain.water"), TERRAIN_COLOR.water],
+    [t("devpage.rmg.terrain.sand"), TERRAIN_COLOR.sand],
+    [t("devpage.rmg.terrain.grass"), TERRAIN_COLOR.grass],
+    [t("devpage.rmg.terrain.forest"), TERRAIN_COLOR.forest],
+    [t("devpage.rmg.terrain.mountain"), TERRAIN_COLOR.mountain],
+    [t("devpage.rmg.terrain.swamp"), TERRAIN_COLOR.swamp],
+    [t("devpage.rmg.terrain.bridge"), "#8b5a2b"],
   ];
 
-  const objectItems = [
-    ["Ville", OBJECT_COLOR.town],
-    ["Mine", OBJECT_COLOR.building],
-    ["Monstre", OBJECT_COLOR.monster],
-    ["Ressource", OBJECT_COLOR.resource],
-    ["Mur", OBJECT_COLOR.wall],
+  const objectItems: Array<[string, string]> = [
+    [t("devpage.rmg.object.town"), OBJECT_COLOR.town],
+    [t("devpage.rmg.object.mine"), OBJECT_COLOR.building],
+    [t("devpage.rmg.object.monster"), OBJECT_COLOR.monster],
+    [t("devpage.rmg.object.resource"), OBJECT_COLOR.resource],
+    [t("devpage.rmg.object.wall"), OBJECT_COLOR.wall],
   ];
 
   return (
     <div className="border border-stone-800 bg-stone-900/80 p-3">
-      <h2 className="mb-2 text-sm font-semibold text-amber-100">Légende</h2>
+      <h2 className="mb-2 text-sm font-semibold text-amber-100">{t("devpage.rmg.legend")}</h2>
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-1.5">
           {terrainItems.map(([label, color]) => (
@@ -270,16 +274,21 @@ function ZoneDensityBlock({
 }: {
   zones: Array<{ label: string; emptyRatio: number; pockets: number; empty: number; total: number }>;
 }) {
+  const { t } = useI18n();
   if (zones.length === 0) return null;
   return (
     <div className="border border-stone-800 bg-stone-900/80 p-3">
-      <h2 className="mb-2 text-sm font-semibold text-amber-100">Zones neutres</h2>
+      <h2 className="mb-2 text-sm font-semibold text-amber-100">{t("devpage.rmg.neutralZones")}</h2>
       <div className="grid gap-1.5">
         {zones.map((zone) => (
           <div key={zone.label} className="grid grid-cols-[1fr_auto] gap-3 text-xs">
             <span className="truncate text-stone-300">{zone.label}</span>
             <span className="font-mono text-stone-100">
-              {Math.round(zone.emptyRatio * 100)}% vide · {zone.pockets} poche{zone.pockets > 1 ? "s" : ""}
+              {t("devpage.rmg.zoneDensity", {
+                pct: Math.round(zone.emptyRatio * 100),
+                n: zone.pockets,
+                poches: zone.pockets > 1 ? t("devpage.rmg.pockets") : t("devpage.rmg.pocket"),
+              })}
             </span>
           </div>
         ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HourglassIcon } from "./theme";
 
 export function Stat({ label, value, color }: { label: string; value: number | string; color: string }) {
@@ -12,6 +13,7 @@ export function Stat({ label, value, color }: { label: string; value: number | s
 }
 
 export function MovementGauge({ movement, maxMovement }: { movement: number; maxMovement: number }) {
+  const { t } = useI18n();
   const ratio = maxMovement > 0 ? Math.max(0, Math.min(1, movement / maxMovement)) : 0;
   const tone = ratio > 0.35
     ? {
@@ -47,7 +49,7 @@ export function MovementGauge({ movement, maxMovement }: { movement: number; max
       <div className="relative flex items-center justify-between gap-3 text-xs font-bold">
         <span className="flex min-w-0 items-center gap-2">
           <HourglassIcon className="h-4 w-4 flex-none" />
-          <span className="truncate">Mouvement</span>
+          <span className="truncate">{t("hud.movement")}</span>
         </span>
         <span className="flex-none tabular-nums">{movement}/{maxMovement}</span>
       </div>

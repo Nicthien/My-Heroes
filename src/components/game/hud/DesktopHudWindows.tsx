@@ -67,7 +67,7 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
   return (
     <div className="desktop-only pointer-events-none absolute inset-0 z-30">
       <HudWindow
-        title="Carte"
+        title={t("hud.mapPanel")}
         storageKey={scopeKey(gameId, playerId, "map")}
         defaultPosition={rightColumnDefault(RIGHT_COLUMN_TOP)}
         className="w-72"
@@ -82,7 +82,7 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
       </HudWindow>
 
       <HudWindow
-        title="Joueurs"
+        title={t("hud.playersPanel")}
         storageKey={scopeKey(gameId, playerId, "players")}
         defaultPosition={rightColumnDefault(PLAYERS_WINDOW_TOP)}
         className="w-72"
@@ -94,7 +94,7 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
 
       {me && (
         <HudWindow
-          title="Suivi"
+          title={t("hud.trackingPanel")}
           storageKey={scopeKey(gameId, playerId, "main")}
           defaultPosition={rightColumnDefault(OVERVIEW_WINDOW_TOP)}
           className="w-72"

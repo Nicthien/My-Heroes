@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Tone = "emerald" | "sky" | "amber";
 
@@ -77,6 +78,7 @@ export function CountDialog({
   footer: ReactNode;
   submitLabel: string;
 }) {
+  const { t } = useI18n();
   const styles = TONE_STYLES[tone];
   const inputTextColor = tone === "sky" ? "text-sky-50" : "text-amber-50";
 
@@ -89,7 +91,7 @@ export function CountDialog({
       }}
     >
       <div className={`mb-2 flex items-center justify-between gap-3 text-xs font-bold ${styles.labelText}`}>
-        <span>Nombre</span>
+        <span>{t("common.count")}</span>
         <span className={styles.maxText}>Max {max}</span>
       </div>
       <input

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import CombatScreen from "@/components/game/combat/CombatScreen";
 import { AuthContext } from "@/lib/auth/client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { COMBAT_BASE_ROWS, COMBAT_COLS } from "@/lib/game/combat/movement";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
@@ -24,21 +26,21 @@ const MOCK_USER_ID = "dev-user";
 type CombatPreviewScenario = "hero" | "naval" | "mine" | "town" | "adventure";
 type CombatPreviewPhase = "start" | "tactics" | "mid" | "end" | "death" | "truce" | "truceAcked";
 
-const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; label: string }> = [
-  { id: "hero", label: "Héros" },
-  { id: "naval", label: "Naval" },
-  { id: "mine", label: "Mine" },
-  { id: "town", label: "Chateau" },
-  { id: "adventure", label: "Bâtiment" },
+const COMBAT_PREVIEW_SCENARIOS: Array<{ id: CombatPreviewScenario; labelKey: TranslationKey }> = [
+  { id: "hero", labelKey: "devpage.combat.scenario.hero" },
+  { id: "naval", labelKey: "devpage.combat.scenario.naval" },
+  { id: "mine", labelKey: "devpage.combat.scenario.mine" },
+  { id: "town", labelKey: "devpage.combat.scenario.town" },
+  { id: "adventure", labelKey: "devpage.combat.scenario.adventure" },
 ];
-const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; label: string }> = [
-  { id: "start", label: "Debut" },
-  { id: "tactics", label: "Tactique" },
-  { id: "mid", label: "Milieu" },
-  { id: "end", label: "Fin" },
-  { id: "death", label: "Mort" },
-  { id: "truce", label: "Trêve" },
-  { id: "truceAcked", label: "Trêve OK" },
+const COMBAT_PREVIEW_PHASES: Array<{ id: CombatPreviewPhase; labelKey: TranslationKey }> = [
+  { id: "start", labelKey: "devpage.combat.phase.start" },
+  { id: "tactics", labelKey: "devpage.combat.phase.tactics" },
+  { id: "mid", labelKey: "devpage.combat.phase.mid" },
+  { id: "end", labelKey: "devpage.combat.phase.end" },
+  { id: "death", labelKey: "devpage.combat.phase.death" },
+  { id: "truce", labelKey: "devpage.combat.phase.truce" },
+  { id: "truceAcked", labelKey: "devpage.combat.phase.truceAcked" },
 ];
 
 function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id" | "unitType" | "count" | "side" | "q" | "r">): CombatBoardUnit {
@@ -336,6 +338,7 @@ const mockAuthValue = {
 };
 
 export default function DevCombatPage() {
+  const { t } = useI18n();
   const [scenario, setScenario] = useState<CombatPreviewScenario>("hero");
   const [phase, setPhase] = useState<CombatPreviewPhase>("mid");
 
@@ -361,7 +364,7 @@ export default function DevCombatPage() {
                 }`}
                 onClick={() => setScenario(item.id)}
               >
-                {item.label}
+                {t(item.labelKey)}
               </button>
             ))}
           </div>
@@ -377,7 +380,7 @@ export default function DevCombatPage() {
                 }`}
                 onClick={() => setPhase(item.id)}
               >
-                {item.label}
+                {t(item.labelKey)}
               </button>
             ))}
           </div>

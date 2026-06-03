@@ -6,6 +6,7 @@ import {
   markNotificationPromptDismissed,
   showBrowserNotification,
 } from "./helpers";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function useTurnNotifications({
   canAct,
@@ -16,6 +17,7 @@ export function useTurnNotifications({
   isPending: boolean;
   turnNotificationKey: string;
 }) {
+  const { t } = useI18n();
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification === "undefined" ? "denied" : Notification.permission
   );
@@ -57,8 +59,8 @@ export function useTurnNotifications({
       return;
     }
 
-    document.title = canAct ? "À vous de jouer - My Heroes" : "My Heroes";
-  }, [canAct, isPending]);
+    document.title = canAct ? t("hud.yourTurnTitle") : "My Heroes";
+  }, [canAct, isPending, t]);
 
   useEffect(() => {
     if (!canAct || isPending) return;
@@ -67,9 +69,9 @@ export function useTurnNotifications({
     lastNotifiedTurnRef.current = turnNotificationKey;
 
     void showBrowserNotification("My Heroes", {
-      body: "C'est à vous de jouer.",
+      body: t("hud.yourTurnBody"),
     });
-  }, [canAct, isPending, permission, turnNotificationKey]);
+  }, [canAct, isPending, permission, turnNotificationKey, t]);
 
   const promptUI = canAct && !isPending && permission === "default" && !dismissed
     ? (
@@ -78,7 +80,7 @@ export function useTurnNotifications({
             className="rounded bg-green-700 px-3 py-1 text-sm font-bold text-white hover:bg-green-600"
             onClick={requestNotifications}
           >
-            Activer les notifications
+            {t("hud.enableNotifications")}
           </button>
         </div>
       )

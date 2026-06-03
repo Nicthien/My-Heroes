@@ -8,6 +8,8 @@ import { buildingTypeLabel } from "./helpers";
 import { RecruitUnitsIcon } from "./icons";
 import { UnitSprite } from "./UnitSprite";
 import { getMaxRecruitCount } from "./recruitHelpers";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 
 export function TownRecruitTab({
   selectedTown,
@@ -34,6 +36,7 @@ export function TownRecruitTab({
   recruitDialog: { townId: string; unitType: UnitType; count: number } | null;
   setRecruitDialog: (next: { townId: string; unitType: UnitType; count: number } | null) => void;
 }) {
+  const { t, locale } = useI18n();
   return (
     <div className="space-y-2">
       <label className="flex items-center gap-2 rounded-md border border-amber-700/30 bg-black/35 px-3 py-2 text-xs font-bold text-amber-100">
@@ -43,7 +46,7 @@ export function TownRecruitTab({
           checked={hideMissingRecruitRequirements}
           onChange={(event) => setHideMissingRecruitRequirements(event.currentTarget.checked)}
         />
-        <span>Masquer les prérequis manquants</span>
+        <span>{t("recruit.hideMissing")}</span>
       </label>
       {displayedRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
         const hasDwelling = selectedTown.buildings.includes(dwelling);
@@ -64,11 +67,11 @@ export function TownRecruitTab({
               <div className="flex min-w-0 items-center gap-3">
                 <UnitSprite unitType={rule.type} />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold text-amber-100">{rule.label}</div>
-                  <div className="text-xs text-amber-200/60">PV {rule.health} · {formatCost(rule.cost)} / unité</div>
-                  {hasDwelling && <div className="mt-1 text-xs text-emerald-300">Disponible : {available}</div>}
-                  {upgraded && <div className="mt-1 text-xs text-sky-300">Amélioration palier {tier + 1}</div>}
-                  {!hasDwelling && <div className="mt-1 text-xs text-red-300">Prérequis : {buildingTypeLabel(dwelling, selectedTownFaction)}</div>}
+                  <div className="truncate text-sm font-bold text-amber-100">{localizedUnitLabel(rule.type, rule.label, locale)}</div>
+                  <div className="text-xs text-amber-200/60">{t("recruit.unitStats", { health: rule.health, cost: formatCost(rule.cost) })}</div>
+                  {hasDwelling && <div className="mt-1 text-xs text-emerald-300">{t("recruit.available", { n: available })}</div>}
+                  {upgraded && <div className="mt-1 text-xs text-sky-300">{t("recruit.upgradeTier", { tier: tier + 1 })}</div>}
+                  {!hasDwelling && <div className="mt-1 text-xs text-red-300">{t("recruit.requires", { name: buildingTypeLabel(dwelling, selectedTownFaction, locale) })}</div>}
                 </div>
               </div>
               <button
@@ -78,8 +81,8 @@ export function TownRecruitTab({
                     : "border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
                 }`}
                 disabled={disabled}
-                title="Recruter"
-                aria-label={`Recruter ${rule.label}`}
+                title={t("recruit.recruit")}
+                aria-label={t("recruit.recruitUnit", { name: localizedUnitLabel(rule.type, rule.label, locale) })}
                 onClick={() => setRecruitDialog(activeRecruitDialog ? null : { townId: selectedTown.id, unitType: rule.type, count: maxRecruitable })}
               >
                 <RecruitUnitsIcon className="h-5 w-5" />

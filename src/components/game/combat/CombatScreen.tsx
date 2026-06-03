@@ -26,15 +26,28 @@ import {
 } from "./combatLayout";
 import {
   RESOURCE_KEYS,
-  RESOURCE_LABELS,
   combatHasPlayerHeroesOnBothSides,
   computeSurrenderCostForSide,
 } from "./combatNegotiation";
 
 import { IsoBattlefield } from "./IsoBattlefield";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+const RES_LABEL_KEY: Record<keyof Resources, TranslationKey> = {
+  gold: "res.gold",
+  wood: "res.wood",
+  ore: "res.ore",
+  mercury: "res.mercury",
+  crystals: "res.crystals",
+  gems: "res.gems",
+  sulfur: "res.sulfur",
+};
 
 export default function CombatScreen() {
   const { data: session } = useSession();
+  const { t } = useI18n();
+  const resLabel = (key: keyof Resources) => t(RES_LABEL_KEY[key]);
   const activeCombat = useGameStore((state) => state.activeCombat);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
   const combatMessage = useGameStore((state) => state.combatMessage);
@@ -337,29 +350,29 @@ export default function CombatScreen() {
   const canSubmitAction = isMyAction && !isTacticsPhaseActive && activeCombat.status === "ACTIVE" && Boolean(currentUnit) && !pendingSurrenderNegotiation && !activeTruce && !actionBlockedByBusyState;
   const canSubmitTacticsAction = isMyTacticsPhase && activeCombat.status === "ACTIVE" && !pendingSurrenderNegotiation && !activeTruce && !actionBlockedByBusyState;
   const actionUnavailableReason = activeCombat.status !== "ACTIVE"
-    ? "Le combat n'est pas actif."
+    ? t("combat.notActive")
     : pendingSurrenderNegotiation
-      ? "Une négociation de reddition est déjà en cours."
+      ? t("combat.surrenderNegotiationInProgress")
       : activeTruce
-        ? "Une trêve est déjà en cours."
+        ? t("combat.truceInProgress")
         : actionBlockedByBusyState
-          ? "Une action est en cours."
+          ? t("combat.actionInProgress")
           : isTacticsPhaseActive
-            ? "Terminez la phase de tactique avant les actions de combat."
+            ? t("combat.finishTacticsFirst")
           : !currentUnit
-            ? "Aucune unité ne peut agir maintenant."
+            ? t("combat.noUnitCanAct")
             : !isMyAction
-              ? "Ce n'est pas votre tour d'action."
+              ? t("combat.notYourActionTurn")
               : null;
   const combatStatusLabel = activeTruce
-    ? "Trêve en cours"
+    ? t("combat.statusTruce")
     : combatAnimationBlocked
-      ? "Action en cours"
+      ? t("combat.statusActionInProgress")
       : isTacticsPhaseActive
-        ? "Phase de tactique"
+        ? t("combat.statusTactics")
         : isMyAction
-          ? "À vous de jouer"
-          : "En attente de l'adversaire";
+          ? t("combat.yourTurn")
+          : t("combat.statusWaitingOpponent");
   const displayedCombat = effectiveCurrentUnitId === activeCombat.currentUnitId
     ? activeCombat
     : { ...activeCombat, currentUnitId: effectiveCurrentUnitId };
@@ -441,14 +454,14 @@ export default function CombatScreen() {
   const canRequestTruce = Boolean(isPrimaryPlayer && canSubmitAction && !hasUsedTruce && !activeTruce && !pendingSurrenderNegotiation);
   const surrenderDisabledReason = actionUnavailableReason
     ?? (!combatHasPlayerHeroesOnBothSides(activeCombat)
-      ? "Se rendre n'est possible que si chaque camp a un héros engagé."
+      ? t("combat.surrenderNeedsBothHeroes")
       : null);
   const truceDisabledReason = activeTruce
-    ? "Une trêve est déjà en cours."
+    ? t("combat.truceInProgress")
     : hasUsedTruce
-      ? "Vous avez déjà utilisé votre trêve pour ce combat."
+      ? t("combat.truceAlreadyUsed")
       : pendingSurrenderNegotiation
-        ? "Une négociation de reddition est déjà en cours."
+        ? t("combat.surrenderNegotiationInProgress")
         : actionUnavailableReason;
   const surrenderCost = combatHero && myPlayer
     ? computeSurrenderCostForSide(activeCombat, myPlayer.id, combatHero.skills ?? {})
@@ -471,14 +484,14 @@ export default function CombatScreen() {
     const submitted = await submitAction({ type: "PROPOSE_SURRENDER", offer: surrenderOffer });
     if (submitted) {
       setSurrenderOfferOpen(false);
-      setCombatMessage("Proposition de reddition envoyee.");
+      setCombatMessage(t("combat.surrenderSent"));
     }
   };
   const submitTruceRequest = async () => {
     const submitted = await submitAction({ type: "REQUEST_TRUCE" });
     if (submitted) {
       setTruceConfirmOpen(false);
-      setCombatMessage("Trêve acceptée. Le combat reprendra au prochain tour d'aventure.");
+      setCombatMessage(t("combat.truceAcceptedMsg"));
     }
   };
   const submitRetreat = async () => {
@@ -496,16 +509,16 @@ export default function CombatScreen() {
   };
   const spellBookHero = combatHero && devInfiniteMana ? { ...combatHero, mana: getHeroMaxMana(combatHero) } : combatHero;
   const castCombatSpell = async (spell: SpellDefinition, targetUnitId?: string) => {
-    if (!combatHero) throw new Error("Héros indisponible.");
+    if (!combatHero) throw new Error(t("combat.heroUnavailable"));
     if (combatHeroHasCastSpell) {
       setPendingTargetSpell(null);
-      setCombatMessage("Ce héros a déjà lancé un sort ce round.");
+      setCombatMessage(t("combat.heroAlreadyCast"));
       return;
     }
     if (spellRequiresCombatTarget(spell) && !targetUnitId) {
       setPendingTargetSpell(spell);
       setSpellBookOpen(false);
-      setCombatMessage(`${spell.label} : choisissez une cible ennemie.`);
+      setCombatMessage(t("combat.spellPickEnemyTarget", { label: spell.label }));
       return;
     }
     const cast = await submitAction({
@@ -565,19 +578,19 @@ export default function CombatScreen() {
         )}
         {pendingSurrenderNegotiation && (
           <div className="pointer-events-auto absolute left-1/2 top-16 z-40 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-emerald-400/50 bg-stone-950/94 px-4 py-2 text-sm font-bold text-emerald-100 shadow-xl">
-            Negociation de reddition en cours.
+            {t("combat.negotiationBanner")}
           </div>
         )}
         {activeTruce && (
           <div className="pointer-events-auto absolute left-1/2 top-16 z-40 max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-sky-400/50 bg-stone-950/94 px-4 py-2 text-sm font-bold text-sky-100 shadow-xl">
-            Trêve en cours. Reprise au tour d&apos;aventure {activeTruce.pauseUntilTurn}.
+            {t("combat.truceResume", { turn: activeTruce.pauseUntilTurn })}
           </div>
         )}
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <div className="absolute left-1/2 top-3 z-30 w-[min(760px,calc(100%-7rem))] -translate-x-1/2">
             {isTacticsPhaseActive ? (
               <div className="mx-auto w-fit rounded-md border border-amber-700/50 bg-black/55 px-4 py-2 text-center text-xs font-black uppercase tracking-[0.24em] text-amber-200 shadow-[0_10px_26px_rgba(0,0,0,0.5),0_0_0_1px_rgba(252,211,77,0.12)_inset] backdrop-blur-sm">
-                Phase de tactique
+                {t("combat.statusTactics")}
               </div>
             ) : (
               <InitiativeQueue combat={displayedCombat} gameState={gameState} inspectedUnitId={inspectedUnitId} onInspectUnit={setInspectedUnitId} />
@@ -598,31 +611,31 @@ export default function CombatScreen() {
           />
         </main>
         <aside className="mobile-combat-aside pointer-events-auto absolute bottom-0 right-0 top-0 z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-4 overflow-y-auto p-4 pr-3">
-          <CombatFloatingPanel title={inspectedUnit ? "Creature inspectee" : isTacticsPhaseActive ? "Unité sélectionnée" : "Unite active"} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
+          <CombatFloatingPanel title={inspectedUnit ? t("combat.inspectedCreature") : isTacticsPhaseActive ? t("combat.selectedUnit") : t("combat.activeUnit")} className={ornateFrame} bodyClassName="px-3 pb-3 pt-2">
             <div className="text-sm text-stone-200">
               {(inspectedUnit ?? tacticsSelectedUnit ?? currentUnit) ? (
                 <UnitDetails unit={(inspectedUnit ?? tacticsSelectedUnit ?? currentUnit)!} combat={activeCombat} gameState={gameState} />
               ) : (
-                <div className="py-4 text-center text-stone-400">{isTacticsPhaseActive ? "Aucune unité sélectionnée" : "Aucune"}</div>
+                <div className="py-4 text-center text-stone-400">{isTacticsPhaseActive ? t("combat.noUnitSelected") : t("combat.none")}</div>
               )}
             </div>
           </CombatFloatingPanel>
 
           {isMyTacticsPhase && (
-            <CombatFloatingPanel title="Phase de tactique" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
-              <div className="text-xs text-amber-200/80 mb-2">Repositionnez vos unités, puis terminez la phase.</div>
+            <CombatFloatingPanel title={t("combat.statusTactics")} className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
+              <div className="text-xs text-amber-200/80 mb-2">{t("combat.tacticsReposition")}</div>
               <button
                 type="button"
                 disabled={!canSubmitTacticsAction}
                 onClick={() => submitAction({ type: "TACTICS_END" })}
                 className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-700 to-amber-900 px-3 py-2 font-bold text-amber-50 hover:from-amber-600 hover:to-amber-800 disabled:opacity-40"
               >
-                Terminer la phase de tactique
+                {t("combat.endTactics")}
               </button>
             </CombatFloatingPanel>
           )}
 
-          <CombatFloatingPanel title="Actions" className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
+          <CombatFloatingPanel title={t("combat.actions")} className={ornateFramePolished} bodyClassName="px-3 pb-3 pt-2">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -630,7 +643,7 @@ export default function CombatScreen() {
                 onClick={() => submitAction({ type: "WAIT" })}
                 className="rounded-md border border-amber-600/50 bg-gradient-to-b from-stone-800 to-stone-950 px-3 py-2 font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset] transition hover:from-stone-700 hover:to-stone-900 disabled:opacity-40"
               >
-                Attendre
+                {t("combat.wait")}
               </button>
               <button
                 type="button"
@@ -638,7 +651,7 @@ export default function CombatScreen() {
                 onClick={() => submitAction({ type: "DEFEND" })}
                 className="rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
               >
-                Defendre
+                {t("combat.defend")}
               </button>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -648,29 +661,29 @@ export default function CombatScreen() {
                 onClick={() => setRetreatConfirmOpen(true)}
                 className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-900 to-red-950 px-3 py-2 font-bold text-red-100 shadow-[0_0_0_1px_rgba(252,165,165,0.18)_inset] transition hover:from-red-800 hover:to-red-900 disabled:opacity-40"
               >
-                Fuir
+                {t("combat.flee")}
               </button>
-              <span className="block" title={surrenderDisabledReason ?? "Proposer une reddition"}>
+              <span className="block" title={surrenderDisabledReason ?? t("combat.proposeSurrender")}>
                 <button
                   type="button"
                   disabled={!canSurrender}
                   onClick={openSurrenderOffer}
                   className="w-full rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
                 >
-                  Se rendre
+                  {t("combat.surrender2")}
                 </button>
               </span>
             </div>
-            {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">Rançon : {surrenderCost} or</div>}
+            {canSurrender && <div className="mt-1 text-center text-xs font-bold text-amber-200/70">{t("combat.ransom", { n: surrenderCost })}</div>}
             {isPrimaryPlayer && (
-              <span className="mt-2 block" title={truceDisabledReason ?? "Demander une trêve"}>
+              <span className="mt-2 block" title={truceDisabledReason ?? t("combat.requestTruce")}>
                 <button
                   type="button"
                   disabled={!canRequestTruce}
                   onClick={() => setTruceConfirmOpen(true)}
                   className="w-full rounded-md border border-sky-400/60 bg-gradient-to-b from-sky-900 to-sky-950 px-3 py-2 font-bold text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.18)_inset] transition hover:from-sky-800 hover:to-sky-900 disabled:opacity-40"
                 >
-                  Trêve
+                  {t("combat.truce")}
                 </button>
               </span>
             )}
@@ -681,12 +694,12 @@ export default function CombatScreen() {
                 onClick={() => submitAction({ type: "FLEE_COMBAT" })}
                 className="mt-2 w-full rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-900 to-emerald-950 px-3 py-2 font-bold text-emerald-100 shadow-[0_0_0_1px_rgba(167,243,208,0.18)_inset] transition hover:from-emerald-800 hover:to-emerald-900 disabled:opacity-40"
               >
-                Fuir par le Tunnel d&apos;évasion
+                {t("combat.fleeEscapeTunnel")}
               </button>
             )}
           </CombatFloatingPanel>
 
-          <CombatFloatingPanel title="Journal" className={`min-h-0 flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex flex-1 flex-col overflow-hidden px-3 pb-3 pt-2">
+          <CombatFloatingPanel title={t("combat.journal")} className={`min-h-0 flex flex-col ${ornateFramePolished}`} expandedClassName="min-h-64 flex-1" bodyClassName="min-h-0 flex flex-1 flex-col overflow-hidden px-3 pb-3 pt-2">
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 text-sm text-stone-300">
               {activeCombat.actionLog.slice(-20).map((line, index) => (
                 <div key={index} className="border-b border-amber-900/20 pb-1 last:border-b-0">{line}</div>
@@ -699,8 +712,8 @@ export default function CombatScreen() {
         <SpellBookModal
           hero={spellBookHero}
           context="combat"
-          title="Livre de sorts - Combat"
-          targetLabel={pendingTargetSpell ? `${pendingTargetSpell.label} : choisissez une cible` : null}
+          title={t("combat.spellBookCombat")}
+          targetLabel={pendingTargetSpell ? t("combat.spellTargetLabel", { label: pendingTargetSpell.label }) : null}
           canCast={canCastHeroSpell}
           ignoreManaCost={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
@@ -710,14 +723,14 @@ export default function CombatScreen() {
       {truceConfirmOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Trêve</div>
-            <h2 className="mt-2 text-2xl font-bold text-sky-100">Suspendre le combat ?</h2>
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">{t("combat.truce")}</div>
+            <h2 className="mt-2 text-2xl font-bold text-sky-100">{t("combat.suspendCombat")}</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              La treve met ce combat en pause jusqu&apos;au prochain tour d&apos;aventure. Elle est utilisable une seule fois par combat et par joueur principal. Aucun participant ne pourra jouer d&apos;action de combat pendant la pause.
+              {t("combat.truceModalDesc")}
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setTruceConfirmOpen(false)}>Annuler</button>
-              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-4 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void submitTruceRequest()}>Accepter</button>
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setTruceConfirmOpen(false)}>{t("common.cancel")}</button>
+              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-4 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void submitTruceRequest()}>{t("combat.accept")}</button>
             </div>
           </div>
         </div>
@@ -725,14 +738,14 @@ export default function CombatScreen() {
       {retreatConfirmOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,32rem)] rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-red-400">Fuite</div>
-            <h2 className="mt-2 text-2xl font-bold text-red-100">Quitter le combat ?</h2>
+            <div className="text-xs uppercase tracking-[0.28em] text-red-400">{t("combat.fleeTitle")}</div>
+            <h2 className="mt-2 text-2xl font-bold text-red-100">{t("combat.leaveCombat")}</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              Votre héros va fuir immédiatement. Les créatures de ce héros seront retirées du combat et chaque pile perdra la moitié de ses unités, arrondie à l&apos;entier inférieur. Si votre camp n&apos;a plus aucune unité active après la fuite, l&apos;adversaire remporte le combat. Cette action est définitive.
+              {t("combat.retreatDesc")}
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 text-sm font-bold text-stone-200 hover:bg-stone-800" onClick={() => setRetreatConfirmOpen(false)}>Annuler</button>
-              <button type="button" className="rounded-md border border-red-400 bg-red-900 px-5 py-2 font-bold text-red-50 hover:bg-red-800" onClick={() => void submitRetreat()}>Confirmer la fuite</button>
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 text-sm font-bold text-stone-200 hover:bg-stone-800" onClick={() => setRetreatConfirmOpen(false)}>{t("common.cancel")}</button>
+              <button type="button" className="rounded-md border border-red-400 bg-red-900 px-5 py-2 font-bold text-red-50 hover:bg-red-800" onClick={() => void submitRetreat()}>{t("combat.confirmFlee")}</button>
             </div>
           </div>
         </div>
@@ -740,10 +753,10 @@ export default function CombatScreen() {
       {activeTruce && truceNeedsAck && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,32rem)] rounded-xl border border-sky-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">Trêve</div>
-            <h2 className="mt-2 text-2xl font-bold text-sky-100">Combat en pause</h2>
+            <div className="text-xs uppercase tracking-[0.28em] text-sky-400">{t("combat.truce")}</div>
+            <h2 className="mt-2 text-2xl font-bold text-sky-100">{t("combat.combatPaused")}</h2>
             <p className="mt-3 text-sm leading-6 text-stone-300">
-              Une trêve a été déclarée. Le combat reprendra au prochain tour d&apos;aventure.
+              {t("combat.truceDeclaredDesc")}
             </p>
             <div className="mt-6 flex justify-end">
               <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-5 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void acknowledgeTruce()}>OK</button>
@@ -754,13 +767,13 @@ export default function CombatScreen() {
       {surrenderOfferOpen && myPlayer && surrenderOffer && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,34rem)] rounded-xl border border-emerald-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-emerald-400">Reddition</div>
-            <h2 className="mt-2 text-2xl font-bold text-emerald-100">Proposer une rancon</h2>
-            <p className="mt-2 text-sm text-stone-300">Rançon de base : {surrenderCost} or. Vous pouvez proposer plus, moins, ou ajouter des ressources.</p>
+            <div className="text-xs uppercase tracking-[0.28em] text-emerald-400">{t("combat.surrenderTitle")}</div>
+            <h2 className="mt-2 text-2xl font-bold text-emerald-100">{t("combat.proposeRansom")}</h2>
+            <p className="mt-2 text-sm text-stone-300">{t("combat.ransomBase", { n: surrenderCost })}</p>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {RESOURCE_KEYS.map((key) => (
                 <label key={key} className="text-sm font-bold text-stone-200">
-                  {RESOURCE_LABELS[key]}
+                  {resLabel(key)}
                   <input
                     type="number"
                     min={0}
@@ -772,13 +785,13 @@ export default function CombatScreen() {
                     }}
                     className="mt-1 w-full rounded-md border border-emerald-700/60 bg-black/40 px-3 py-2 text-emerald-50 outline-none focus:border-emerald-300"
                   />
-                  <span className="mt-0.5 block text-[11px] font-normal text-stone-500">Disponible : {myPlayer.resources[key]}</span>
+                  <span className="mt-0.5 block text-[11px] font-normal text-stone-500">{t("combat.available", { n: myPlayer.resources[key] })}</span>
                 </label>
               ))}
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setSurrenderOfferOpen(false)}>Annuler</button>
-              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-2 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitSurrenderOffer()}>Proposer</button>
+              <button type="button" className="rounded-md border border-stone-600 px-4 py-2 font-bold text-stone-200 hover:bg-stone-800" onClick={() => setSurrenderOfferOpen(false)}>{t("common.cancel")}</button>
+              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-2 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitSurrenderOffer()}>{t("combat.propose")}</button>
             </div>
           </div>
         </div>
@@ -786,20 +799,20 @@ export default function CombatScreen() {
       {pendingSurrenderNegotiation && myPlayer?.id === pendingSurrenderNegotiation.targetPlayerId && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 pointer-events-auto">
           <div className="w-[min(92vw,34rem)] rounded-xl border border-amber-700 bg-stone-950 p-6 text-white shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.28em] text-amber-400">Negociation</div>
-            <h2 className="mt-2 text-2xl font-bold text-amber-100">Accepter la reddition ?</h2>
+            <div className="text-xs uppercase tracking-[0.28em] text-amber-400">{t("combat.negotiation")}</div>
+            <h2 className="mt-2 text-2xl font-bold text-amber-100">{t("combat.acceptSurrender")}</h2>
             <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
               {RESOURCE_KEYS.filter((key) => pendingSurrenderNegotiation.offer[key] > 0).map((key) => (
                 <div key={key} className="rounded-md border border-amber-800/60 bg-black/30 px-3 py-2">
-                  <div className="text-stone-400">{RESOURCE_LABELS[key]}</div>
+                  <div className="text-stone-400">{resLabel(key)}</div>
                   <div className="font-black text-amber-100">{pendingSurrenderNegotiation.offer[key]}</div>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-sm text-stone-300">Refus restants avant reddition forcee : {Math.max(0, 3 - pendingSurrenderNegotiation.refusalCount)}</p>
+            <p className="mt-4 text-sm text-stone-300">{t("combat.refusalsLeft", { n: Math.max(0, 3 - pendingSurrenderNegotiation.refusalCount) })}</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-3 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitAction({ type: "ACCEPT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>Accepter</button>
-              <button type="button" className="rounded-md border border-red-400 bg-red-950 px-4 py-3 font-bold text-red-100 hover:bg-red-900" onClick={() => void submitAction({ type: "REJECT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>Refuser</button>
+              <button type="button" className="rounded-md border border-emerald-400 bg-emerald-900 px-4 py-3 font-bold text-emerald-50 hover:bg-emerald-800" onClick={() => void submitAction({ type: "ACCEPT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>{t("combat.accept")}</button>
+              <button type="button" className="rounded-md border border-red-400 bg-red-950 px-4 py-3 font-bold text-red-100 hover:bg-red-900" onClick={() => void submitAction({ type: "REJECT_SURRENDER", negotiationId: pendingSurrenderNegotiation.id })}>{t("combat.reject")}</button>
             </div>
           </div>
         </div>

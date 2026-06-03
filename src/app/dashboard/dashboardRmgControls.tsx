@@ -1,4 +1,5 @@
 import { OBJECT_COLOR, TERRAIN_COLOR } from "@/components/game/map/RmgMapPreview";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function RmgTuningSlider({
   label,
@@ -57,27 +58,28 @@ export function SignOutIcon({ className = "h-5 w-5" }: { className?: string }) {
 }
 
 export function RmgLegend() {
+  const { t } = useI18n();
   const terrainItems = [
-    ["Eau", TERRAIN_COLOR.water],
-    ["Plage", TERRAIN_COLOR.sand],
-    ["Prairie", TERRAIN_COLOR.grass],
-    ["Foret", TERRAIN_COLOR.forest],
-    ["Montagne", TERRAIN_COLOR.mountain],
-    ["Marais", TERRAIN_COLOR.swamp],
-    ["Pont", "#8b5a2b"],
+    [t("rmg.water"), TERRAIN_COLOR.water],
+    [t("rmg.beach"), TERRAIN_COLOR.sand],
+    [t("rmg.grass"), TERRAIN_COLOR.grass],
+    [t("rmg.forest"), TERRAIN_COLOR.forest],
+    [t("rmg.mountain"), TERRAIN_COLOR.mountain],
+    [t("rmg.swamp"), TERRAIN_COLOR.swamp],
+    [t("rmg.bridge"), "#8b5a2b"],
   ];
 
   const objectItems = [
-    ["Ville", OBJECT_COLOR.town],
-    ["Mine", OBJECT_COLOR.building],
-    ["Monstre", OBJECT_COLOR.monster],
-    ["Ressource", OBJECT_COLOR.resource],
-    ["Mur", OBJECT_COLOR.wall],
+    [t("rmg.town"), OBJECT_COLOR.town],
+    [t("rmg.mine"), OBJECT_COLOR.building],
+    [t("rmg.monster"), OBJECT_COLOR.monster],
+    [t("rmg.resource"), OBJECT_COLOR.resource],
+    [t("rmg.wall"), OBJECT_COLOR.wall],
   ];
 
   return (
     <div className="border border-stone-800 bg-stone-900/80 p-3">
-      <h4 className="mb-2 text-sm font-semibold text-amber-100">Légende</h4>
+      <h4 className="mb-2 text-sm font-semibold text-amber-100">{t("rmg.legend")}</h4>
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-1.5">
           {terrainItems.map(([label, color]) => (
@@ -107,18 +109,19 @@ export function RmgLegendItem({ label, color, round = false }: { label: string; 
 }
 
 export function RmgGenerationProgress({ progress, className = "" }: { progress: number; className?: string }) {
+  const { t } = useI18n();
   const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
 
   return (
     <div className={`flex min-h-[260px] min-w-0 items-center justify-center overflow-hidden border border-stone-800 bg-stone-900 p-6 ${className}`}>
       <div className="w-full max-w-sm">
         <div className="mb-3 flex items-end justify-between gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-200/80">G&eacute;n&eacute;ration de la carte</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("rmg.mapGeneration")}</span>
           <span className="font-mono text-sm font-bold text-amber-100">{safeProgress}%</span>
         </div>
         <div
           role="progressbar"
-          aria-label={"Génération de la carte"}
+          aria-label={t("rmg.mapGeneration")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={safeProgress}
@@ -129,7 +132,7 @@ export function RmgGenerationProgress({ progress, className = "" }: { progress: 
             style={{ width: `${safeProgress}%` }}
           />
         </div>
-        <p className="mt-3 text-xs text-stone-400">Assemblage du terrain, des routes et des objectifs...</p>
+        <p className="mt-3 text-xs text-stone-400">{t("rmg.assembling")}</p>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeLocale } from "@/lib/i18n/types";
 
 export async function GET(request: Request) {
   const { user, response } = await requireCurrentUser(request);
@@ -12,6 +13,7 @@ export async function GET(request: Request) {
     name: user.name,
     role: user.role ?? "user",
     mustChangePassword: Boolean(user.mustChangePassword),
+    language: user.language ?? "fr",
   });
 }
 
@@ -21,6 +23,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? user.name ?? user.email ?? "Joueur").trim();
+  const language = normalizeLocale(body.language ?? user.language ?? "fr");
 
   const supabase = createAdminClient();
   const { error } = await supabase
@@ -31,6 +34,7 @@ export async function POST(request: Request) {
       name,
       role: user.role ?? "user",
       must_change_password: Boolean(user.mustChangePassword),
+      language,
     }, { onConflict: "id" });
 
   if (error) {

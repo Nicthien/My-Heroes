@@ -90,6 +90,7 @@ interface AuthSession {
     name?: string | null;
     role?: string;
     mustChangePassword?: boolean;
+    language?: string | null;
   };
 }
 
@@ -108,7 +109,7 @@ export const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<{ name?: string | null; role?: string; mustChangePassword?: boolean } | null>(null);
+  const [profile, setProfile] = useState<{ name?: string | null; role?: string; mustChangePassword?: boolean; language?: string | null } | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
 
   useEffect(() => {
@@ -138,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: data.name ?? null,
             role: data.role ?? "user",
             mustChangePassword: Boolean(data.mustChangePassword),
+            language: data.language ?? null,
           });
         }
       } catch {
@@ -196,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: profile?.name ?? (user.user_metadata?.name as string | undefined) ?? user.email ?? null,
             role: profile?.role ?? "user",
             mustChangePassword: profile?.mustChangePassword ?? false,
+            language: profile?.language ?? null,
           },
         }
       : null,

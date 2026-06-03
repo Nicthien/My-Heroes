@@ -1,4 +1,5 @@
 import type { VictoryCondition, VictoryConditionType } from "./types";
+import type { Locale } from "@/lib/i18n/types";
 
 /**
  * Defaults and helpers for the selectable game victory conditions.
@@ -19,32 +20,52 @@ const VICTORY_TYPES: readonly VictoryConditionType[] = ["DOMINATION", "GOLD", "T
 export interface VictoryConditionMeta {
   type: VictoryConditionType;
   label: string;
-  /** Short French description shown next to the option in the wizard. */
+  labelEn: string;
+  /** Short description shown next to the option in the wizard. */
   description: string;
+  descriptionEn: string;
 }
 
 export const VICTORY_CONDITION_META: Record<VictoryConditionType, VictoryConditionMeta> = {
   DOMINATION: {
     type: "DOMINATION",
     label: "Domination",
+    labelEn: "Domination",
     description: "Soyez le dernier joueur à posséder un héros ou une ville.",
+    descriptionEn: "Be the last player to own a hero or a town.",
   },
   GOLD: {
     type: "GOLD",
     label: "Accumulation d'or",
+    labelEn: "Gold accumulation",
     description: "Soyez le premier à atteindre le seuil d'or fixé.",
+    descriptionEn: "Be the first to reach the set gold threshold.",
   },
   TURN_LIMIT: {
     type: "TURN_LIMIT",
     label: "Limite de tours",
+    labelEn: "Turn limit",
     description: "À la fin du dernier tour, le meilleur score l'emporte.",
+    descriptionEn: "When the final turn ends, the highest score wins.",
   },
   CAPTURE_TOWN: {
     type: "CAPTURE_TOWN",
     label: "Capture d'une ville",
+    labelEn: "Capture a town",
     description: "Capturez la ville cible désignée sur la carte.",
+    descriptionEn: "Capture the designated target town on the map.",
   },
 };
+
+export function victoryConditionLabel(type: VictoryConditionType, locale: Locale): string {
+  const meta = VICTORY_CONDITION_META[type];
+  return locale === "en" ? meta.labelEn : meta.label;
+}
+
+export function victoryConditionDescription(type: VictoryConditionType, locale: Locale): string {
+  const meta = VICTORY_CONDITION_META[type];
+  return locale === "en" ? meta.descriptionEn : meta.description;
+}
 
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
@@ -167,19 +188,25 @@ function highestScoreContenderId(contenders: VictoryContenderSnapshot[]): string
   return bestId;
 }
 
-/** Human-readable French summary of the active condition (lobby, banners). */
-export function describeVictoryCondition(condition: VictoryCondition): string {
+/** Human-readable summary of the active condition (lobby, banners). */
+export function describeVictoryCondition(condition: VictoryCondition, locale: Locale = "fr"): string {
+  const en = locale === "en";
   switch (condition.type) {
-    case "GOLD":
-      return `Atteindre ${(condition.goldTarget ?? DEFAULT_GOLD_TARGET).toLocaleString("fr-FR")} or`;
+    case "GOLD": {
+      const amount = (condition.goldTarget ?? DEFAULT_GOLD_TARGET).toLocaleString(en ? "en-US" : "fr-FR");
+      return en ? `Reach ${amount} gold` : `Atteindre ${amount} or`;
+    }
     case "TURN_LIMIT":
-      return `Meilleur score au tour ${condition.turnLimit ?? DEFAULT_TURN_LIMIT}`;
+      return en
+        ? `Highest score by turn ${condition.turnLimit ?? DEFAULT_TURN_LIMIT}`
+        : `Meilleur score au tour ${condition.turnLimit ?? DEFAULT_TURN_LIMIT}`;
     case "CAPTURE_TOWN":
-      return condition.targetTownName
-        ? `Capturer ${condition.targetTownName}`
-        : "Capturer la ville cible";
+      if (condition.targetTownName) {
+        return en ? `Capture ${condition.targetTownName}` : `Capturer ${condition.targetTownName}`;
+      }
+      return en ? "Capture the target town" : "Capturer la ville cible";
     case "DOMINATION":
     default:
-      return "Dernier joueur en lice";
+      return en ? "Last player standing" : "Dernier joueur en lice";
   }
 }

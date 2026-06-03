@@ -15,11 +15,14 @@ import {
 } from "./theme";
 import ActiveCombatsPanel from "../combat/ActiveCombatsPanel";
 import CollapsiblePanel from "./CollapsiblePanel";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 
 type SidePanelMode = "all" | "heroes" | "towns" | "actions" | "mines" | "combats";
 
 export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
   const { data: session } = useSession();
+  const { t, locale } = useI18n();
   const gameState = useGameStore((s) => s.gameState);
   const selectedHeroId = useGameStore((s) => s.selectedHeroId);
   const selectedTownId = useGameStore((s) => s.selectedTownId);
@@ -43,7 +46,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
   return (
     <div className="pointer-events-auto flex w-full flex-col gap-3">
       {showHeroes && heroes.length > 0 && (
-        <Section title={`Héros (${heroes.length})`}>
+        <Section title={t("side.heroesTitle", { n: heroes.length })}>
           {heroes.map((h) => {
             const active = h.id === selectedHeroId;
             const townAtHero = towns.find((town) =>
@@ -68,15 +71,15 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                   />
                 }
                 title={h.name}
-                subtitle={townAtHero ? `Niveau ${h.level} · Au château` : `Niveau ${h.level}`}
+                subtitle={townAtHero ? t("side.levelAtTown", { level: h.level }) : t("side.level", { level: h.level })}
                 meta={
                   <div className="flex items-center gap-2 text-[10px] text-amber-200/80">
                     {townAtHero && (
                       <button
                         type="button"
                         className="grid h-5 w-5 place-items-center rounded border border-sky-500/40 bg-sky-950/50 text-sky-200 transition hover:border-sky-300/70 hover:bg-sky-900/60 hover:text-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200/80"
-                        title={`Au château : ${townAtHero.name}`}
-                        aria-label={`Sélectionner le château ${townAtHero.name}`}
+                        title={t("side.atTownTitle", { name: townAtHero.name })}
+                        aria-label={t("side.selectTown", { name: townAtHero.name })}
                         onClick={(event) => {
                           event.stopPropagation();
                           selectTown(townAtHero.id);
@@ -96,22 +99,22 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
       )}
 
       {showHeroes && heroes.length === 0 && (
-        <EmptyState>Aucun heros disponible.</EmptyState>
+        <EmptyState>{t("side.noHeroes")}</EmptyState>
       )}
 
       {showTowns && towns.length > 0 && (
-        <Section title={`Châteaux (${towns.length})`}>
-          {towns.map((t) => {
-            const active = t.id === selectedTownId;
-            const factionKey = (t.townType ?? t.faction) as string;
+        <Section title={t("side.townsTitle", { n: towns.length })}>
+          {towns.map((town) => {
+            const active = town.id === selectedTownId;
+            const factionKey = (town.townType ?? town.faction) as string;
             const sprite = MAP_SPRITES.towns[factionKey] ?? MAP_SPRITES.town;
             return (
               <Row
-                key={t.id}
+                key={town.id}
                 active={active}
                 onClick={() => {
-                  selectTown(t.id);
-                  focusTile(t.position.x, t.position.y);
+                  selectTown(town.id);
+                  focusTile(town.position.x, town.position.y);
                 }}
                 left={
                   <div
@@ -123,7 +126,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                   >
                     <Image
                       src={sprite}
-                      alt={t.name}
+                      alt={town.name}
                       width={40}
                       height={40}
                       className="h-auto w-full object-contain"
@@ -132,8 +135,8 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                     />
                   </div>
                 }
-                title={t.name}
-                subtitle={`Niveau ${t.level}`}
+                title={town.name}
+                subtitle={t("side.level", { level: town.level })}
               />
             );
           })}
@@ -141,14 +144,14 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
       )}
 
       {showTowns && towns.length === 0 && (
-        <EmptyState>Aucun chateau disponible.</EmptyState>
+        <EmptyState>{t("side.noTowns")}</EmptyState>
       )}
 
       {showMines && mines.length > 0 && (
-        <Section title={`Mines (${mines.length})`}>
+        <Section title={t("side.minesTitle", { n: mines.length })}>
           {mines.map((m) => {
             const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === m.type);
-            const label = rule?.label ?? m.type;
+            const label = localizedLabelFromId(m.type, rule?.label ?? m.type, locale);
             const prod = rule ? formatResourceProduction(rule.production) : "";
             const sprite = MAP_SPRITES.buildings[m.type];
             return (
@@ -181,7 +184,7 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
       )}
 
       {showMines && mines.length === 0 && (
-        <EmptyState>Aucune mine contrôlée.</EmptyState>
+        <EmptyState>{t("side.noMines")}</EmptyState>
       )}
 
       {showCombats && <ActiveCombatsPanel />}

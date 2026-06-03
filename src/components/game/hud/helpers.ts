@@ -1,5 +1,7 @@
 import { Faction, UnitType } from "@/lib/game/types";
 import { UNIT_RULES, getFactionBuildingRule } from "@/lib/game/economy";
+import type { Locale } from "@/lib/i18n/types";
+import { unitTypeToEnglishLabel } from "@/lib/i18n/gameLabels";
 
 export const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 
@@ -30,7 +32,18 @@ export async function showBrowserNotification(title: string, options: Notificati
   }
 }
 
-export function factionLabel(f: Faction): string {
+export function factionLabel(f: Faction, locale: Locale = "fr"): string {
+  const labelsEn: Record<string, string> = {
+    castle: "Castle",
+    rampart: "Rampart",
+    tower: "Tower",
+    inferno: "Inferno",
+    necropolis: "Necropolis",
+    dungeon: "Dungeon",
+    stronghold: "Stronghold",
+    fortress: "Fortress",
+    conflux: "Conflux",
+  };
   const labels: Record<string, string> = {
     castle: "Château",
     rampart: "Rempart",
@@ -42,14 +55,16 @@ export function factionLabel(f: Faction): string {
     fortress: "Forteresse",
     conflux: "Conflux",
   };
-  return labels[f] || f;
+  return (locale === "en" ? labelsEn[f] : labels[f]) || f;
 }
 
-export function unitTypeLabel(u: string): string {
+export function unitTypeLabel(u: string, locale: Locale = "fr"): string {
+  if (locale === "en") return unitTypeToEnglishLabel(u);
   return UNIT_RULES[u as UnitType]?.label ?? u;
 }
 
-export function buildingTypeLabel(building: string, faction: Faction = Faction.CASTLE): string {
+export function buildingTypeLabel(building: string, faction: Faction = Faction.CASTLE, locale: Locale = "fr"): string {
+  if (locale === "en") return unitTypeToEnglishLabel(building);
   const factionRule = getFactionBuildingRule(faction, building);
   if (factionRule) return factionRule.label;
   const labels: Record<string, string> = {

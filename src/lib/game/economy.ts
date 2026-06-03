@@ -35,6 +35,22 @@ export const RESOURCE_LABELS: Record<keyof Resources, string> = {
   sulfur: "soufre",
 };
 
+export const RESOURCE_LABELS_EN: Record<keyof Resources, string> = {
+  gold: "gold",
+  wood: "wood",
+  ore: "ore",
+  mercury: "mercury",
+  crystals: "crystals",
+  gems: "gems",
+  sulfur: "sulfur",
+};
+
+/** Localized resource name. Defaults to French to keep existing callers intact. */
+export function resourceLabel(resource: string, locale: "fr" | "en" = "fr") {
+  const map = locale === "en" ? RESOURCE_LABELS_EN : RESOURCE_LABELS;
+  return map[resource as keyof Resources] ?? resource;
+}
+
 export const RESOURCE_BUILDING_RULES: ResourceBuildingRule[] = [
   {
     type: ResourceBuildingType.GOLD_MINE,

@@ -2,6 +2,7 @@
 
 import type { Hero, Player, Town } from "@/lib/game/types";
 import { getArtifact } from "@/lib/game/artifacts";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function TownArtifactsTab({
   selectedTown,
@@ -20,13 +21,14 @@ export function TownArtifactsTab({
   heroesAtSelectedTown: Hero[];
   onBuyArtifact: (townId: string, heroId: string, artifactId: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const offer = selectedTown.artifactOffer ?? [];
   const buyer = heroesAtSelectedTown[0];
 
   if (offer.length === 0) {
     return (
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
-        Stock de marchands d&apos;artefacts épuisé. Reviendra à la prochaine reconstruction.
+        {t("artifactsTab.depleted")}
       </div>
     );
   }
@@ -34,7 +36,7 @@ export function TownArtifactsTab({
   if (!buyer) {
     return (
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
-        Aucun héros présent dans le château pour acheter.
+        {t("artifactsTab.noHero")}
       </div>
     );
   }
@@ -42,7 +44,7 @@ export function TownArtifactsTab({
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/70">
-        Héros acheteur : <span className="font-bold text-amber-100">{buyer.name}</span>
+        {t("artifactsTab.buyer", { name: buyer.name })}
       </div>
       {offer.map((artifactId) => {
         const artifact = getArtifact(artifactId);
@@ -56,7 +58,7 @@ export function TownArtifactsTab({
               <div className="min-w-0">
                 <div className="text-sm font-bold text-amber-100">{artifact.name}</div>
                 <div className="text-xs text-amber-200/60 capitalize">{artifact.class}</div>
-                <div className="mt-1 text-xs text-amber-300">{price} or</div>
+                <div className="mt-1 text-xs text-amber-300">{t("tavern.goldCost", { n: price })}</div>
               </div>
               <button
                 type="button"
@@ -68,7 +70,7 @@ export function TownArtifactsTab({
                     : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 hover:from-amber-500 hover:to-amber-700"
                 }`}
               >
-                Acheter
+                {t("ballista.buy")}
               </button>
             </div>
           </div>

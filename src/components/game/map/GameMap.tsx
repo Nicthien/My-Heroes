@@ -7,7 +7,7 @@ import { GameState, Position, UnitStack, UnitType } from "@/lib/game/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL, normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
-import { RESOURCE_BUILDING_RULES, formatResourceName, formatResourceProduction } from "@/lib/game/economy";
+import { RESOURCE_BUILDING_RULES, formatResourceProduction } from "@/lib/game/economy";
 import { UNIT_RULES } from "@/lib/game/economy";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
@@ -34,6 +34,18 @@ import {
   setMapContainerCursor,
 } from "./gameMapCursors";
 import { buildObjects } from "./gameMapObjects";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import { resourceLabel } from "@/lib/game/economy";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+function localizedBuildingName(buildingType: string | undefined, locale: Locale, t: TFn): string {
+  const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === buildingType);
+  return rule ? localizedLabelFromId(rule.type, rule.label, locale) : t("map.buildingFallback");
+}
 
 const REACHABLE_TILE_COLOR = 0x2f80ff;
 const REACHABLE_TILE_ALPHA = 0.34;
@@ -163,6 +175,15 @@ export default function GameMapComponent() {
   const setPendingAdventureSpell = useGameStore((state) => state.setPendingAdventureSpell);
   const spellRevealHighlight = useGameStore((state) => state.spellRevealHighlight);
   const setSpellRevealHighlight = useGameStore((state) => state.setSpellRevealHighlight);
+  const { t, locale } = useI18n();
+  // Stable refs so the many useCallback handlers below can translate without
+  // adding `t`/`locale` to every dependency array.
+  const tRef = useRef(t);
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    tRef.current = t;
+    localeRef.current = locale;
+  }, [t, locale]);
   const activeCombatHeroIds = useMemo(
     () => getActiveCombatHeroIds(gameState?.activeCombats),
     [gameState?.activeCombats]
@@ -236,16 +257,16 @@ export default function GameMapComponent() {
       }
     };
 
-    updateRendererLoading(78, "Preparation du moteur de rendu...");
+    updateRendererLoading(78, tRef.current("map.prepEngine"));
     rendererLoadingTimer = window.setInterval(() => {
       optimisticProgress = Math.min(87, optimisticProgress + 1);
       updateRendererLoading(
         optimisticProgress,
         optimisticProgress < 82
-          ? "Chargement du moteur graphique..."
+          ? tRef.current("map.loadEngine")
           : optimisticProgress < 86
-            ? "Chargement des graphismes..."
-            : "Finalisation du rendu..."
+            ? tRef.current("map.loadGraphics")
+            : tRef.current("map.finalizeRender")
       );
       if (optimisticProgress >= 87) stopRendererLoadingTimer();
     }, 700);
@@ -258,7 +279,7 @@ export default function GameMapComponent() {
       }
 
       rendererRef.current = renderer;
-      updateRendererLoading(82, "Moteur graphique charge...");
+      updateRendererLoading(82, tRef.current("map.engineLoaded"));
 
       await renderer.init(container, updateRendererLoading);
       stopRendererLoadingTimer();
@@ -270,7 +291,7 @@ export default function GameMapComponent() {
 
       const currentLoadingState = useGameStore.getState();
       if (currentLoadingState.isLoading) {
-        currentLoadingState.updateLoadingProgress(90, "Affichage de la carte...");
+        currentLoadingState.updateLoadingProgress(90, tRef.current("map.displayMap"));
       }
 
       setRendererReadyVersion((version) => version + 1);
@@ -308,7 +329,7 @@ export default function GameMapComponent() {
 
       const currentLoadingState = useGameStore.getState();
       if (currentLoadingState.isLoading && completedLoadingNonceRef.current < currentLoadingState.loadingNonce) {
-        currentLoadingState.updateLoadingProgress(88, "Mise à jour de la carte...");
+        currentLoadingState.updateLoadingProgress(88, tRef.current("map.updateMap"));
       }
 
       const reportMapLoading = (progress: number, message: string) => {
@@ -750,29 +771,31 @@ export default function GameMapComponent() {
     if (interaction.type === "COLLECT") {
       const amount = getCollectInteractionAmount(interaction);
       const msg = interaction.resource === "gold"
-        ? `+${amount} Or trouve !`
-        : `+${amount} ${formatResourceName(interaction.resource)} collecté(e) !`;
+        ? tRef.current("map.goldFound", { amount })
+        : tRef.current("map.collected", { amount, res: resourceLabel(interaction.resource, localeRef.current) });
       setCombatMessage(msg);
       return true;
     }
 
     if (interaction.type === "ARTIFACT") {
-      setCombatMessage(`${interaction.label} recupere.`);
+      setCombatMessage(tRef.current("map.artifactCollected", { label: interaction.label }));
       return true;
     }
 
     if (interaction.type === "CAPTURE_BUILDING") {
-      setCombatMessage(`Bâtiment capture : ${RESOURCE_BUILDING_RULES.find((rule) => rule.type === interaction.buildingType)?.label ?? "Bâtiment"}.`);
+      const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === interaction.buildingType);
+      const name = rule ? localizedLabelFromId(rule.type, rule.label, localeRef.current) : tRef.current("map.buildingFallback");
+      setCombatMessage(tRef.current("map.buildingCaptured", { name }));
       return true;
     }
 
     if (interaction.type === "CAPTURE_TOWN") {
-      setCombatMessage("Chateau capture.");
+      setCombatMessage(tRef.current("map.townCaptured"));
       return true;
     }
 
     if (interaction.type === "CAPTURE_GATE") {
-      setCombatMessage("Porte controlee.");
+      setCombatMessage(tRef.current("map.gateControlled"));
       setSelectedGateId(interaction.gateId);
       return true;
     }
@@ -794,12 +817,13 @@ export default function GameMapComponent() {
       }
       if (interaction.recruited) {
         const rule = UNIT_RULES[interaction.recruited.unitType];
-        setCombatMessage(interaction.message ?? `${interaction.recruited.count} ${rule?.label ?? "creature(s)"} recruté(e)s.`);
+        const label = rule ? localizedLabelFromId(interaction.recruited.unitType, rule.label, localeRef.current) : tRef.current("map.creatureFallback");
+        setCombatMessage(interaction.message ?? tRef.current("map.recruited", { count: interaction.recruited.count, label }));
       } else if (interaction.reward) {
         const parts = [];
-        if (interaction.reward.gold) parts.push(`+${interaction.reward.gold} Or`);
+        if (interaction.reward.gold) parts.push(tRef.current("map.plusGold", { n: interaction.reward.gold }));
         for (const [resource, amount] of Object.entries(interaction.reward.resources ?? {})) {
-          parts.push(`+${amount} ${formatResourceName(resource)}`);
+          parts.push(tRef.current("map.plusResource", { n: amount, res: resourceLabel(resource, localeRef.current) }));
         }
         setCombatMessage(parts.length > 0 ? parts.join(", ") : interaction.message ?? getAdventureBuildingLabel(interaction.buildingType));
       } else {
@@ -809,14 +833,14 @@ export default function GameMapComponent() {
     }
 
     if (interaction.type === "TELEPORT") {
-      setCombatMessage(interaction.message ?? "Teleportation effectuee.");
+      setCombatMessage(interaction.message ?? tRef.current("map.teleported"));
       setActiveMapLevel(normalizeMapLevel(interaction.to.level));
       renderedMapRef.current = null;
       rendererRef.current?.centerOnTile(interaction.to.x, interaction.to.y);
       return true;
     }
 
-    setCombatMessage(interaction.message ?? "Action effectuee.");
+    setCombatMessage(interaction.message ?? tRef.current("map.actionDone"));
     return true;
   }, [setActiveMapLevel, setCombatMessage, setPendingCombat]);
 
@@ -929,8 +953,8 @@ export default function GameMapComponent() {
       myPlayer && gameState.status === "ACTIVE" && myPlayer.isAlive && !myPlayer.hasEndedTurn
     );
     const blockedTurnMessage = myPlayer?.hasEndedTurn
-      ? "Vous avez déjà terminé votre tour."
-      : "Vous ne pouvez pas jouer pour le moment.";
+      ? tRef.current("map.alreadyEndedTurn")
+      : tRef.current("map.cannotPlayNow");
 
     const tile = rendererRef.current.getTileAtScreen(screenX, screenY);
     const mapForAction = activeMap ?? gameState.map;
@@ -945,7 +969,7 @@ export default function GameMapComponent() {
     if (devTeleportArmed) {
       if (!tile) return;
       if (!selectedHeroId) {
-        setCombatMessage("Sélectionnez un héros avant de le téléporter.");
+        setCombatMessage(tRef.current("map.selectHeroToTeleport"));
         useGameStore.getState().setDevTeleportArmed(false);
         return;
       }
@@ -975,7 +999,7 @@ export default function GameMapComponent() {
         .then((state) => {
           if (state) {
             useGameStore.getState().setGameState(state);
-            setCombatMessage("Héros téléporté.");
+            setCombatMessage(tRef.current("map.heroTeleported"));
           }
         })
         .finally(() => {
@@ -989,7 +1013,7 @@ export default function GameMapComponent() {
       ? myPlayer?.heroes.find((hero) => hero.id === selectedHeroId)
       : null;
     if (selectedHeroForLayer && normalizeMapLevel(selectedHeroForLayer.position.level) !== activeMapLevel) {
-      setCombatMessage(activeMapLevel === UNDERGROUND_LEVEL ? "Ce héros est à la surface." : "Ce héros est dans le souterrain.");
+      setCombatMessage(activeMapLevel === UNDERGROUND_LEVEL ? tRef.current("map.heroAtSurface") : tRef.current("map.heroUnderground"));
       return;
     }
 
@@ -998,7 +1022,7 @@ export default function GameMapComponent() {
       const hero = myPlayer?.heroes.find((item) => item.id === pendingAdventureSpell.heroId);
       if (!hero) {
         setPendingAdventureSpell(null);
-        setCombatMessage("Héros lanceur indisponible.");
+        setCombatMessage(tRef.current("map.casterUnavailable"));
         return;
       }
       if (!canAct) {
@@ -1007,7 +1031,7 @@ export default function GameMapComponent() {
       }
       if (activeCombatHeroIds.has(hero.id)) {
         setPendingAdventureSpell(null);
-        setCombatMessage("Ce héros est déjà engagé dans un combat.");
+        setCombatMessage(tRef.current("map.heroInCombat"));
         return;
       }
 
@@ -1068,7 +1092,7 @@ export default function GameMapComponent() {
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         renderer.clearHighlights();
-        setCombatMessage("Ce héros est déjà engagé dans un combat.");
+        setCombatMessage(tRef.current("map.heroInCombat"));
         return "handled";
       }
       if (destination.x === heroSrc.position.x && destination.y === heroSrc.position.y) {
@@ -1219,7 +1243,7 @@ export default function GameMapComponent() {
       pendingMoveRef.current = null;
       pendingAttackRef.current = null;
       rendererRef.current?.clearHighlights();
-      setCombatMessage("Ce héros est déjà engagé dans un combat.");
+      setCombatMessage(tRef.current("map.heroInCombat"));
       return true;
     };
 
@@ -1367,7 +1391,7 @@ export default function GameMapComponent() {
             if (getCombatHeroIds(combat).has(hero.id)) {
               if (isCombatOpenable) setActiveCombat(combat);
             } else {
-              setCombatMessage("Ce héros est déjà engagé dans un combat.");
+              setCombatMessage(tRef.current("map.heroInCombat"));
             }
             return;
           }
@@ -1387,7 +1411,7 @@ export default function GameMapComponent() {
             pendingAttackRef.current = { heroId: selectedHeroId, targetId: combat.id, destination, path };
             rendererRef.current.highlightPath(path);
             rendererRef.current.highlightTile(destination.x, destination.y, 0xffa500);
-            setCombatMessage("Cliquez à nouveau pour rejoindre ce combat.");
+            setCombatMessage(tRef.current("map.clickAgainJoinCombat"));
             return;
           }
           if (!canAct) {
@@ -1412,7 +1436,7 @@ export default function GameMapComponent() {
         if (isCombatOpenable) {
           setActiveCombat(combat);
         } else {
-          setCombatMessage("Sélectionnez un héros pour rejoindre ce combat.");
+          setCombatMessage(tRef.current("map.selectHeroJoinCombat"));
         }
         return;
       }
@@ -1540,7 +1564,7 @@ export default function GameMapComponent() {
           };
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
-          setCombatMessage("Cliquez à nouveau pour capturer ce château.");
+          setCombatMessage(tRef.current("map.clickAgainCaptureTown"));
           return;
         }
 
@@ -1605,7 +1629,7 @@ export default function GameMapComponent() {
               useGameStore.getState().selectTown(obj.id);
             });
 
-            useGameStore.getState().setCombatMessage("Château capturé.");
+            useGameStore.getState().setCombatMessage(tRef.current("map.townCaptured"));
           });
         return;
       }
@@ -1620,7 +1644,7 @@ export default function GameMapComponent() {
           pendingMoveRef.current = null;
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
-          setCombatMessage("Ce héros est déjà dans ce château.");
+          setCombatMessage(tRef.current("map.heroAlreadyInTown"));
           return;
         }
 
@@ -1648,7 +1672,7 @@ export default function GameMapComponent() {
           };
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x32d583);
-          setCombatMessage("Cliquez à nouveau pour entrer dans ce château.");
+          setCombatMessage(tRef.current("map.clickAgainEnterTown"));
           return;
         }
 
@@ -1690,7 +1714,7 @@ export default function GameMapComponent() {
               pendingMoveRef.current = null;
               rendererRef.current?.clearHighlights();
             }
-            setCombatMessage("Héros entré dans le château.");
+            setCombatMessage(tRef.current("map.heroEnteredTown"));
 
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {
@@ -1770,8 +1794,8 @@ export default function GameMapComponent() {
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x00ff00);
           const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
-          const label = buildingRule?.label ?? obj.name ?? "Bâtiment";
-          setCombatMessage(`Cliquez à nouveau pour capturer : ${label}${obj.playerId ? " (ennemi)" : ""}`);
+          const label = buildingRule ? localizedLabelFromId(buildingRule.type, buildingRule.label, localeRef.current) : obj.name ?? tRef.current("map.buildingFallback");
+          setCombatMessage(tRef.current("map.clickAgainCapture", { label, enemy: obj.playerId ? tRef.current("map.enemySuffix") : "" }));
           return;
         }
 
@@ -1796,8 +1820,8 @@ export default function GameMapComponent() {
               if (s) useGameStore.getState().setGameState(s);
             });
             setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
-              ? `Bâtiment capturé : ${RESOURCE_BUILDING_RULES.find((r) => r.type === data.interaction.buildingType)?.label ?? "Bâtiment"}.`
-              : "Bâtiment capturé.");
+              ? tRef.current("map.buildingCaptured", { name: localizedBuildingName(data.interaction.buildingType, localeRef.current, tRef.current) })
+              : tRef.current("map.buildingCapturedGeneric"));
           });
         return;
       }
@@ -1828,7 +1852,7 @@ export default function GameMapComponent() {
           rendererRef.current.highlightPath(path);
           rendererRef.current.highlightTile(destination.x, destination.y, 0x22d3ee);
           if (!obj.visited) {
-            setCombatMessage(`Cliquez à nouveau pour visiter : ${obj.name || getAdventureBuildingLabel(obj.buildingType)}`);
+            setCombatMessage(tRef.current("map.clickAgainVisit", { label: obj.name || localizedLabelFromId(obj.buildingType ?? "", getAdventureBuildingLabel(obj.buildingType), localeRef.current) }));
           }
           return;
         }
@@ -2036,7 +2060,7 @@ export default function GameMapComponent() {
             });
             return;
           }
-          if (garrisonCount > 0) setCombatMessage(`Porte gardée : ${garrisonCount} unité(s).`);
+          if (garrisonCount > 0) setCombatMessage(tRef.current("map.gateGuarded", { count: garrisonCount }));
         }
       } else if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
         pendingMoveRef.current = null;
@@ -2053,9 +2077,9 @@ export default function GameMapComponent() {
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
         const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === obj.buildingType);
-        const label = buildingRule ? buildingRule.label : obj.name || "Bâtiment";
-        const ownerStr = obj.playerId ? (obj.playerId === myPlayer?.id ? " (vous)" : " (ennemi)") : " (neutre)";
-        setCombatMessage(`${label}${ownerStr} — Production hebdomadaire: ${buildingRule ? formatResourceProduction(buildingRule.production) : "aucune"}`);
+        const label = buildingRule ? localizedLabelFromId(buildingRule.type, buildingRule.label, localeRef.current) : obj.name || tRef.current("map.buildingFallback");
+        const ownerStr = obj.playerId ? (obj.playerId === myPlayer?.id ? tRef.current("map.ownerYou") : tRef.current("map.enemySuffix")) : tRef.current("map.ownerNeutral");
+        setCombatMessage(tRef.current("map.buildingProduction", { label, owner: ownerStr, production: buildingRule ? formatResourceProduction(buildingRule.production) : tRef.current("map.productionNone") }));
       }
       return;
     }
@@ -2104,7 +2128,7 @@ export default function GameMapComponent() {
           targetTile?.object?.type === "wall"
             ? "Passage bloque par un mur."
             : targetTile?.object?.type === "town_footprint"
-            ? "La porte du château se trouve au sud."
+            ? tRef.current("map.gateToSouth")
             : "Terrain infranchissable."
         );
         setTimeout(() => rendererRef.current?.clearHighlights(), 650);
@@ -2264,7 +2288,7 @@ export default function GameMapComponent() {
               rendererRef.current.highlightPath(path);
               rendererRef.current.highlightTile(tile.x, tile.y, 0x00ff00);
               const buildingRule = RESOURCE_BUILDING_RULES.find((r) => r.type === targetTile.object!.subtype);
-              setCombatMessage(`Cliquez à nouveau pour capturer : ${buildingRule?.label ?? "Bâtiment"}`);
+              setCombatMessage(tRef.current("map.clickAgainCapture", { label: buildingRule ? localizedLabelFromId(buildingRule.type, buildingRule.label, localeRef.current) : tRef.current("map.buildingFallback"), enemy: "" }));
               return;
             }
 
@@ -2284,7 +2308,7 @@ export default function GameMapComponent() {
                 if (!response.ok) {
                   const data = await response.json().catch(() => ({}));
                   setCombatMessage(data.interaction?.resource === "defeat"
-                    ? "Défaite... Les gardiens ont vaincu votre héros."
+                    ? tRef.current("map.defeatGuardians")
                     : data.error || "Capture impossible.");
                   return null;
                 }
@@ -2298,8 +2322,8 @@ export default function GameMapComponent() {
                   if (state) useGameStore.getState().setGameState(state);
                 });
                 setCombatMessage(data.interaction?.type === "CAPTURE_BUILDING"
-                  ? `Bâtiment capturé : ${RESOURCE_BUILDING_RULES.find((r) => r.type === data.interaction.buildingType)?.label ?? "Bâtiment"}.`
-                  : "Bâtiment capturé.");
+                  ? tRef.current("map.buildingCaptured", { name: localizedBuildingName(data.interaction.buildingType, localeRef.current, tRef.current) })
+                  : tRef.current("map.buildingCapturedGeneric"));
               });
             return;
           }
@@ -2373,14 +2397,14 @@ export default function GameMapComponent() {
             if (!handledInteraction && data.interaction?.type === "COLLECT") {
               const r = data.interaction.resource;
               const msg = r === "gold"
-                ? `+${data.interaction.gold} Or trouvé !`
-                : `+${r === "wood" || r === "ore" ? 2 : 1} ${formatResourceName(r)} collecté(e) !`;
+                ? tRef.current("map.goldFound", { amount: data.interaction.gold })
+                : tRef.current("map.collected", { amount: r === "wood" || r === "ore" ? 2 : 1, res: resourceLabel(r, localeRef.current) });
               useGameStore.getState().setCombatMessage(msg);
             } else if (data.interaction?.type === "FIGHT") {
               if (data.interaction.resource === "victory") {
                 useGameStore.getState().setCombatMessage(`Victoire ! Monstre vaincu (+${data.interaction.gold} XP).`);
               } else {
-                useGameStore.getState().setCombatMessage("Défaite... Votre héros a péri contre le monstre.");
+                useGameStore.getState().setCombatMessage(tRef.current("map.defeatMonster"));
               }
             }
           })
@@ -2495,6 +2519,7 @@ function GateGarrisonModal({
   onClose: () => void;
   onMessage: (message: string | null) => void;
 }) {
+  const { t, locale } = useI18n();
   const [pending, setPending] = useState(false);
   const [transferDialog, setTransferDialog] = useState<{
     type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON";
@@ -2518,9 +2543,9 @@ function GateGarrisonModal({
   const activeTransferMax = activeTransferStack?.count ?? 0;
   const activeTransferCount = Math.min(Math.max(1, transferDialog?.count ?? 1), Math.max(1, activeTransferMax));
   const activeTransferLabel = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO"
-    ? hero ? `Vers : ${hero.name}` : "Vers : héros"
-    : "Vers : garnison";
-  const activeTransferAction = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO" ? "Reprendre" : "Déposer";
+    ? hero ? t("map.transferToHero", { name: hero.name }) : t("map.transferToHeroFallback")
+    : t("hud.towardGarrison");
+  const activeTransferAction = transferDialog?.type === "TRANSFER_GATE_GARRISON_TO_HERO" ? t("map.takeBack") : t("hud.deposit");
 
   const openTransferDialog = (
     type: "TRANSFER_GATE_GARRISON_TO_HERO" | "TRANSFER_HERO_TO_GATE_GARRISON",
@@ -2564,41 +2589,43 @@ function GateGarrisonModal({
       <div className="w-[min(92vw,42rem)] rounded-xl border border-amber-600 bg-stone-950 p-5 text-amber-100 shadow-2xl shadow-black">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-400/80">Porte fortifiée</div>
-            <h2 className="mt-1 text-xl font-black text-amber-100">Garnison de passage</h2>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-400/80">{t("map.gateFortified")}</div>
+            <h2 className="mt-1 text-xl font-black text-amber-100">{t("map.gatePassageGarrison")}</h2>
           </div>
           <button type="button" className="rounded-md border border-stone-600 px-3 py-1 text-sm text-stone-200 hover:bg-stone-800" onClick={onClose}>
-            Fermer
+            {t("common.close")}
           </button>
         </div>
 
         {!isOwned && (
           <div className="mt-4 rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
-            Cette porte ne vous appartient pas.
+            {t("map.gateNotYours")}
           </div>
         )}
         {isOwned && !hero && (
           <div className="mt-4 rounded-md border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
-            Placez un héros allié adjacent à la porte pour modifier la garnison.
+            {t("map.placeHeroAdjacent")}
           </div>
         )}
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <GateStackList
-            title="Dans la porte"
-            empty="Aucune unité en garnison."
+            title={t("map.inGate")}
+            empty={t("garrison.empty")}
             stacks={gate.garrison}
-            actionLabel="Reprendre"
+            actionLabel={t("map.takeBack")}
             disabled={!isOwned || !hero || pending}
             onTransfer={(unit) => openTransferDialog("TRANSFER_GATE_GARRISON_TO_HERO", unit)}
+            locale={locale}
           />
           <GateStackList
-            title={hero ? `Avec ${hero.name}` : "Héros adjacent"}
-            empty="Aucune unité disponible."
+            title={hero ? t("map.withHeroTitle", { name: hero.name }) : t("map.heroAdjacent")}
+            empty={t("map.noUnitsAvailable")}
             stacks={hero?.armies ?? []}
-            actionLabel="Deposer"
+            actionLabel={t("hud.deposit")}
             disabled={!isOwned || !hero || pending}
             onTransfer={(unit) => openTransferDialog("TRANSFER_HERO_TO_GATE_GARRISON", unit)}
+            locale={locale}
           />
         </div>
 
@@ -2612,8 +2639,8 @@ function GateGarrisonModal({
           }}
         >
           <div className="mb-3 flex items-center justify-between gap-3 text-base font-black">
-            <span className="text-amber-100">Nombre</span>
-            <span className="text-yellow-300">Max {activeTransferMax}</span>
+            <span className="text-amber-100">{t("map.count")}</span>
+            <span className="text-yellow-300">{t("map.maxN", { n: activeTransferMax })}</span>
           </div>
           <input
             type="number"
@@ -2640,7 +2667,7 @@ function GateGarrisonModal({
               onClick={() => setTransferDialog(null)}
               disabled={pending}
             >
-              Annuler
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -2663,6 +2690,7 @@ function GateStackList({
   actionLabel,
   disabled,
   onTransfer,
+  locale,
 }: {
   title: string;
   empty: string;
@@ -2670,7 +2698,9 @@ function GateStackList({
   actionLabel: string;
   disabled: boolean;
   onTransfer: (unit: UnitStack) => void;
+  locale: Locale;
 }) {
+  const { t } = useI18n();
   return (
     <section className="rounded-lg border border-amber-700/40 bg-black/35 p-3">
       <div className="text-[11px] font-black uppercase tracking-wider text-amber-300/80">{title}</div>
@@ -2681,8 +2711,8 @@ function GateStackList({
           {stacks.map((unit) => (
             <div key={unit.id} className="flex items-center justify-between gap-3 rounded-md border border-stone-700 bg-stone-900/80 px-3 py-2">
               <div className="min-w-0">
-                <div className="truncate text-sm font-bold text-amber-100">{UNIT_RULES[unit.unitType as UnitType]?.label ?? unit.unitType}</div>
-                <div className="text-xs text-amber-200/60">{unit.count} unité(s)</div>
+                <div className="truncate text-sm font-bold text-amber-100">{localizedLabelFromId(unit.unitType, UNIT_RULES[unit.unitType as UnitType]?.label ?? unit.unitType, locale)}</div>
+                <div className="text-xs text-amber-200/60">{t("map.unitsCount", { n: unit.count })}</div>
               </div>
               <button
                 type="button"

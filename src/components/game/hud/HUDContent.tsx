@@ -27,6 +27,8 @@ import {
   type TownTab,
 } from "./icons";
 import { ResourceBar, combatInvolvesPlayer } from "./topBar";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import {
   factionLabel,
   getApiErrorMessage,
@@ -75,6 +77,7 @@ import {
 export function HUDContent() {
   const router = useRouter();
   const { data: session } = useSession();
+  const { t, locale } = useI18n();
   const [mobileDrawer, setMobileDrawer] = useState<"heroes" | "towns" | "map" | "players" | "actions" | null>(null);
   const [mobileActionsTab, setMobileActionsTab] = useState<"mines" | "combats" | "journal">("mines");
   const [townTabState, setTownTabState] = useState<{ townId: string | null; tab: TownTab }>({
@@ -200,7 +203,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Impossible de finir le tour."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.endTurnFailed")));
       return;
     }
 
@@ -217,7 +220,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Impossible d'annuler la fin du tour."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.cancelEndTurnFailed")));
       return;
     }
 
@@ -239,7 +242,7 @@ export function HUDContent() {
         useGameStore.getState().setGameState(refreshedState);
         return;
       }
-      setCombatMessage(await getApiErrorMessage(response, "Impossible de demarrer la partie."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.startGameFailed")));
       return;
     }
 
@@ -260,7 +263,7 @@ export function HUDContent() {
       building === BuildingType.CAPITOL &&
       myPlayer.towns.some((town) => town.id !== selectedTown.id && town.buildings.includes(BuildingType.CAPITOL))
     ) {
-      setCombatMessage("Un seul Capitole est autorisé par joueur.");
+      setCombatMessage(t("hud.oneCapitol"));
       return;
     }
 
@@ -271,7 +274,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Construction impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.buildFailed")));
       return;
     }
 
@@ -312,7 +315,7 @@ export function HUDContent() {
   const handleBuildBoat = async () => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
     if (myPlayer.resources.gold < 1000 || myPlayer.resources.wood < 10) {
-      setCombatMessage("Ressources insuffisantes pour construire un bateau.");
+      setCombatMessage(t("hud.boatResourcesInsufficient"));
       return;
     }
 
@@ -323,23 +326,23 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Construction du bateau impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.boatBuildFailed")));
       return;
     }
 
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
-    setCombatMessage("Bateau construit.");
+    setCombatMessage(t("hud.boatBuilt"));
   };
 
   const handleRecruitHero = async (templateId: string) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
     if (myPlayer.resources.gold < HERO_RECRUIT_COST_GOLD) {
-      setCombatMessage("Or insuffisant pour engager un héros.");
+      setCombatMessage(t("hud.goldInsufficientHero"));
       return;
     }
     if (myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER) {
-      setCombatMessage(`Maximum ${MAX_HEROES_PER_PLAYER} héros atteint.`);
+      setCombatMessage(t("hud.maxHeroes", { n: MAX_HEROES_PER_PLAYER }));
       return;
     }
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
@@ -354,7 +357,7 @@ export function HUDContent() {
       }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Recrutement de héros impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.heroRecruitFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -369,7 +372,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "EXCHANGE_RESOURCES", townId, from, to, amount }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Échange impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.exchangeFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -384,7 +387,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "BUY_TOWN_ARTIFACT", townId, heroId, artifactId }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Achat d'artefact impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.artifactBuyFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -399,7 +402,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "SELL_CREATURES", townId, unitType, count }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Vente impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.sellFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -414,7 +417,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "LEARN_MAGIC_SCHOOL", townId, heroId, school }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Apprentissage impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.learnFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -429,7 +432,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "BUY_WAR_MACHINE", townId, heroId, machine }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Achat impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.buyFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -444,7 +447,7 @@ export function HUDContent() {
       body: JSON.stringify({ type: "CASTLE_GATE_TRANSFER", fromTownId, toTownId, unitType, count }),
     });
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
       return;
     }
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -463,7 +466,7 @@ export function HUDContent() {
       getMaxRecruitCount(myPlayer.resources, rule.cost, available)
     );
     if (recruitCount <= 0) {
-      setCombatMessage("Ressources ou recrues insuffisantes.");
+      setCombatMessage(t("hud.resourcesOrRecruitsInsufficient"));
       return;
     }
 
@@ -482,7 +485,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Recrutement impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.recruitFailed")));
       return;
     }
 
@@ -532,7 +535,7 @@ export function HUDContent() {
       getMaxRecruitCount(myPlayer.resources, upgradeCost, source?.count ?? 0)
     );
     if (upgradeCount <= 0) {
-      setCombatMessage("Ressources ou troupes insuffisantes.");
+      setCombatMessage(t("hud.resourcesOrTroopsInsufficient"));
       return;
     }
 
@@ -552,7 +555,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Amelioration impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.upgradeFailed")));
       return;
     }
 
@@ -621,7 +624,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
       return;
     }
 
@@ -676,7 +679,7 @@ export function HUDContent() {
     });
 
     if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, "Transfert impossible."));
+      setCombatMessage(await getApiErrorMessage(response, t("hud.transferFailed")));
       return;
     }
 
@@ -785,30 +788,30 @@ export function HUDContent() {
     Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_3));
 
   const townTabs: { id: TownTab; label: string; badge?: number }[] = [
-    { id: "summary", label: "Résumé" },
-    { id: "build", label: "Construire", badge: buildableBuildings },
-    { id: "recruit", label: "Recruter", badge: recruitableUnits },
-    { id: "garrison", label: "Garnison", badge: selectedTown?.garrison.length },
+    { id: "summary", label: t("town.tabSummary") },
+    { id: "build", label: t("build.build"), badge: buildableBuildings },
+    { id: "recruit", label: t("recruit.recruit"), badge: recruitableUnits },
+    { id: "garrison", label: t("town.tabGarrison"), badge: selectedTown?.garrison.length },
     ...(selectedTown?.buildings.includes(BuildingType.TAVERN)
-      ? [{ id: "tavern" as const, label: "Taverne", badge: (selectedTown.tavernOffer?.length ?? 0) + (myPlayer?.tavernHeroes?.length ?? 0) }]
+      ? [{ id: "tavern" as const, label: t("town.tabTavern"), badge: (selectedTown.tavernOffer?.length ?? 0) + (myPlayer?.tavernHeroes?.length ?? 0) }]
       : []),
     ...(selectedTown?.buildings.includes(BuildingType.MARKET)
-      ? [{ id: "market" as const, label: "Marché" }]
+      ? [{ id: "market" as const, label: t("town.tabMarket") }]
       : []),
     ...(hasArtifactMerchant
-      ? [{ id: "artifacts" as const, label: "Artefacts", badge: selectedTown?.artifactOffer?.length ?? 0 }]
+      ? [{ id: "artifacts" as const, label: t("hero.tabArtifacts"), badge: selectedTown?.artifactOffer?.length ?? 0 }]
       : []),
     ...(hasMercenaryGuild
-      ? [{ id: "mercenary" as const, label: "Francs-tireurs" }]
+      ? [{ id: "mercenary" as const, label: t("town.tabMercenary") }]
       : []),
     ...(hasCastleGate
-      ? [{ id: "gate" as const, label: "Porte du château" }]
+      ? [{ id: "gate" as const, label: t("town.tabGate") }]
       : []),
     ...(hasMageUniversity
-      ? [{ id: "university" as const, label: "Université de magie" }]
+      ? [{ id: "university" as const, label: t("town.tabUniversity") }]
       : []),
     ...(hasBallistaYard
-      ? [{ id: "ballista" as const, label: "Cour des balistes" }]
+      ? [{ id: "ballista" as const, label: t("town.tabBallista") }]
       : []),
   ];
   const activeTownTab = townTabState.townId === selectedTownId ? townTabState.tab : "summary";
@@ -852,7 +855,7 @@ export function HUDContent() {
     if (!baseEntry || !upgradedEntry || !selectedTown.buildings.includes(upgradedEntry.dwelling)) return null;
     const upgradeCost = getUpgradeCost(baseEntry.rule.cost, upgradedEntry.rule.cost);
     return {
-      label: upgradedEntry.rule.label,
+      label: localizedUnitLabel(upgradedEntry.rule.type, upgradedEntry.rule.label, locale),
       max: getMaxRecruitCount(myPlayer.resources, upgradeCost, available),
     };
   };
@@ -929,7 +932,7 @@ export function HUDContent() {
           <div className="flex min-w-0 items-center gap-3 justify-self-start text-left">
             <button
               type="button"
-              aria-label="Mode DEV"
+              aria-label={t("hud.devMode")}
               className="grid h-7 w-7 shrink-0 place-items-center text-amber-400 drop-shadow outline-none transition hover:text-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/70"
               onDoubleClick={devPanel.openPassword}
             >
@@ -954,7 +957,7 @@ export function HUDContent() {
             {isPending && (
               <span className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-amber-400/50 bg-gradient-to-b from-amber-900/60 to-stone-950/80 px-5 py-2 text-sm font-black uppercase tracking-widest text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]">
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
-                En attente
+                {t("hud.waiting")}
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
               </span>
             )}
@@ -968,7 +971,7 @@ export function HUDContent() {
                     : "border-red-400/40 bg-gradient-to-b from-red-900/60 to-red-950 text-red-100"
                 }`}
               >
-                {myPlayer?.isAlive === false ? "Défaite" : canAct ? "À vous" : isWaitingForPlayers ? "Tour terminé" : "Observation"}
+                {myPlayer?.isAlive === false ? t("gameover.defeat") : canAct ? t("hud.statusYourTurn") : isWaitingForPlayers ? t("hud.turnEnded") : t("hud.statusObservation")}
               </span>
             )}
           </div>
@@ -978,8 +981,8 @@ export function HUDContent() {
               <>
                 <div
                   className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.18em] text-cyan-100"
-                  aria-label={`Images par seconde: ${devPanel.fpsText}`}
-                  title="Images par seconde"
+                  aria-label={`${t("hud.fps")}: ${devPanel.fpsText}`}
+                  title={t("hud.fps")}
                 >
                   {devPanel.fpsText}
                 </div>
@@ -987,13 +990,13 @@ export function HUDContent() {
                   <button
                     onClick={() => setGameOverDismissed(false)}
                     className="rounded-lg border border-amber-400/55 bg-amber-950/50 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-amber-100 transition hover:border-amber-300/70 hover:bg-amber-900/50"
-                    title="Voir le récapitulatif de fin de partie"
+                    title={t("hud.viewGameOver")}
                   >
-                    🏆 Partie terminée
+                    {t("hud.gameFinished")}
                   </button>
                 ) : (
                   <div className="rounded-lg border border-cyan-400/45 bg-cyan-950/45 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100">
-                    Observation
+                    {t("hud.statusObservation")}
                   </div>
                 )}
               </>
@@ -1003,12 +1006,12 @@ export function HUDContent() {
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}
-              title={myPlayer?.turnOrder !== 0 && isPending ? "Quitter la partie" : "Retour au dashboard"}
+              title={myPlayer?.turnOrder !== 0 && isPending ? t("hud.leaveGame") : t("hud.backToDashboard")}
             >
               <span className="text-sm font-black uppercase tracking-wider leading-none">
-                {myPlayer?.turnOrder !== 0 && isPending ? "Quitter" : "Retour"}
+                {myPlayer?.turnOrder !== 0 && isPending ? t("hud.quit") : t("hud.back")}
               </span>
-              <span className="mt-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] leading-none text-amber-600/80">menu</span>
+              <span className="mt-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] leading-none text-amber-600/80">{t("hud.menu")}</span>
             </button>
           </div>
         </div>
@@ -1024,7 +1027,7 @@ export function HUDContent() {
             className="mt-2 text-sm text-gray-300 hover:text-white"
             onClick={() => setCombatMessage(null)}
           >
-            Fermer
+            {t("common.close")}
           </button>
         </div>
       )}
@@ -1036,7 +1039,7 @@ export function HUDContent() {
         <div className="mobile-hud-drawer pointer-events-auto rounded-xl" data-testid="mobile-hud-drawer">
           <div className="flex items-center justify-between border-b border-amber-700/40 px-3 py-2">
             <div className={`text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
-              {mobileDrawer === "heroes" ? "Héros" : mobileDrawer === "towns" ? "Chateaux" : mobileDrawer === "map" ? "Carte" : mobileDrawer === "players" ? "Joueurs" : "Suivi"}
+              {mobileDrawer === "heroes" ? t("hud.navHeroes") : mobileDrawer === "towns" ? t("hud.navTowns") : mobileDrawer === "map" ? t("hud.navMap") : mobileDrawer === "players" ? t("hud.navPlayers") : t("hud.navTracking")}
             </div>
             <button
               type="button"
@@ -1101,7 +1104,7 @@ export function HUDContent() {
               <button
                 className="rounded text-amber-300/60 transition hover:text-amber-100"
                 onClick={() => useGameStore.getState().selectTown(null)}
-                aria-label="Fermer"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>
@@ -1109,16 +1112,16 @@ export function HUDContent() {
         >
           <div className="border-b border-amber-700/30 px-4 py-3">
             <div className="text-xs uppercase tracking-wider text-amber-200/60">
-              {factionLabel(selectedTownFaction)} · Niveau {selectedTown.level}
+              {t("hud.townHeader", { faction: factionLabel(selectedTownFaction, locale), level: selectedTown.level })}
             </div>
             {!isMyTown && (
               <div className="mt-2 rounded-md border border-red-500/50 bg-red-950/60 px-2 py-1 text-sm text-red-200">
-                Ville ennemie ou non contrôlée.
+                {t("hud.enemyTown")}
               </div>
             )}
             {isMyTown && selectedTown.lastBuiltTurn === gameState.turnNumber && (
               <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-950/60 px-2 py-1 text-sm text-amber-200">
-                Construction déjà réalisée aujourd&apos;hui dans ce château.
+                {t("hud.alreadyBuiltToday")}
               </div>
             )}
           </div>
@@ -1295,8 +1298,8 @@ export function HUDContent() {
           onCountChange={(next) => setRecruitDialog({ townId: selectedTown.id, unitType: activeRecruitEntry.rule.type, count: next })}
           onSubmit={() => void handleRecruit(activeRecruitEntry.rule.type, activeRecruitCount)}
           onClose={() => setRecruitDialog(null)}
-          footer={<>Total : {formatCost(multiplyCost(activeRecruitEntry.rule.cost, activeRecruitCount))}</>}
-          submitLabel="Recruter"
+          footer={<>{t("hud.total", { cost: formatCost(multiplyCost(activeRecruitEntry.rule.cost, activeRecruitCount)) })}</>}
+          submitLabel={t("recruit.recruit")}
         />
       )}
 
@@ -1324,8 +1327,8 @@ export function HUDContent() {
           onCountChange={(next) => setUpgradeDialog({ townId: selectedTown.id, heroId: upgradeDialog?.heroId, unitType: activeUpgradeBaseEntry.rule.type, count: next })}
           onSubmit={() => void handleUpgradeTroops(activeUpgradeBaseEntry.rule.type, activeUpgradeCount, upgradeDialog?.heroId)}
           onClose={() => setUpgradeDialog(null)}
-          footer={<>Vers : {activeUpgradeEntry.rule.label} | Total : {formatCost(multiplyCost(activeUpgradeCost, activeUpgradeCount)) || "gratuit"}</>}
-          submitLabel="Ameliorer"
+          footer={<>{t("hud.upgradeFooter", { name: localizedUnitLabel(activeUpgradeEntry.rule.type, activeUpgradeEntry.rule.label, locale), cost: formatCost(multiplyCost(activeUpgradeCost, activeUpgradeCount)) || t("hud.free") })}</>}
+          submitLabel={t("hud.upgrade")}
         />
       )}
 
@@ -1337,8 +1340,8 @@ export function HUDContent() {
           onCountChange={(next) => setTransferDialog({ townId: selectedTown.id, heroId: activeTransferHero.id, unitType: activeTransferStack.unitType, count: next })}
           onSubmit={() => void handleTransferGarrisonToHero(activeTransferStack.unitType, activeTransferCount, activeTransferHero)}
           onClose={() => setTransferDialog(null)}
-          footer={<>Vers : {activeTransferHero.name}</>}
-          submitLabel="Envoyer"
+          footer={<>{t("hud.toward", { name: activeTransferHero.name })}</>}
+          submitLabel={t("hud.send")}
         />
       )}
 
@@ -1350,8 +1353,8 @@ export function HUDContent() {
           onCountChange={(next) => setReturnDialog({ townId: selectedTown.id, heroId: activeReturnHero.id, unitType: activeReturnStack.unitType, count: next })}
           onSubmit={() => void handleTransferHeroToGarrison(activeReturnStack.unitType, activeReturnCount, activeReturnHero)}
           onClose={() => setReturnDialog(null)}
-          footer="Vers : garnison"
-          submitLabel="Déposer"
+          footer={t("hud.towardGarrison")}
+          submitLabel={t("hud.deposit")}
         />
       )}
 
@@ -1365,19 +1368,19 @@ export function HUDContent() {
           <div className={`${ornateFramePolished} relative w-full p-5 text-center`} data-testid="pending-lobby-panel">
             <CornerOrnaments />
             <ParchmentBackground />
-            <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Salle d&apos;attente</div>
+            <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>{t("hud.waitingRoom")}</div>
             <div className="mt-2 flex flex-col gap-1">
               {gameState.players.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 text-sm">
                   <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-                  <span className="text-gray-200 font-medium">{p.name || "Joueur"}</span>
-                  {p.isAi && <span className="rounded border border-cyan-400/50 px-1 text-[10px] font-black text-cyan-200">IA</span>}
-                  {p.turnOrder === 0 && <span className="text-xs text-yellow-400">(hôte)</span>}
+                  <span className="text-gray-200 font-medium">{p.name || t("common.player")}</span>
+                  {p.isAi && <span className="rounded border border-cyan-400/50 px-1 text-[10px] font-black text-cyan-200">{t("common.ai")}</span>}
+                  {p.turnOrder === 0 && <span className="text-xs text-yellow-400">{t("hud.host")}</span>}
                 </div>
               ))}
               {gameState.players.length < (gameState.maxPlayers ?? 8) && (
                 <div className="text-gray-500 text-xs mt-1">
-                  {(gameState.maxPlayers ?? 8) - gameState.players.length} place(s) libre(s)
+                  {t("hud.freeSlots", { n: (gameState.maxPlayers ?? 8) - gameState.players.length })}
                 </div>
               )}
             </div>
@@ -1387,17 +1390,17 @@ export function HUDContent() {
                 onClick={handleStartGame}
                 data-testid="start-game"
               >
-                Démarrer
+                {t("hud.startGame")}
               </button>
             ) : (
-              <div className="mt-4 text-sm text-amber-200/60">En attente que l&apos;hôte démarre la partie…</div>
+              <div className="mt-4 text-sm text-amber-200/60">{t("hud.waitingForHost")}</div>
             )}
           </div>
         ) : !adminObserverMode ? (
           <div className="text-center">
           {hasActiveCombats && canAct && (
             <div className="mb-2 rounded-md border border-amber-500/50 bg-amber-950/80 px-3 py-1 text-sm font-bold text-amber-200">
-              Terminez les combats en cours avant de finir le tour.
+              {t("hud.finishCombatsFirst")}
             </div>
           )}
           <button
@@ -1411,11 +1414,11 @@ export function HUDContent() {
             disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn"
-            title={isWaitingForPlayers ? "Annuler la fin du tour" : "Fin du tour"}
+            title={isWaitingForPlayers ? t("hud.cancelEndTurn") : t("hud.endTurn")}
           >
             <HourglassIcon className="mx-auto h-9 w-9 drop-shadow" />
             <span className="mt-1 block text-[10px] font-black uppercase tracking-widest">
-              {isWaitingForPlayers ? "Annuler" : "Fin tour"}
+              {isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
             </span>
           </button>
           </div>
@@ -1434,7 +1437,7 @@ export function HUDContent() {
             onClick={() => setMobileDrawer((current) => current === item ? null : item)}
             data-testid={`mobile-nav-${item}`}
           >
-            {item === "heroes" ? "Héros" : item === "towns" ? "Villes" : item === "map" ? "Carte" : item === "players" ? "Joueurs" : "Suivi"}
+            {item === "heroes" ? t("hud.navHeroes") : item === "towns" ? t("hud.navTowns") : item === "map" ? t("hud.navMap") : item === "players" ? t("hud.navPlayers") : t("hud.navTracking")}
           </button>
         ))}
         {!isPending && !adminObserverMode && (
@@ -1449,9 +1452,9 @@ export function HUDContent() {
             disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn-mobile"
-            title={isWaitingForPlayers ? "Annuler la fin du tour" : "Fin du tour"}
+            title={isWaitingForPlayers ? t("hud.cancelEndTurn") : t("hud.endTurn")}
           >
-            {isWaitingForPlayers ? "Annuler" : "Fin tour"}
+            {isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
           </button>
         )}
       </div>

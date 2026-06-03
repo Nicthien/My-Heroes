@@ -9,6 +9,7 @@ create table public.profiles (
   name text unique,
   role text not null default 'user',
   must_change_password boolean not null default false,
+  language text not null default 'fr' check (language in ('fr', 'en')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

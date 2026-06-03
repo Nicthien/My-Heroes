@@ -15,14 +15,20 @@ import { getTownBuildingSprite } from "@/lib/game/town-building-sprites";
 import { buildingTypeLabel, factionLabel } from "./helpers";
 import { BuildIcon } from "./icons";
 import { goldText, ornateFramePolished } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 type BuildNodeState =
-  | { kind: "built"; label: "Construit"; canBuild: false }
-  | { kind: "buildable"; label: "Construire"; canBuild: true }
+  | { kind: "built"; label: string; canBuild: false }
+  | { kind: "buildable"; label: string; canBuild: true }
   | { kind: "missingRequirement"; label: string; canBuild: false }
-  | { kind: "capitolLimit"; label: "Limite Capitole"; canBuild: false }
-  | { kind: "missingResources"; label: "Ressources insuffisantes"; canBuild: false }
-  | { kind: "unavailable"; label: "Indisponible"; canBuild: false };
+  | { kind: "capitolLimit"; label: string; canBuild: false }
+  | { kind: "missingResources"; label: string; canBuild: false }
+  | { kind: "unavailable"; label: string; canBuild: false };
 
 type BuildTreeGroup = {
   id: string;
@@ -70,9 +76,10 @@ export function TownBuildTreeModal({
   onBuild: (building: BuildingType) => void;
   onClose: () => void;
 }) {
+  const { t, locale } = useI18n();
   const portalTarget = typeof document === "undefined" ? null : document.body;
   const ruleByType = useMemo(() => new Map(rules.map((rule) => [rule.type, rule])), [rules]);
-  const groups = useMemo(() => buildTreeGroups(rules), [rules]);
+  const groups = useMemo(() => buildTreeGroups(rules, t), [rules, t]);
   const layout = useMemo(() => {
     return buildTreeLayout({
       groups,
@@ -84,18 +91,20 @@ export function TownBuildTreeModal({
       canAct,
       isPending,
       isMyTown,
+      t,
+      locale,
     });
-  }, [canAct, gameState, groups, hasPlayerCapitol, isMyTown, isPending, myPlayer, selectedTown, selectedTownFaction]);
+  }, [canAct, gameState, groups, hasPlayerCapitol, isMyTown, isPending, myPlayer, selectedTown, selectedTownFaction, t, locale]);
 
   const modal = (
-    <div className="fixed inset-0 z-[999] grid bg-black/75 p-0 text-amber-50 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Arbre des constructions">
+    <div className="fixed inset-0 z-[999] grid bg-black/75 p-0 text-amber-50 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label={t("town.buildTree")}>
       <section className={`${ornateFramePolished} flex h-full w-full flex-col overflow-hidden sm:max-h-[min(50rem,calc(100vh-2rem))] sm:w-[min(82rem,calc(100vw-2rem))]`}>
         <header className="flex items-center gap-3 border-b border-amber-700/50 bg-stone-950/90 px-4 py-3">
           <BuildTreeHeaderIcon className="h-6 w-6 shrink-0 text-amber-200" />
           <div className="min-w-0 flex-1">
-            <h2 className={`truncate text-lg font-black ${goldText}`}>Arbre des constructions</h2>
+            <h2 className={`truncate text-lg font-black ${goldText}`}>{t("town.buildTree")}</h2>
             <div className="truncate text-xs text-amber-200/70">
-              {selectedTown.name} - {factionLabel(selectedTownFaction)}
+              {selectedTown.name} - {factionLabel(selectedTownFaction, locale)}
             </div>
           </div>
           <button
@@ -103,7 +112,7 @@ export function TownBuildTreeModal({
             onClick={onClose}
             className="rounded-md border border-amber-700/50 bg-black/35 px-3 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-300"
           >
-            Fermer
+            {t("common.close")}
           </button>
         </header>
 
@@ -132,6 +141,8 @@ export function TownBuildTreeModal({
                 onBuild={onBuild}
                 x={node.x}
                 y={node.y}
+                t={t}
+                locale={locale}
               />
             ))}
           </div>
@@ -150,6 +161,8 @@ function BuildTreeNode({
   onBuild,
   x,
   y,
+  t,
+  locale,
 }: {
   rule: TownBuildingRule;
   state: BuildNodeState;
@@ -157,7 +170,10 @@ function BuildTreeNode({
   onBuild: (building: BuildingType) => void;
   x: number;
   y: number;
+  t: TFn;
+  locale: Locale;
 }) {
+  const localizedName = localizedLabelFromId(rule.type, rule.label, locale);
   const stateClass = getNodeStateClass(state.kind);
   const buildingSprite = getTownBuildingSprite(rule, selectedTownFaction);
   return (
@@ -169,7 +185,7 @@ function BuildTreeNode({
         <div
           className={`group/sprite absolute left-1/2 top-0 z-20 grid h-20 w-24 -translate-x-1/2 place-items-center rounded-md border-2 bg-black/65 shadow-[0_12px_26px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80 ${stateClass.frame}`}
           role="img"
-          aria-label={`${rule.label} : ${rule.description}`}
+          aria-label={`${localizedName} : ${rule.description}`}
           tabIndex={0}
         >
           {buildingSprite ? (
@@ -199,13 +215,13 @@ function BuildTreeNode({
             </span>
           )}
           <div className="relative flex h-7 items-center justify-center text-center">
-            <h4 className="line-clamp-2 text-sm font-black leading-tight text-amber-50 drop-shadow" title={rule.label}>{rule.label}</h4>
+            <h4 className="line-clamp-2 text-sm font-black leading-tight text-amber-50 drop-shadow" title={localizedName}>{localizedName}</h4>
           </div>
 
           <div className="relative mt-1 flex items-center justify-between gap-2 text-[10px] font-bold text-amber-100/65">
-            <span className="truncate">{formatCost(rule.cost) || "Gratuit"}</span>
+            <span className="truncate">{formatCost(rule.cost) || t("buildtree.free")}</span>
             <span className={`max-w-[6.7rem] truncate text-right ${getStateTextClass(state.kind)}`} title={state.label}>
-              {getShortStateLabel(state)}
+              {getShortStateLabel(state, t)}
             </span>
           </div>
 
@@ -215,7 +231,7 @@ function BuildTreeNode({
               onClick={() => onBuild(rule.type)}
               className="relative mt-1 h-6 w-full rounded-md border border-emerald-300/70 bg-gradient-to-b from-emerald-600 to-emerald-800 text-[11px] font-black text-emerald-50 transition hover:from-emerald-500 hover:to-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/70"
             >
-              Construire
+              {t("build.build")}
             </button>
           )}
         </div>
@@ -224,31 +240,31 @@ function BuildTreeNode({
   );
 }
 
-function buildTreeGroups(rules: TownBuildingRule[]): BuildTreeGroup[] {
+function buildTreeGroups(rules: TownBuildingRule[], t: TFn): BuildTreeGroup[] {
   return [
     {
       id: "common",
-      label: "Centre et communs",
+      label: t("buildtree.catCommon"),
       rules: orderRules(rules.filter((rule) => rule.category === "common" && !BASE_DWELLING_TYPES.includes(rule.type) && !UPGRADED_DWELLING_TYPES.includes(rule.type))),
     },
     {
       id: "mage",
-      label: "Guilde des mages",
+      label: t("buildtree.catMageGuild"),
       rules: orderRules(rules.filter((rule) => rule.category === "mage_guild")),
     },
     {
       id: "dwellings",
-      label: "Demeures",
+      label: t("buildtree.catDwelling"),
       rules: orderRules(rules.filter((rule) => rule.category === "dwelling")),
     },
     {
       id: "upgrades",
-      label: "Améliorations",
+      label: t("buildtree.catUpgrade"),
       rules: orderRules(rules.filter((rule) => rule.category === "dwelling_upgrade")),
     },
     {
       id: "unique",
-      label: "Bâtiments uniques",
+      label: t("buildtree.catUnique"),
       rules: orderRules(rules.filter((rule) => rule.category === "unique")),
     },
   ].filter((group) => group.rules.length > 0);
@@ -264,6 +280,8 @@ function buildTreeLayout({
   canAct,
   isPending,
   isMyTown,
+  t,
+  locale,
 }: {
   groups: BuildTreeGroup[];
   selectedTown: Town;
@@ -274,6 +292,8 @@ function buildTreeLayout({
   canAct: boolean;
   isPending: boolean;
   isMyTown: boolean;
+  t: TFn;
+  locale: Locale;
 }) {
   const maxRows = Math.max(1, ...groups.map((group) => group.rules.length));
   const nodes: BuildTreeNodeLayout[] = [];
@@ -297,6 +317,8 @@ function buildTreeLayout({
           canAct,
           isPending,
           isMyTown,
+          t,
+          locale,
         }),
         x,
         y: CANVAS_PADDING_Y + 38 + index * (NODE_HEIGHT + ROW_GAP),
@@ -332,6 +354,8 @@ function getBuildNodeState({
   canAct,
   isPending,
   isMyTown,
+  t,
+  locale,
 }: {
   rule: TownBuildingRule;
   selectedTown: Town;
@@ -342,33 +366,35 @@ function getBuildNodeState({
   canAct: boolean;
   isPending: boolean;
   isMyTown: boolean;
-}) {
+  t: TFn;
+  locale: Locale;
+}): BuildNodeState {
   const alreadyBuilt = selectedTown.buildings.includes(rule.type);
-  if (alreadyBuilt) return { kind: "built", label: "Construit", canBuild: false } as const;
+  if (alreadyBuilt) return { kind: "built", label: t("buildtree.built"), canBuild: false };
 
   const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(selectedTown.buildings, requirement));
   if (missingRequirement) {
     return {
       kind: "missingRequirement",
-      label: `Prérequis : ${buildingTypeLabel(missingRequirement, selectedTownFaction)}`,
+      label: t("buildtree.requiresName", { name: buildingTypeLabel(missingRequirement, selectedTownFaction, locale) }),
       canBuild: false,
-    } as const;
+    };
   }
 
   const blockedByCapitolLimit =
     rule.type === BuildingType.CAPITOL &&
     hasPlayerCapitol &&
     !selectedTown.buildings.includes(BuildingType.CAPITOL);
-  if (blockedByCapitolLimit) return { kind: "capitolLimit", label: "Limite Capitole", canBuild: false } as const;
+  if (blockedByCapitolLimit) return { kind: "capitolLimit", label: t("buildtree.capitolLimit"), canBuild: false };
 
   const lacksResources = Boolean(myPlayer && !canAfford(myPlayer.resources, rule.cost));
-  if (lacksResources) return { kind: "missingResources", label: "Ressources insuffisantes", canBuild: false } as const;
+  if (lacksResources) return { kind: "missingResources", label: t("buildtree.missingResources"), canBuild: false };
 
   if (!myPlayer || selectedTown.lastBuiltTurn === gameState.turnNumber || !canAct || !isMyTown || isPending) {
-    return { kind: "unavailable", label: "Indisponible", canBuild: false } as const;
+    return { kind: "unavailable", label: t("buildtree.unavailable"), canBuild: false };
   }
 
-  return { kind: "buildable", label: "Construire", canBuild: true } as const;
+  return { kind: "buildable", label: t("buildtree.buildable"), canBuild: true };
 }
 
 function getNodeStateClass(kind: BuildNodeState["kind"]) {
@@ -417,8 +443,8 @@ function getStateTextClass(kind: BuildNodeState["kind"]) {
   }
 }
 
-function getShortStateLabel(state: BuildNodeState) {
-  if (state.kind === "missingRequirement") return "Prérequis";
+function getShortStateLabel(state: BuildNodeState, t: TFn) {
+  if (state.kind === "missingRequirement") return t("buildtree.requires");
   return state.label;
 }
 

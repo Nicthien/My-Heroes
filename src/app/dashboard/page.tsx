@@ -32,7 +32,9 @@ import {
 } from "@/components/game/hud/theme";
 import { GearIcon, SignOutIcon } from "./dashboardRmgControls";
 import { MAP_SIZES, randomSeedValue, summarizeMap } from "./dashboardConstants";
-import { FACTION_META } from "./factionMeta";
+import { FACTION_META, factionLabel } from "./factionMeta";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import LanguageSelect from "@/components/i18n/LanguageSelect";
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { Leaderboard } from "./Leaderboard";
@@ -191,6 +193,7 @@ function playerStatusClass(status?: string | null) {
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
+  const { locale, setLocale, t } = useI18n();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -479,15 +482,15 @@ export default function DashboardPage() {
     setForcedPasswordError("");
 
     if (nextPassword.length < 6) {
-      setForcedPasswordError("Le mot de passe doit contenir au moins 6 caracteres.");
+      setForcedPasswordError(t("dashboard.pwMinLength"));
       return;
     }
     if (nextPassword === "ChangeMe") {
-      setForcedPasswordError("Choisissez un mot de passe different du mot de passe par defaut.");
+      setForcedPasswordError(t("dashboard.pwNotDefault"));
       return;
     }
     if (nextPassword !== forcedPasswordConfirm.trim()) {
-      setForcedPasswordError("Les mots de passe ne correspondent pas.");
+      setForcedPasswordError(t("dashboard.options.passwordMismatch"));
       return;
     }
 
@@ -495,7 +498,7 @@ export default function DashboardPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password: nextPassword });
     if (error) {
-      setForcedPasswordError(error.message || "Impossible de changer le mot de passe.");
+      setForcedPasswordError(error.message || t("dashboard.pwChangeFailed"));
       setSavingForcedPassword(false);
       return;
     }
@@ -503,7 +506,7 @@ export default function DashboardPage() {
     const response = await fetchWithAuth("/api/auth/password-changed", { method: "POST" });
     if (!response.ok) {
       const data = await parseJsonResponse(response);
-      setForcedPasswordError(data?.error || "Impossible de finaliser le changement.");
+      setForcedPasswordError(data?.error || t("dashboard.pwFinalizeFailed"));
       setSavingForcedPassword(false);
       return;
     }
@@ -596,15 +599,15 @@ export default function DashboardPage() {
     const nextPassword = profilePassword.trim();
 
     if (!nextEmail) {
-      setProfileMessage({ kind: "error", text: "L'adresse mail est requise." });
+      setProfileMessage({ kind: "error", text: t("dashboard.options.emailRequired") });
       return;
     }
     if (!nextName) {
-      setProfileMessage({ kind: "error", text: "Le pseudo est requis." });
+      setProfileMessage({ kind: "error", text: t("dashboard.options.nameRequired") });
       return;
     }
     if (nextPassword && nextPassword !== profilePasswordConfirm.trim()) {
-      setProfileMessage({ kind: "error", text: "Les mots de passe ne correspondent pas." });
+      setProfileMessage({ kind: "error", text: t("dashboard.options.passwordMismatch") });
       return;
     }
 
@@ -623,7 +626,7 @@ export default function DashboardPage() {
 
     const { error: authError } = await supabase.auth.updateUser(authUpdates);
     if (authError) {
-      setProfileMessage({ kind: "error", text: authError.message || "Impossible de mettre à jour le compte." });
+      setProfileMessage({ kind: "error", text: authError.message || t("dashboard.options.accountUpdateFailed") });
       setSavingProfile(false);
       return;
     }
@@ -636,7 +639,7 @@ export default function DashboardPage() {
 
     if (!profileResponse.ok) {
       const data = await parseJsonResponse(profileResponse);
-      setProfileMessage({ kind: "error", text: data?.error || "Impossible de mettre à jour le profil." });
+      setProfileMessage({ kind: "error", text: data?.error || t("dashboard.options.profileUpdateFailed") });
       setSavingProfile(false);
       return;
     }
@@ -647,8 +650,8 @@ export default function DashboardPage() {
     setProfileMessage({
       kind: "success",
       text: nextEmail !== (session.user.email ?? "")
-        ? "Profil mis à jour. Confirmez la nouvelle adresse mail si Supabase vous envoie un message."
-        : "Profil mis à jour.",
+        ? t("dashboard.options.updatedWithEmail")
+        : t("dashboard.options.updated"),
     });
     setSavingProfile(false);
     router.refresh();
@@ -735,7 +738,7 @@ export default function DashboardPage() {
       const data = await parseJsonResponse(response);
       setDashboardMessage({
         kind: "error",
-        text: data?.error || "Impossible d'abandonner la partie.",
+        text: data?.error || t("dashboard.surrenderError"),
       });
       setSurrenderTarget(null);
       setSurrenderingGameId(null);
@@ -748,7 +751,7 @@ export default function DashboardPage() {
     setSurrenderingGameId(null);
     setDashboardMessage({
       kind: "success",
-      text: `Vous avez abandonné la partie "${game.name}".`,
+      text: t("dashboard.surrenderedMessage", { name: game.name }),
     });
   };
 
@@ -764,7 +767,7 @@ export default function DashboardPage() {
       const data = await parseJsonResponse(response);
       setDashboardMessage({
         kind: "error",
-        text: data?.error || "Impossible de supprimer la partie.",
+        text: data?.error || t("dashboard.deleteError"),
       });
       setDeleteTarget(null);
       setDeletingGameId(null);
@@ -781,14 +784,14 @@ export default function DashboardPage() {
     setDeletingGameId(null);
     setDashboardMessage({
       kind: "success",
-      text: `La partie "${game.name}" a bien été supprimée.`,
+      text: t("dashboard.deletedMessage", { name: game.name }),
     });
   };
 
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900 flex items-center justify-center">
-        <div className={`text-xl font-black uppercase tracking-widest ${goldText}`}>Chargement...</div>
+        <div className={`text-xl font-black uppercase tracking-widest ${goldText}`}>{t("common.loading")}</div>
       </div>
     );
   }
@@ -813,7 +816,7 @@ export default function DashboardPage() {
                 </span>
               </h1>
               <p className="text-sm uppercase tracking-wider text-amber-200/70 mt-1">
-                Bienvenue, {session?.user?.name}
+                {t("dashboard.welcome", { name: session?.user?.name ?? "" })}
               </p>
             </div>
           </div>
@@ -822,13 +825,13 @@ export default function DashboardPage() {
               onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); }}
               className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
-              Nouvelle partie
+              {t("dashboard.newGame")}
             </button>
             <button
               onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
               className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
             >
-              Rejoindre
+              {t("common.join")}
             </button>
             {isAdmin && (
               <button
@@ -842,14 +845,14 @@ export default function DashboardPage() {
                 }}
                 className="touch-target rounded-lg border border-cyan-400/60 bg-gradient-to-b from-cyan-700 to-cyan-900 px-4 py-3 font-black uppercase tracking-wider text-cyan-50 shadow-[inset_0_0_0_1px_rgba(165,243,252,0.2)] transition hover:from-cyan-600 hover:to-cyan-800 sm:px-5"
               >
-                Admin
+                {t("dashboard.admin")}
               </button>
             )}
             <button
               type="button"
               onClick={openOptions}
-              title="Options"
-              aria-label="Options"
+              title={t("dashboard.options.title")}
+              aria-label={t("dashboard.options.title")}
               className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 sm:w-12"
             >
               <GearIcon />
@@ -858,12 +861,12 @@ export default function DashboardPage() {
               type="button"
               onClick={() => signOut().catch((error) => {
                 console.error(error);
-                setDashboardMessage({ kind: "error", text: "Impossible de se déconnecter." });
+                setDashboardMessage({ kind: "error", text: t("dashboard.signOutError") });
                 setSigningOut(false);
               })}
               disabled={signingOut}
-              title={signingOut ? "Déconnexion..." : "Déconnexion"}
-              aria-label={signingOut ? "Déconnexion..." : "Déconnexion"}
+              title={signingOut ? t("dashboard.signingOut") : t("dashboard.signOut")}
+              aria-label={signingOut ? t("dashboard.signingOut") : t("dashboard.signOut")}
               className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-12"
             >
               <SignOutIcon />
@@ -882,10 +885,10 @@ export default function DashboardPage() {
               <CornerOrnaments />
               <ParchmentBackground />
               <h2 id="forced-password-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                Changer le mot de passe
+                {t("dashboard.changePassword")}
               </h2>
               <p className="mb-4 text-sm leading-6 text-amber-100/80">
-                Ce compte utilise un mot de passe temporaire. Choisissez un nouveau mot de passe pour continuer.
+                {t("dashboard.changePasswordIntro")}
               </p>
               {forcedPasswordError && (
                 <div className="mb-4 rounded-md border border-red-400/50 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
@@ -895,7 +898,7 @@ export default function DashboardPage() {
               <form onSubmit={saveForcedPassword} className="space-y-4">
                 <div>
                   <label htmlFor="forced-password" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                    Nouveau mot de passe
+                    {t("dashboard.options.newPassword")}
                   </label>
                   <input
                     id="forced-password"
@@ -909,7 +912,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label htmlFor="forced-password-confirm" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                    Confirmer
+                    {t("dashboard.options.confirmPassword")}
                   </label>
                   <input
                     id="forced-password-confirm"
@@ -926,7 +929,7 @@ export default function DashboardPage() {
                   disabled={savingForcedPassword}
                   className="w-full rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {savingForcedPassword ? "Enregistrement..." : "Enregistrer"}
+                  {savingForcedPassword ? t("dashboard.options.saving") : t("dashboard.options.save")}
                 </button>
               </form>
             </div>
@@ -950,7 +953,7 @@ export default function DashboardPage() {
               <CornerOrnaments />
               <ParchmentBackground />
               <h2 id="account-options-title" className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                Options
+                {t("dashboard.options.title")}
               </h2>
 
               {profileMessage && (
@@ -970,7 +973,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="profile-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                      Pseudo
+                      {t("dashboard.options.name")}
                     </label>
                     <input
                       id="profile-name"
@@ -983,7 +986,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label htmlFor="profile-email" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                      Adresse mail
+                      {t("dashboard.options.email")}
                     </label>
                     <input
                       id="profile-email"
@@ -999,7 +1002,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="profile-password" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                      Nouveau mot de passe
+                      {t("dashboard.options.newPassword")}
                     </label>
                     <input
                       id="profile-password"
@@ -1012,7 +1015,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label htmlFor="profile-password-confirm" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                      Confirmer
+                      {t("dashboard.options.confirmPassword")}
                     </label>
                     <input
                       id="profile-password-confirm"
@@ -1025,6 +1028,13 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
+                    {t("dashboard.options.language")}
+                  </label>
+                  <LanguageSelect value={locale} onChange={setLocale} />
+                </div>
+
                 <div className="flex flex-wrap justify-end gap-3 pt-2">
                   <button
                     type="button"
@@ -1032,14 +1042,14 @@ export default function DashboardPage() {
                     onClick={() => setShowOptions(false)}
                     className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Annuler
+                    {t("dashboard.options.cancel")}
                   </button>
                   <button
                     type="submit"
                     disabled={savingProfile}
                     className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {savingProfile ? "Enregistrement..." : "Enregistrer"}
+                    {savingProfile ? t("dashboard.options.saving") : t("dashboard.options.save")}
                   </button>
                 </div>
               </form>
@@ -1128,10 +1138,10 @@ export default function DashboardPage() {
               <CornerOrnaments />
               <ParchmentBackground />
               <h2 id="delete-game-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                Supprimer la partie
+                {t("dashboard.deleteTitle")}
               </h2>
               <p className="text-sm leading-6 text-amber-100/85">
-                Vous allez supprimer <span className="font-black text-amber-100">{deleteTarget.name}</span>. Cette action est définitive et retirera la partie pour tous les joueurs.
+                {t("dashboard.deleteConfirmPrefix")}<span className="font-black text-amber-100">{deleteTarget.name}</span>{t("dashboard.deleteConfirmSuffix")}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <button
@@ -1140,20 +1150,20 @@ export default function DashboardPage() {
                   onClick={() => setDeleteTarget(null)}
                   className="rounded-md border border-amber-700/40 bg-stone-950/70 px-5 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Annuler
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
                   disabled={deletingGameId === deleteTarget.id}
                   onClick={() => deleteGame(deleteTarget).catch((error) => {
                     console.error(error);
-                    setDashboardMessage({ kind: "error", text: "Impossible de supprimer la partie." });
+                    setDashboardMessage({ kind: "error", text: t("dashboard.deleteError") });
                     setDeleteTarget(null);
                     setDeletingGameId(null);
                   })}
                   className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-5 py-2 text-sm font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {deletingGameId === deleteTarget.id ? "Suppression..." : "Supprimer"}
+                  {deletingGameId === deleteTarget.id ? t("dashboard.deleting") : t("common.delete")}
                 </button>
               </div>
             </div>
@@ -1177,10 +1187,10 @@ export default function DashboardPage() {
               <CornerOrnaments />
               <ParchmentBackground />
               <h2 id="surrender-game-title" className={`mb-3 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                Abandonner la partie
+                {t("dashboard.surrenderTitle")}
               </h2>
               <p className="text-sm leading-6 text-amber-100/85">
-                Vous allez abandonner <span className="font-black text-amber-100">{surrenderTarget.name}</span>. Vous serez éliminé et ne pourrez plus jouer. Cette action est définitive.
+                {t("dashboard.surrenderConfirmPrefix")}<span className="font-black text-amber-100">{surrenderTarget.name}</span>{t("dashboard.surrenderConfirmSuffix")}
               </p>
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <button
@@ -1189,20 +1199,20 @@ export default function DashboardPage() {
                   onClick={() => setSurrenderTarget(null)}
                   className="rounded-md border border-amber-700/40 bg-stone-950/70 px-5 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/70 transition hover:border-amber-500/50 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Annuler
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
                   disabled={surrenderingGameId === surrenderTarget.id}
                   onClick={() => surrenderGame(surrenderTarget).catch((error) => {
                     console.error(error);
-                    setDashboardMessage({ kind: "error", text: "Impossible d'abandonner la partie." });
+                    setDashboardMessage({ kind: "error", text: t("dashboard.surrenderError") });
                     setSurrenderTarget(null);
                     setSurrenderingGameId(null);
                   })}
                   className="rounded-md border border-red-400/60 bg-gradient-to-b from-red-700 to-red-900 px-5 py-2 text-sm font-black uppercase tracking-wider text-red-50 shadow-[inset_0_0_0_1px_rgba(254,202,202,0.2)] transition hover:from-red-600 hover:to-red-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {surrenderingGameId === surrenderTarget.id ? "Abandon..." : "Abandonner"}
+                  {surrenderingGameId === surrenderTarget.id ? t("dashboard.surrendering") : t("common.surrender")}
                 </button>
               </div>
             </div>
@@ -1473,7 +1483,7 @@ export default function DashboardPage() {
         <div className={`relative ${ornateFrame}`}>
           <CornerOrnaments />
           <ParchmentBackground />
-          <OrnateHeader>Mes parties</OrnateHeader>
+          <OrnateHeader>{t("dashboard.myGames")}</OrnateHeader>
           <div className="space-y-3 p-4">
             {dashboardMessage && (
               <div
@@ -1489,7 +1499,7 @@ export default function DashboardPage() {
             )}
             {games.length === 0 && (
               <div className="py-12 text-center italic text-amber-200/40">
-                Aucune partie. Créez ou rejoignez-en une !
+                {t("dashboard.noGames")}
               </div>
             )}
             {games.map((game) => {
@@ -1498,9 +1508,9 @@ export default function DashboardPage() {
               );
               const isHost = myPlayer?.turnOrder === 0;
               const statusLabel =
-                game.status === "PENDING" ? "En attente" :
-                game.status === "ACTIVE" ? "En cours" :
-                game.status === "COMPLETED" ? "Terminée" : game.status;
+                game.status === "PENDING" ? t("status.pending") :
+                game.status === "ACTIVE" ? t("status.active") :
+                game.status === "COMPLETED" ? t("status.completed") : game.status;
               const statusColor =
                 game.status === "ACTIVE" ? "text-emerald-300" :
                 game.status === "PENDING" ? "text-amber-300" :
@@ -1516,12 +1526,12 @@ export default function DashboardPage() {
                   <div>
                     <h3 className={`text-lg font-black ${goldText}`}>{game.name}</h3>
                     <div className="mt-1 text-xs uppercase tracking-wider text-amber-200/70">
-                      Tour {game.turnNumber} <span className="mx-1 text-amber-700">◆</span>
+                      {t("dashboard.turn", { n: game.turnNumber })} <span className="mx-1 text-amber-700">◆</span>
                       <span className={`font-bold ${statusColor}`}>{statusLabel}</span>
                       <span className="mx-1 text-amber-700">◆</span>
                       {game.mapWidth}×{game.mapHeight}
                       <span className="mx-1 text-amber-700">◆</span>
-                      🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory))}
+                      🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory), locale)}
                       {isAdmin && (
                         <>
                           <span className="mx-1 text-amber-700">◆</span>
@@ -1544,7 +1554,7 @@ export default function DashboardPage() {
                             setSurrenderTarget(game);
                           }}
                         >
-                          Abandonner
+                          {t("common.surrender")}
                         </button>
                       )}
                       {isAdmin || isHost ? (
@@ -1556,7 +1566,7 @@ export default function DashboardPage() {
                             setDeleteTarget(game);
                           }}
                         >
-                          Supprimer
+                          {t("common.delete")}
                         </button>
                       ) : game.status === "PENDING" ? (
                         <button
@@ -1566,7 +1576,7 @@ export default function DashboardPage() {
                             leaveGame(game.id).catch(console.error);
                           }}
                         >
-                          Quitter
+                          {t("common.leave")}
                         </button>
                       ) : null}
                     </div>
@@ -1576,10 +1586,10 @@ export default function DashboardPage() {
                   <div className="overflow-x-auto">
                     <div className="min-w-[620px]">
                       <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
-                        <div>Pseudo</div>
-                        <div>Faction</div>
-                        <div>Derniere connexion</div>
-                        <div>Statut</div>
+                        <div>{t("dashboard.colUsername")}</div>
+                        <div>{t("dashboard.colFaction")}</div>
+                        <div>{t("dashboard.colLastLogin")}</div>
+                        <div>{t("dashboard.colStatus")}</div>
                       </div>
                       <div className="divide-y divide-amber-900/35">
                         {game.players.map((player) => {
@@ -1587,15 +1597,15 @@ export default function DashboardPage() {
                           return (
                             <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
                               <div className="min-w-0 font-semibold text-amber-100">{playerName(player)}</div>
-                              <div>{FACTION_META[player.faction]?.label ?? player.faction}</div>
-                              <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, "Jamais")}</div>
+                              <div>{factionLabel(player.faction, locale)}</div>
+                              <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, t("common.never"))}</div>
                               <div className={`font-semibold ${playerStatusClass(status)}`}>{status}</div>
                             </div>
                           );
                         })}
                         {game.players.length === 0 && (
                           <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
-                            Aucun joueur dans cette partie.
+                            {t("dashboard.noPlayers")}
                           </div>
                         )}
                       </div>

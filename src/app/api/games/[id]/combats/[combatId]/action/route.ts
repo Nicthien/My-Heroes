@@ -1608,7 +1608,7 @@ async function applyCombatXp(
   before: CombatBoardUnit[],
   after: CombatBoardUnit[],
 ) {
-  // XP basée sur HP totaux d'ennemis détruits (approx H3 : ~XP = HP des unités tuées).
+  // XP basée sur les HP totaux d'ennemis détruits.
   const afterById = new Map(after.map((u) => [u.id, u]));
   let totalXp = 0;
   for (const unit of before) {

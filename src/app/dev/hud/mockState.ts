@@ -246,7 +246,7 @@ export function buildMockState(): GameState {
         towns: [
           {
             id: "t1",
-            name: "Château Astral",
+            name: "Château Stellaire",
             faction: Faction.CASTLE,
             position: { x: 3, y: 12 },
             level: 3,

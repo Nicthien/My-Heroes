@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { goldText } from "@/components/game/hud/theme";
 import { ALIGNMENT_GROUPS, FACTION_META, getFactionShowcase } from "./factionMeta";
+import { PLAYABLE_FACTIONS, normalizePlayableFaction } from "@/lib/game/playable-factions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { pickLocale } from "@/lib/i18n/localized";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import { localizedSpecialty } from "@/lib/game/heroes-i18n";
 
 const PIXELATED: React.CSSProperties = { imageRendering: "pixelated" };
+const PLAYABLE_FACTION_SET = new Set<string>(PLAYABLE_FACTIONS);
 
 // Hero adventure spritesheet layout (see HERO_SPRITESHEETS in rendering/phaser/assets.ts):
 // 12 columns wide, one row per HERO_DIRECTIONS entry (8 rows, order
@@ -65,7 +67,7 @@ function FactionGrid({
           <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{pickLocale(group.label, group.labelEn, locale)}</div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {Object.entries(FACTION_META)
-              .filter(([, m]) => m.alignment === group.key)
+              .filter(([key, m]) => PLAYABLE_FACTION_SET.has(key) && m.alignment === group.key)
               .map(([key, meta]) => (
                 <button
                   key={key}
@@ -190,6 +192,11 @@ export function FactionSelect({
   selectedFaction: string;
   onSelect: (faction: string) => void;
 }) {
+  useEffect(() => {
+    const playableFaction = normalizePlayableFaction(selectedFaction);
+    if (playableFaction !== selectedFaction) onSelect(playableFaction);
+  }, [selectedFaction, onSelect]);
+
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <FactionGrid selectedFaction={selectedFaction} onSelect={onSelect} />

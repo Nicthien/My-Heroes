@@ -44,7 +44,7 @@ const HERO_SPECIALTY_EN: Record<string, string> = {
   "Hommes-lézards": "Lizardmen",
   "Hypnose": "Hypnotize",
   "Hâte": "Haste",
-  "Inferno": "Inferno",
+  "Brasier abyssal": "Abyssal Blaze",
   "Intelligence": "Intelligence",
   "Liches": "Liches",
   "Licornes": "Unicorns",

@@ -165,15 +165,15 @@ function buildShowcaseState(): GameState {
   const map = buildShowcaseMap();
   const gates = buildShowcaseGates();
   const townPositions = [
-    { id: "town-castle", faction: Faction.CASTLE, x: 17, y: 3, name: "Castle" },
-    { id: "town-rampart", faction: Faction.RAMPART, x: 21, y: 3, name: "Rampart" },
-    { id: "town-tower", faction: Faction.TOWER, x: 25, y: 3, name: "Tower" },
-    { id: "town-inferno", faction: Faction.INFERNO, x: 17, y: 7, name: "Inferno" },
-    { id: "town-necropolis", faction: Faction.NECROPOLIS, x: 21, y: 7, name: "Necropolis" },
-    { id: "town-dungeon", faction: Faction.DUNGEON, x: 25, y: 7, name: "Dungeon" },
-    { id: "town-stronghold", faction: Faction.STRONGHOLD, x: 17, y: 11, name: "Stronghold" },
-    { id: "town-fortress", faction: Faction.FORTRESS, x: 21, y: 11, name: "Fortress" },
-    { id: "town-conflux", faction: Faction.CONFLUX, x: 25, y: 11, name: "Conflux" },
+    { id: "town-castle", faction: Faction.CASTLE, x: 17, y: 3, name: "Couronnes d'Acier" },
+    { id: "town-rampart", faction: Faction.RAMPART, x: 21, y: 3, name: "Pacte des Sylves" },
+    { id: "town-tower", faction: Faction.TOWER, x: 25, y: 3, name: "Cercle d'Azur" },
+    { id: "town-inferno", faction: Faction.INFERNO, x: 17, y: 7, name: "Braises Profanes" },
+    { id: "town-necropolis", faction: Faction.NECROPOLIS, x: 21, y: 7, name: "Voile d'Os" },
+    { id: "town-dungeon", faction: Faction.DUNGEON, x: 25, y: 7, name: "Royaume Sous-Roche" },
+    { id: "town-stronghold", faction: Faction.STRONGHOLD, x: 17, y: 11, name: "Marteaux Rouges" },
+    { id: "town-fortress", faction: Faction.FORTRESS, x: 21, y: 11, name: "Serments du Marais" },
+    { id: "town-conflux", faction: Faction.CONFLUX, x: 25, y: 11, name: "Orbe Primordial" },
   ];
 
   for (const town of townPositions) {
@@ -253,7 +253,7 @@ function buildShowcaseState(): GameState {
         color: "#ef4444",
         resources: { gold: 8000, wood: 10, ore: 10, mercury: 5, crystals: 5, gems: 5, sulfur: 5 },
         heroes: [
-          buildHero("showcase-hero-inferno", "Xyron", HeroClass.HERETIC, { x: 19, y: 9 }, UnitType.EFREET, 20, 20),
+          buildHero("showcase-hero-inferno", "Xavrek", HeroClass.HERETIC, { x: 19, y: 9 }, UnitType.EFREET, 20, 20),
         ],
         towns: townPositions.slice(3, 6).map((town) => buildTown(town.id, town.name, town.faction, town.x, town.y)),
         resourceBuildings: [

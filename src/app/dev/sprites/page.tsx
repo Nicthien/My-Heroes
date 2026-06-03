@@ -592,13 +592,13 @@ const SPRITES_EN: Record<string, string> = {
 
   // SVG items
   "Marché": "Market", "Marchands d'artefacts": "Artifact merchants", "Francs-tireurs": "Free shooters",
-  "Porte du château": "Castle gate", "Université de magie": "Magic university", "Cour des balistes": "Ballista yard",
-  "Échange ressources (taux H3 selon nb marchés)": "Trade resources (H3 rate based on # markets)",
-  "Achat artefacts (Tour/Donjon/Conflux)": "Buy artifacts (Tower/Dungeon/Conflux)",
-  "Vendre créatures de garnison (Bastion)": "Sell garrison creatures (Stronghold)",
-  "Transfert garnison entre villes Hadès": "Transfer garrison between Inferno towns",
-  "Apprendre écoles élémentaires (Conflux)": "Learn elemental schools (Conflux)",
-  "Achat machines de guerre (Bastion)": "Buy war machines (Stronghold)",
+  "Porte des Braises": "Ember gate", "Université de magie": "Magic university", "Cour des balistes": "Ballista yard",
+  "Échange ressources (taux selon nb marchés)": "Trade resources (rate based on # markets)",
+  "Achat artefacts (Cercle d'Azur/Royaume Sous-Roche/Orbe Primordial)": "Buy artifacts (Azure Circle/Understone Realm/Primordial Orb)",
+  "Vendre créatures de garnison (Marteaux Rouges)": "Sell garrison creatures (Red Hammers)",
+  "Transfert garnison entre villes des Braises Profanes": "Transfer garrison between Profane Embers towns",
+  "Apprendre écoles élémentaires (Orbe Primordial)": "Learn elemental schools (Primordial Orb)",
+  "Achat machines de guerre (Marteaux Rouges)": "Buy war machines (Red Hammers)",
 
   // Stat labels
   PV: "HP", Type: "Type", Classe: "Class", Description: "Description", Effet: "Effect",
@@ -2076,12 +2076,12 @@ const SVG_GROUPS: Array<{ label: string; items: SvgItem[] }> = [
   {
     label: "Onglets ville (HUD)",
     items: [
-      { id: "town-market", label: "Marché", description: "Échange ressources (taux H3 selon nb marchés)", render: <TownTabMarketSvg /> },
-      { id: "town-artifacts", label: "Marchands d'artefacts", description: "Achat artefacts (Tour/Donjon/Conflux)", render: <TownTabArtifactsSvg /> },
-      { id: "town-mercenary", label: "Francs-tireurs", description: "Vendre créatures de garnison (Bastion)", render: <TownTabMercenarySvg /> },
-      { id: "town-gate", label: "Porte du château", description: "Transfert garnison entre villes Hadès", render: <TownTabGateSvg /> },
-      { id: "town-university", label: "Université de magie", description: "Apprendre écoles élémentaires (Conflux)", render: <TownTabUniversitySvg /> },
-      { id: "town-ballista", label: "Cour des balistes", description: "Achat machines de guerre (Bastion)", render: <TownTabBallistaSvg /> },
+      { id: "town-market", label: "Marché", description: "Échange ressources (taux selon nb marchés)", render: <TownTabMarketSvg /> },
+      { id: "town-artifacts", label: "Marchands d'artefacts", description: "Achat artefacts (Cercle d'Azur/Royaume Sous-Roche/Orbe Primordial)", render: <TownTabArtifactsSvg /> },
+      { id: "town-mercenary", label: "Francs-tireurs", description: "Vendre créatures de garnison (Marteaux Rouges)", render: <TownTabMercenarySvg /> },
+      { id: "town-gate", label: "Porte des Braises", description: "Transfert garnison entre villes des Braises Profanes", render: <TownTabGateSvg /> },
+      { id: "town-university", label: "Université de magie", description: "Apprendre écoles élémentaires (Orbe Primordial)", render: <TownTabUniversitySvg /> },
+      { id: "town-ballista", label: "Cour des balistes", description: "Achat machines de guerre (Marteaux Rouges)", render: <TownTabBallistaSvg /> },
     ],
   },
 ];

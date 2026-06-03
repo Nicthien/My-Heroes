@@ -6,6 +6,7 @@ import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/game/types";
 import { normalizeRmgTuning } from "@/lib/game/engine/rmg-tuning";
+import { isPlayableFaction, normalizePlayableFaction } from "@/lib/game/playable-factions";
 import { normalizeVictoryCondition } from "@/lib/game/victory";
 import type { VictoryCondition } from "@/lib/game/types";
 import { mapLevels, SURFACE_LEVEL } from "@/lib/game/map-levels";
@@ -144,6 +145,11 @@ export async function POST(request: Request) {
       faction = "castle",
       victory: victoryInput,
     } = body;
+    const requestedFaction = String(faction);
+    const playableFaction = normalizePlayableFaction(requestedFaction);
+    if (user.role !== "admin" && !isPlayableFaction(requestedFaction)) {
+      return NextResponse.json({ error: "Cette faction n'est pas jouable." }, { status: 400 });
+    }
     const tuning = normalizeRmgTuning(rmgTuning);
 
     const size = MAP_SIZES[mapSize] ?? MAP_SIZES.M;
@@ -204,7 +210,7 @@ export async function POST(request: Request) {
         supabase,
         gameId: gameRow.id,
         userId: user.id,
-        faction,
+        faction: playableFaction,
         color: "#3b82f6",
         turnOrder: 0,
         mapData,
@@ -216,7 +222,7 @@ export async function POST(request: Request) {
     const gateResult = await createGates(supabase, gameRow.id, mapData);
     if (!gateResult.ok) return NextResponse.json({ error: gateResult.error }, { status: 500 });
     if (boatSchema.ok) {
-      const boatResult = await createInitialBoats(supabase, gameRow.id, mapData, faction, maxPlayers);
+      const boatResult = await createInitialBoats(supabase, gameRow.id, mapData, playableFaction, maxPlayers);
       if (!boatResult.ok) return NextResponse.json({ error: boatResult.error }, { status: 500 });
     }
     await createNeutralTowns(supabase, gameRow.id, mapData);

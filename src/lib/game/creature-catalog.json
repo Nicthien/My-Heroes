@@ -1,10 +1,10 @@
 {
-  "source": "https://heroes.thelazy.net/index.php/List_of_creatures",
+  "source": "legacy-creature-reference",
   "sourceRetrievedAt": "2026-05-14",
   "groups": [
     {
       "key": "castle",
-      "label": "Château",
+      "label": "Couronnes d'Acier",
       "units": [
         "pikeman",
         "halberdier",
@@ -24,7 +24,7 @@
     },
     {
       "key": "rampart",
-      "label": "Rempart",
+      "label": "Pacte des Sylves",
       "units": [
         "centaur",
         "centaur_captain",
@@ -44,7 +44,7 @@
     },
     {
       "key": "tower",
-      "label": "Tour",
+      "label": "Cercle d'Azur",
       "units": [
         "gremlin",
         "master_gremlin",
@@ -64,7 +64,7 @@
     },
     {
       "key": "inferno",
-      "label": "Hadès",
+      "label": "Braises Profanes",
       "units": [
         "imp",
         "familiar",
@@ -84,7 +84,7 @@
     },
     {
       "key": "necropolis",
-      "label": "Nécropole",
+      "label": "Voile d'Os",
       "units": [
         "skeleton",
         "skeleton_warrior",
@@ -104,7 +104,7 @@
     },
     {
       "key": "dungeon",
-      "label": "Donjon",
+      "label": "Royaume Sous-Roche",
       "units": [
         "troglodyte",
         "infernal_troglodyte",
@@ -124,7 +124,7 @@
     },
     {
       "key": "stronghold",
-      "label": "Bastion",
+      "label": "Marteaux Rouges",
       "units": [
         "goblin",
         "hobgoblin",
@@ -144,7 +144,7 @@
     },
     {
       "key": "fortress",
-      "label": "Forteresse",
+      "label": "Serments du Marais",
       "units": [
         "gnoll",
         "gnoll_marauder",
@@ -164,7 +164,7 @@
     },
     {
       "key": "conflux",
-      "label": "Conflux",
+      "label": "Orbe Primordial",
       "units": [
         "pixie",
         "sprite",
@@ -227,7 +227,7 @@
     },
     {
       "key": "bulwark",
-      "label": "Bastion nordique",
+      "label": "Citadelle nordique",
       "units": [
         "kobold",
         "kobold_foreman",
@@ -2995,7 +2995,7 @@
       "abilities": [
         "elemental"
       ],
-      "special": "Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Inferno and Armageddon , +100% to basic damage to Fire and Energy Elementals"
+      "special": "Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Abyssal Blaze and Armageddon , +100% to basic damage to Fire and Energy Elementals"
     },
     {
       "type": "ice_elemental",
@@ -3020,7 +3020,7 @@
         "spellcaster",
         "elemental"
       ],
-      "special": "Ranged (24 shots), Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Inferno and Armageddon , +100% to basic damage to Fire and Energy Elementals , Spellcaster ( Protection from Water )"
+      "special": "Ranged (24 shots), Elemental , Immune to Ice Bolt and Frost Ring , Vulnerable to Fireball , Abyssal Blaze and Armageddon , +100% to basic damage to Fire and Energy Elementals , Spellcaster ( Protection from Water )"
     },
     {
       "type": "fire_elemental",

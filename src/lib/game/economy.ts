@@ -169,15 +169,15 @@ export const FACTION_UPGRADED_UNITS = Object.fromEntries(
 ) as Record<Faction, SevenTierUnits>;
 
 export const FACTION_TOWN_NAMES: Record<Faction, string> = {
-  [Faction.CASTLE]: "Château",
-  [Faction.RAMPART]: "Rempart",
-  [Faction.TOWER]: "Tour d'Ivoire",
-  [Faction.INFERNO]: "Hadès",
-  [Faction.NECROPOLIS]: "Nécropole",
-  [Faction.DUNGEON]: "Donjon",
-  [Faction.STRONGHOLD]: "Bastion",
-  [Faction.FORTRESS]: "Forteresse",
-  [Faction.CONFLUX]: "Conflux",
+  [Faction.CASTLE]: "Couronnes d'Acier",
+  [Faction.RAMPART]: "Pacte des Sylves",
+  [Faction.TOWER]: "Cercle d'Azur",
+  [Faction.INFERNO]: "Braises Profanes",
+  [Faction.NECROPOLIS]: "Voile d'Os",
+  [Faction.DUNGEON]: "Royaume Sous-Roche",
+  [Faction.STRONGHOLD]: "Marteaux Rouges",
+  [Faction.FORTRESS]: "Serments du Marais",
+  [Faction.CONFLUX]: "Orbe Primordial",
 };
 
 export function tierForUnit(unitType: UnitType): { faction: Faction; tier: number } | null {

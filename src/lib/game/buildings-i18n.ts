@@ -83,7 +83,7 @@ const BUILDING_DESC_EN: Record<string, string> = {
   "Produit une petite ressource rare aléatoire chaque semaine.": "Produces a small random rare resource each week.",
   "Prépare l'échange de ressources et débloque le silo.": "Prepares resource trading and unlocks the silo.",
   "Relie la surface au souterrain.": "Connects the surface to the underground.",
-  "Relie les villes Hadès pour transférer des créatures.": "Links Inferno towns to transfer creatures.",
+  "Relie les villes des Braises Profanes pour transférer des créatures.": "Links Profane Embers towns to transfer creatures.",
   "Restaure 20 mana au héros.": "Restores 20 mana to the hero.",
   "Restaure la mana du héros une fois par semaine.": "Restores the hero's mana once per week.",
   "Réduit la reconnaissance ennemie autour de la ville.": "Reduces enemy scouting around the town.",

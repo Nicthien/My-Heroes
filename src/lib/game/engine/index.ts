@@ -357,7 +357,7 @@ export function getAdventurePathCostForMode(map: GameMap, path: Position[], mode
 }
 
 /**
- * Movement points actually required to traverse a path, applying the H3
+ * Movement points actually required to traverse a path, applying the
  * "last-move diagonal exception": if the final step is diagonal, the hero
  * only needs to pay the destination's orthogonal cost (the full diagonal cost
  * is still consumed afterwards, clamped to 0).
@@ -1172,7 +1172,7 @@ export function computeExtraTownVisionTiles(
   const extra = new Set<string>();
   for (const town of towns) {
     const buildings = town.buildings ?? [];
-    // Tour de guet est UNIQUE_1 de la faction TOWER
+    // Tour de guet est UNIQUE_1 de la faction Cercle d'Azur.
     const faction = town.townType ?? town.faction;
     if (faction === "tower" && buildings.includes("unique_1")) {
       for (const key of computeVisibleTiles(map, [town.position], bonusRadius)) extra.add(key);

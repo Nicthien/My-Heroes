@@ -395,7 +395,7 @@ export const fr = {
   "town.tabTavern": "Taverne",
   "town.tabMarket": "Marché",
   "town.tabMercenary": "Francs-tireurs",
-  "town.tabGate": "Porte du château",
+  "town.tabGate": "Porte des Braises",
   "town.tabUniversity": "Université de magie",
   "town.tabBallista": "Cour des balistes",
   "hud.townHeader": "{faction} · Niveau {level}",
@@ -681,9 +681,9 @@ export const fr = {
   "artifactsTab.buyer": "Héros acheteur : {name}",
 
   // --- Town: castle gate tab ---
-  "gate.needAnother": "Vous devez posséder une autre ville Hadès équipée de la Porte du château pour transférer des unités.",
+  "gate.needAnother": "Vous devez posséder une autre ville des Braises Profanes équipée de la Porte des Braises pour transférer des unités.",
   "gate.noCreatures": "Aucune créature en garnison à transférer.",
-  "gate.info": "Transférez instantanément les créatures de la garnison vers une autre ville Hadès équipée.",
+  "gate.info": "Transférez instantanément les créatures de la garnison vers une autre ville des Braises Profanes équipée.",
   "gate.destination": "Destination",
   "gate.transfer": "Transférer",
 
@@ -903,7 +903,7 @@ export const fr = {
   "devpage.combat.scenario.hero": "Héros",
   "devpage.combat.scenario.naval": "Naval",
   "devpage.combat.scenario.mine": "Mine",
-  "devpage.combat.scenario.town": "Château",
+  "devpage.combat.scenario.town": "Ville",
   "devpage.combat.scenario.adventure": "Bâtiment",
   "devpage.combat.phase.start": "Début",
   "devpage.combat.phase.tactics": "Tactique",

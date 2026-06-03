@@ -17,8 +17,8 @@ export const FACTION_META: Record<
   }
 > = {
   castle: {
-    label: "Château",
-    labelEn: "Castle",
+    label: "Couronnes d'Acier",
+    labelEn: "Steel Crowns",
     color: "#3b82f6",
     alignment: "good",
     emblem: "♔",
@@ -28,8 +28,8 @@ export const FACTION_META: Record<
     descEn: "Pikemen, archers, griffins, crusaders, cavaliers and angels fight in the name of light.",
   },
   rampart: {
-    label: "Rempart",
-    labelEn: "Rampart",
+    label: "Pacte des Sylves",
+    labelEn: "Sylvan Pact",
     color: "#22c55e",
     alignment: "good",
     emblem: "🌳",
@@ -39,8 +39,8 @@ export const FACTION_META: Record<
     descEn: "Dwarves, elven archers, pegasi, druids, unicorns and gold dragons watch over the forest.",
   },
   tower: {
-    label: "Tour",
-    labelEn: "Tower",
+    label: "Cercle d'Azur",
+    labelEn: "Azure Circle",
     color: "#8b5cf6",
     alignment: "good",
     emblem: "✦",
@@ -50,19 +50,19 @@ export const FACTION_META: Record<
     descEn: "Gremlins, golems, mages, genies and titans: arcane science in the service of good.",
   },
   inferno: {
-    label: "Hadès",
-    labelEn: "Inferno",
+    label: "Braises Profanes",
+    labelEn: "Profane Embers",
     color: "#ef4444",
     alignment: "evil",
     emblem: "🔥",
     tagline: "La ville des démons et des diables",
     taglineEn: "The city of demons and devils",
     desc: "Lutins, gogs, cerbères, démons, magogs et diables surgis des Enfers.",
-    descEn: "Imps, gogs, cerberi, demons, magogs and devils risen from the Inferno.",
+    descEn: "Imps, gogs, cerberi, demons, magogs and devils risen from profane embers.",
   },
   necropolis: {
-    label: "Nécropole",
-    labelEn: "Necropolis",
+    label: "Voile d'Os",
+    labelEn: "Bone Veil",
     color: "#6b7280",
     alignment: "evil",
     emblem: "☠",
@@ -72,8 +72,8 @@ export const FACTION_META: Record<
     descEn: "Skeletons, zombies, ghosts, vampires, liches and bone dragons risen anew.",
   },
   dungeon: {
-    label: "Donjon",
-    labelEn: "Dungeon",
+    label: "Royaume Sous-Roche",
+    labelEn: "Understone Realm",
     color: "#7c3aed",
     alignment: "evil",
     emblem: "✸",
@@ -83,8 +83,8 @@ export const FACTION_META: Record<
     descEn: "Troglodytes, harpies, medusas, minotaurs, manticores and black dragons.",
   },
   stronghold: {
-    label: "Bastion",
-    labelEn: "Stronghold",
+    label: "Marteaux Rouges",
+    labelEn: "Red Hammers",
     color: "#f97316",
     alignment: "barbarian",
     emblem: "⚔",
@@ -94,8 +94,8 @@ export const FACTION_META: Record<
     descEn: "Goblins, orcs, ogres, rocs, cyclopes and mighty behemoths.",
   },
   fortress: {
-    label: "Forteresse",
-    labelEn: "Fortress",
+    label: "Serments du Marais",
+    labelEn: "Swamp Oaths",
     color: "#059669",
     alignment: "barbarian",
     emblem: "🐍",
@@ -103,6 +103,17 @@ export const FACTION_META: Record<
     taglineEn: "Poison, swamps and scales",
     desc: "Gnolls, hommes-lézards, mouches dragons, basilics, gorgones et hydres venimeuses.",
     descEn: "Gnolls, lizardmen, dragon flies, basilisks, gorgons and venomous hydras.",
+  },
+  conflux: {
+    label: "Orbe Primordial",
+    labelEn: "Primordial Orb",
+    color: "#14b8a6",
+    alignment: "good",
+    emblem: "✧",
+    tagline: "Équilibre élémentaire et magie pure",
+    taglineEn: "Elemental balance and pure magic",
+    desc: "Pixies, élémentaires, oiseaux de feu et phénix combattent sous l'éclat primordial.",
+    descEn: "Pixies, elementals, firebirds and phoenixes fight under primordial radiance.",
   },
 };
 

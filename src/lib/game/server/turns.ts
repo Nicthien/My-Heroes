@@ -285,7 +285,7 @@ export async function completePlayerTurn(
             bonusRare[resource] = (bonusRare[resource] ?? 0) + rule.weeklyRandomRareResource;
           }
         }
-        // Portail d'invocation (Donjon UNIQUE_4) : tire 50% des unités des demeures externes du joueur vers les recrues de cette ville.
+        // Portail d'invocation (Royaume Sous-Roche UNIQUE_4) : tire 50% des unités des demeures externes du joueur vers les recrues de cette ville.
         if (townFaction === Faction.DUNGEON && buildings.includes(BuildingType.UNIQUE_4)) {
           const externalDwellings = ((mapState.externalDwellings as Record<string, { ownerId?: string | null; unitType?: string; available?: number }> | undefined) ?? {});
           const pulledByType: Record<string, number> = {};

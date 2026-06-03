@@ -11,6 +11,7 @@ import { BuildIcon, BuiltIcon, MissingResourcesIcon } from "./icons";
 import { buildingTypeLabel } from "./helpers";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
 
 export function TownBuildTab({
   selectedTown,
@@ -137,7 +138,7 @@ export function TownBuildTab({
                 )}
                 <div className="min-w-0">
                 <div className="text-sm font-bold text-amber-100">{localizedLabelFromId(rule.type, rule.label, locale)}</div>
-                <div className="text-xs text-amber-200/60">{rule.description}</div>
+                <div className="text-xs text-amber-200/60">{localizedBuildingDescription(rule.description, locale)}</div>
                 <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
                 {missingRequirement && (
                   <div className="mt-1 text-xs text-red-300">{t("build.missingRequirement", { name: buildingTypeLabel(missingRequirement, selectedTownFaction, locale) })}</div>

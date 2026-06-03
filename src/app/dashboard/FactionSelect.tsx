@@ -7,6 +7,7 @@ import { ALIGNMENT_GROUPS, FACTION_META, getFactionShowcase } from "./factionMet
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { pickLocale } from "@/lib/i18n/localized";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { localizedSpecialty } from "@/lib/game/heroes-i18n";
 
 const PIXELATED: React.CSSProperties = { imageRendering: "pixelated" };
 
@@ -146,7 +147,7 @@ function FactionDetail({ faction }: { faction: string }) {
             />
             <div className="min-w-0">
               <div className="text-sm font-bold text-amber-100">{showcase.hero.name}</div>
-              <div className="text-[11px] uppercase tracking-wider text-amber-200/60">{showcase.hero.specialty}</div>
+              <div className="text-[11px] uppercase tracking-wider text-amber-200/60">{localizedSpecialty(showcase.hero.specialty, locale)}</div>
             </div>
           </div>
         </div>

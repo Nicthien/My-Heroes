@@ -4,6 +4,7 @@ import { Faction, type Player, type Town } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { factionLabel } from "./helpers";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedSpecialty } from "@/lib/game/heroes-i18n";
 
 export function TownTavernTab({
   selectedTown,
@@ -40,7 +41,7 @@ export function TownTavernTab({
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-amber-100">{hero.name}</div>
                   <div className="text-xs text-amber-200/60">{hero.class} · {factionLabel(hero.faction as Faction, locale)}</div>
-                  <div className="text-xs text-amber-300/80">{t("tavern.specialty", { s: hero.specialty })}</div>
+                  <div className="text-xs text-amber-300/80">{t("tavern.specialty", { s: localizedSpecialty(hero.specialty, locale) })}</div>
                   {hero.returning && <div className="text-xs text-emerald-300">{t("tavern.returningHero", { level: hero.level ?? 1, army: hero.armyCount ?? 0 })}</div>}
                   <div className="mt-1 text-xs text-amber-300">{t("tavern.goldCost", { n: HERO_RECRUIT_COST_GOLD })}</div>
                   {atMax && <div className="mt-1 text-xs text-red-300">{t("tavern.maxHeroes", { n: MAX_HEROES_PER_PLAYER })}</div>}

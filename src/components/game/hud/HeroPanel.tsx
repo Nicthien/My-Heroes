@@ -14,6 +14,7 @@ import {
 } from "@/lib/game/artifacts";
 import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } from "@/lib/game/spells";
 import { SKILL_DEFINITIONS, type SkillId, type SkillLevel } from "@/lib/game/skills";
+import { localizedSkillDescription } from "@/lib/game/skills-i18n";
 import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP } from "@/lib/game/army-stacks";
 import type { Hero, Town, UnitStack } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
@@ -367,7 +368,7 @@ function getHeroSkillEntries(hero: Hero, t: TFn, locale: Locale) {
       return {
         id,
         label: localizedLabelFromId(id, definition?.label ?? id.replace(/_/g, " "), locale),
-        description: definition?.description(level) ?? "",
+        description: localizedSkillDescription(id, level, locale),
         level,
         levelLabel: skillLevelLabel(level, t),
       };
@@ -757,7 +758,7 @@ function PendingSkillChoiceBlock({
   if (!next) return null;
   const labelFor = (id: string) => localizedLabelFromId(id, SKILL_DEFINITIONS.find((s) => s.id === id)?.label ?? id, locale);
   const descriptionFor = (id: string, level: SkillLevel) =>
-    SKILL_DEFINITIONS.find((s) => s.id === id)?.description(level) ?? "";
+    localizedSkillDescription(id as SkillId, level, locale);
   const currentLevel = (id: string) => (hero.skills?.[id] as SkillLevel | undefined);
   return (
     <div className="mt-3 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/60 to-stone-950/80 p-3 shadow-inner shadow-black/40">

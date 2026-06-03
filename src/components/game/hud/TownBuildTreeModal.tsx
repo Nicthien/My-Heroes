@@ -17,6 +17,7 @@ import { BuildIcon } from "./icons";
 import { goldText, ornateFramePolished } from "./theme";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 
@@ -185,7 +186,7 @@ function BuildTreeNode({
         <div
           className={`group/sprite absolute left-1/2 top-0 z-20 grid h-20 w-24 -translate-x-1/2 place-items-center rounded-md border-2 bg-black/65 shadow-[0_12px_26px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80 ${stateClass.frame}`}
           role="img"
-          aria-label={`${localizedName} : ${rule.description}`}
+          aria-label={`${localizedName} : ${localizedBuildingDescription(rule.description, locale)}`}
           tabIndex={0}
         >
           {buildingSprite ? (
@@ -203,7 +204,7 @@ function BuildTreeNode({
             <BuildTreeHeaderIcon className="h-10 w-10 text-amber-200/60" />
           )}
           <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-md border border-amber-600/65 bg-stone-950/97 px-3 py-2 text-center text-[11px] font-bold leading-snug text-amber-100 opacity-0 shadow-xl shadow-black/60 transition group-hover/sprite:opacity-100 group-focus/sprite:opacity-100">
-            {rule.description}
+            {localizedBuildingDescription(rule.description, locale)}
           </div>
         </div>
 

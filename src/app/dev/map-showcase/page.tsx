@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { DevPerformancePanel, useDevPerformanceStats } from "@/components/game/hud/DevPerformancePanel";
 import GameMapComponent from "@/components/game/map/GameMap";
 import { AuthContext } from "@/lib/auth/client";
@@ -92,13 +93,18 @@ export default function DevMapShowcasePage() {
 }
 
 function DevMapShowcaseContent() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const perfSize = parsePerfMapSize(searchParams.get("size"));
   const perfFogMode = parsePerfFogMode(searchParams.get("fog"));
   const devPerformanceStats = useDevPerformanceStats(Boolean(perfSize));
   const modeLabel = perfSize
-    ? `Carte Phaser ${perfSize} ${PERF_MAP_SIZES[perfSize]}x${PERF_MAP_SIZES[perfSize]}${perfFogMode === "partial" ? " fog partiel" : ""}`
-    : "Carte de test visuelle";
+    ? t("devpage.mapShowcase.perfLabel", {
+        size: perfSize,
+        dim: PERF_MAP_SIZES[perfSize],
+        fog: perfFogMode === "partial" ? t("devpage.mapShowcase.fogPartial") : "",
+      })
+    : t("devpage.mapShowcase.title");
 
   useEffect(() => {
     const store = useGameStore.getState();

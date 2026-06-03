@@ -280,6 +280,7 @@ export default function GameMapComponent() {
       }
 
       rendererRef.current = renderer;
+      renderer.setLocale(localeRef.current);
       updateRendererLoading(82, tRef.current("map.engineLoaded"));
 
       await renderer.init(container, updateRendererLoading);

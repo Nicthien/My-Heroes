@@ -245,7 +245,7 @@ export function buildObjects(
           color: tile.object.ownerId ? (playerById.get(tile.object.ownerId)?.color ?? "") : "",
           name: isExternalDwellingType(tile.object.subtype)
             ? localizedLabelFromId(tile.object.targetId ?? "", getExternalDwellingLabel(tile.object.targetId), locale)
-            : tile.object.name ?? localizedLabelFromId(tile.object.subtype ?? "", getAdventureBuildingLabel(tile.object.subtype), locale),
+            : localizedLabelFromId(tile.object.subtype ?? "", tile.object.name ?? getAdventureBuildingLabel(tile.object.subtype), locale),
           description,
           buildingType: tile.object.subtype,
           dwellingUnitType: isExternalDwellingType(tile.object.subtype) ? tile.object.targetId : undefined,

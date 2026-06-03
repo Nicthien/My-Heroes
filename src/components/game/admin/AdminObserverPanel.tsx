@@ -5,19 +5,15 @@ import type { ReactNode } from "react";
 import type { Player, ResourceBuilding } from "@/lib/game/types";
 import type { GameActionLogEntry } from "@/lib/game/server/action-log";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { resourceLabel } from "@/lib/game/economy";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
+import type { Locale } from "@/lib/i18n/types";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import { factionLabel as factionMetaLabel } from "@/app/dashboard/factionMeta";
 import { useDraggableWindow } from "../hud/useDraggableWindow";
 import { categoryLabel, formatActionLogTooltip, formatActor, formatLogTime, playerName, sortActionLogNewestFirst } from "../hud/actionLogDisplay";
-
-const FACTION_LABELS: Record<string, string> = {
-  castle: "Chateau",
-  rampart: "Rempart",
-  tower: "Tour",
-  inferno: "Hades",
-  necropolis: "Necropole",
-  dungeon: "Donjon",
-  stronghold: "Bastion",
-  fortress: "Forteresse",
-};
 
 const RESOURCE_BUILDING_LABELS: Record<string, string> = {
   gold_mine: "Mine d'or",
@@ -29,39 +25,36 @@ const RESOURCE_BUILDING_LABELS: Record<string, string> = {
   sulfur_dune: "Carriere de soufre",
 };
 
+const RESOURCE_KEYS: Array<keyof Player["resources"]> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
+
 function coords(position: { x: number; y: number }) {
   return `${position.x}, ${position.y}`;
 }
 
-function factionLabel(faction: string) {
-  return FACTION_LABELS[faction] ?? faction;
+function resourceBuildingLabel(building: ResourceBuilding, locale: Locale) {
+  return localizedLabelFromId(building.type, RESOURCE_BUILDING_LABELS[building.type] ?? building.type, locale);
 }
 
-function resourceBuildingLabel(building: ResourceBuilding) {
-  return RESOURCE_BUILDING_LABELS[building.type] ?? building.type;
-}
-
-function resourcesLabel(player: Player) {
+function resourcesLabel(player: Player, locale: Locale) {
   const resources = player.resources;
-  return [
-    ["Or", resources.gold],
-    ["Bois", resources.wood],
-    ["Minerai", resources.ore],
-    ["Mercure", resources.mercury],
-    ["Cristaux", resources.crystals],
-    ["Gemmes", resources.gems],
-    ["Soufre", resources.sulfur],
-  ].map(([label, value]) => `${label} ${value}`).join(" - ");
+  return RESOURCE_KEYS
+    .map((key) => `${capitalize(resourceLabel(key, locale))} ${resources[key]}`)
+    .join(" - ");
 }
 
-function turnStatus(player: Player, currentTurnPlayerId: string) {
-  if (player.isAlive === false) return "Defait";
-  if (player.hasEndedTurn) return "Tour termine";
-  if (currentTurnPlayerId === player.id) return "Doit jouer";
-  return "En attente";
+function capitalize(value: string) {
+  return value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+function turnStatusKey(player: Player, currentTurnPlayerId: string): TranslationKey {
+  if (player.isAlive === false) return "admin.statusDefeated";
+  if (player.hasEndedTurn) return "admin.statusTurnEnded";
+  if (currentTurnPlayerId === player.id) return "admin.statusMustPlay";
+  return "admin.statusWaiting";
 }
 
 export default function AdminObserverPanel() {
+  const { t, locale } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
   const focusTile = useGameStore((state) => state.focusTile);
@@ -112,9 +105,9 @@ export default function AdminObserverPanel() {
           {...(adminWindowEnabled ? adminWindowDragHandleProps : {})}
           className={`min-w-0 flex-1 ${adminWindowEnabled ? "cursor-move touch-none select-none" : ""}`}
         >
-          <div className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100">Observation admin</div>
+          <div className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100">{t("admin.observerTitle")}</div>
           <div className="truncate text-[11px] font-semibold uppercase tracking-wider text-cyan-200/60">
-            {gameState.players.length}/{gameState.maxPlayers} joueurs - Tour {gameState.turnNumber}
+            {t("admin.observerMeta", { count: gameState.players.length, max: gameState.maxPlayers, turn: gameState.turnNumber })}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -124,8 +117,8 @@ export default function AdminObserverPanel() {
               onPointerDown={(event) => event.stopPropagation()}
               onClick={resetAdminWindowPosition}
               className="grid h-8 w-8 place-items-center rounded border border-cyan-400/35 bg-cyan-950/55 text-cyan-100 transition hover:bg-cyan-900"
-              aria-label="Reinitialiser la position du panneau admin"
-              title="Position initiale"
+              aria-label={t("admin.resetPosition")}
+              title={t("panel.initialPosition")}
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -138,7 +131,7 @@ export default function AdminObserverPanel() {
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setCollapsed((value) => !value)}
             className="grid h-8 w-8 place-items-center rounded border border-cyan-400/35 bg-cyan-950/55 text-sm font-black text-cyan-100 transition hover:bg-cyan-900"
-            aria-label={collapsed ? "Ouvrir le panneau admin" : "Reduire le panneau admin"}
+            aria-label={collapsed ? t("admin.openPanel") : t("admin.collapsePanel")}
           >
             {collapsed ? "+" : "-"}
           </button>
@@ -149,10 +142,10 @@ export default function AdminObserverPanel() {
         <>
           <div className="grid grid-cols-2 border-b border-cyan-400/20 text-[11px] font-black uppercase tracking-wider">
             <AdminTabButton active={activeTab === "players"} onClick={() => setActiveTab("players")}>
-              Joueurs
+              {t("admin.players")}
             </AdminTabButton>
             <AdminTabButton active={activeTab === "journal"} onClick={() => setActiveTab("journal")}>
-              Journal
+              {t("admin.journal")}
             </AdminTabButton>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -162,10 +155,12 @@ export default function AdminObserverPanel() {
                 playersById={playersById}
                 showDetails={showJournalDetails}
                 onToggleDetails={() => setShowJournalDetails((value) => !value)}
+                t={t}
+                locale={locale}
               />
             ) : gameState.players.length === 0 ? (
               <div className="rounded border border-cyan-400/25 bg-black/25 px-3 py-4 text-center text-xs italic text-cyan-100/60">
-                Aucun joueur dans cette partie.
+                {t("admin.noPlayers")}
               </div>
             ) : (
               <div className="space-y-3">
@@ -175,9 +170,9 @@ export default function AdminObserverPanel() {
                     <section key={player.id} className="rounded-md border border-cyan-400/25 bg-black/28">
                       <div className="flex items-start justify-between gap-3 border-b border-cyan-400/15 px-3 py-2">
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-black text-cyan-50">{playerName(player)}</div>
+                          <div className="truncate text-sm font-black text-cyan-50">{playerName(player, locale)}</div>
                           <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-cyan-200/60">
-                            {factionLabel(player.faction)} - {turnStatus(player, gameState.currentTurnPlayerId)}
+                            {factionMetaLabel(player.faction, locale)} - {t(turnStatusKey(player, gameState.currentTurnPlayerId))}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -186,7 +181,7 @@ export default function AdminObserverPanel() {
                             type="button"
                             onClick={() => togglePlayer(player.id)}
                             className="grid h-7 w-7 place-items-center rounded border border-cyan-400/25 bg-cyan-950/35 text-sm font-black text-cyan-100 transition hover:bg-cyan-900"
-                            aria-label={playerCollapsed ? `Ouvrir ${playerName(player)}` : `Reduire ${playerName(player)}`}
+                            aria-label={t(playerCollapsed ? "admin.openPlayer" : "admin.collapsePlayer", { name: playerName(player, locale) })}
                           >
                             {playerCollapsed ? "+" : "-"}
                           </button>
@@ -195,13 +190,13 @@ export default function AdminObserverPanel() {
 
                       {!playerCollapsed && (
                         <div className="space-y-2 px-3 py-2 text-xs text-cyan-50/82">
-                          <div className="font-semibold text-cyan-100/75">{resourcesLabel(player)}</div>
+                          <div className="font-semibold text-cyan-100/75">{resourcesLabel(player, locale)}</div>
 
-                          <AdminSection title={`Heros (${player.heroes.length})`}>
+                          <AdminSection title={t("admin.heroesSection", { n: player.heroes.length })}>
                             {player.heroes.map((hero) => (
                               <AdminPositionButton
                                 key={hero.id}
-                                label={`${hero.name} Niv. ${hero.level}`}
+                                label={t("admin.heroLevel", { name: hero.name, level: hero.level })}
                                 position={hero.position}
                                 onFocus={(position) => {
                                   selectHero(hero.id);
@@ -211,7 +206,7 @@ export default function AdminObserverPanel() {
                             ))}
                           </AdminSection>
 
-                          <AdminSection title={`Chateaux (${player.towns.length})`}>
+                          <AdminSection title={t("admin.castlesSection", { n: player.towns.length })}>
                             {player.towns.map((town) => (
                               <AdminPositionButton
                                 key={town.id}
@@ -225,9 +220,9 @@ export default function AdminObserverPanel() {
                             ))}
                           </AdminSection>
 
-                          <AdminSection title={`Mines (${player.resourceBuildings.length})`}>
+                          <AdminSection title={t("admin.minesSection", { n: player.resourceBuildings.length })}>
                             {player.resourceBuildings.map((building) => (
-                              <AdminPositionButton key={building.id} label={resourceBuildingLabel(building)} position={building.position} onFocus={focus} />
+                              <AdminPositionButton key={building.id} label={resourceBuildingLabel(building, locale)} position={building.position} onFocus={focus} />
                             ))}
                           </AdminSection>
                         </div>
@@ -266,27 +261,31 @@ function AdminJournal({
   playersById,
   showDetails,
   onToggleDetails,
+  t,
+  locale,
 }: {
   entries: GameActionLogEntry[];
   playersById: Map<string, Player>;
   showDetails: boolean;
   onToggleDetails: () => void;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  locale: Locale;
 }) {
   return (
     <div className="space-y-3 text-xs">
       <div className="flex items-center justify-between gap-2">
-        <div className="font-black uppercase tracking-wider text-cyan-200/60">Journal ({entries.length})</div>
+        <div className="font-black uppercase tracking-wider text-cyan-200/60">{t("admin.journalCount", { n: entries.length })}</div>
         <button
           type="button"
           onClick={onToggleDetails}
           className="rounded border border-cyan-400/25 bg-cyan-950/35 px-2 py-1 font-bold text-cyan-100 transition hover:bg-cyan-900"
         >
-          {showDetails ? "Masquer details" : "Details"}
+          {showDetails ? t("admin.hideDetails") : t("admin.showDetails")}
         </button>
       </div>
       {entries.length === 0 ? (
         <div className="rounded border border-cyan-400/25 bg-black/25 px-3 py-4 text-center italic text-cyan-100/60">
-          Aucune action journalisee.
+          {t("admin.noActions")}
         </div>
       ) : (
         <div className="space-y-2">
@@ -296,13 +295,13 @@ function AdminJournal({
               <article
                 key={entry.id}
                 className="rounded border border-cyan-400/20 bg-slate-900/45 px-3 py-2 text-cyan-50/82"
-                title={formatActionLogTooltip(entry, player)}
+                title={formatActionLogTooltip(entry, player, locale)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-cyan-50">{entry.summary}</div>
+                    <div className="font-semibold text-cyan-50">{localizedServerMessage(entry.summary, locale)}</div>
                     <div className="mt-1 text-[10px] font-black uppercase tracking-wider text-cyan-200/50">
-                      {formatActor(entry, player)} - Tour {entry.turnNumber} - {categoryLabel(entry.category)}
+                      {t("admin.logMeta", { actor: formatActor(entry, player, locale), turn: entry.turnNumber, category: categoryLabel(entry.category, locale) })}
                     </div>
                   </div>
                   <time className="shrink-0 font-mono text-[10px] text-cyan-200/55">{formatLogTime(entry.createdAt)}</time>
@@ -322,11 +321,12 @@ function AdminJournal({
 }
 
 function AdminSection({ title, children }: { title: string; children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div>
       <div className="mb-1 text-[11px] font-black uppercase tracking-wider text-cyan-200/55">{title}</div>
       <div className="grid gap-1">
-        {children || <div className="text-cyan-100/35">Aucun</div>}
+        {children || <div className="text-cyan-100/35">{t("admin.none")}</div>}
       </div>
     </div>
   );

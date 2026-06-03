@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -64,6 +64,10 @@ import {
   type UnitModelKind,
   getUnitModel,
 } from "@/components/game/combat/CombatScreen";
+import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId, localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import type { Locale } from "@/lib/i18n/types";
 
 type SpriteKind =
   | "unit"
@@ -428,6 +432,254 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   gems: "Gemmes - ressource rare pour bâtiments et sorts avancés.",
   sulfur: "Soufre - ressource rare pour bâtiments et sorts avancés.",
 };
+
+// ---------------------------------------------------------------------------
+// Localization (dev-only gallery). The FR strings above stay canonical (used as
+// React keys / open-group matching). At display time, `tr()` swaps to English
+// when the locale is "en", via a flat literal map plus ordered fragment rules
+// for composed labels. Kept inline so the shared dictionaries aren't bloated
+// with ~250 dev-only keys.
+// ---------------------------------------------------------------------------
+
+const SPRITES_EN: Record<string, string> = {
+  // Model / terrain / artifact label maps
+  Infanterie: "Infantry", Tireur: "Shooter", Cavalerie: "Cavalry", Volant: "Flying",
+  Colosse: "Colossus", Lanceur: "Caster", "Bête": "Beast", "Mort-vivant": "Undead",
+  Plaine: "Grassland", Terre: "Dirt", Sable: "Sand", Neige: "Snow", Marais: "Swamp",
+  Lave: "Lava", Montagne: "Mountain", "Forêt": "Forest", Eau: "Water",
+  Arme: "Weapon", Bouclier: "Shield", Torse: "Torso", Heaume: "Helmet", Collier: "Necklace",
+  Pieds: "Feet", Anneau: "Ring", Divers: "Misc",
+  Attaque: "Attack", "Défense": "Defense", Puissance: "Spell Power", Connaissance: "Knowledge",
+  Moral: "Morale", Chance: "Luck", "Déplacement": "Movement", "Déplacement mer": "Sea movement",
+  "Armure des damnés": "Armor of the Damned",
+  "Pouvoir du père-dragon": "Power of the Dragon Father",
+  "Tonnerre des titans": "Titan's Thunder",
+  "Alliance angélique": "Angelic Alliance",
+
+  // Adventure building labels
+  Observatoire: "Observatory", "Feu de camp": "Campfire", Phare: "Lighthouse", Stargate: "Stargate",
+  "Arène": "Arena", "Camp de mercenaires": "Mercenary Camp", "Tour de Marletto": "Marletto Tower",
+  "Axe étoilé": "Star Axis", "Jardin de révélation": "Garden of Revelation", "Pierre de savoir": "Learning Stone",
+  "École de guerre": "School of War", "École de magie": "School of Magic",
+  "Bibliothèque d'illumination": "Library of Enlightenment", Cartographe: "Cartographer",
+  "Observatoire sylvestre": "Redwood Observatory", "Jardin mystique": "Mystical Garden",
+  Ecuries: "Stables", Temple: "Temple", "Fontaine de fortune": "Fountain of Fortune",
+  "Idole de fortune": "Idol of Fortune", "Puits magique": "Magic Well", "Sanctuaire magique": "Magic Shrine",
+  "Moulin à eau": "Water Mill", "Roue à eau": "Water Wheel", "Chariot abandonne": "Abandoned Wagon",
+  Caisse: "Crate", Squelette: "Skeleton", Obelisque: "Obelisk", "Tombe du guerrier": "Warrior's Tomb",
+  "Autel maudit": "Cursed Altar", "Sanctuaire de sort I": "Spell Shrine I",
+  "Sanctuaire de sort II": "Spell Shrine II", "Sanctuaire de sort III": "Spell Shrine III",
+  "Arbre de connaissance": "Tree of Knowledge", "Hutte d'érudit": "Seer's Hut", Sirene: "Mermaid",
+  "Bouée": "Buoy", "Debris flottants": "Flotsam", "Coffre marin": "Sea Chest",
+
+  // Adventure building descriptions
+  "Révèle une grande zone autour de la position visitée. Visitable une seule fois par héros.":
+    "Reveals a large area around the visited position. Visitable once per hero.",
+  "Offre un petit gain d'or et d'une ressource aléatoire. Disparaît une fois visité.":
+    "Grants a small amount of gold and a random resource. Vanishes once visited.",
+  "Une fois capturé, augmente le mouvement maritime de tous les héros du joueur.":
+    "Once captured, increases the sea movement of all the player's heroes.",
+  "Téléporte le héros vers une autre stargate appartenant au même joueur.":
+    "Teleports the hero to another stargate owned by the same player.",
+  "Permet de choisir un entraînement : +2 Attaque ou +2 Défense pour le héros.":
+    "Lets you pick a training: +2 Attack or +2 Defense for the hero.",
+  "Accorde +1 Attaque au héros qui le visite.": "Grants +1 Attack to the visiting hero.",
+  "Accorde +1 Défense au héros qui la visite.": "Grants +1 Defense to the visiting hero.",
+  "Accorde +1 Pouvoir au héros qui le visite.": "Grants +1 Spell Power to the visiting hero.",
+  "Accorde +1 Savoir au héros qui le visite.": "Grants +1 Knowledge to the visiting hero.",
+  "Accorde 1000 XP au héros qui la visite.": "Grants 1000 XP to the visiting hero.",
+  "Permet de payer 1000 Or pour choisir +1 Attaque ou +1 Défense.":
+    "Lets you pay 1000 Gold to pick +1 Attack or +1 Defense.",
+  "Permet de payer 1000 Or pour choisir +1 Pouvoir ou +1 Savoir.":
+    "Lets you pay 1000 Gold to pick +1 Spell Power or +1 Knowledge.",
+  "Accorde +2 aux quatre caractéristiques principales aux héros de niveau 10 ou plus.":
+    "Grants +2 to the four main stats to heroes level 10 or higher.",
+  "Permet de payer 10000 Or pour révéler toute la carte.":
+    "Lets you pay 10000 Gold to reveal the whole map.",
+  "Révèle une très grande zone autour du bâtiment.": "Reveals a very large area around the building.",
+  "Offre une récompense hebdomadaire en Or ou Gemmes.": "Grants a weekly reward of Gold or Gems.",
+  "Accorde un bonus hebdomadaire de déplacement au héros.": "Grants the hero a weekly movement bonus.",
+  "Accorde +1 Moral au héros qui le visite.": "Grants +1 Morale to the visiting hero.",
+  "Accorde +1 Chance au héros qui la visite.": "Grants +1 Luck to the visiting hero.",
+  "Accorde +1 Moral et +1 Chance au héros qui la visite.": "Grants +1 Morale and +1 Luck to the visiting hero.",
+  "Restaure la mana du héros une fois par semaine.": "Restores the hero's mana once per week.",
+  "Restaure 20 mana au héros qui le visite.": "Restores 20 mana to the visiting hero.",
+  "Produit 1000 Or une fois par semaine pour le joueur.": "Produces 1000 Gold once per week for the player.",
+  "Produit 500 Or une fois par semaine pour le joueur.": "Produces 500 Gold once per week for the player.",
+  "Contient une petite récompense de carte fouillable une seule fois.":
+    "Contains a small map reward searchable once.",
+  "Contient de l'Or, du Bois ou du Minerai une seule fois.": "Contains Gold, Wood or Ore once.",
+  "Peut contenir de l'Or ou quelques Gemmes.": "May contain Gold or a few Gems.",
+  "Révèle une grande region autour du bâtiment.": "Reveals a large region around the building.",
+  "Offre Or et XP, mais retire 1 Moral au héros.": "Grants Gold and XP, but removes 1 Morale from the hero.",
+  "Accorde +1 Pouvoir au héros, mais retire 1 Chance.": "Grants +1 Spell Power to the hero, but removes 1 Luck.",
+  "Enseigne un sort de niveau 1 au héros.": "Teaches the hero a level 1 spell.",
+  "Enseigne un sort de niveau 2 au héros.": "Teaches the hero a level 2 spell.",
+  "Enseigne un sort de niveau 3 au héros.": "Teaches the hero a level 3 spell.",
+  "Accorde 2000 XP contre 2000 Or.": "Grants 2000 XP for 2000 Gold.",
+  "Accorde 1000 XP et restaure un peu de mana.": "Grants 1000 XP and restores a little mana.",
+  "Accorde +1 Chance au héros.": "Grants +1 Luck to the hero.",
+  "Accorde +1 Moral au héros.": "Grants +1 Morale to the hero.",
+  "Contient de l'Or et du Bois.": "Contains Gold and Wood.",
+  "Contient de l'Or ou des Gemmes.": "Contains Gold or Gems.",
+  "Bâtiment d'aventure.": "Adventure building.",
+
+  // Faction town descriptions
+  "Faction humaine équilibrée : pikemen, archers, griffons, chevaliers, anges.":
+    "Balanced human faction: pikemen, archers, griffins, knights, angels.",
+  "Faction sylvestre : centaures, elfes, pégases, licornes, dragons verts.":
+    "Sylvan faction: centaurs, elves, pegasi, unicorns, green dragons.",
+  "Faction mage : gremlins, gargouilles, golems, mages, génies, titans.":
+    "Mage faction: gremlins, gargoyles, golems, mages, genies, titans.",
+  "Faction démoniaque : diablotins, démons, efreets, diables.":
+    "Demonic faction: imps, demons, efreets, devils.",
+  "Faction morts-vivants : squelettes, vampires, liches, dragons d'os.":
+    "Undead faction: skeletons, vampires, liches, bone dragons.",
+  "Faction souterraine : troglodytes, méduses, manticores, dragons rouges.":
+    "Subterranean faction: troglodytes, medusas, manticores, red dragons.",
+  "Faction barbare : gobelins, ogres, cyclopes, behemoths.":
+    "Barbarian faction: goblins, ogres, cyclopes, behemoths.",
+  "Faction des marais : lézards, basilics, gorgones, wyvernes, hydres.":
+    "Swamp faction: lizardmen, basilisks, gorgons, wyverns, hydras.",
+  "Faction élémentaire : pixies, élémentaires, oiseaux de feu.":
+    "Elemental faction: pixies, elementals, firebirds.",
+
+  // Resource descriptions
+  "Monnaie principale. Sert à recruter, construire, négocier.":
+    "Main currency. Used to recruit, build and trade.",
+  "Bois - matériau de construction de base.": "Wood - basic construction material.",
+  "Minerai - matériau de construction de base.": "Ore - basic construction material.",
+  "Mercure - ressource rare pour bâtiments et sorts avancés.":
+    "Mercury - rare resource for advanced buildings and spells.",
+  "Cristaux - ressource rare pour bâtiments et sorts avancés.":
+    "Crystals - rare resource for advanced buildings and spells.",
+  "Gemmes - ressource rare pour bâtiments et sorts avancés.":
+    "Gems - rare resource for advanced buildings and spells.",
+  "Soufre - ressource rare pour bâtiments et sorts avancés.":
+    "Sulfur - rare resource for advanced buildings and spells.",
+
+  // Detail categories / misc labels
+  "Banque de créatures": "Creature bank", "Bâtiment de ville": "Town building",
+  "Bâtiment de ressource": "Resource building", "Demeure externe": "External dwelling",
+  "Bâtiment d'aventure": "Adventure building", Obstacle: "Obstacle", Ressource: "Resource",
+  Faction: "Faction", "Machine de guerre": "War machine", "Fortification de siege": "Siege fortification",
+  "Mur de carte aventure": "Adventure map wall", "Porte de carte aventure": "Adventure map gate",
+  "Sprite générique": "Generic sprite", "Texture de terrain": "Terrain texture",
+  "Décor impassable.": "Impassable decor.",
+  "Demeure externe générique": "Generic external dwelling", Baliste: "Ballista",
+  "Tente de premiers secours": "First aid tent", "Chariot de munitions": "Ammo cart",
+  Catapulte: "Catapult", Tour: "Tower", Porte: "Gate", "Mur de rempart": "Rampart wall",
+  "Porte générique": "Generic gate", "Porte N_S": "Gate N_S", "Porte E_W": "Gate E_W",
+
+  // Group labels
+  "Machines de guerre": "War machines", "Fortifications de siège": "Siege fortifications",
+  "Villes de faction": "Faction towns", "Bâtiments de ressources": "Resource buildings",
+  "Bâtiments d'aventure": "Adventure buildings", "Banques de créatures": "Creature banks",
+  "Demeures externes": "External dwellings", "Murs et portes": "Walls and gates",
+  Obstacles: "Obstacles", Ressources: "Resources", "Bâtiments communs": "Common buildings",
+  "Demeures améliorées": "Upgraded dwellings", "Bâtiments uniques": "Unique buildings",
+  "Onglets ville (HUD)": "Town tabs (HUD)",
+
+  // Subtitles
+  "Unités de combat": "Combat units",
+  "Spritesheets animés : idle et marche par direction": "Animated spritesheets: idle and walk per direction",
+  "Galions complets par faction : idle et navigation par direction":
+    "Full galleons per faction: idle and sailing per direction",
+  "Héros aventure": "Adventure heroes", "Bateaux aventure": "Adventure boats",
+
+  // Tabs
+  Aventure: "Adventure", Villes: "Towns", Artefacts: "Artifacts",
+
+  // SVG items
+  "Marché": "Market", "Marchands d'artefacts": "Artifact merchants", "Francs-tireurs": "Free shooters",
+  "Porte du château": "Castle gate", "Université de magie": "Magic university", "Cour des balistes": "Ballista yard",
+  "Échange ressources (taux H3 selon nb marchés)": "Trade resources (H3 rate based on # markets)",
+  "Achat artefacts (Tour/Donjon/Conflux)": "Buy artifacts (Tower/Dungeon/Conflux)",
+  "Vendre créatures de garnison (Bastion)": "Sell garrison creatures (Stronghold)",
+  "Transfert garnison entre villes Hadès": "Transfer garrison between Inferno towns",
+  "Apprendre écoles élémentaires (Conflux)": "Learn elemental schools (Conflux)",
+  "Achat machines de guerre (Bastion)": "Buy war machines (Stronghold)",
+
+  // Stat labels
+  PV: "HP", Type: "Type", Classe: "Class", Description: "Description", Effet: "Effect",
+  "Garde (puissance)": "Guard (power)", Slots: "Slots", "Nom original": "Original name",
+  "Rareté": "Rarity", Aquatique: "Aquatic", "Croissance / semaine": "Growth / week",
+  "Coût unitaire": "Unit cost", "Att/Déf": "Att/Def", "Production / jour": "Production / day",
+  "Garde (puissance de base)": "Guard (base power)", "Prérequis": "Requirements",
+  "Unité débloquée": "Unlocked unit", Remplace: "Replaces", "Face cube": "Cube face",
+  Terrain: "Terrain", Masque: "Mask", "Unité produite": "Produced unit", "Coût": "Cost",
+  Tirs: "Shots", "Dégâts": "Damage",
+
+  // Section titles
+  "Capacités": "Abilities", Bonus: "Bonus", "Effets supplémentaires": "Additional effects",
+  Combo: "Combo", "Terrains préférés": "Preferred terrains", Variantes: "Variants",
+  "Bonus de croissance": "Growth bonus", Fonctionnement: "How it works",
+  "Unités élite (palier 7+)": "Elite units (tier 7+)", Spritesheet: "Spritesheet", Tags: "Tags",
+  Gardiens: "Guardians", "Récompense": "Reward", Variante: "Variant", garde: "guard",
+  Recrute: "Recruit", Artefact: "Artifact",
+  or: "gold", bois: "wood", minerai: "ore", mercure: "mercury", cristaux: "crystals",
+  gemmes: "gems", soufre: "sulfur",
+
+  // Value strings
+  Distance: "Ranged", "Mêlée": "Melee", Oui: "Yes", Non: "No", Gratuit: "Free", Dessus: "Top",
+
+  // Prose
+  "Une fois capturé, le bâtiment ajoute sa production aux revenus quotidiens du joueur. Il est défendu par des gardiens dont la force dépend de la valeur de base ci-dessus, ajustée par la difficulté de la carte.":
+    "Once captured, the building adds its production to the player's daily income. It is defended by guardians whose strength depends on the base value above, adjusted by map difficulty.",
+  "La demeure externe produit chaque semaine son nombre de créatures. Un héros du propriétaire peut venir les recruter sur place avec les ressources nécessaires.":
+    "The external dwelling produces its number of creatures each week. A hero of the owner can come recruit them on site with the required resources.",
+  "Animation directionnelle utilisée par le moteur Phaser pour les héros et bateaux d'aventure (idle + marche par orientation).":
+    "Directional animation used by the Phaser engine for adventure heroes and boats (idle + walk per orientation).",
+
+  // Header
+  "Galerie des sprites": "Sprites gallery",
+  "Inspection métier des sprites du jeu. Ouvrez une carte pour vérifier le rendu, les détails et la navigation au clavier.":
+    "Production inspection of the game's sprites. Open a card to check rendering, details and keyboard navigation.",
+};
+
+// Ordered fragment rules for composed labels (applied only for "en"). Longer /
+// more specific fragments first so they don't get partially clobbered.
+const SPRITES_FRAGMENTS: Array<[string, string]> = [
+  [" - bâtiment unique", " - unique building"],
+  [" - demeure améliorée", " - upgraded dwelling"],
+  ["Terrain - ", "Terrain - "],
+  ["Routes - ", "Roads - "],
+  ["Artefacts - ", "Artifacts - "],
+  ["Ville ", "Town "],
+  ["bateau ", "boat "],
+  [" par frame", " per frame"],
+  ["Masque route ", "Road mask "],
+  ["côte ", "side "],
+  ["Variante ", "Variant "],
+  [" · garde ", " · guard "],
+  ["Recrute ", "Recruit "],
+  ["Artefact ", "Artifact "],
+  ["/semaine", "/week"],
+  [" or", " gold"],
+  ["Trésor", "Treasure"],
+  ["Mineur", "Minor"],
+  ["Majeur", "Major"],
+  ["Relique", "Relic"],
+];
+
+function localize(locale: Locale, s: string | undefined): string {
+  if (!s || locale !== "en") return s ?? "";
+  if (SPRITES_EN[s]) return SPRITES_EN[s];
+  let out = s;
+  for (const [fr, en] of SPRITES_FRAGMENTS) {
+    if (out.includes(fr)) out = out.split(fr).join(en);
+  }
+  return out;
+}
+
+// Locale flows through context so the leaf cards/panels can localize at display
+// time without re-plumbing the module-scope FR entry constants.
+const SpritesLocaleContext = createContext<Locale>("fr");
+type Tr = (s: string | undefined) => string;
+function useTr(): Tr {
+  const locale = useContext(SpritesLocaleContext);
+  return (s) => localize(locale, s);
+}
 
 function mockUnit(unitType: UnitType, side: "attacker" | "defender"): CombatBoardUnit {
   const rule = UNIT_RULES[unitType];
@@ -898,6 +1150,8 @@ function UnitCard({
 }) {
   const entry = entries[index];
   const rule = entry.unit!.rule;
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
 
   return (
     <button
@@ -918,10 +1172,10 @@ function UnitCard({
         />
       </div>
       <div className="text-center">
-        <div className="text-sm font-black text-amber-200">{rule.label}</div>
-        <div className="text-[10px] uppercase tracking-wider text-stone-400">{entry.unit!.model}</div>
+        <div className="text-sm font-black text-amber-200">{localizedUnitLabel(rule.type, rule.label, locale)}</div>
+        <div className="text-[10px] uppercase tracking-wider text-stone-400">{tr(entry.unit!.model)}</div>
         <div className="mt-1 text-[10px] text-stone-500">
-          Att/Déf {rule.attack}/{rule.defense} · Dégâts {rule.minDamage}-{rule.maxDamage}
+          {tr("Att/Déf")} {rule.attack}/{rule.defense} · {tr("Dégâts")} {rule.minDamage}-{rule.maxDamage}
         </div>
       </div>
     </button>
@@ -938,6 +1192,7 @@ function StaticCard({
   onSelect: (selection: Selection) => void;
 }) {
   const entry = entries[index];
+  const tr = useTr();
   return (
     <button
       type="button"
@@ -948,8 +1203,8 @@ function StaticCard({
         <Image src={entry.path} alt={entry.label} width={80} height={80} unoptimized />
       </div>
       <div className="text-center">
-        <div className="text-sm font-bold text-amber-200">{entry.label}</div>
-        {entry.detail ? <div className="text-[10px] text-stone-500">{entry.detail}</div> : null}
+        <div className="text-sm font-bold text-amber-200">{tr(entry.label)}</div>
+        {entry.detail ? <div className="text-[10px] text-stone-500">{tr(entry.detail)}</div> : null}
       </div>
     </button>
   );
@@ -1007,11 +1262,12 @@ function DirectionalSheetCard({
   onSelect: (selection: Selection) => void;
   sheet: DirectionalSpritesheet;
 }) {
+  const tr = useTr();
   return (
     <div className="rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3">
       <div className="flex flex-wrap items-start gap-4">
         <div>
-          <div className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-200">{label}</div>
+          <div className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-200">{tr(label)}</div>
           <button
             type="button"
             onClick={() => onSelect({ entries, index })}
@@ -1038,18 +1294,20 @@ function DirectionalSheetCard({
 }
 
 function Stat({ label, value }: { label: string; value: ReactNode }) {
+  const tr = useTr();
   return (
     <div className="rounded border border-stone-800 bg-black/30 px-3 py-2">
-      <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{label}</div>
-      <div className="mt-1 text-sm font-black text-amber-100">{value}</div>
+      <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr(label)}</div>
+      <div className="mt-1 text-sm font-black text-amber-100">{typeof value === "string" ? tr(value) : value}</div>
     </div>
   );
 }
 
 function Section({ children, title }: { children: ReactNode; title: string }) {
+  const tr = useTr();
   return (
     <div className="mt-3 rounded border border-stone-800 bg-black/30 px-3 py-2">
-      <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{title}</div>
+      <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr(title)}</div>
       <div className="mt-2">{children}</div>
     </div>
   );
@@ -1063,20 +1321,21 @@ function Badge({ children }: { children: ReactNode }) {
   );
 }
 
-function formatCost(cost: Partial<Resources>) {
+function formatCost(cost: Partial<Resources>, locale: Locale) {
   const entries = Object.entries(cost).filter(([, amount]) => Boolean(amount));
-  if (entries.length === 0) return "Gratuit";
-  return entries.map(([resource, amount]) => `${amount} ${RESOURCE_LABELS[resource as keyof Resources]}`).join(" · ");
+  if (entries.length === 0) return localize(locale, "Gratuit");
+  return entries.map(([resource, amount]) => `${amount} ${localize(locale, RESOURCE_LABELS[resource as keyof Resources])}`).join(" · ");
 }
 
 function UnitDetails({ unit }: { unit: NonNullable<SpriteEntry["unit"]> }) {
   const { rule } = unit;
+  const tr = useTr();
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Type</div>
-          <div className="text-sm font-black text-amber-100">{unit.model}</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Type")}</div>
+          <div className="text-sm font-black text-amber-100">{tr(unit.model)}</div>
         </div>
         <div className="rounded border border-amber-700/40 bg-amber-400/10 px-2 py-1 font-mono text-xs text-amber-100">
           {rule.type}
@@ -1106,14 +1365,15 @@ function UnitDetails({ unit }: { unit: NonNullable<SpriteEntry["unit"]> }) {
 }
 
 function ArtifactDetails({ artifact }: { artifact: ArtifactDefinition }) {
+  const tr = useTr();
   const bonuses = (Object.entries(artifact.bonus) as [keyof ArtifactStatsBonus, number][])
     .filter(([, value]) => value);
-  const slotLabels = Array.from(new Set(artifact.slots.map((slot) => ARTIFACT_SLOT_LABELS[slot] ?? slot)));
+  const slotLabels = Array.from(new Set(artifact.slots.map((slot) => tr(ARTIFACT_SLOT_LABELS[slot] ?? slot))));
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Classe</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Classe")}</div>
           <div className="text-sm font-black text-amber-100">{artifactClassLabel(artifact.class)}</div>
         </div>
         <div className="rounded border border-amber-700/40 bg-amber-400/10 px-2 py-1 font-mono text-xs text-amber-100">
@@ -1131,7 +1391,7 @@ function ArtifactDetails({ artifact }: { artifact: ArtifactDefinition }) {
           <div className="grid grid-cols-2 gap-2">
             {bonuses.map(([stat, value]) => (
               <div key={stat} className="flex items-center justify-between rounded border border-stone-800 bg-black/40 px-2 py-1">
-                <span className="text-xs text-stone-300">{ARTIFACT_BONUS_LABELS[stat]}</span>
+                <span className="text-xs text-stone-300">{tr(ARTIFACT_BONUS_LABELS[stat])}</span>
                 <span className={`font-mono text-xs font-black ${value > 0 ? "text-emerald-300" : "text-rose-300"}`}>
                   {value > 0 ? `+${value}` : value}
                 </span>
@@ -1151,7 +1411,7 @@ function ArtifactDetails({ artifact }: { artifact: ArtifactDefinition }) {
       ) : null}
       {artifact.combo ? (
         <Section title="Combo">
-          <Badge>{ARTIFACT_COMBO_LABELS[artifact.combo] ?? artifact.combo}</Badge>
+          <Badge>{tr(ARTIFACT_COMBO_LABELS[artifact.combo] ?? artifact.combo)}</Badge>
         </Section>
       ) : null}
     </>
@@ -1159,11 +1419,13 @@ function ArtifactDetails({ artifact }: { artifact: ArtifactDefinition }) {
 }
 
 function CreatureBankDetails({ bank }: { bank: CreatureBankDefinition }) {
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
   return (
     <>
       <div className="mb-3">
-        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Description</div>
-        <p className="mt-1 text-sm text-stone-200">{bank.description}</p>
+        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Description")}</div>
+        <p className="mt-1 text-sm text-stone-200">{localizedBuildingDescription(bank.description, locale)}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Rareté" value={bank.rarity} />
@@ -1172,7 +1434,7 @@ function CreatureBankDetails({ bank }: { bank: CreatureBankDefinition }) {
       <Section title="Terrains préférés">
         <div className="flex flex-wrap gap-2">
           {bank.preferredTerrain.map((terrain) => (
-            <Badge key={terrain}>{TERRAIN_LABELS[terrain] ?? terrain}</Badge>
+            <Badge key={terrain}>{tr(TERRAIN_LABELS[terrain] ?? terrain)}</Badge>
           ))}
         </div>
       </Section>
@@ -1181,42 +1443,42 @@ function CreatureBankDetails({ bank }: { bank: CreatureBankDefinition }) {
           {bank.variants.map((variant, idx) => (
             <div key={idx} className="rounded border border-stone-800 bg-black/40 p-2">
               <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wider text-stone-400">
-                <span>Variante {idx + 1}</span>
+                <span>{tr("Variante")} {idx + 1}</span>
                 <span className="font-mono">
-                  {variant.chance}% · garde {variant.guardPower}
+                  {variant.chance}% · {tr("garde")} {variant.guardPower}
                 </span>
               </div>
               <div className="mb-2">
-                <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/80">Gardiens</div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-amber-300/80">{tr("Gardiens")}</div>
                 <ul className="mt-1 space-y-0.5 text-xs text-stone-200">
                   {variant.guards.map((guard, gIdx) => (
                     <li key={gIdx}>
-                      {guard.count}× {UNIT_RULES[guard.unitType]?.label ?? guard.unitType}
+                      {guard.count}× {localizedUnitLabel(guard.unitType, UNIT_RULES[guard.unitType]?.label ?? guard.unitType, locale)}
                     </li>
                   ))}
                 </ul>
               </div>
               <div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-300/80">Récompense</div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-300/80">{tr("Récompense")}</div>
                 <ul className="mt-1 space-y-0.5 text-xs text-stone-200">
-                  {variant.reward.gold ? <li>{variant.reward.gold} or</li> : null}
+                  {variant.reward.gold ? <li>{variant.reward.gold} {tr("or")}</li> : null}
                   {variant.reward.experience ? <li>{variant.reward.experience} XP</li> : null}
                   {variant.reward.resources ? (
                     <li>
                       {Object.entries(variant.reward.resources)
                         .filter(([, amount]) => Boolean(amount))
-                        .map(([res, amount]) => `${amount} ${RESOURCE_LABELS[res as keyof Resources]}`)
+                        .map(([res, amount]) => `${amount} ${tr(RESOURCE_LABELS[res as keyof Resources])}`)
                         .join(", ")}
                     </li>
                   ) : null}
                   {variant.reward.creatures?.map((c, cIdx) => (
                     <li key={cIdx}>
-                      Recrute {c.count}× {UNIT_RULES[c.unitType]?.label ?? c.unitType}
+                      {tr("Recrute")} {c.count}× {localizedUnitLabel(c.unitType, UNIT_RULES[c.unitType]?.label ?? c.unitType, locale)}
                     </li>
                   ))}
                   {variant.reward.artifactTokens?.length ? (
                     <li>
-                      {variant.reward.artifactTokens.map((token) => `Artefact ${token}`).join(", ")}
+                      {variant.reward.artifactTokens.map((token) => `${tr("Artefact")} ${token}`).join(", ")}
                     </li>
                   ) : null}
                 </ul>
@@ -1230,11 +1492,13 @@ function CreatureBankDetails({ bank }: { bank: CreatureBankDefinition }) {
 }
 
 function TownBuildingDetails({ rule, faction }: { rule: TownBuildingRule; faction: Faction }) {
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Faction</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Faction")}</div>
           <div className="text-sm font-black text-amber-100">{FACTION_TOWN_NAMES[faction]}</div>
         </div>
         <div className="rounded border border-amber-700/40 bg-amber-400/10 px-2 py-1 font-mono text-xs text-amber-100">
@@ -1242,11 +1506,11 @@ function TownBuildingDetails({ rule, faction }: { rule: TownBuildingRule; factio
         </div>
       </div>
       <div className="mb-3">
-        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Effet</div>
-        <p className="mt-1 text-sm text-stone-200">{rule.description}</p>
+        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Effet")}</div>
+        <p className="mt-1 text-sm text-stone-200">{localizedBuildingDescription(rule.description, locale)}</p>
       </div>
       <div className="grid grid-cols-1 gap-2">
-        <Stat label="Coût" value={formatCost(rule.cost)} />
+        <Stat label="Coût" value={formatCost(rule.cost, locale)} />
         {rule.requires?.length ? (
           <Stat label="Prérequis" value={rule.requires.join(", ")} />
         ) : null}
@@ -1254,10 +1518,10 @@ function TownBuildingDetails({ rule, faction }: { rule: TownBuildingRule; factio
           <Stat label="Production / jour" value={formatResourceProduction(rule.dailyProduction)} />
         ) : null}
         {rule.unlocksUnit ? (
-          <Stat label="Unité débloquée" value={UNIT_RULES[rule.unlocksUnit]?.label ?? rule.unlocksUnit} />
+          <Stat label="Unité débloquée" value={localizedUnitLabel(rule.unlocksUnit, UNIT_RULES[rule.unlocksUnit]?.label ?? rule.unlocksUnit, locale)} />
         ) : null}
         {rule.replacesUnit ? (
-          <Stat label="Remplace" value={UNIT_RULES[rule.replacesUnit]?.label ?? rule.replacesUnit} />
+          <Stat label="Remplace" value={localizedUnitLabel(rule.replacesUnit, UNIT_RULES[rule.replacesUnit]?.label ?? rule.replacesUnit, locale)} />
         ) : null}
       </div>
       {rule.growthBonus ? (
@@ -1265,7 +1529,7 @@ function TownBuildingDetails({ rule, faction }: { rule: TownBuildingRule; factio
           <ul className="space-y-0.5 text-xs text-stone-200">
             {Object.entries(rule.growthBonus).map(([unitType, bonus]) => (
               <li key={unitType}>
-                +{bonus} {UNIT_RULES[unitType as UnitType]?.label ?? unitType}/semaine
+                +{bonus} {localizedUnitLabel(unitType, UNIT_RULES[unitType as UnitType]?.label ?? unitType, locale)}{tr("/semaine")}
               </li>
             ))}
           </ul>
@@ -1276,11 +1540,13 @@ function TownBuildingDetails({ rule, faction }: { rule: TownBuildingRule; factio
 }
 
 function ResourceBuildingDetails({ rule }: { rule: ResourceBuildingRule }) {
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
   return (
     <>
       <div className="mb-3">
-        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Bâtiment de ressource</div>
-        <div className="text-sm font-black text-amber-100">{rule.label}</div>
+        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Bâtiment de ressource")}</div>
+        <div className="text-sm font-black text-amber-100">{localizedLabelFromId(rule.type, rule.label, locale)}</div>
       </div>
       <div className="grid grid-cols-1 gap-2">
         <Stat label="Production / jour" value={formatResourceProduction(rule.production)} />
@@ -1288,8 +1554,7 @@ function ResourceBuildingDetails({ rule }: { rule: ResourceBuildingRule }) {
       </div>
       <Section title="Fonctionnement">
         <p className="text-xs text-stone-300">
-          Une fois capturé, le bâtiment ajoute sa production aux revenus quotidiens du joueur. Il est défendu par des gardiens
-          dont la force dépend de la valeur de base ci-dessus, ajustée par la difficulté de la carte.
+          {tr("Une fois capturé, le bâtiment ajoute sa production aux revenus quotidiens du joueur. Il est défendu par des gardiens dont la force dépend de la valeur de base ci-dessus, ajustée par la difficulté de la carte.")}
         </p>
       </Section>
     </>
@@ -1298,12 +1563,14 @@ function ResourceBuildingDetails({ rule }: { rule: ResourceBuildingRule }) {
 
 function ExternalDwellingDetails({ unitType, rule }: { unitType: UnitType; rule: UnitRule }) {
   const econ = UNIT_ECON_RULES[unitType];
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Unité produite</div>
-          <div className="text-sm font-black text-amber-100">{rule.label}</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Unité produite")}</div>
+          <div className="text-sm font-black text-amber-100">{localizedUnitLabel(unitType, rule.label, locale)}</div>
         </div>
         <div className="rounded border border-amber-700/40 bg-amber-400/10 px-2 py-1 font-mono text-xs text-amber-100">
           {unitType}
@@ -1311,14 +1578,13 @@ function ExternalDwellingDetails({ unitType, rule }: { unitType: UnitType; rule:
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Croissance / semaine" value={econ?.growth ?? "-"} />
-        <Stat label="Coût unitaire" value={econ ? formatCost(econ.cost) : "-"} />
+        <Stat label="Coût unitaire" value={econ ? formatCost(econ.cost, locale) : "-"} />
         <Stat label="PV" value={rule.health} />
         <Stat label="Att/Déf" value={`${rule.attack}/${rule.defense}`} />
       </div>
       <Section title="Fonctionnement">
         <p className="text-xs text-stone-300">
-          La demeure externe produit chaque semaine son nombre de créatures. Un héros du propriétaire peut venir les recruter
-          sur place avec les ressources nécessaires.
+          {tr("La demeure externe produit chaque semaine son nombre de créatures. Un héros du propriétaire peut venir les recruter sur place avec les ressources nécessaires.")}
         </p>
       </Section>
     </>
@@ -1326,32 +1592,35 @@ function ExternalDwellingDetails({ unitType, rule }: { unitType: UnitType; rule:
 }
 
 function PlainDescription({ description }: { description: string }) {
+  const tr = useTr();
   if (!description) return null;
   return (
     <Section title="Description">
-      <p className="text-xs text-stone-300">{description}</p>
+      <p className="text-xs text-stone-300">{tr(description)}</p>
     </Section>
   );
 }
 
 function FactionDetails({ faction, description }: { faction: Faction; description: string }) {
   const baseUnits = FACTION_UPGRADED_UNITS[faction];
+  const tr = useTr();
+  const locale = useContext(SpritesLocaleContext);
   return (
     <>
       <div className="mb-3">
-        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">Faction</div>
+        <div className="text-[10px] font-black uppercase tracking-wider text-stone-500">{tr("Faction")}</div>
         <div className="text-sm font-black text-amber-100">{FACTION_TOWN_NAMES[faction]}</div>
       </div>
       {description ? (
         <Section title="Description">
-          <p className="text-xs text-stone-300">{description}</p>
+          <p className="text-xs text-stone-300">{tr(description)}</p>
         </Section>
       ) : null}
       {baseUnits ? (
         <Section title="Unités élite (palier 7+)">
           <div className="flex flex-wrap gap-2">
             {baseUnits.slice(-2).map((unitType) => (
-              <Badge key={unitType}>{UNIT_RULES[unitType]?.label ?? unitType}</Badge>
+              <Badge key={unitType}>{localizedUnitLabel(unitType, UNIT_RULES[unitType]?.label ?? unitType, locale)}</Badge>
             ))}
           </div>
         </Section>
@@ -1361,6 +1630,7 @@ function FactionDetails({ faction, description }: { faction: Faction; descriptio
 }
 
 function SpriteDetails({ entry }: { entry: SpriteEntry }) {
+  const tr = useTr();
   switch (entry.kind) {
     case "unit":
       return entry.unit ? <UnitDetails unit={entry.unit} /> : null;
@@ -1393,8 +1663,7 @@ function SpriteDetails({ entry }: { entry: SpriteEntry }) {
       return (
         <Section title="Spritesheet">
           <p className="text-xs text-stone-300">
-            Animation directionnelle utilisée par le moteur Phaser pour les héros et bateaux d&apos;aventure (idle + marche par
-            orientation).
+            {tr("Animation directionnelle utilisée par le moteur Phaser pour les héros et bateaux d'aventure (idle + marche par orientation).")}
           </p>
         </Section>
       );
@@ -1546,6 +1815,7 @@ function TabButton({
   label: string;
   onClick: () => void;
 }) {
+  const tr = useTr();
   return (
     <button
       type="button"
@@ -1558,7 +1828,7 @@ function TabButton({
           : "border-stone-700 bg-stone-900/70 text-stone-400 hover:border-amber-700/70 hover:text-amber-200",
       ].join(" ")}
     >
-      {label}
+      {tr(label)}
       <span className="ml-2 font-mono text-[11px] text-stone-500">{count}</span>
     </button>
   );
@@ -1577,6 +1847,7 @@ function CollapsibleGroup({
   subtitle?: string;
   title: string;
 }) {
+  const tr = useTr();
   return (
     <details className="border-t border-stone-800 py-4 last:border-b" open={defaultOpen}>
       <summary className="grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-3 rounded px-2 py-2 hover:bg-stone-900/70">
@@ -1584,8 +1855,8 @@ function CollapsibleGroup({
           &rsaquo;
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-black uppercase tracking-[0.18em] text-amber-200">{title}</span>
-          {subtitle ? <span className="mt-0.5 block truncate text-xs text-stone-500">{subtitle}</span> : null}
+          <span className="block text-sm font-black uppercase tracking-[0.18em] text-amber-200">{tr(title)}</span>
+          {subtitle ? <span className="mt-0.5 block truncate text-xs text-stone-500">{tr(subtitle)}</span> : null}
         </span>
         <span className="rounded border border-stone-700 bg-stone-950 px-2 py-1 font-mono text-xs text-stone-400">
           {count}
@@ -1818,14 +2089,15 @@ const SVG_GROUPS: Array<{ label: string; items: SvgItem[] }> = [
 const SVG_COUNT = SVG_GROUPS.reduce((sum, group) => sum + group.items.length, 0);
 
 function SvgCard({ item }: { item: SvgItem }) {
+  const tr = useTr();
   return (
     <div className="flex flex-col items-center gap-2 rounded-md border border-amber-700/40 bg-gradient-to-b from-stone-900 to-black p-3 text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset]">
       <div className="grid h-[120px] w-[120px] place-items-center rounded bg-[linear-gradient(45deg,#1f1f1f_25%,transparent_25%),linear-gradient(-45deg,#1f1f1f_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f1f1f_75%),linear-gradient(-45deg,transparent_75%,#1f1f1f_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0]">
         <div className="h-20 w-20 text-amber-200">{item.render}</div>
       </div>
       <div className="text-center">
-        <div className="text-sm font-bold text-amber-100">{item.label}</div>
-        <div className="text-[10px] text-amber-200/60">{item.description}</div>
+        <div className="text-sm font-bold text-amber-100">{tr(item.label)}</div>
+        <div className="text-[10px] text-amber-200/60">{tr(item.description)}</div>
         <code className="mt-1 inline-block text-[10px] text-stone-500">{item.id}</code>
       </div>
     </div>
@@ -1894,6 +2166,7 @@ const GALLERY_TABS: GalleryTabDefinition[] = [
 ];
 
 export default function SpritesGalleryPage() {
+  const { locale } = useI18n();
   const [activeTab, setActiveTab] = useState<GalleryTab>("combat");
   const [selection, setSelection] = useState<Selection>(null);
   const activeTabDefinition = GALLERY_TABS.find((tab) => tab.id === activeTab) ?? GALLERY_TABS[0];
@@ -1909,45 +2182,47 @@ export default function SpritesGalleryPage() {
   const selectedEntry = selection ? selection.entries[selection.index] : null;
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#151712] px-4 py-6 text-stone-100 sm:px-8 sm:py-10">
-      <header className="sticky top-0 z-10 mx-auto max-w-7xl border-b border-stone-800 bg-[#151712]/95 pb-4 backdrop-blur">
-        <div className="grid gap-4">
-          <div>
-            <h1 className="text-3xl font-black text-amber-200">Galerie des sprites</h1>
-            <p className="mt-1 max-w-3xl text-sm text-stone-400">
-              Inspection métier des sprites du jeu. Ouvrez une carte pour vérifier le rendu, les détails et la navigation au clavier.
-            </p>
+    <SpritesLocaleContext.Provider value={locale}>
+      <div className="h-screen overflow-y-auto bg-[#151712] px-4 py-6 text-stone-100 sm:px-8 sm:py-10">
+        <header className="sticky top-0 z-10 mx-auto max-w-7xl border-b border-stone-800 bg-[#151712]/95 pb-4 backdrop-blur">
+          <div className="grid gap-4">
+            <div>
+              <h1 className="text-3xl font-black text-amber-200">{localize(locale, "Galerie des sprites")}</h1>
+              <p className="mt-1 max-w-3xl text-sm text-stone-400">
+                {localize(locale, "Inspection métier des sprites du jeu. Ouvrez une carte pour vérifier le rendu, les détails et la navigation au clavier.")}
+              </p>
+            </div>
+            <nav aria-label="Types de ressources" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              {GALLERY_TABS.map((tab) => (
+                <TabButton
+                  key={tab.id}
+                  active={activeTab === tab.id}
+                  count={tab.count}
+                  label={tab.label}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSelection(null);
+                  }}
+                />
+              ))}
+            </nav>
           </div>
-          <nav aria-label="Types de ressources" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {GALLERY_TABS.map((tab) => (
-              <TabButton
-                key={tab.id}
-                active={activeTab === tab.id}
-                count={tab.count}
-                label={tab.label}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setSelection(null);
-                }}
-              />
-            ))}
-          </nav>
-        </div>
-      </header>
+        </header>
 
-      <main className="mx-auto mt-6 max-w-7xl">
-        {activeTabDefinition.render(setSelection)}
-      </main>
-      {selection && selectedEntry ? (
-        <SpriteLightbox
-          entry={selectedEntry}
-          position={{ index: selection.index, total: selection.entries.length }}
-          total={selection.entries.length}
-          onClose={() => setSelection(null)}
-          onPrevious={() => navigate(-1)}
-          onNext={() => navigate(1)}
-        />
-      ) : null}
-    </div>
+        <main className="mx-auto mt-6 max-w-7xl">
+          {activeTabDefinition.render(setSelection)}
+        </main>
+        {selection && selectedEntry ? (
+          <SpriteLightbox
+            entry={selectedEntry}
+            position={{ index: selection.index, total: selection.entries.length }}
+            total={selection.entries.length}
+            onClose={() => setSelection(null)}
+            onPrevious={() => navigate(-1)}
+            onNext={() => navigate(1)}
+          />
+        ) : null}
+      </div>
+    </SpritesLocaleContext.Provider>
   );
 }

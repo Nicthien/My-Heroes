@@ -52,6 +52,7 @@ import {
   getUnitMoveTransition,
   getUnitTitle,
 } from "./combatLayout";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type CombatHoverAction = "move" | "mêlée" | "ranged" | "rangedHampered";
 
@@ -137,6 +138,7 @@ export function IsoBattlefield({
   tacticsSelectedUnitId?: string | null;
   onTacticsSelectedUnitChange?: (unitId: string | null) => void;
 }) {
+  const { t } = useI18n();
   const [pendingMove, setPendingMove] = useState<{ unitId: string; q: number; r: number; path: { q: number; r: number }[] } | null>(null);
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
   const [camera, setCamera] = useState({ zoom: DEFAULT_BATTLE_ZOOM, panX: DEFAULT_BATTLE_PAN_X, panY: DEFAULT_BATTLE_PAN_Y });
@@ -743,14 +745,14 @@ export function IsoBattlefield({
           className="rounded-md border border-amber-500/50 bg-black/55 px-2 py-1 text-xs font-black text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
           onClick={resetCamera}
         >
-          Vue
+          {t("combat.resetView")}
         </button>
         <button
           type="button"
           className="grid h-6 w-10 place-items-center rounded-md border border-amber-500/45 bg-black/55 text-sm font-black leading-none text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
           onClick={() => zoomCamera(1.12)}
-          aria-label="Zoom avant"
-          title="Zoom avant"
+          aria-label={t("combat.zoomIn")}
+          title={t("combat.zoomIn")}
         >
           +
         </button>
@@ -758,8 +760,8 @@ export function IsoBattlefield({
           type="button"
           className="grid h-6 w-10 place-items-center rounded-md border border-amber-500/45 bg-black/55 text-sm font-black leading-none text-amber-100 shadow-lg transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
           onClick={() => zoomCamera(0.89)}
-          aria-label="Zoom arriere"
-          title="Zoom arriere"
+          aria-label={t("combat.zoomOut")}
+          title={t("combat.zoomOut")}
         >
           -
         </button>

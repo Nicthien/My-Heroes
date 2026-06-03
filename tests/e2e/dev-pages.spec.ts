@@ -94,7 +94,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
 
   test("combat town preview renders siege sprites", async ({ page }) => {
     await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Chateau" }).click();
+    await page.getByRole("button", { name: "Château" }).click();
 
     await expect(page.getByTestId("siege-overlay")).toBeAttached();
     await expect(page.locator('img[src*="/assets/sprites/map/wall-rampart-cube.png"]').first()).toBeVisible();
@@ -351,8 +351,8 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(panel).toBeVisible();
     await expect(panel.getByText("Observation admin")).toBeVisible();
     await expect(panel.getByText("Leon Sticky-Fingers")).toBeVisible();
-    await expect(panel.getByText("Heros (2)")).toBeVisible();
-    await expect(panel.getByText("Chateaux (1)")).toBeVisible();
+    await expect(panel.getByText("Héros (2)")).toBeVisible();
+    await expect(panel.getByText("Châteaux (1)")).toBeVisible();
     await expect(panel.getByText("Mines (3)")).toBeVisible();
     await expect(panel.getByRole("button", { name: "Demarrer" })).toHaveCount(0);
   });
@@ -361,14 +361,14 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await page.goto("/dev/admin-observer", { waitUntil: "domcontentloaded" });
 
     const panel = page.getByTestId("admin-observer-panel");
-    await panel.getByRole("button", { name: /Reduire Leon Sticky-Fingers/ }).click();
-    await expect(panel.getByText("Heros (2)")).toHaveCount(0);
+    await panel.getByRole("button", { name: /Réduire Leon Sticky-Fingers/ }).click();
+    await expect(panel.getByText("Héros (2)")).toHaveCount(0);
 
     await panel.getByRole("button", { name: "Journal" }).click();
     await expect(panel.getByText("Leon Sticky-Fingers déplace un héros.")).toBeVisible();
     await expect(panel.getByText("actionType")).toHaveCount(0);
 
-    await panel.getByRole("button", { name: "Details" }).click();
+    await panel.getByRole("button", { name: "Détails" }).click();
     await expect(panel.getByText("actionType").first()).toBeVisible();
     await expect(panel.getByText("MOVE_HERO")).toBeVisible();
   });
@@ -378,7 +378,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
 
     const panel = page.getByTestId("admin-observer-panel");
     await expect(panel).toBeVisible();
-    await page.getByRole("button", { name: "Reinitialiser la position du panneau admin" }).click();
+    await page.getByRole("button", { name: "Réinitialiser la position du panneau admin" }).click();
 
     const start = await panel.boundingBox();
     expect(start).not.toBeNull();
@@ -397,7 +397,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     expect(restored).not.toBeNull();
     expect(Math.abs(restored!.x - moved!.x)).toBeLessThan(8);
 
-    await page.getByRole("button", { name: "Reinitialiser la position du panneau admin" }).click();
+    await page.getByRole("button", { name: "Réinitialiser la position du panneau admin" }).click();
     const reset = await page.getByTestId("admin-observer-panel").boundingBox();
     expect(reset).not.toBeNull();
     expect(reset!.x).toBeLessThan(moved!.x - 80);

@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export default function JoinCombatModal() {
+  const { t } = useI18n();
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
   const pendingJoinCombat = useGameStore((state) => state.pendingJoinCombat);
@@ -28,15 +30,15 @@ export default function JoinCombatModal() {
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      setCombatMessage(data?.error ?? "Impossible de traiter cette demande de renfort.");
+      setCombatMessage(data?.error ?? t("combat.reinforceFailed"));
       return;
     }
     const combatPayload = data?.combat ?? data;
     if (combatPayload) setActiveCombat(mapCombat(combatPayload));
-    setCombatMessage(decision === "accept" ? "Renfort accepte." : "Renfort refuse.");
+    setCombatMessage(decision === "accept" ? t("combat.reinforceAccepted") : t("combat.reinforceRejected"));
     const refreshed = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshed) setGameState(refreshed);
-  }, [gameState, session?.user?.id, setActiveCombat, setCombatMessage, setGameState]);
+  }, [gameState, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, t]);
 
   const join = useCallback(async (side: "attacker" | "defender") => {
     if (!gameState || !pendingJoinCombat) return;
@@ -47,13 +49,13 @@ export default function JoinCombatModal() {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setCombatMessage(data?.error ?? "Impossible de rejoindre le combat.");
+      setCombatMessage(data?.error ?? t("combat.joinFailed"));
       setPendingJoinCombat(null);
       return;
     }
     const data = await response.json();
     if (data.pending) {
-      setCombatMessage(data.message ?? "Demande de renfort envoyee.");
+      setCombatMessage(data.message ?? t("combat.reinforceSent"));
       setPendingJoinCombat(null);
       const refreshed = await refreshGameState(gameState.id, session?.user?.id);
       if (refreshed) setGameState(refreshed);
@@ -64,7 +66,7 @@ export default function JoinCombatModal() {
     setPendingJoinCombat(null);
     const refreshed = await refreshGameState(gameState.id, session?.user?.id);
     if (refreshed) setGameState(refreshed);
-  }, [gameState, pendingJoinCombat, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, setPendingJoinCombat]);
+  }, [gameState, pendingJoinCombat, session?.user?.id, setActiveCombat, setCombatMessage, setGameState, setPendingJoinCombat, t]);
 
   useEffect(() => {
     if (!pendingJoinCombat) return;
@@ -87,28 +89,28 @@ export default function JoinCombatModal() {
   if (!pendingJoinCombat && pendingApproval) {
     const requesterPlayer = gameState.players.find((player) => player.id === pendingApproval.request.requesterPlayerId);
     const requesterHero = requesterPlayer?.heroes.find((hero) => hero.id === pendingApproval.request.requesterHeroId);
-    const sideLabel = pendingApproval.request.side === "attacker" ? "attaquant" : "defenseur";
+    const sideLabel = pendingApproval.request.side === "attacker" ? t("combat.sideAttacker") : t("combat.sideDefender");
 
     return (
       <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
         <div className="w-[min(92vw,32rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 text-white shadow-2xl">
-          <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">Demande de renfort</div>
-          <h2 className="mt-2 text-2xl font-bold text-yellow-100">Accepter ce renfort ?</h2>
+          <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">{t("combat.reinforceRequest")}</div>
+          <h2 className="mt-2 text-2xl font-bold text-yellow-100">{t("combat.acceptReinforce")}</h2>
           <p className="mt-3 text-sm text-stone-300">
-            {requesterPlayer?.name ?? "Un joueur"} veut envoyer {requesterHero?.name ?? "un héros"} soutenir le camp {sideLabel}.
+            {t("combat.reinforceDesc", { player: requesterPlayer?.name ?? t("combat.aPlayer"), hero: requesterHero?.name ?? t("combat.aHero"), side: sideLabel })}
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button
               className="rounded-lg border border-emerald-500 bg-emerald-950/80 p-4 font-bold text-emerald-100 hover:bg-emerald-900"
               onClick={() => void decideRequest(pendingApproval.request.id, "accept")}
             >
-              Accepter
+              {t("combat.accept")}
             </button>
             <button
               className="rounded-lg border border-red-500 bg-red-950/80 p-4 font-bold text-red-100 hover:bg-red-900"
               onClick={() => void decideRequest(pendingApproval.request.id, "reject")}
             >
-              Refuser
+              {t("combat.reject")}
             </button>
           </div>
         </div>
@@ -125,32 +127,32 @@ export default function JoinCombatModal() {
   const defenderPlayer = combat?.defenderPlayerId
     ? gameState.players.find((p) => p.id === combat.defenderPlayerId)
     : null;
-  const attackerLabel = attackerPlayer?.name ?? "Attaquant";
-  const defenderLabel = defenderPlayer?.name ?? (combat?.neutralArmyId ? "Armée neutre" : "Défenseur");
+  const attackerLabel = attackerPlayer?.name ?? t("combat.attackerLabel");
+  const defenderLabel = defenderPlayer?.name ?? (combat?.neutralArmyId ? t("combat.neutralArmy") : t("combat.defenderLabel"));
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
       <div className="w-[min(92vw,32rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 text-white shadow-2xl">
-        <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">Renfort</div>
-        <h2 className="mt-2 text-2xl font-bold text-yellow-100">Choisir le camp à soutenir</h2>
-        <p className="mt-3 text-sm text-stone-300">Les unités de ce héros rejoindront le combat au prochain round.</p>
+        <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">{t("combat.reinforce")}</div>
+        <h2 className="mt-2 text-2xl font-bold text-yellow-100">{t("combat.chooseSide")}</h2>
+        <p className="mt-3 text-sm text-stone-300">{t("combat.reinforceJoinDesc")}</p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <button
             className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 font-bold hover:bg-blue-900"
             onClick={() => join("attacker")}
           >
-            <div>Soutenir l&apos;attaquant</div>
+            <div>{t("combat.supportAttacker")}</div>
             <div className="mt-1 text-xs font-normal text-blue-200/80">{attackerLabel}</div>
           </button>
           <button
             className="rounded-lg border border-red-500 bg-red-950/80 p-4 font-bold hover:bg-red-900"
             onClick={() => join("defender")}
           >
-            <div>Soutenir le défenseur</div>
+            <div>{t("combat.supportDefender")}</div>
             <div className="mt-1 text-xs font-normal text-red-200/80">{defenderLabel}</div>
           </button>
         </div>
-        <button className="mt-5 text-sm text-stone-400 hover:text-white" onClick={() => setPendingJoinCombat(null)}>Annuler</button>
+        <button className="mt-5 text-sm text-stone-400 hover:text-white" onClick={() => setPendingJoinCombat(null)}>{t("common.cancel")}</button>
       </div>
     </div>
   );

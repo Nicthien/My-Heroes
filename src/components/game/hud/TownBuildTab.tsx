@@ -9,6 +9,8 @@ import { getTownBuildingSprite } from "@/lib/game/town-building-sprites";
 import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
 import { BuildIcon, BuiltIcon, MissingResourcesIcon } from "./icons";
 import { buildingTypeLabel } from "./helpers";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 
 export function TownBuildTab({
   selectedTown,
@@ -49,6 +51,7 @@ export function TownBuildTab({
   onBuild: (building: BuildingType) => void;
   onBuildBoat?: () => void;
 }) {
+  const { t, locale } = useI18n();
   const isCoastal = isTownCoastal(gameState, selectedTown);
   const hasShipyard = hasShipyardBuilding(selectedTownFaction, selectedTown.buildings);
   const canBuildBoat = Boolean(
@@ -69,23 +72,23 @@ export function TownBuildTab({
         className="flex w-full items-center justify-center gap-2 rounded-md border border-amber-500/50 bg-amber-950/45 px-3 py-2 text-[10px] font-black uppercase leading-tight tracking-wide text-amber-100 shadow-inner shadow-black/35 transition hover:border-amber-300/70 hover:bg-amber-900/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70"
       >
         <BuildTreeIcon className="h-4 w-4" />
-        Arbre des constructions
+        {t("town.buildTree")}
       </button>
-      <div className="grid grid-cols-3 gap-1.5" aria-label="Filtres des constructions">
+      <div className="grid grid-cols-3 gap-1.5" aria-label={t("town.buildFilters")}>
         <BuildFilterToggle
           pressed={showBuildableBuildings}
           onPressedChange={setShowBuildableBuildings}
-          label="Achetable"
+          label={t("town.filterBuyable")}
         />
         <BuildFilterToggle
           pressed={showMissingBuildRequirements}
           onPressedChange={setShowMissingBuildRequirements}
-          label="Prérequis"
+          label={t("town.filterRequires")}
         />
         <BuildFilterToggle
           pressed={showBuiltBuildings}
           onPressedChange={setShowBuiltBuildings}
-          label="Construits"
+          label={t("town.filterBuilt")}
         />
       </div>
       {displayedBuildRules.map((rule) => {
@@ -109,10 +112,10 @@ export function TownBuildTab({
           isPending;
         const buildingSprite = getTownBuildingSprite(rule, selectedTownFaction);
         const buildActionLabel = alreadyBuilt
-          ? "Construit"
+          ? t("build.built")
           : lacksResources
-            ? "Ressources insuffisantes"
-            : "Construire";
+            ? t("build.insufficientResources")
+            : t("build.build");
 
         return (
           <div key={rule.type} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
@@ -133,14 +136,14 @@ export function TownBuildTab({
                   </div>
                 )}
                 <div className="min-w-0">
-                <div className="text-sm font-bold text-amber-100">{rule.label}</div>
+                <div className="text-sm font-bold text-amber-100">{localizedLabelFromId(rule.type, rule.label, locale)}</div>
                 <div className="text-xs text-amber-200/60">{rule.description}</div>
                 <div className="mt-1 text-xs text-amber-300">{formatCost(rule.cost)}</div>
                 {missingRequirement && (
-                  <div className="mt-1 text-xs text-red-300">Prérequis manquant : {buildingTypeLabel(missingRequirement, selectedTownFaction)}</div>
+                  <div className="mt-1 text-xs text-red-300">{t("build.missingRequirement", { name: buildingTypeLabel(missingRequirement, selectedTownFaction, locale) })}</div>
                 )}
                 {blockedByCapitolLimit && (
-                  <div className="mt-1 text-xs text-red-300">Limite atteinte : un seul Capitole par joueur.</div>
+                  <div className="mt-1 text-xs text-red-300">{t("build.capitolLimit")}</div>
                 )}
                 </div>
               </div>
@@ -176,10 +179,10 @@ export function TownBuildTab({
         <div className="rounded-lg border border-sky-700/40 bg-gradient-to-b from-sky-950/70 to-black/60 p-3 shadow-inner shadow-black/40">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-sky-100">Bateau</div>
-              <div className="text-xs text-sky-200/65">Construire un bateau sur une case d&apos;eau côtière proche.</div>
-              <div className="mt-1 text-xs text-sky-200">1000 Or, 10 Bois</div>
-              {!isCoastal && <div className="mt-1 text-xs text-red-300">Ville non côtière : aucune eau proche.</div>}
+              <div className="text-sm font-bold text-sky-100">{t("build.boat")}</div>
+              <div className="text-xs text-sky-200/65">{t("build.boatDesc")}</div>
+              <div className="mt-1 text-xs text-sky-200">{t("build.boatCost")}</div>
+              {!isCoastal && <div className="mt-1 text-xs text-red-300">{t("build.notCoastal")}</div>}
             </div>
             <button
               type="button"
@@ -191,7 +194,7 @@ export function TownBuildTab({
                   : "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
               }`}
             >
-              Construire
+              {t("build.build")}
             </button>
           </div>
         </div>

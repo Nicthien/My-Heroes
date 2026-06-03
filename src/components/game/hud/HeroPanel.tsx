@@ -26,6 +26,12 @@ import { UnitSprite } from "./UnitSprite";
 import { unitTypeLabel } from "./helpers";
 import { goldDivider, ornateFramePolished } from "./theme";
 import { useDraggableWindow } from "./useDraggableWindow";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 type HeroTab = "profile" | "army" | "artifacts" | "skills";
 
@@ -41,6 +47,7 @@ export function HeroPanel({
   storagePlayerId?: string;
 }) {
   const { data: session } = useSession();
+  const { t, locale } = useI18n();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<HeroTab>("profile");
   const gameState = useGameStore((state) => state.gameState);
@@ -64,20 +71,20 @@ export function HeroPanel({
     ?.heroes.filter((candidate) => candidate.id !== hero.id && canTransferArtifacts(hero, candidate, gameState.players.flatMap((player) => player.towns))) ?? [];
   const heroArtifactBag = normalizeArtifactBag(hero.artifacts);
   const artifactCount = heroArtifactBag.inventory.length + Object.values(heroArtifactBag.equipment).filter(Boolean).length;
-  const skillEntries = getHeroSkillEntries(hero);
+  const skillEntries = getHeroSkillEntries(hero, t, locale);
   const heroTabs: { id: HeroTab; label: string; badge?: number }[] = [
-    { id: "profile", label: "Profil" },
-    { id: "skills", label: "Compétences", badge: skillEntries.length },
-    { id: "army", label: "Armée", badge: hero.armies.length },
-    { id: "artifacts", label: "Artefacts", badge: artifactCount },
+    { id: "profile", label: t("hero.tabProfile") },
+    { id: "skills", label: t("hero.tabSkills"), badge: skillEntries.length },
+    { id: "army", label: t("hero.tabArmy"), badge: hero.armies.length },
+    { id: "artifacts", label: t("hero.tabArtifacts"), badge: artifactCount },
   ];
 
   async function castAdventureSpell(spell: SpellDefinition, target?: { x: number; y: number }) {
-    if (!gameState) throw new Error("Partie indisponible.");
+    if (!gameState) throw new Error(t("msg.gameUnavailable"));
     if (spellRequiresAdventureTarget(spell) && !target) {
       setPendingAdventureSpell({ heroId: hero.id, spellId: spell.id, label: spell.label });
       setSpellBookOpen(false);
-      setCombatMessage(`${spell.label} : choisissez une case cible.`);
+      setCombatMessage(t("hero.spellPickTarget", { label: spell.label }));
       return;
     }
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
@@ -92,7 +99,7 @@ export function HeroPanel({
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? "Action impossible.");
+    if (!response.ok) throw new Error(data.error ?? t("msg.actionImpossible"));
     setPendingAdventureSpell(null);
     if (typeof data?.interaction?.message === "string") setCombatMessage(data.interaction.message);
     const revealedTiles = normalizeRevealedTiles(data?.interaction?.revealedTiles);
@@ -113,7 +120,7 @@ export function HeroPanel({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? "Action impossible.");
+      setCombatMessage(data.error ?? t("msg.actionImpossible"));
       return;
     }
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -129,10 +136,10 @@ export function HeroPanel({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? "Action impossible.");
+      setCombatMessage(data.error ?? t("msg.actionImpossible"));
       return;
     }
-    if (data?.moved) setCombatMessage(`Fusion : ${data.moved} unités transférées.`);
+    if (data?.moved) setCombatMessage(t("hero.mergeResult", { n: data.moved }));
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshed) setGameState(refreshed);
   }
@@ -156,8 +163,8 @@ export function HeroPanel({
               event.stopPropagation();
               useGameStore.getState().selectHero(null);
             }}
-            aria-label="Fermer"
-            title="Fermer"
+            aria-label={t("common.close")}
+            title={t("common.close")}
           >
             X
           </button>
@@ -165,24 +172,26 @@ export function HeroPanel({
       >
         <div className="border-b border-amber-700/30 px-4 py-3">
           <div className="text-xs uppercase tracking-wider text-amber-200/60">
-            Niveau {hero.level} - XP {hero.experience}
+            {t("hero.levelXp", { level: hero.level, xp: hero.experience })}
           </div>
           {(hero.warMachines?.ballista || hero.warMachines?.firstAid || hero.warMachines?.ammoCart) && (
             <div className="mt-2 flex flex-wrap gap-1">
               {hero.warMachines.ballista && (
-                <span className="inline-flex rounded-full border border-orange-600/50 bg-orange-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-200">Baliste</span>
+                <span className="inline-flex rounded-full border border-orange-600/50 bg-orange-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-200">{t("hero.machineBallista")}</span>
               )}
               {hero.warMachines.firstAid && (
-                <span className="inline-flex rounded-full border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">Tente</span>
+                <span className="inline-flex rounded-full border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">{t("hero.machineTent")}</span>
               )}
               {hero.warMachines.ammoCart && (
-                <span className="inline-flex rounded-full border border-sky-600/50 bg-sky-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">Munitions</span>
+                <span className="inline-flex rounded-full border border-sky-600/50 bg-sky-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-200">{t("hero.machineAmmo")}</span>
               )}
             </div>
           )}
           {!readOnly && (hero.pendingSkillChoices?.length ?? 0) > 0 && (
             <PendingSkillChoiceBlock
               hero={hero}
+              t={t}
+              locale={locale}
               onPicked={async (level, skillId) => {
                 if (!gameState) return;
                 const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
@@ -191,7 +200,7 @@ export function HeroPanel({
                   body: JSON.stringify({ type: "LEARN_SKILL", heroId: hero.id, level, skillId }),
                 });
                 if (!response.ok) {
-                  setCombatMessage((await response.json())?.error ?? "Choix de compétence impossible.");
+                  setCombatMessage((await response.json())?.error ?? t("hero.skillChoiceImpossible"));
                   return;
                 }
                 const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
@@ -208,7 +217,7 @@ export function HeroPanel({
               }}
               className="mt-2 w-full rounded-md border border-violet-400/50 bg-violet-950/65 px-3 py-2 text-left text-sm font-black text-violet-100 transition hover:border-violet-200"
             >
-              Cible: {pendingAdventureSpell.label}
+              {t("hero.target", { label: pendingAdventureSpell.label })}
             </button>
           )}
           {townAtHero && (
@@ -217,7 +226,7 @@ export function HeroPanel({
               className="mt-2 w-full rounded-md border border-sky-500/40 bg-sky-950/50 px-3 py-2 text-left text-sm text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-900/60"
               onClick={() => useGameStore.getState().selectTown(townAtHero.id)}
             >
-              Au château : <span className="font-black">{townAtHero.name}</span>
+              {t("hero.atTown")} <span className="font-black">{townAtHero.name}</span>
             </button>
           )}
         </div>
@@ -244,29 +253,30 @@ export function HeroPanel({
           {activeTab === "profile" && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <Stat label="Attaque" value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
-                <Stat label="Défense" value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
-                <Stat label="Pouvoir" value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
-                <Stat label="Savoir" value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
-                <Stat label="Moral" value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />
-                <Stat label="Chance" value={formatStatBonus(effectiveStats.luck, artifactBonus.luck, true)} color={luckStatColor(effectiveStats.luck)} />
-                <Stat label="Mana" value={hero.mana} color="text-violet-200" />
+                <Stat label={t("stat.attack")} value={formatStatBonus(effectiveStats.attack, artifactBonus.attack)} color="text-red-300" />
+                <Stat label={t("stat.defense")} value={formatStatBonus(effectiveStats.defense, artifactBonus.defense)} color="text-blue-300" />
+                <Stat label={t("stat.spellPower")} value={formatStatBonus(effectiveStats.spellPower, artifactBonus.spellPower)} color="text-violet-300" />
+                <Stat label={t("stat.knowledge")} value={formatStatBonus(effectiveStats.knowledge, artifactBonus.knowledge)} color="text-cyan-300" />
+                <Stat label={t("stat.morale")} value={formatStatBonus(effectiveStats.morale, artifactBonus.morale, true)} color={moraleStatColor(effectiveStats.morale)} />
+                <Stat label={t("stat.luck")} value={formatStatBonus(effectiveStats.luck, artifactBonus.luck, true)} color={luckStatColor(effectiveStats.luck)} />
+                <Stat label={t("stat.mana")} value={hero.mana} color="text-violet-200" />
               </div>
               <div className={goldDivider} />
               <div className="rounded-md border border-amber-800/35 bg-black/35 px-3 py-2 text-xs text-amber-200/70">
-                Position : <span className="font-black text-amber-100">{hero.position.x}, {hero.position.y}</span>
+                {t("hero.position")} <span className="font-black text-amber-100">{hero.position.x}, {hero.position.y}</span>
               </div>
             </div>
           )}
 
-          {activeTab === "skills" && <HeroSkillsPanel hero={hero} />}
+          {activeTab === "skills" && <HeroSkillsPanel hero={hero} t={t} locale={locale} />}
 
-          {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} />}
+          {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} t={t} locale={locale} />}
 
           {activeTab === "artifacts" && (
             <ArtifactPanel
               hero={hero}
               readOnly={readOnly}
+              t={t}
               eligibleTransferHeroes={eligibleTransferHeroes}
               onEquip={(artifactId, slot) => performArtifactAction({ type: "EQUIP_ARTIFACT", heroId: hero.id, artifactId, slot })}
               onUnequip={(slot) => performArtifactAction({ type: "UNEQUIP_ARTIFACT", heroId: hero.id, slot })}
@@ -283,7 +293,7 @@ export function HeroPanel({
         <SpellBookModal
           hero={displayHero}
           context="adventure"
-          title="Livre de sorts - Aventure"
+          title={t("spell.bookAdventure")}
           ignoreManaCost={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
           onCast={castAdventureSpell}
@@ -319,19 +329,19 @@ function luckStatColor(value: number | undefined) {
   return "text-amber-200/80";
 }
 
-function HeroSkillsPanel({ hero }: { hero: Hero }) {
-  const skills = getHeroSkillEntries(hero);
+function HeroSkillsPanel({ hero, t, locale }: { hero: Hero; t: TFn; locale: Locale }) {
+  const skills = getHeroSkillEntries(hero, t, locale);
   if (skills.length === 0) {
     return (
       <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
-        Aucune compétence
+        {t("hero.noSkills")}
       </div>
     );
   }
 
   return (
     <div>
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Compétences</div>
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">{t("hero.tabSkills")}</div>
       <div className="space-y-1">
         {skills.map(({ id, label, description, levelLabel }) => (
           <div key={id} className="rounded-md border border-amber-700/35 bg-black/45 px-2.5 py-2">
@@ -349,17 +359,17 @@ function HeroSkillsPanel({ hero }: { hero: Hero }) {
   );
 }
 
-function getHeroSkillEntries(hero: Hero) {
+function getHeroSkillEntries(hero: Hero, t: TFn, locale: Locale) {
   return Object.entries(hero.skills ?? {})
     .filter((entry): entry is [SkillId, SkillLevel] => isSkillId(entry[0]) && isSkillLevel(entry[1]))
     .map(([id, level]) => {
       const definition = SKILL_DEFINITIONS.find((skill) => skill.id === id);
       return {
         id,
-        label: definition?.label ?? id.replace(/_/g, " "),
+        label: localizedLabelFromId(id, definition?.label ?? id.replace(/_/g, " "), locale),
         description: definition?.description(level) ?? "",
         level,
-        levelLabel: skillLevelLabel(level),
+        levelLabel: skillLevelLabel(level, t),
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -373,10 +383,10 @@ function isSkillLevel(value: unknown): value is SkillLevel {
   return value === "basic" || value === "advanced" || value === "expert";
 }
 
-function skillLevelLabel(level: SkillLevel) {
-  if (level === "basic") return "Base";
-  if (level === "advanced") return "Avancé";
-  return "Expert";
+function skillLevelLabel(level: SkillLevel, t: TFn) {
+  if (level === "basic") return t("skill.levelBasic");
+  if (level === "advanced") return t("skill.levelAdvanced");
+  return t("skill.levelExpert");
 }
 
 function HeroTabButton({
@@ -452,7 +462,7 @@ function HeroTabIcon({ tab }: { tab: HeroTab }) {
   }
 }
 
-function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
+function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; readOnly?: boolean; onAction: (body: Record<string, unknown>) => Promise<void>; t: TFn; locale: Locale }) {
   const [selectedStackId, setSelectedStackId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState(1);
   const sortedArmies = [...hero.armies].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
@@ -481,14 +491,14 @@ function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: bo
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">Armée</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">{t("hero.tabArmy")}</div>
         <div className="text-[10px] font-black text-amber-200/60">{sortedArmies.length}/{HERO_ARMY_STACK_LIMIT}</div>
       </div>
       {selected && (
         <div className="mb-3 rounded-md border border-amber-700/35 bg-black/40 p-2">
           <div className="flex items-center gap-2 text-xs text-amber-100">
             <UnitSprite unitType={selected.unitType} size="xs" />
-            <span className="min-w-0 flex-1 truncate font-black">{unitTypeLabel(selected.unitType)}</span>
+            <span className="min-w-0 flex-1 truncate font-black">{unitTypeLabel(selected.unitType, locale)}</span>
             <span>{selected.count}/{UNIT_STACK_COUNT_CAP}</span>
           </div>
           <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
@@ -517,7 +527,7 @@ function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: bo
             onClick={() => void splitSelected()}
             className="mt-2 w-full rounded-md border border-amber-600/50 bg-amber-950/55 px-3 py-1.5 text-xs font-black text-amber-100 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-45"
           >
-            Séparer
+            {t("hero.split")}
           </button>
         </div>
       )}
@@ -541,11 +551,11 @@ function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: bo
                   ? "border-emerald-300/75 bg-emerald-950/55 text-emerald-100 hover:bg-emerald-900/60"
                   : `border-amber-700/40 bg-black/50 text-amber-100 ${readOnly ? "cursor-default" : "hover:border-amber-400/70"}`
               }`}
-              title={`${unitTypeLabel(unit.unitType)} x ${unit.count}`}
+              title={`${unitTypeLabel(unit.unitType, locale)} x ${unit.count}`}
             >
               <UnitSprite unitType={unit.unitType} size="xs" />
               <span className="min-w-0">
-                <span className="block truncate text-[11px] font-black leading-tight text-amber-100">{unitTypeLabel(unit.unitType)}</span>
+                <span className="block truncate text-[11px] font-black leading-tight text-amber-100">{unitTypeLabel(unit.unitType, locale)}</span>
                 <span className="mt-1 block text-sm font-black leading-none text-amber-50">{unit.count}</span>
               </span>
             </button>
@@ -554,7 +564,7 @@ function HeroArmyPanel({ hero, readOnly, onAction }: { hero: Hero; readOnly?: bo
       </div>
       {hero.armies.length === 0 && (
         <div className="mt-2 rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
-          Armée vide
+          {t("hero.armyEmpty")}
         </div>
       )}
     </div>
@@ -568,6 +578,7 @@ function ArtifactPanel({
   onEquip,
   onUnequip,
   onTransfer,
+  t,
 }: {
   hero: Hero;
   readOnly?: boolean;
@@ -575,6 +586,7 @@ function ArtifactPanel({
   onEquip: (artifactId: string, slot?: ArtifactSlot) => void;
   onUnequip: (slot: ArtifactSlot) => void;
   onTransfer: (artifactId: string, toHeroId: string) => void;
+  t: TFn;
 }) {
   const bag = normalizeArtifactBag(hero.artifacts);
   const equippedEntries = ARTIFACT_SLOTS.map((slot) => ({ slot, artifactId: bag.equipment[slot] }));
@@ -582,7 +594,7 @@ function ArtifactPanel({
 
   return (
     <div>
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-300/80">Artefacts</div>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-300/80">{t("hero.tabArtifacts")}</div>
       <div className="grid grid-cols-4 gap-1">
         {equippedEntries.map(({ slot, artifactId }) => {
           const artifact = artifactId ? getArtifact(artifactId) : null;
@@ -595,10 +607,10 @@ function ArtifactPanel({
                   ? "border-amber-500/55 bg-gradient-to-b from-amber-950/35 to-black/55 text-amber-100 shadow-[inset_0_0_12px_rgba(251,191,36,0.08)] hover:border-amber-300/80"
                   : "border-amber-900/45 bg-black/30 text-amber-200/45 hover:border-amber-700/65"
               }`}
-              title={artifact ? artifactTooltip(artifact.id) : slotLabel(slot)}
+              title={artifact ? artifactTooltip(artifact.id, t) : slotLabel(slot, t)}
               onClick={() => artifactId && !readOnly && onUnequip(slot)}
             >
-              <span className="block w-full truncate font-bold uppercase tracking-normal text-amber-300/75">{slotLabel(slot)}</span>
+              <span className="block w-full truncate font-bold uppercase tracking-normal text-amber-300/75">{slotLabel(slot, t)}</span>
               {artifact ? (
                 <span className="grid min-h-0 flex-1 place-items-center">
                   <ArtifactIcon artifactId={artifact.id} size="slot" />
@@ -612,7 +624,7 @@ function ArtifactPanel({
       </div>
       <div className="mt-2 grid grid-cols-1 gap-1">
         {bag.inventory.length === 0 && (
-          <div className="rounded-md border border-amber-900/40 bg-black/30 px-2 py-1 text-[11px] text-amber-200/55">Inventaire vide</div>
+          <div className="rounded-md border border-amber-900/40 bg-black/30 px-2 py-1 text-[11px] text-amber-200/55">{t("hero.inventoryEmpty")}</div>
         )}
         {bag.inventory.map((artifactId, index) => {
           const artifact = ARTIFACTS_BY_ID[artifactId];
@@ -621,13 +633,13 @@ function ArtifactPanel({
           return (
             <div key={`${artifactId}-${index}`} className="flex items-center gap-1 rounded-md border border-amber-700/35 bg-black/45 px-2 py-1 text-xs">
               <ArtifactIcon artifactId={artifactId} size="row" />
-              <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId)}>{artifact.name}</span>
+              <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId, t)}>{artifact.name}</span>
               {!readOnly && <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
-                Éq.
+                {t("hero.equip")}
               </button>}
               {!readOnly && transferTargetId && (
                 <button type="button" className="rounded border border-sky-500/40 px-2 py-0.5 font-bold text-sky-200" onClick={() => onTransfer(artifactId, transferTargetId)}>
-                  Don
+                  {t("hero.give")}
                 </button>
               )}
             </div>
@@ -655,43 +667,43 @@ function ArtifactIcon({ artifactId, size }: { artifactId: string; size: "row" | 
   );
 }
 
-function slotLabel(slot: ArtifactSlot) {
-  const labels: Record<ArtifactSlot, string> = {
-    weapon: "Arme",
-    shield: "Bouclier",
-    torso: "Torse",
-    helmet: "Tête",
-    necklace: "Cou",
-    feet: "Pieds",
-    ringLeft: "Anneau",
-    ringRight: "Anneau",
-    misc1: "Sac",
-    misc2: "Sac",
-    misc3: "Sac",
-    misc4: "Sac",
+function slotLabel(slot: ArtifactSlot, t: TFn) {
+  const keys: Record<ArtifactSlot, TranslationKey> = {
+    weapon: "slot.weapon",
+    shield: "slot.shield",
+    torso: "slot.torso",
+    helmet: "slot.helmet",
+    necklace: "slot.necklace",
+    feet: "slot.feet",
+    ringLeft: "slot.ring",
+    ringRight: "slot.ring",
+    misc1: "slot.bag",
+    misc2: "slot.bag",
+    misc3: "slot.bag",
+    misc4: "slot.bag",
   };
-  return labels[slot];
+  return t(keys[slot]);
 }
 
-function artifactTooltip(artifactId: string) {
+function artifactTooltip(artifactId: string, t: TFn) {
   const artifact = getArtifact(artifactId);
   if (!artifact) return artifactId;
   const bonus = Object.entries(artifact.bonus)
     .filter(([, value]) => value)
-    .map(([key, value]) => `${bonusLabel(key)} ${Number(value) > 0 ? "+" : ""}${value}`)
+    .map(([key, value]) => `${bonusLabel(key, t)} ${Number(value) > 0 ? "+" : ""}${value}`)
     .join(", ");
-  const unsupported = artifact.unsupportedEffects?.length ? ` | Non actif: ${artifact.unsupportedEffects.join(", ")}` : "";
+  const unsupported = artifact.unsupportedEffects?.length ? ` | ${t("hero.artifactInactive")} ${artifact.unsupportedEffects.join(", ")}` : "";
   return `${artifact.name} (${artifact.originalName})${bonus ? ` | ${bonus}` : ""}${unsupported}`;
 }
 
-function bonusLabel(key: string) {
-  if (key === "attack") return "Att.";
-  if (key === "defense") return "Déf.";
-  if (key === "spellPower") return "Pouvoir";
-  if (key === "knowledge") return "Savoir";
-  if (key === "morale") return "Moral";
-  if (key === "luck") return "Chance";
-  if (key === "movement") return "Mouv.";
+function bonusLabel(key: string, t: TFn) {
+  if (key === "attack") return t("bonus.attack");
+  if (key === "defense") return t("bonus.defense");
+  if (key === "spellPower") return t("bonus.spellPower");
+  if (key === "knowledge") return t("bonus.knowledge");
+  if (key === "morale") return t("bonus.morale");
+  if (key === "luck") return t("bonus.luck");
+  if (key === "movement") return t("bonus.movement");
   return key;
 }
 
@@ -733,19 +745,23 @@ function normalizeRevealHints(value: unknown) {
 function PendingSkillChoiceBlock({
   hero,
   onPicked,
+  t,
+  locale,
 }: {
   hero: Hero;
   onPicked: (level: number, skillId: SkillId) => Promise<void>;
+  t: TFn;
+  locale: Locale;
 }) {
   const next = hero.pendingSkillChoices?.[0];
   if (!next) return null;
-  const labelFor = (id: string) => SKILL_DEFINITIONS.find((s) => s.id === id)?.label ?? id;
+  const labelFor = (id: string) => localizedLabelFromId(id, SKILL_DEFINITIONS.find((s) => s.id === id)?.label ?? id, locale);
   const descriptionFor = (id: string, level: SkillLevel) =>
     SKILL_DEFINITIONS.find((s) => s.id === id)?.description(level) ?? "";
   const currentLevel = (id: string) => (hero.skills?.[id] as SkillLevel | undefined);
   return (
     <div className="mt-3 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/60 to-stone-950/80 p-3 shadow-inner shadow-black/40">
-      <div className="text-xs font-bold uppercase tracking-wider text-amber-200">Montée de niveau {next.level} : choisis une compétence</div>
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-200">{t("hero.levelUpChoice", { level: next.level })}</div>
       <div className="mt-2 space-y-2">
         {next.options.map((id) => {
           const known = currentLevel(id);

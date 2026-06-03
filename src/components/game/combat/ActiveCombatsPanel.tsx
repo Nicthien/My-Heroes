@@ -10,8 +10,13 @@ import {
   ornateFrame,
 } from "../hud/theme";
 import CollapsiblePanel from "../hud/CollapsiblePanel";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 export default function ActiveCombatsPanel() {
+  const { t } = useI18n();
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
   const myPlayer = gameState?.players.find((player) => player.userId === session?.user?.id);
@@ -22,7 +27,7 @@ export default function ActiveCombatsPanel() {
 
   return (
     <CollapsiblePanel
-      title={`Combats (${combats.length})`}
+      title={t("combat.combatsTitle", { n: combats.length })}
       className={ornateFrame}
       expandedClassName="shrink-0 overflow-hidden"
       collapsedClassName="shrink-0 overflow-hidden"
@@ -34,6 +39,7 @@ export default function ActiveCombatsPanel() {
 }
 
 export function ActiveCombatsList() {
+  const { t } = useI18n();
   const { data: session } = useSession();
   const gameState = useGameStore((state) => state.gameState);
   const restoreCombat = useGameStore((state) => state.restoreCombat);
@@ -44,7 +50,7 @@ export function ActiveCombatsList() {
   );
 
   if (combats.length === 0) {
-    return <div className="rounded-lg border border-amber-700/20 bg-black/30 px-3 py-3 text-center text-sm font-semibold text-amber-200/60">Aucun combat actif.</div>;
+    return <div className="rounded-lg border border-amber-700/20 bg-black/30 px-3 py-3 text-center text-sm font-semibold text-amber-200/60">{t("combat.noActive")}</div>;
   }
 
   return (
@@ -57,6 +63,7 @@ export function ActiveCombatsList() {
           myPlayerId={myPlayer?.id}
           onOpen={() => restoreCombat(combat)}
           onFocus={() => focusTile(combat.position.x, combat.position.y)}
+          t={t}
         />
       ))}
     </>
@@ -69,12 +76,14 @@ function CombatRow({
   myPlayerId,
   onOpen,
   onFocus,
+  t,
 }: {
   combat: PersistentCombat;
   turnNumber: number;
   myPlayerId?: string;
   onOpen: () => void;
   onFocus: () => void;
+  t: TFn;
 }) {
   const isParticipant = Boolean(
     myPlayerId &&
@@ -93,7 +102,7 @@ function CombatRow({
         className="min-w-0 flex-1 text-left"
       >
         <div className={`truncate text-sm font-bold ${goldText}`}>
-          Combat {combat.position.x},{combat.position.y}
+          {t("combat.combatAt", { x: combat.position.x, y: combat.position.y })}
         </div>
         <div
           className={`truncate text-[11px] uppercase tracking-wider ${
@@ -106,7 +115,7 @@ function CombatRow({
               : "text-amber-200/50"
           }`}
         >
-          {activeTruce ? "Trêve" : isMyTurn ? "À vous de jouer" : isParticipant ? "En attente" : "Observable"}
+          {activeTruce ? t("combat.truce") : isMyTurn ? t("combat.yourTurn") : isParticipant ? t("hud.waiting") : t("combat.observable")}
         </div>
       </button>
       <button
@@ -117,7 +126,7 @@ function CombatRow({
         }`}
         onClick={onOpen}
       >
-        {activeTruce ? "Trêve" : "Ouvrir"}
+        {activeTruce ? t("combat.truce") : t("combat.open")}
       </button>
     </div>
   );

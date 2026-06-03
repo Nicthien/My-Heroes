@@ -1,6 +1,8 @@
 "use client";
 
 import type { Hero, Player, Town } from "@/lib/game/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 
 const SCHOOLS: Array<{ id: "fire_magic" | "water_magic" | "earth_magic" | "air_magic"; label: string; color: string }> = [
   { id: "fire_magic", label: "Magie du feu", color: "text-red-300" },
@@ -27,12 +29,13 @@ export function TownMageUniversityTab({
   heroesAtSelectedTown: Hero[];
   onLearnSchool: (townId: string, heroId: string, school: "fire_magic" | "water_magic" | "earth_magic" | "air_magic") => Promise<void>;
 }) {
+  const { t, locale } = useI18n();
   const hero = heroesAtSelectedTown[0];
 
   if (!hero) {
     return (
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
-        Aucun héros présent dans le château pour apprendre une école de magie.
+        {t("mage.noHero")}
       </div>
     );
   }
@@ -43,7 +46,7 @@ export function TownMageUniversityTab({
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/70">
-        Héros : <span className="font-bold text-amber-100">{hero.name}</span> — apprend une école pour {LEARN_COST} or (niveau Basic).
+        {t("mage.heroLearns", { name: hero.name, cost: LEARN_COST })}
       </div>
       {SCHOOLS.map((school) => {
         const alreadyKnown = Boolean(skills[school.id]);
@@ -52,8 +55,8 @@ export function TownMageUniversityTab({
           <div key={school.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className={`text-sm font-bold ${school.color}`}>{school.label}</div>
-                {alreadyKnown && <div className="text-xs text-emerald-300">Déjà acquis ({skills[school.id]}).</div>}
+                <div className={`text-sm font-bold ${school.color}`}>{localizedLabelFromId(school.id, school.label, locale)}</div>
+                {alreadyKnown && <div className="text-xs text-emerald-300">{t("mage.alreadyKnown", { level: String(skills[school.id]) })}</div>}
               </div>
               <button
                 type="button"
@@ -65,7 +68,7 @@ export function TownMageUniversityTab({
                     : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 hover:from-amber-500 hover:to-amber-700"
                 }`}
               >
-                Apprendre
+                {t("mage.learn")}
               </button>
             </div>
           </div>

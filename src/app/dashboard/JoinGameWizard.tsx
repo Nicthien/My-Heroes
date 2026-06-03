@@ -8,6 +8,7 @@ import {
 } from "@/components/game/hud/theme";
 import { factionLabel } from "./factionMeta";
 import { FactionSelect } from "./FactionSelect";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export interface JoinableGamePlayer {
   color: string;
@@ -48,6 +49,7 @@ export function JoinGameWizard({
   onRefresh,
   onClose,
 }: JoinGameWizardProps) {
+  const { t, locale } = useI18n();
   return (
     <div
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
@@ -60,24 +62,24 @@ export function JoinGameWizard({
         <CornerOrnaments />
         <ParchmentBackground />
         <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-          Rejoindre une partie <span className="text-sm font-bold text-amber-200/60">— Étape {step}/2</span>
+          {t("join.title")} <span className="text-sm font-bold text-amber-200/60">— {t("wizard.step", { step })}</span>
         </h2>
 
         {step === 1 && (
           <>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Choisissez votre faction</label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("join.chooseFaction")}</label>
             <div className="mb-4">
               <FactionSelect selectedFaction={selectedFaction} onSelect={onSelectFaction} />
             </div>
             <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-4">
               <button onClick={onClose} className={SECONDARY_BUTTON}>
-                Annuler
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => onStepChange(2)}
                 className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-2 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
               >
-                Suivant
+                {t("common.next")}
               </button>
             </div>
           </>
@@ -86,7 +88,7 @@ export function JoinGameWizard({
         {step === 2 && (
           <>
             {openGames.length === 0 ? (
-              <div className="py-4 text-center italic text-amber-200/50">Aucune partie en attente</div>
+              <div className="py-4 text-center italic text-amber-200/50">{t("join.noOpenGames")}</div>
             ) : (
               <div className="mb-4 space-y-2">
                 {openGames.map((game) => (
@@ -97,7 +99,7 @@ export function JoinGameWizard({
                     <div>
                       <div className="font-bold text-amber-100">{game.name}</div>
                       <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                        {game.players.length}/{game.maxPlayers} joueurs
+                        {t("wizard.playersCount", { count: game.players.length, max: game.maxPlayers })}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -106,14 +108,14 @@ export function JoinGameWizard({
                           key={i}
                           className="h-6 w-6 rounded-full ring-2 ring-amber-300/60"
                           style={{ backgroundColor: p.color }}
-                          title={`${p.isAi ? p.aiName || "IA" : p.user?.name || "Joueur"} - ${factionLabel(p.faction)}`}
+                          title={`${p.isAi ? p.aiName || t("common.ai") : p.user?.name || t("common.player")} - ${factionLabel(p.faction, locale)}`}
                         />
                       ))}
                       <button
                         onClick={() => onJoin(game.id)}
                         className="rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-1 text-sm font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700"
                       >
-                        Rejoindre
+                        {t("common.join")}
                       </button>
                     </div>
                   </div>
@@ -123,17 +125,17 @@ export function JoinGameWizard({
 
             <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
               <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
-                Précédent
+                {t("common.previous")}
               </button>
               <div className="flex flex-wrap items-center gap-3">
                 <button onClick={onClose} className={SECONDARY_BUTTON}>
-                  Annuler
+                  {t("common.cancel")}
                 </button>
                 <button
                   onClick={onRefresh}
                   className="rounded-md border border-amber-700/50 bg-stone-950/80 px-6 py-2 text-sm font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100"
                 >
-                  Actualiser
+                  {t("common.refresh")}
                 </button>
               </div>
             </div>

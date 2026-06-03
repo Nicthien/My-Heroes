@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { goldText } from "@/components/game/hud/theme";
 import { ALIGNMENT_GROUPS, FACTION_META, getFactionShowcase } from "./factionMeta";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { pickLocale } from "@/lib/i18n/localized";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 
 const PIXELATED: React.CSSProperties = { imageRendering: "pixelated" };
 
@@ -53,11 +56,12 @@ function FactionGrid({
   selectedFaction: string;
   onSelect: (faction: string) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <div className="space-y-3">
       {ALIGNMENT_GROUPS.map((group) => (
         <div key={group.key}>
-          <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{group.label}</div>
+          <div className={`mb-1 text-[11px] font-bold uppercase tracking-[0.2em] ${group.accent}`}>{pickLocale(group.label, group.labelEn, locale)}</div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {Object.entries(FACTION_META)
               .filter(([, m]) => m.alignment === group.key)
@@ -87,9 +91,9 @@ function FactionGrid({
                       <div className="flex items-center gap-2">
                         <span className="text-base" aria-hidden>{meta.emblem}</span>
                         <div className="h-3 w-3 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-                        <span className="text-sm font-bold text-amber-100">{meta.label}</span>
+                        <span className="text-sm font-bold text-amber-100">{pickLocale(meta.label, meta.labelEn, locale)}</span>
                       </div>
-                      <div className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wider text-amber-200/60">{meta.tagline}</div>
+                      <div className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wider text-amber-200/60">{pickLocale(meta.tagline, meta.taglineEn, locale)}</div>
                     </div>
                   </div>
                 </button>
@@ -102,6 +106,7 @@ function FactionGrid({
 }
 
 function FactionDetail({ faction }: { faction: string }) {
+  const { locale, t } = useI18n();
   const meta = FACTION_META[faction];
   const showcase = getFactionShowcase(faction);
   if (!meta) return null;
@@ -111,7 +116,7 @@ function FactionDetail({ faction }: { faction: string }) {
       <div className="flex items-start gap-4">
         <Image
           src={showcase.townSprite}
-          alt={meta.label}
+          alt={pickLocale(meta.label, meta.labelEn, locale)}
           width={96}
           height={96}
           unoptimized
@@ -122,16 +127,16 @@ function FactionDetail({ faction }: { faction: string }) {
           <div className="flex items-center gap-2">
             <span className="text-lg" aria-hidden>{meta.emblem}</span>
             <div className="h-3.5 w-3.5 rounded-full ring-1 ring-amber-200/40" style={{ backgroundColor: meta.color }} />
-            <h3 className={`text-lg font-black uppercase tracking-wider ${goldText}`}>{meta.label}</h3>
+            <h3 className={`text-lg font-black uppercase tracking-wider ${goldText}`}>{pickLocale(meta.label, meta.labelEn, locale)}</h3>
           </div>
-          <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{meta.tagline}</div>
-          <p className="mt-2 text-xs leading-snug text-amber-200/70">{meta.desc}</p>
+          <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-amber-200/70">{pickLocale(meta.tagline, meta.taglineEn, locale)}</div>
+          <p className="mt-2 text-xs leading-snug text-amber-200/70">{pickLocale(meta.desc, meta.descEn, locale)}</p>
         </div>
       </div>
 
       {showcase.hero && (
         <div className="mt-4">
-          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/80">Héros de départ</div>
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/80">{t("faction.startingHero")}</div>
           <div className="flex items-center gap-3 rounded-md border border-amber-700/30 bg-black/30 p-2.5">
             <HeroIdleSprite
               src={showcase.hero.sprite}
@@ -148,7 +153,7 @@ function FactionDetail({ faction }: { faction: string }) {
       )}
 
       <div className="mt-4">
-        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/80">Créatures emblématiques</div>
+        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/80">{t("faction.signatureCreatures")}</div>
         <div className="grid grid-cols-3 gap-2">
           {showcase.creatures.map((creature) => (
             <div
@@ -157,17 +162,17 @@ function FactionDetail({ faction }: { faction: string }) {
             >
               <Image
                 src={creature.sprite}
-                alt={creature.label}
+                alt={localizedUnitLabel(creature.type, creature.label, locale)}
                 width={48}
                 height={48}
                 unoptimized
                 className="h-12 w-12 object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
                 style={PIXELATED}
               />
-              <div className="text-[11px] font-bold leading-tight text-amber-100">{creature.label}</div>
-              <div className="text-[10px] uppercase tracking-wider text-amber-200/55">Niv. {creature.tier}</div>
+              <div className="text-[11px] font-bold leading-tight text-amber-100">{localizedUnitLabel(creature.type, creature.label, locale)}</div>
+              <div className="text-[10px] uppercase tracking-wider text-amber-200/55">{t("faction.tier")} {creature.tier}</div>
               <div className="text-[10px] text-amber-200/70">
-                <span title="Attaque">⚔ {creature.attack}</span> · <span title="Points de vie">❤ {creature.health}</span>
+                <span title={t("stat.attack")}>⚔ {creature.attack}</span> · <span title={t("stat.health")}>❤ {creature.health}</span>
               </div>
             </div>
           ))}

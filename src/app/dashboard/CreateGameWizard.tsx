@@ -17,6 +17,9 @@ import {
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { MAP_SIZES, type MapSizeKey, type PreviewStats, randomSeedValue } from "./dashboardConstants";
 import { FactionSelect } from "./FactionSelect";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { victoryConditionLabel, victoryConditionDescription } from "@/lib/game/victory";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import {
   RmgGenerationProgress,
   RmgLegend,
@@ -24,12 +27,12 @@ import {
   RmgTuningSlider,
 } from "./dashboardRmgControls";
 
-const RMG_TUNING_CONTROLS: { key: keyof RmgTuning; label: string; min: number; max: number; step: number }[] = [
-  { key: "resourceBudgetPercent", label: "Budget de ressources", min: 25, max: 250, step: 5 },
-  { key: "buildingPercent", label: "Bâtiments économiques", min: 0, max: 250, step: 5 },
-  { key: "looseResourcePercent", label: "Ressources libres", min: 0, max: 300, step: 5 },
-  { key: "monsterPercent", label: "Monstres gardiens", min: 0, max: 250, step: 5 },
-  { key: "adventurePercent", label: "Bâtiments d'aventure", min: 0, max: 250, step: 5 },
+const RMG_TUNING_CONTROLS: { key: keyof RmgTuning; labelKey: TranslationKey; min: number; max: number; step: number }[] = [
+  { key: "resourceBudgetPercent", labelKey: "rmg.resourceBudget", min: 25, max: 250, step: 5 },
+  { key: "buildingPercent", labelKey: "rmg.buildings", min: 0, max: 250, step: 5 },
+  { key: "looseResourcePercent", labelKey: "rmg.looseResources", min: 0, max: 300, step: 5 },
+  { key: "monsterPercent", labelKey: "rmg.monsters", min: 0, max: 250, step: 5 },
+  { key: "adventurePercent", labelKey: "rmg.adventureBuildings", min: 0, max: 250, step: 5 },
 ];
 
 export interface CreateGameWizardProps {
@@ -136,6 +139,8 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
     onClose,
   } = props;
 
+  const { t, locale } = useI18n();
+
   const close = () => {
     onClose();
     setShowRmgPreview(false);
@@ -156,21 +161,21 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
         <CornerOrnaments />
         <ParchmentBackground />
         <h2 className={`mb-4 text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-          Créer une partie {!isAdmin && <span className="text-sm font-bold text-amber-200/60">— Étape {step}/2</span>}
+          {t("create.title")} {!isAdmin && <span className="text-sm font-bold text-amber-200/60">— {t("wizard.step", { step })}</span>}
         </h2>
 
         {showFactionStep ? (
           <>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Choisissez votre faction</label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("join.chooseFaction")}</label>
             <div className="mb-4">
               <FactionSelect selectedFaction={selectedFaction} onSelect={setSelectedFaction} />
             </div>
             <div className="mt-auto flex flex-wrap items-center justify-end gap-3 pt-4">
               <button onClick={close} className={SECONDARY_BUTTON}>
-                Annuler
+                {t("common.cancel")}
               </button>
               <button onClick={() => onStepChange(2)} className={PRIMARY_BUTTON}>
-                Suivant
+                {t("common.next")}
               </button>
             </div>
           </>
@@ -181,18 +186,18 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Nom</label>
+                    <label htmlFor="game-name" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.name")}</label>
                     <input
                       id="game-name"
                       type="text"
                       value={gameName}
                       onChange={(e) => setGameName(e.target.value)}
-                      placeholder={`Partie de ${userName ?? ""}`}
+                      placeholder={t("create.namePlaceholder", { name: userName ?? "" })}
                       className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label htmlFor="max-players" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Joueurs max</label>
+                    <label htmlFor="max-players" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.maxPlayers")}</label>
                     <select
                       id="max-players"
                       value={maxPlayers}
@@ -200,14 +205,14 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                       className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
                     >
                       {[2, 3, 4, 5, 6].map((n) => (
-                        <option key={n} value={n}>{n} joueurs</option>
+                        <option key={n} value={n}>{t("create.playersOption", { n })}</option>
                       ))}
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Taille de carte</label>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.mapSize")}</label>
                   <div className="grid grid-cols-4 gap-2">
                     {(["S", "M", "L", "XL"] as const).map((s) => (
                       <button
@@ -231,37 +236,37 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Modèle</label>
+                    <label htmlFor="template" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.template")}</label>
                     <select
                       id="template"
                       value={selectedTemplateId}
                       onChange={(e) => setTemplateId(e.target.value)}
                       className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
                     >
-                      <option value="auto">Auto</option>
+                      <option value="auto">{t("create.templateAuto")}</option>
                       {templateOptions.map((template) => (
                         <option key={template.id} value={template.id}>
-                          {template.name} ({template.minPlayers}-{template.maxPlayers} joueurs)
+                          {t("create.templateOption", { name: template.name, min: template.minPlayers, max: template.maxPlayers })}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">Graine</label>
+                    <label htmlFor="seed" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.seed")}</label>
                     <div className="flex gap-2">
                       <input
                         id="seed"
                         type="text"
                         value={seed}
                         onChange={(e) => setSeed(e.target.value.toUpperCase() || randomSeedValue())}
-                        placeholder="Graine"
+                        placeholder={t("create.seed")}
                         maxLength={32}
                         className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 placeholder:text-amber-200/30 focus:border-amber-400 focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={generateRandomSeed}
-                        title="Graine aléatoire"
+                        title={t("create.randomSeed")}
                         className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 text-amber-100 hover:border-amber-400"
                       >
                         🎲
@@ -280,12 +285,12 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                     }}
                     className="h-4 w-4 accent-amber-500"
                   />
-                  <span>Générer un souterrain</span>
+                  <span>{t("create.generateUnderground")}</span>
                 </label>
 
                 <div className="rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
                   <label htmlFor="victory-type" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-                    Condition de victoire
+                    {t("create.victoryCondition")}
                   </label>
                   <select
                     id="victory-type"
@@ -294,18 +299,18 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                     className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
                   >
                     {Object.values(VICTORY_CONDITION_META).map((meta) => (
-                      <option key={meta.type} value={meta.type}>{meta.label}</option>
+                      <option key={meta.type} value={meta.type}>{victoryConditionLabel(meta.type, locale)}</option>
                     ))}
                   </select>
                   <p className="mt-1.5 text-[11px] leading-snug text-amber-200/55">
-                    {VICTORY_CONDITION_META[victoryType].description}
-                    {victoryType !== "DOMINATION" && " La domination reste une victoire de secours."}
+                    {victoryConditionDescription(victoryType, locale)}
+                    {victoryType !== "DOMINATION" && t("create.dominationFallback")}
                   </p>
 
                   {victoryType === "GOLD" && (
                     <div className="mt-2">
                       <label htmlFor="gold-target" className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-amber-200/70">
-                        Or à atteindre
+                        {t("create.goldTarget")}
                       </label>
                       <input
                         id="gold-target"
@@ -323,7 +328,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                   {victoryType === "TURN_LIMIT" && (
                     <div className="mt-2">
                       <label htmlFor="turn-limit" className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-amber-200/70">
-                        Nombre de tours
+                        {t("create.turnCount")}
                       </label>
                       <input
                         id="turn-limit"
@@ -340,7 +345,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
 
                   {victoryType === "CAPTURE_TOWN" && (
                     <p className="mt-2 text-[11px] leading-snug text-amber-200/45">
-                      Une ville neutre proche du centre sera désignée comme cible à la création.
+                      {t("create.captureNote")}
                     </p>
                   )}
                 </div>
@@ -353,9 +358,9 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                     className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
                   >
                     <span>
-                      <span className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">R&eacute;glages de g&eacute;n&eacute;ration</span>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.generationSettings")}</span>
                       <span className="block text-[11px] uppercase tracking-wider text-amber-200/50">
-                        Ressources {normalizedRmgTuning.resourceBudgetPercent}% - B&acirc;timents {normalizedRmgTuning.buildingPercent}% - Monstres {normalizedRmgTuning.monsterPercent}%
+                        {t("create.generationSummary", { res: normalizedRmgTuning.resourceBudgetPercent, bld: normalizedRmgTuning.buildingPercent, mon: normalizedRmgTuning.monsterPercent })}
                       </span>
                     </span>
                     <span className="shrink-0 rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-sm font-black text-amber-200">
@@ -367,7 +372,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                       {RMG_TUNING_CONTROLS.map((control) => (
                         <RmgTuningSlider
                           key={control.key}
-                          label={control.label}
+                          label={t(control.labelKey)}
                           min={control.min}
                           max={control.max}
                           step={control.step}
@@ -384,16 +389,16 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               <div className="flex flex-col rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">Aperçu de la carte</div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.mapPreview")}</div>
                     <div className="truncate text-[11px] uppercase tracking-wider text-amber-200/50">
-                      Graine {previewSeedLabel} - {previewSizeLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
+                      {t("create.previewSeedSize", { seed: previewSeedLabel, size: previewSizeLabel })}{undergroundEnabled ? t("create.undergroundOn") : ""}
                     </div>
                   </div>
                   {undergroundEnabled && (
                     <div className="flex rounded-md border border-amber-700/40 bg-black/30 p-1">
                       {[
-                        { id: SURFACE_LEVEL, label: "Surface" },
-                        { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                        { id: SURFACE_LEVEL, label: t("create.surface") },
+                        { id: UNDERGROUND_LEVEL, label: t("create.underground") },
                       ].map((item) => (
                         <button
                           key={item.id}
@@ -413,7 +418,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                     onClick={() => setShowRmgPreview(true)}
                     className="shrink-0 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-100 transition hover:bg-amber-500/25"
                   >
-                    Grand aperçu
+                    {t("create.largePreview")}
                   </button>
                 </div>
                 {isPreviewGenerating || !visiblePreviewMap ? (
@@ -437,16 +442,16 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               <div>
                 {!isAdmin && (
                   <button onClick={() => onStepChange(1)} className={SECONDARY_BUTTON}>
-                    Précédent
+                    {t("common.previous")}
                   </button>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button onClick={close} className={SECONDARY_BUTTON}>
-                  Annuler
+                  {t("common.cancel")}
                 </button>
                 <button onClick={onCreate} disabled={creating} data-testid="create-game-submit" className={PRIMARY_BUTTON}>
-                  {creating ? "Création..." : isAdmin ? "Créer" : "Commencer"}
+                  {creating ? t("create.creating") : isAdmin ? t("create.create") : t("create.start")}
                 </button>
               </div>
             </div>
@@ -468,17 +473,17 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
           >
             <header className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-800 pb-3">
               <div>
-                <h3 className="text-xl font-semibold tracking-normal">Aperçu RMG</h3>
+                <h3 className="text-xl font-semibold tracking-normal">{t("create.rmgPreview")}</h3>
                 <p className="text-sm text-stone-400">
-                  Graine {previewSeedLabel} - Modèle {previewTemplateLabel}{undergroundEnabled ? " - Souterrain activé" : ""}
+                  {t("create.previewSeedTemplate", { seed: previewSeedLabel, template: previewTemplateLabel })}{undergroundEnabled ? t("create.undergroundOn") : ""}
                 </p>
               </div>
               <div className="flex gap-2">
                 {undergroundEnabled && (
                   <div className="flex rounded border border-stone-700 bg-stone-900 p-1">
                     {[
-                      { id: SURFACE_LEVEL, label: "Surface" },
-                      { id: UNDERGROUND_LEVEL, label: "Souterrain" },
+                      { id: SURFACE_LEVEL, label: t("create.surface") },
+                      { id: UNDERGROUND_LEVEL, label: t("create.underground") },
                     ].map((item) => (
                       <button
                         key={item.id}
@@ -498,21 +503,21 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                   onClick={generateRandomSeed}
                   className="h-9 rounded border border-amber-500/60 bg-amber-500/15 px-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/25"
                 >
-                  Nouvelle graine
+                  {t("create.newSeed")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowRmgPreview(false)}
                   className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm font-semibold text-stone-200 hover:border-amber-500/60 hover:text-amber-100"
                 >
-                  Fermer
+                  {t("common.close")}
                 </button>
               </div>
             </header>
 
             <section className="grid gap-3 border-b border-stone-800 pb-4 lg:grid-cols-[1fr_auto_auto_auto]">
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-stone-400">Graine</span>
+                <span className="text-stone-400">{t("create.seed")}</span>
                 <input
                   value={seed}
                   onChange={(event) => setSeed(event.target.value.toUpperCase() || randomSeedValue())}
@@ -522,7 +527,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               </label>
 
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-stone-400">Taille</span>
+                <span className="text-stone-400">{t("create.size")}</span>
                 <select
                   value={mapSize}
                   onChange={(event) => setMapSize(event.target.value as MapSizeKey)}
@@ -537,7 +542,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               </label>
 
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-stone-400">Joueurs</span>
+                <span className="text-stone-400">{t("create.players")}</span>
                 <select
                   value={maxPlayers}
                   onChange={(event) => setMaxPlayers(Number(event.target.value))}
@@ -552,13 +557,13 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
               </label>
 
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-stone-400">Modèle</span>
+                <span className="text-stone-400">{t("create.template")}</span>
                 <select
                   value={selectedTemplateId}
                   onChange={(event) => setTemplateId(event.target.value)}
                   className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
                 >
-                  <option value="auto">auto</option>
+                  <option value="auto">{t("create.templateAuto")}</option>
                   {templateOptions.map((template) => (
                     <option key={template.id} value={template.id}>
                       {template.id}
@@ -577,9 +582,9 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
 
                   <aside className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 text-sm">
                     <RmgLegend />
-                    <RmgStatBlock title="Terrain" values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
-                    <RmgStatBlock title="Objets" values={previewStats.objects} total={previewStats.objectTotal} />
-                    <RmgStatBlock title="Details" values={previewStats.details} />
+                    <RmgStatBlock title={t("rmg.terrain")} values={previewStats.terrain} total={visiblePreviewMap.width * visiblePreviewMap.height} />
+                    <RmgStatBlock title={t("rmg.objects")} values={previewStats.objects} total={previewStats.objectTotal} />
+                    <RmgStatBlock title={t("rmg.details")} values={previewStats.details} />
                   </aside>
                 </>
               )}

@@ -9,19 +9,22 @@ import { getUnitRule } from "@/lib/game/units";
 import { goldText } from "@/components/game/hud/theme";
 import { type DamagePreview, formatRange, getEffectiveCombatUnitStats } from "./combatLayout";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 
 export function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview; actor?: CombatBoardUnit; target?: CombatBoardUnit }) {
+  const { t, locale } = useI18n();
   if (!actor || !target) return null;
   const actorRule = getUnitRule(actor.unitType);
   const targetRule = getUnitRule(target.unitType);
   return (
     <div className="pointer-events-none absolute bottom-4 left-4 z-30 w-64 rounded-md border border-amber-500/45 bg-black/65 p-3 text-xs text-stone-200 shadow-xl">
-      <div className={`text-[11px] font-black uppercase tracking-[0.2em] ${goldText}`}>Preview tactique</div>
-      <div className="mt-2 font-bold text-amber-100">{actorRule.label} vers {targetRule.label}</div>
+      <div className={`text-[11px] font-black uppercase tracking-[0.2em] ${goldText}`}>{t("combat.tacticalPreview")}</div>
+      <div className="mt-2 font-bold text-amber-100">{t("combat.actorToTarget", { actor: localizedUnitLabel(actor.unitType, actorRule.label, locale), target: localizedUnitLabel(target.unitType, targetRule.label, locale) })}</div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
         <span className="rounded-sm border border-stone-600/60 bg-stone-950/70 px-2 py-1">{preview.actionLabel}</span>
-        <span className="rounded-sm border border-red-500/50 bg-red-950/60 px-2 py-1">{formatRange(preview.minDamage, preview.maxDamage)} deg.</span>
-        <span className="rounded-sm border border-amber-500/50 bg-amber-950/60 px-2 py-1">{formatRange(preview.minKills, preview.maxKills)} pertes</span>
+        <span className="rounded-sm border border-red-500/50 bg-red-950/60 px-2 py-1">{t("combat.dmgShort", { range: formatRange(preview.minDamage, preview.maxDamage) })}</span>
+        <span className="rounded-sm border border-amber-500/50 bg-amber-950/60 px-2 py-1">{t("combat.lossesShort", { range: formatRange(preview.minKills, preview.maxKills) })}</span>
       </div>
     </div>
   );
@@ -38,6 +41,7 @@ export function InitiativeQueue({
   inspectedUnitId: string | null;
   onInspectUnit: (unitId: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const queueRef = useRef<HTMLDivElement>(null);
   const [visibleRadius, setVisibleRadius] = useState(3);
   const unitsById = new Map(combat.boardState.units.map((unit) => [unit.id, unit]));
@@ -101,15 +105,15 @@ export function InitiativeQueue({
               {startsRound && (
                 <span
                   className="mx-1 h-14 w-1.5 shrink-0 rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-50 via-amber-300 to-orange-700 shadow-[0_0_16px_rgba(251,191,36,0.88)]"
-                  title="Debut d'un tour"
-                  aria-label="Debut d'un tour"
+                  title={t("combat.turnStart")}
+                  aria-label={t("combat.turnStart")}
                 />
               )}
               <button
                 type="button"
                 className={`group relative shrink-0 overflow-hidden rounded-md border transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/80 ${active ? "h-16 w-14" : "h-14 w-12"} ${previous ? "opacity-55 saturate-75" : ""}`}
                 style={buttonStyle}
-                title={`${offset === 0 ? "Actuel" : offset < 0 ? `${Math.abs(offset)} precedent` : `${offset} suivant`} - ${rule.label} x${unit.count} / v${unit.speed}`}
+                title={`${offset === 0 ? t("combat.initCurrent") : offset < 0 ? t("combat.initPrev", { n: Math.abs(offset) }) : t("combat.initNext", { n: offset })} - ${localizedUnitLabel(unit.unitType, rule.label, locale)} x${unit.count} / v${unit.speed}`}
                 onClick={() => onInspectUnit(unit.id)}
               >
                 <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/55 to-black/30`}>
@@ -126,8 +130,8 @@ export function InitiativeQueue({
         {queue.some((slot) => slot.endsRound) && (
           <span
             className="mx-1 h-14 w-1.5 shrink-0 rounded-full border border-amber-100/80 bg-gradient-to-b from-amber-50 via-amber-300 to-orange-700 shadow-[0_0_16px_rgba(251,191,36,0.88)]"
-            title="Debut d'un tour"
-            aria-label="Debut d'un tour"
+            title={t("combat.turnStart")}
+            aria-label={t("combat.turnStart")}
           />
         )}
       </div>
@@ -268,13 +272,14 @@ function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
 
 
 export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit; combat: PersistentCombat; gameState: GameState }) {
+  const { t, locale } = useI18n();
   const rule = getUnitRule(unit.unitType);
   const creature = getCreature(unit.unitType);
   const effectiveStats = getEffectiveCombatUnitStats(unit, combat, gameState);
   const states = [
-    unit.defended ? "Defend" : null,
-    unit.waited ? "Attend" : null,
-    unit.hasRetaliated ? "Riposte utilisée" : null,
+    unit.defended ? t("combat.stateDefend") : null,
+    unit.waited ? t("combat.stateWait") : null,
+    unit.hasRetaliated ? t("combat.retaliationUsed") : null,
   ].filter(Boolean);
 
   return (
@@ -283,20 +288,20 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
         <UnitPortrait unit={unit} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className={`font-black ${goldText}`}>{rule.label} x{unit.count}</div>
+        <div className={`font-black ${goldText}`}>{localizedUnitLabel(unit.unitType, rule.label, locale)} x{unit.count}</div>
         <div className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-stone-400">
-          {unit.side === "attacker" ? "Attaquant" : "Defenseur"}
+          {unit.side === "attacker" ? t("combat.attackerLabel") : t("combat.defenderLabel")}
         </div>
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-300">
-          <span title={`Base ${rule.attack} + héros ${effectiveStats.heroAttack}`}>Att. {effectiveStats.attack}</span>
-          <span title={`Base ${rule.defense} + héros ${effectiveStats.heroDefense}`}>Déf. {effectiveStats.defense}</span>
-          <span>Vit. {unit.speed}</span>
-          <span>Deg. {unit.minDamage}-{unit.maxDamage}</span>
-          <span>PV/u {unit.maxHealth}</span>
-          <span>PV {unit.health}/{unit.maxHealth * unit.count}</span>
-          <span className={moraleClass(unit.morale)}>Moral. {formatMorale(unit.morale)}</span>
+          <span title={t("combat.statAttackTitle", { base: rule.attack, hero: effectiveStats.heroAttack })}>{t("combat.statAttack", { v: effectiveStats.attack })}</span>
+          <span title={t("combat.statDefenseTitle", { base: rule.defense, hero: effectiveStats.heroDefense })}>{t("combat.statDefense", { v: effectiveStats.defense })}</span>
+          <span>{t("combat.statSpeed", { v: unit.speed })}</span>
+          <span>{t("combat.statDamage", { min: unit.minDamage, max: unit.maxDamage })}</span>
+          <span>{t("combat.statHpPerUnit", { v: unit.maxHealth })}</span>
+          <span>{t("combat.statHp", { v: unit.health, max: unit.maxHealth * unit.count })}</span>
+          <span className={moraleClass(unit.morale)}>{t("combat.statMorale", { v: formatMorale(unit.morale) })}</span>
         </div>
-        {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">Tirs : {unit.shots}</div>}
+        {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">{t("combat.statShots", { n: unit.shots })}</div>}
         {creature.abilities.length > 0 && (
           <div className="mt-2 text-xs text-stone-300">{creature.abilities.join(", ")}</div>
         )}

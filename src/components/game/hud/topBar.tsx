@@ -7,20 +7,23 @@ import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "@/lib/game/econ
 import { getEstatesGold } from "@/lib/game/skills";
 import { getTownGoldProduction } from "@/lib/game/town-buildings";
 import { HourglassIcon } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 const RESOURCE_ITEMS = [
-  { key: "gold", label: "Or", short: "Or", src: "/assets/sprites/resources/gold.webp", text: "text-yellow-200", ring: "ring-yellow-300/50", glow: "shadow-yellow-500/25", bg: "from-yellow-300 to-amber-600" },
-  { key: "wood", label: "Bois", short: "Bois", src: "/assets/sprites/resources/wood.webp", text: "text-orange-200", ring: "ring-orange-300/40", glow: "shadow-orange-700/25", bg: "from-amber-700 to-orange-950" },
-  { key: "ore", label: "Minerai", short: "Min.", src: "/assets/sprites/resources/ore.webp", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
-  { key: "mercury", label: "Mercure", short: "Merc.", src: "/assets/sprites/resources/mercury.webp", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
-  { key: "crystals", label: "Cristaux", short: "Crist.", src: "/assets/sprites/resources/crystals.webp", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
-  { key: "gems", label: "Gemmes", short: "Gem.", src: "/assets/sprites/resources/gems.webp", text: "text-pink-100", ring: "ring-pink-300/50", glow: "shadow-pink-400/30", bg: "from-pink-200 to-rose-700" },
-  { key: "sulfur", label: "Soufre", short: "Soufre", src: "/assets/sprites/resources/sulfur.webp", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
-] as const;
+  { key: "gold", labelKey: "res.gold", src: "/assets/sprites/resources/gold.webp", text: "text-yellow-200", ring: "ring-yellow-300/50", glow: "shadow-yellow-500/25", bg: "from-yellow-300 to-amber-600" },
+  { key: "wood", labelKey: "res.wood", src: "/assets/sprites/resources/wood.webp", text: "text-orange-200", ring: "ring-orange-300/40", glow: "shadow-orange-700/25", bg: "from-amber-700 to-orange-950" },
+  { key: "ore", labelKey: "res.ore", src: "/assets/sprites/resources/ore.webp", text: "text-slate-200", ring: "ring-slate-300/40", glow: "shadow-slate-400/20", bg: "from-slate-300 to-slate-700" },
+  { key: "mercury", labelKey: "res.mercury", src: "/assets/sprites/resources/mercury.webp", text: "text-violet-200", ring: "ring-violet-300/40", glow: "shadow-violet-500/25", bg: "from-violet-300 to-fuchsia-700" },
+  { key: "crystals", labelKey: "res.crystals", src: "/assets/sprites/resources/crystals.webp", text: "text-cyan-100", ring: "ring-cyan-300/50", glow: "shadow-cyan-400/30", bg: "from-cyan-200 to-sky-700" },
+  { key: "gems", labelKey: "res.gems", src: "/assets/sprites/resources/gems.webp", text: "text-pink-100", ring: "ring-pink-300/50", glow: "shadow-pink-400/30", bg: "from-pink-200 to-rose-700" },
+  { key: "sulfur", labelKey: "res.sulfur", src: "/assets/sprites/resources/sulfur.webp", text: "text-amber-100", ring: "ring-amber-300/40", glow: "shadow-amber-500/25", bg: "from-orange-300 to-yellow-700" },
+] as const satisfies ReadonlyArray<{ key: keyof Resources; labelKey: TranslationKey; src: string; text: string; ring: string; glow: string; bg: string }>;
 
 type ResourceItem = (typeof RESOURCE_ITEMS)[number];
 
 export function ResourceBar({ player }: { player: Player }) {
+  const { t } = useI18n();
   const resources = player.resources;
   const income = getPlayerResourceIncomePerTurn(player);
 
@@ -30,7 +33,7 @@ export function ResourceBar({ player }: { player: Player }) {
         const isGold = item.key === "gold";
         const amount = resources[item.key];
         const incomeAmount = income[item.key];
-        const title = `${item.label} : ${amount}\nGain par tour : +${incomeAmount}`;
+        const title = t("hud.resourceTooltip", { label: t(item.labelKey), amount, income: incomeAmount });
 
         return (
           <span
@@ -126,6 +129,7 @@ export function PlayerProgressGauge({
   gameState: GameState;
   className?: string;
 }) {
+  const { t } = useI18n();
   const { ratio, activeCombatCount } = getPlayerTurnProgress(player, gameState);
   const percent = Math.round(ratio * 100);
   const fill = ratio > 0.55
@@ -134,14 +138,14 @@ export function PlayerProgressGauge({
       ? "from-amber-300 via-orange-300 to-red-300"
       : "from-red-500 via-red-400 to-rose-300";
   const title = activeCombatCount > 0
-    ? `Avancement du tour : ${percent}% restant, ${activeCombatCount} combat(s) actif(s)`
-    : `Avancement du tour : ${percent}% restant`;
+    ? t("hud.turnProgressCombat", { percent, count: activeCombatCount })
+    : t("hud.turnProgress", { percent });
 
   return (
     <div
       className={`${className} overflow-hidden rounded-sm border border-amber-700/45 bg-black/65 shadow-inner shadow-black/70`}
       role="progressbar"
-      aria-label={`Avancement de ${player.name}`}
+      aria-label={t("hud.turnProgressOf", { name: player.name })}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}
@@ -156,12 +160,13 @@ export function PlayerProgressGauge({
 }
 
 export function TurnStatusIcon({ ended }: { ended: boolean }) {
+  const { t } = useI18n();
   if (ended) {
     return (
       <span
         className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full border border-emerald-400/45 bg-emerald-950/55 text-emerald-300"
-        title="Tour terminé"
-        aria-label="Tour terminé"
+        title={t("hud.turnEnded")}
+        aria-label={t("hud.turnEnded")}
       >
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M5 12.5 L10 17 L19 7" />
@@ -173,8 +178,8 @@ export function TurnStatusIcon({ ended }: { ended: boolean }) {
   return (
     <span
       className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded-full border border-amber-500/45 bg-black/45 text-amber-300"
-      title="Tour en cours"
-      aria-label="Tour en cours"
+      title={t("hud.turnInProgress")}
+      aria-label={t("hud.turnInProgress")}
     >
       <HourglassIcon className="h-3 w-3" />
     </span>

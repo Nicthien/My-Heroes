@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import LanguageSelect from "@/components/i18n/LanguageSelect";
 
 export default function LoginForm() {
+  const { t, locale, setLocale } = useI18n();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -30,7 +33,7 @@ export default function LoginForm() {
         });
         const resolved = await resolveResponse.json().catch(() => null);
         if (!resolveResponse.ok || !resolved?.email) {
-          setError("Email, pseudo ou mot de passe incorrect");
+          setError(t("auth.login.invalidCredentials"));
           setLoading(false);
           return;
         }
@@ -44,7 +47,7 @@ export default function LoginForm() {
       });
 
       if (signInError) {
-        setError("Email, pseudo ou mot de passe incorrect");
+        setError(t("auth.login.invalidCredentials"));
         setLoading(false);
         return;
       }
@@ -53,9 +56,7 @@ export default function LoginForm() {
       router.refresh();
     } catch (error) {
       console.error("Supabase auth network error:", error);
-      setError(
-        "Impossible de contacter le serveur d'authentification. Vérifiez votre connexion réseau ou la configuration de Supabase."
-      );
+      setError(t("auth.error.network"));
       setLoading(false);
     }
   };
@@ -64,10 +65,10 @@ export default function LoginForm() {
     <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800 p-4">
       <div className="w-full max-w-96 rounded-xl border border-gray-700 bg-gray-800/90 p-5 shadow-2xl backdrop-blur sm:p-8">
         <h1 className="mb-2 text-center text-2xl font-bold text-white sm:text-3xl">
-          My Heroes
+          {t("common.appName")}
         </h1>
         <p className="text-gray-400 text-center mb-8">
-          Inspiré de Heroes of Might and Magic
+          {t("auth.login.tagline")}
         </p>
 
         {error && (
@@ -79,7 +80,7 @@ export default function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="login-email" className="text-gray-300 text-sm block mb-1">
-              Email ou pseudo
+              {t("auth.login.identifier")}
             </label>
             <input
               id="login-email"
@@ -92,7 +93,7 @@ export default function LoginForm() {
           </div>
           <div>
             <label htmlFor="login-password" className="text-gray-300 text-sm block mb-1">
-              Mot de passe
+              {t("auth.login.password")}
             </label>
             <input
               id="login-password"
@@ -108,16 +109,20 @@ export default function LoginForm() {
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-500 text-white p-3 rounded font-bold transition disabled:opacity-50"
           >
-            {loading ? "Connexion..." : "Se connecter"}
+            {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
 
         <p className="text-gray-400 text-center mt-4 text-sm">
-          Pas de compte ?{" "}
+          {t("auth.login.noAccount")}{" "}
           <a href="/auth/register" className="text-blue-400 hover:underline">
-            Créer un compte
+            {t("auth.login.createAccount")}
           </a>
         </p>
+
+        <div className="mt-6">
+          <LanguageSelect value={locale} onChange={setLocale} />
+        </div>
       </div>
     </div>
   );

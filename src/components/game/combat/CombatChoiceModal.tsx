@@ -9,8 +9,15 @@ import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/eng
 import { GameMap, GameState, Hero, MapObject, MapTile, UnitStack, UnitType, type MapLevelId } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 export default function CombatChoiceModal() {
+  const { t, locale } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const pendingCombat = useGameStore((state) => state.pendingCombat);
   const setPendingCombat = useGameStore((state) => state.setPendingCombat);
@@ -21,8 +28,8 @@ export default function CombatChoiceModal() {
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const devGodMode = useGameStore((state) => state.devGodMode);
   const encounterInfo = useMemo(
-    () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat) : null,
-    [gameState, pendingCombat]
+    () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat, t, locale) : null,
+    [gameState, pendingCombat, t, locale]
   );
 
   const startCombat = useCallback(async (mode: "AUTO" | "MANUAL") => {
@@ -62,7 +69,7 @@ export default function CombatChoiceModal() {
 
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setCombatMessage(data?.error ?? "Combat impossible.");
+      setCombatMessage(data?.error ?? t("combat.impossible"));
       setPendingCombat(null);
       return;
     }
@@ -84,7 +91,7 @@ export default function CombatChoiceModal() {
       }
     }
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
-  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat]);
+  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat, t]);
 
   if (!gameState || !pendingCombat || !encounterInfo) return null;
 
@@ -92,15 +99,15 @@ export default function CombatChoiceModal() {
     return (
       <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
         <div className="w-[min(92vw,34rem)] rounded-xl border border-red-700 bg-stone-950 p-6 text-white shadow-2xl">
-          <div className="text-xs uppercase tracking-[0.28em] text-red-400">Héros adverse</div>
-          <h2 className="mt-2 text-2xl font-bold text-red-100">Engager le combat ?</h2>
+          <div className="text-xs uppercase tracking-[0.28em] text-red-400">{t("combat.opponentHero")}</div>
+          <h2 className="mt-2 text-2xl font-bold text-red-100">{t("combat.engage")}</h2>
           <p className="mt-3 text-sm text-stone-300">
-            Votre héros croise la route d&apos;un adversaire. Vous pouvez l&apos;attaquer maintenant ou fuir et rester sur la carte.
+            {t("combat.heroCrosses")}
           </p>
           <section className="mt-5 rounded-lg border border-red-700/50 bg-black/30 p-4 shadow-[0_0_0_1px_rgba(248,113,113,0.08)_inset]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.22em] text-red-400/80">Forces aperçues</div>
+                <div className="text-xs uppercase tracking-[0.22em] text-red-400/80">{t("combat.forcesSeen")}</div>
                 <div className="mt-1 text-sm text-stone-300">{encounterInfo.sourceLabel}</div>
               </div>
               <div className={`rounded-md border px-3 py-1 text-sm font-bold ${encounterInfo.difficulty.className}`}>
@@ -115,19 +122,19 @@ export default function CombatChoiceModal() {
                 </div>
               )) : (
                 <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
-                  Défense inconnue
+                  {t("combat.defenseUnknown")}
                 </div>
               )}
             </div>
           </section>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button className="rounded-lg border border-red-500 bg-red-950/80 p-4 text-left hover:bg-red-900" onClick={() => startCombat("MANUAL")}>
-              <div className="font-bold text-red-100">Attaquer</div>
-              <div className="mt-1 text-sm text-red-200/80">Ouvrir le combat manuel contre ce héros.</div>
+              <div className="font-bold text-red-100">{t("combat.attack")}</div>
+              <div className="mt-1 text-sm text-red-200/80">{t("combat.attackHeroDesc")}</div>
             </button>
             <button className="rounded-lg border border-stone-600 bg-stone-900/80 p-4 text-left hover:bg-stone-800" onClick={() => setPendingCombat(null)}>
-              <div className="font-bold text-stone-100">Fuir</div>
-              <div className="mt-1 text-sm text-stone-300/80">Annuler l&apos;engagement et revenir sur la carte.</div>
+              <div className="font-bold text-stone-100">{t("combat.flee")}</div>
+              <div className="mt-1 text-sm text-stone-300/80">{t("combat.fleeDesc")}</div>
             </button>
           </div>
         </div>
@@ -142,20 +149,20 @@ export default function CombatChoiceModal() {
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto">
       <div className="w-[min(92vw,58rem)] rounded-xl border border-yellow-700 bg-stone-950 p-6 shadow-2xl shadow-black text-white">
         <div className="text-xs uppercase tracking-[0.28em] text-yellow-500">
-          {isGate ? "Gardiens de la porte" : isBuilding ? "Gardiens du bâtiment" : "Engagement"}
+          {isGate ? t("combat.gateGuards") : isBuilding ? t("combat.buildingGuards") : t("combat.engagement")}
         </div>
-        <h2 className="mt-2 text-2xl font-bold text-yellow-100">Choisir la résolution du combat</h2>
+        <h2 className="mt-2 text-2xl font-bold text-yellow-100">{t("combat.chooseResolution")}</h2>
         <p className="mt-3 text-sm text-stone-300">
           {isGate
-            ? "Cette porte est defendue par une garnison. Battez-la pour controler le passage."
+            ? t("combat.gateDesc")
             : isBuilding
-            ? "Ce bâtiment est défendu par des gardiens. Battez-les pour en prendre le contrôle."
-            : "Le combat sera visible sur la carte générale. En mode manuel, les deux joueurs rejoignent le plateau tactique synchrone."}
+            ? t("combat.buildingDesc")
+            : t("combat.engagementDesc")}
         </p>
         <section className="mt-5 rounded-lg border border-yellow-700/50 bg-black/30 p-4 shadow-[0_0_0_1px_rgba(250,204,21,0.08)_inset]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs uppercase tracking-[0.22em] text-yellow-500/80">Forces aperçues</div>
+              <div className="text-xs uppercase tracking-[0.22em] text-yellow-500/80">{t("combat.forcesSeen")}</div>
               <div className="mt-1 text-sm text-stone-300">{encounterInfo.sourceLabel}</div>
             </div>
             <div className={`rounded-md border px-3 py-1 text-sm font-bold ${encounterInfo.difficulty.className}`}>
@@ -170,23 +177,23 @@ export default function CombatChoiceModal() {
               </div>
             )) : (
               <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
-                Défense inconnue
+                {t("combat.defenseUnknown")}
               </div>
             )}
           </div>
         </section>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <button className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 text-left hover:bg-blue-900" onClick={() => startCombat("AUTO")}>
-            <div className="font-bold text-blue-100">Automatique</div>
-            <div className="mt-1 text-sm text-blue-200/80">Résolution immédiate selon les puissances, pertes et héros.</div>
+            <div className="font-bold text-blue-100">{t("combat.auto")}</div>
+            <div className="mt-1 text-sm text-blue-200/80">{t("combat.autoDesc")}</div>
           </button>
           <button className="rounded-lg border border-red-500 bg-red-950/80 p-4 text-left hover:bg-red-900" onClick={() => startCombat("MANUAL")}>
-            <div className="font-bold text-red-100">Manuel</div>
-            <div className="mt-1 text-sm text-red-200/80">Plateau hexagonal, tours par vitesse, attaques et ripostes.</div>
+            <div className="font-bold text-red-100">{t("combat.manual")}</div>
+            <div className="mt-1 text-sm text-red-200/80">{t("combat.manualDesc")}</div>
           </button>
           <button className="rounded-lg border border-stone-600 bg-stone-900/80 p-4 text-left hover:bg-stone-800" onClick={() => setPendingCombat(null)}>
-            <div className="font-bold text-stone-100">Fuir</div>
-            <div className="mt-1 text-sm text-stone-300/80">Annuler l&apos;engagement et revenir sur la carte.</div>
+            <div className="font-bold text-stone-100">{t("combat.flee")}</div>
+            <div className="mt-1 text-sm text-stone-300/80">{t("combat.fleeDesc")}</div>
           </button>
         </div>
       </div>
@@ -301,7 +308,7 @@ function withDefeatedTargetCleared(gameState: GameState, pending: PendingCombat)
   };
 }
 
-function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat) {
+function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat, t: TFn, locale: Locale) {
   const attacker = findHero(gameState, pendingCombat.attackerHeroId);
   const defenderStacks = getDefenderStacks(gameState, pendingCombat);
   const attackerPower = attacker ? calculateArmyPower({
@@ -314,16 +321,16 @@ function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat) {
   const defenderPower = Math.max(1, getStacksPower(defenderStacks));
 
   return {
-    sourceLabel: getSourceLabel(pendingCombat.targetType),
-    difficulty: getDifficulty(defenderPower / Math.max(1, attackerPower)),
+    sourceLabel: getSourceLabel(pendingCombat.targetType, t),
+    difficulty: getDifficulty(defenderPower / Math.max(1, attackerPower), t),
     units: defenderStacks
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((stack) => ({
         unitType: stack.unitType,
         position: stack.position,
-        label: getUnitRule(stack.unitType).label,
-        range: formatCountRange(stack.count),
+        label: localizedUnitLabel(stack.unitType, getUnitRule(stack.unitType).label, locale),
+        range: formatCountRange(stack.count, t),
       })),
   };
 }
@@ -405,32 +412,32 @@ function getStacksPower(stacks: UnitStack[]) {
   return stacks.reduce((total, stack) => total + getUnitRule(stack.unitType).power * stack.count, 0);
 }
 
-function getDifficulty(ratio: number) {
-  if (ratio <= 0.35) return { label: "Facile", className: "border-emerald-400/60 bg-emerald-950 text-emerald-100" };
-  if (ratio <= 0.7) return { label: "Moyen", className: "border-lime-400/60 bg-lime-950 text-lime-100" };
-  if (ratio <= 1.05) return { label: "Difficile", className: "border-yellow-400/60 bg-yellow-950 text-yellow-100" };
-  if (ratio <= 1.55) return { label: "Très difficile", className: "border-orange-400/60 bg-orange-950 text-orange-100" };
-  return { label: "Suicidaire", className: "border-red-400/60 bg-red-950 text-red-100" };
+function getDifficulty(ratio: number, t: TFn) {
+  if (ratio <= 0.35) return { label: t("combat.diffEasy"), className: "border-emerald-400/60 bg-emerald-950 text-emerald-100" };
+  if (ratio <= 0.7) return { label: t("combat.diffMedium"), className: "border-lime-400/60 bg-lime-950 text-lime-100" };
+  if (ratio <= 1.05) return { label: t("combat.diffHard"), className: "border-yellow-400/60 bg-yellow-950 text-yellow-100" };
+  if (ratio <= 1.55) return { label: t("combat.diffVeryHard"), className: "border-orange-400/60 bg-orange-950 text-orange-100" };
+  return { label: t("combat.diffSuicidal"), className: "border-red-400/60 bg-red-950 text-red-100" };
 }
 
-function getSourceLabel(targetType: PendingCombat["targetType"]) {
-  if (targetType === "hero") return "Armée du héros adverse.";
-  if (targetType === "building") return "Gardiens estimés du lieu.";
-  if (targetType === "town") return "Garnison neutre repérée.";
-  if (targetType === "gate") return "Garnison de porte reperee.";
-  if (targetType === "creature_bank") return "Gardiens de banque de créatures.";
-  if (targetType === "artifact") return "Gardiens de l'artefact.";
-  if (targetType === "monster") return "Armée neutre observée.";
-  return "Défense adverse repérée.";
+function getSourceLabel(targetType: PendingCombat["targetType"], t: TFn) {
+  if (targetType === "hero") return t("combat.srcHero");
+  if (targetType === "building") return t("combat.srcBuilding");
+  if (targetType === "town") return t("combat.srcTown");
+  if (targetType === "gate") return t("combat.srcGate");
+  if (targetType === "creature_bank") return t("combat.srcBank");
+  if (targetType === "artifact") return t("combat.srcArtifact");
+  if (targetType === "monster") return t("combat.srcMonster");
+  return t("combat.srcDefault");
 }
 
-function formatCountRange(count: number) {
-  if (count <= 0) return "Aucun";
-  if (count < 5) return "1-4 unités";
-  if (count < 10) return "5-9 unités";
-  if (count < 20) return "10-19 unités";
-  if (count < 50) return "20-49 unités";
-  if (count < 100) return "50-99 unités";
-  if (count < 250) return "100-249 unités";
-  return "250+ unités";
+function formatCountRange(count: number, t: TFn) {
+  if (count <= 0) return t("combat.countNone");
+  if (count < 5) return t("combat.unitsRange", { range: "1-4" });
+  if (count < 10) return t("combat.unitsRange", { range: "5-9" });
+  if (count < 20) return t("combat.unitsRange", { range: "10-19" });
+  if (count < 50) return t("combat.unitsRange", { range: "20-49" });
+  if (count < 100) return t("combat.unitsRange", { range: "50-99" });
+  if (count < 250) return t("combat.unitsRange", { range: "100-249" });
+  return t("combat.unitsRange", { range: "250+" });
 }

@@ -3,6 +3,7 @@
 import { Faction, type Player, type Town } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { factionLabel } from "./helpers";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function TownTavernTab({
   selectedTown,
@@ -19,6 +20,7 @@ export function TownTavernTab({
   isMyTown: boolean;
   onRecruitHero: (templateId: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const offer = selectedTown.tavernOffer ?? [];
   const returningHeroes = myPlayer?.tavernHeroes ?? [];
   const visibleOffer = [...returningHeroes, ...offer];
@@ -26,7 +28,7 @@ export function TownTavernTab({
   return (
     <div className="space-y-2">
       {visibleOffer.length === 0 ? (
-        <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucun héros disponible pour le moment.</div>
+        <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">{t("tavern.noHeroes")}</div>
       ) : (
         visibleOffer.map((hero) => {
           const atMax = myPlayer ? myPlayer.heroes.length >= MAX_HEROES_PER_PLAYER : true;
@@ -37,11 +39,11 @@ export function TownTavernTab({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-amber-100">{hero.name}</div>
-                  <div className="text-xs text-amber-200/60">{hero.class} · {factionLabel(hero.faction as Faction)}</div>
-                  <div className="text-xs text-amber-300/80">Spécialité : {hero.specialty}</div>
-                  {hero.returning && <div className="text-xs text-emerald-300">Héros de retour · niveau {hero.level ?? 1} · armée {hero.armyCount ?? 0}</div>}
-                  <div className="mt-1 text-xs text-amber-300">{HERO_RECRUIT_COST_GOLD} or</div>
-                  {atMax && <div className="mt-1 text-xs text-red-300">Maximum {MAX_HEROES_PER_PLAYER} héros</div>}
+                  <div className="text-xs text-amber-200/60">{hero.class} · {factionLabel(hero.faction as Faction, locale)}</div>
+                  <div className="text-xs text-amber-300/80">{t("tavern.specialty", { s: hero.specialty })}</div>
+                  {hero.returning && <div className="text-xs text-emerald-300">{t("tavern.returningHero", { level: hero.level ?? 1, army: hero.armyCount ?? 0 })}</div>}
+                  <div className="mt-1 text-xs text-amber-300">{t("tavern.goldCost", { n: HERO_RECRUIT_COST_GOLD })}</div>
+                  {atMax && <div className="mt-1 text-xs text-red-300">{t("tavern.maxHeroes", { n: MAX_HEROES_PER_PLAYER })}</div>}
                 </div>
                 <button
                   className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
@@ -52,7 +54,7 @@ export function TownTavernTab({
                   disabled={disabled}
                   onClick={() => onRecruitHero(hero.heroId ? `hero:${hero.heroId}` : hero.templateId)}
                 >
-                  Engager
+                  {t("tavern.hire")}
                 </button>
               </div>
             </div>

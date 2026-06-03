@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeLocale } from "@/lib/i18n/types";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? "").trim();
   const email = String(body.email ?? "").trim();
   const password = String(body.password ?? "");
+  const language = normalizeLocale(body.language);
 
   if (!name) return NextResponse.json({ error: "Le pseudo est requis." }, { status: 400 });
   if (!email) return NextResponse.json({ error: "L'adresse mail est requise." }, { status: 400 });
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
     name,
     role: "user",
     must_change_password: false,
+    language,
   });
 
   if (profileError) {

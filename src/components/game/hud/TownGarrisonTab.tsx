@@ -4,6 +4,7 @@ import type { Hero, Town, UnitType } from "@/lib/game/types";
 import { unitTypeLabel } from "./helpers";
 import { TransferToHeroIcon, TransferToTownIcon, UpgradeUnitsIcon } from "./icons";
 import { UnitSprite } from "./UnitSprite";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type TransferDialog = { townId: string; heroId: string; unitType: UnitType; count: number };
 type UpgradeDialog = { townId: string; heroId?: string; unitType: UnitType; count: number };
@@ -39,17 +40,18 @@ export function TownGarrisonTab({
   setUpgradeDialog: (next: UpgradeDialog | null) => void;
   getUpgradeOption: (unitType: UnitType, available: number) => { label: string; max: number } | null;
 }) {
+  const { t, locale } = useI18n();
   return (
     <div className="space-y-2">
       {isMyTown && heroesAtSelectedTown.length === 0 && (
         <div className="rounded-md border border-red-500/40 bg-red-950/50 px-3 py-2 text-xs text-red-200">
-          Aucun héros au château pour recevoir la garnison.
+          {t("garrison.noHeroForReceive")}
         </div>
       )}
       {isMyTown && heroesAtSelectedTown.length > 0 && (
         <div className="rounded-md border border-sky-500/30 bg-sky-950/40 px-3 py-2">
           <label className="block text-[11px] font-black uppercase tracking-wider text-sky-200/70">
-            Héros au château
+            {t("town.heroesAtTown")}
             <select
               className="mt-2 w-full rounded-md border border-sky-500/40 bg-black/60 px-2 py-1.5 text-sm font-bold text-sky-50 outline-none transition focus:border-sky-300"
               value={garrisonTargetHero?.id ?? ""}
@@ -69,12 +71,12 @@ export function TownGarrisonTab({
         </div>
       )}
       {selectedTown.garrison.length === 0 ? (
-        <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Aucune unité en garnison.</div>
+        <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">{t("garrison.empty")}</div>
       ) : (
         <div className="space-y-2">
           {garrisonTargetHero && (
             <div className="text-[11px] font-black uppercase tracking-wider text-sky-200/70">
-              Garnison vers {garrisonTargetHero.name}
+              {t("garrison.garrisonTo", { name: garrisonTargetHero.name })}
             </div>
           )}
           {selectedTown.garrison.map((unit) => {
@@ -97,8 +99,8 @@ export function TownGarrisonTab({
                   <div className="flex min-w-0 items-center gap-3">
                     <UnitSprite unitType={unit.unitType} side="defender" />
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
-                      <div className="text-xs text-amber-200/60">En garnison : {unit.count}</div>
+                      <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType, locale)}</div>
+                      <div className="text-xs text-amber-200/60">{t("garrison.inGarrison", { n: unit.count })}</div>
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
@@ -115,8 +117,8 @@ export function TownGarrisonTab({
                         setReturnDialog(null);
                         setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
                       }}
-                      aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
-                      title={upgradeOption ? `Améliorer en ${upgradeOption.label}` : "Bâtiment amélioré requis"}
+                      aria-label={t("garrison.upgradeAria", { name: unitTypeLabel(unit.unitType, locale) })}
+                      title={upgradeOption ? t("garrison.upgradeTo", { name: upgradeOption.label }) : t("garrison.upgradeRequires")}
                     >
                       <UpgradeUnitsIcon className="h-5 w-5" />
                     </button>
@@ -135,8 +137,8 @@ export function TownGarrisonTab({
                           ? null
                           : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
                       }}
-                      aria-label={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
-                      title={`Envoyer vers ${garrisonTargetHero?.name ?? "héros"}`}
+                      aria-label={t("garrison.sendTo", { name: garrisonTargetHero?.name ?? t("common.hero") })}
+                      title={t("garrison.sendTo", { name: garrisonTargetHero?.name ?? t("common.hero") })}
                     >
                       <TransferToHeroIcon className="h-5 w-5" />
                     </button>
@@ -150,10 +152,10 @@ export function TownGarrisonTab({
       {garrisonTargetHero && (
         <div className="mt-3 rounded-md border border-amber-700/30 bg-black/30 p-2">
           <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-amber-300/80">
-            Armée de {garrisonTargetHero.name}
+            {t("garrison.armyOf", { name: garrisonTargetHero.name })}
           </div>
           {garrisonTargetHero.armies.length === 0 ? (
-            <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">Ce héros n&apos;a pas d&apos;unités à déposer.</div>
+            <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">{t("garrison.heroNoUnits")}</div>
           ) : (
             <div className="space-y-2">
               {garrisonTargetHero.armies.map((unit) => {
@@ -176,8 +178,8 @@ export function TownGarrisonTab({
                       <div className="flex min-w-0 items-center gap-3">
                         <UnitSprite unitType={unit.unitType} />
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType)}</div>
-                          <div className="text-xs text-amber-200/60">Avec le héros : {unit.count}</div>
+                          <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType, locale)}</div>
+                          <div className="text-xs text-amber-200/60">{t("garrison.withHero", { n: unit.count })}</div>
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-2">
@@ -194,8 +196,8 @@ export function TownGarrisonTab({
                             setReturnDialog(null);
                             setUpgradeDialog(activeUpgradeDialog ? null : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: upgradeOption?.max ?? unit.count });
                           }}
-                          aria-label={`Ameliorer ${unitTypeLabel(unit.unitType)}`}
-                          title={upgradeOption ? `Améliorer en ${upgradeOption.label}` : "Bâtiment amélioré requis"}
+                          aria-label={t("garrison.upgradeAria", { name: unitTypeLabel(unit.unitType, locale) })}
+                          title={upgradeOption ? t("garrison.upgradeTo", { name: upgradeOption.label }) : t("garrison.upgradeRequires")}
                         >
                           <UpgradeUnitsIcon className="h-5 w-5" />
                         </button>
@@ -214,8 +216,8 @@ export function TownGarrisonTab({
                               ? null
                               : { townId: selectedTown.id, heroId: garrisonTargetHero.id, unitType: unit.unitType, count: unit.count });
                           }}
-                          aria-label="Déposer dans la garnison"
-                          title="Déposer dans la garnison"
+                          aria-label={t("garrison.depositToGarrison")}
+                          title={t("garrison.depositToGarrison")}
                         >
                           <TransferToTownIcon className="h-5 w-5" />
                         </button>

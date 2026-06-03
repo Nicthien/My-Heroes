@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Town, UnitType } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/economy";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 
 export function TownMercenaryTab({
   selectedTown,
@@ -17,13 +19,14 @@ export function TownMercenaryTab({
   isMyTown: boolean;
   onSellCreatures: (townId: string, unitType: UnitType, count: number) => Promise<void>;
 }) {
+  const { t, locale } = useI18n();
   const garrison = selectedTown.garrison ?? [];
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   if (garrison.length === 0) {
     return (
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/60">
-        Aucune créature dans la garnison à vendre.
+        {t("merc.noCreatures")}
       </div>
     );
   }
@@ -31,7 +34,7 @@ export function TownMercenaryTab({
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/70">
-        Vendez les créatures de la garnison à 50% de leur coût en or.
+        {t("merc.sellInfo")}
       </div>
       {garrison.map((stack) => {
         const rule = UNIT_RULES[stack.unitType];
@@ -43,8 +46,8 @@ export function TownMercenaryTab({
           <div key={stack.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm font-bold text-amber-100">{rule.label} × {stack.count}</div>
-                <div className="text-xs text-amber-300">{unitGold} or / unité</div>
+                <div className="text-sm font-bold text-amber-100">{localizedUnitLabel(stack.unitType, rule.label, locale)} × {stack.count}</div>
+                <div className="text-xs text-amber-300">{t("merc.goldPerUnit", { n: unitGold })}</div>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -65,7 +68,7 @@ export function TownMercenaryTab({
                       : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 hover:from-amber-500 hover:to-amber-700"
                   }`}
                 >
-                  Vendre
+                  {t("merc.sell")}
                 </button>
               </div>
             </div>

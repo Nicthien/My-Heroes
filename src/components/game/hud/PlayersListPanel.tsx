@@ -7,6 +7,7 @@ import CollapsiblePanel from "./CollapsiblePanel";
 import { PlayerProgressGauge, TurnStatusIcon } from "./topBar";
 import { PlayerScoreTooltip } from "./PlayerScoreTooltip";
 import { ornateFrame } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function PlayersListPanel({
   gameState,
@@ -17,6 +18,7 @@ export function PlayersListPanel({
   myPlayer: Player | undefined;
   embedded?: boolean;
 }) {
+  const { t } = useI18n();
   // The server sends an authoritative total score per player (computed from full,
   // un-sanitized data). Opponents' possessions are hidden by fog of war, so we
   // can only build their per-category breakdown for the viewer's own player.
@@ -100,7 +102,7 @@ export function PlayersListPanel({
 
   return (
     <CollapsiblePanel
-      title="Joueurs"
+      title={t("hud.navPlayers")}
       className={`${ornateFrame} pointer-events-auto shrink-0 overflow-hidden`}
       bodyClassName="max-h-32 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
     >

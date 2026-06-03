@@ -14,6 +14,7 @@ export async function getCurrentUser(request?: Request) {
       name: profile?.name ?? (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? null,
       role: profile?.role ?? "user",
       mustChangePassword: profile?.must_change_password ?? false,
+      language: profile?.language ?? "fr",
     };
   }
 
@@ -35,6 +36,7 @@ export async function getCurrentUser(request?: Request) {
     name: profile?.name ?? (tokenData.user.user_metadata?.name as string | undefined) ?? tokenData.user.email ?? null,
     role: profile?.role ?? "user",
     mustChangePassword: profile?.must_change_password ?? false,
+    language: profile?.language ?? "fr",
   };
 }
 
@@ -72,9 +74,9 @@ async function getUserProfile(userId: string) {
   const adminSupabase = createAdminClient();
   const { data } = await adminSupabase
     .from("profiles")
-    .select("name,role,must_change_password")
+    .select("name,role,must_change_password,language")
     .eq("id", userId)
     .maybeSingle();
 
-  return data as { name: string | null; role: string | null; must_change_password: boolean | null } | null;
+  return data as { name: string | null; role: string | null; must_change_password: boolean | null; language: string | null } | null;
 }

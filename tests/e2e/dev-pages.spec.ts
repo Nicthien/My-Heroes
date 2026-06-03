@@ -525,7 +525,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByText("Aucune unité sélectionnée")).toBeVisible();
     await expect(page.getByRole("button", { name: "Terminer la phase de tactique" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Attendre" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Defendre" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Défendre" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Fuir" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Livre de sorts combat" })).toBeDisabled();
 

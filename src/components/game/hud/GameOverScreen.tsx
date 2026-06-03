@@ -6,6 +6,8 @@ import { rankPlayers } from "@/lib/game/score";
 import { describeVictoryCondition } from "@/lib/game/victory";
 import type { GameState, Player } from "@/lib/game/types";
 import { CornerOrnaments, ParchmentBackground, goldText, ornateFramePolished } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 interface ScoreSnapshot {
   gamePlayerId: string;
@@ -28,10 +30,10 @@ const KEY_MOMENT_ICON: Record<KeyMomentKind, string> = {
   combat: "⚔️",
 };
 
-const KEY_MOMENT_LABEL: Record<KeyMomentKind, string> = {
-  town: "Château capturé",
-  mine: "Mine capturée",
-  combat: "Combat gagné",
+const KEY_MOMENT_LABEL_KEY: Record<KeyMomentKind, TranslationKey> = {
+  town: "gameover.momentTown",
+  mine: "gameover.momentMine",
+  combat: "gameover.momentCombat",
 };
 
 interface GameOverScreenProps {
@@ -50,6 +52,7 @@ interface GameOverScreenProps {
  * score progression chart are shown.
  */
 export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: GameOverScreenProps) {
+  const { t, locale } = useI18n();
   const [snapshots, setSnapshots] = useState<ScoreSnapshot[] | null>(null);
   const [events, setEvents] = useState<KeyMoment[]>([]);
 
@@ -88,7 +91,7 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
   const isObserver = !myPlayer;
   const iWon = Boolean(myPlayer && winner && winner.id === myPlayer.id);
 
-  const title = isDraw ? "Match nul" : isObserver ? "Partie terminée" : iWon ? "Victoire !" : "Défaite";
+  const title = isDraw ? t("gameover.draw") : isObserver ? t("gameover.finished") : iWon ? t("gameover.victory") : t("gameover.defeat");
   const titleColor = isDraw || isObserver ? "text-amber-200" : iWon ? "text-emerald-300" : "text-red-300";
   const titleIcon = isDraw ? "🤝" : isObserver || iWon ? "🏆" : "💀";
 
@@ -103,11 +106,11 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
           <h2 className={`mt-2 text-3xl font-black uppercase tracking-[0.15em] ${titleColor}`}>{title}</h2>
           {!isDraw && (
             <p className="mt-1 text-sm uppercase tracking-wider text-amber-200/80">
-              Vainqueur : <span className="font-bold text-amber-100">{winner?.name}</span>
+              {t("gameover.winner")} <span className="font-bold text-amber-100">{winner?.name}</span>
             </p>
           )}
           <p className="mt-1 text-xs uppercase tracking-wider text-amber-200/55">
-            🏆 {describeVictoryCondition(gameState.victoryCondition ?? { type: "DOMINATION" })}
+            🏆 {describeVictoryCondition(gameState.victoryCondition ?? { type: "DOMINATION" }, locale)}
           </p>
         </div>
 
@@ -116,7 +119,7 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
             {/* Progression chart */}
             <div className="rounded-lg border border-amber-700/40 bg-black/30 p-3">
               <div className={`mb-2 text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
-                Progression des scores
+                {t("gameover.scoreProgression")}
               </div>
               <ProgressionChart snapshots={snapshots} events={events} playersById={playersById} />
               <ChartLegend hasEvents={events.length > 0} />
@@ -125,7 +128,7 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
             {/* Final ranking */}
             <div className="rounded-lg border border-amber-700/40 bg-black/30 p-3">
               <div className={`mb-2 text-xs font-black uppercase tracking-[0.18em] ${goldText}`}>
-                Classement final
+                {t("gameover.finalRanking")}
               </div>
               <ol className="flex flex-col gap-1.5">
                 {ranked.map(({ player, breakdown, rank }) => (
@@ -137,17 +140,17 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
                         : "border-amber-800/30 bg-black/20"
                     }`}
                   >
-                    <span className="w-6 text-center text-sm font-black text-amber-200/80">{rankLabel(rank)}</span>
+                    <span className="w-6 text-center text-sm font-black text-amber-200/80">{rankLabel(rank, t)}</span>
                     <span
                       className="h-3 w-3 shrink-0 rounded-full border border-black/40"
                       style={{ backgroundColor: player.color }}
                     />
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-amber-50">
                       {player.name}
-                      {!player.isAlive && <span className="ml-1 text-[0.65rem] uppercase text-red-300/70">éliminé</span>}
+                      {!player.isAlive && <span className="ml-1 text-[0.65rem] uppercase text-red-300/70">{t("gameover.eliminated")}</span>}
                     </span>
                     <span className="text-sm font-black tabular-nums text-amber-200">
-                      {breakdown.total.toLocaleString("fr-FR")}
+                      {breakdown.total.toLocaleString(locale === "en" ? "en-US" : "fr-FR")}
                     </span>
                   </li>
                 ))}
@@ -162,14 +165,14 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
               onClick={onDismiss}
               className="rounded-md border border-amber-700/40 bg-stone-950/70 px-6 py-2 font-bold uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
             >
-              Inspecter le plateau
+              {t("gameover.inspectBoard")}
             </button>
           )}
           <button
             onClick={onLeave}
             className="rounded-md border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-2 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700"
           >
-            Retour au menu
+            {t("gameover.backToMenu")}
           </button>
         </div>
       </div>
@@ -177,11 +180,11 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
   );
 }
 
-function rankLabel(rank: number) {
+function rankLabel(rank: number, t: (key: TranslationKey, params?: Record<string, string | number>) => string) {
   if (rank === 1) return "🥇";
   if (rank === 2) return "🥈";
   if (rank === 3) return "🥉";
-  return `${rank}e`;
+  return t("gameover.rankOrdinal", { rank });
 }
 
 const CHART_W = 560;
@@ -208,13 +211,14 @@ function clampView(view: ChartView): ChartView {
 }
 
 function ChartLegend({ hasEvents }: { hasEvents: boolean }) {
+  const { t } = useI18n();
   if (!hasEvents) return null;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.7rem] text-amber-200/70">
-      <span className="font-semibold uppercase tracking-wider text-amber-200/55">Moments clés :</span>
-      <span>🏰 château</span>
-      <span>⛏️ mine</span>
-      <span>⚔️ combat gagné</span>
+      <span className="font-semibold uppercase tracking-wider text-amber-200/55">{t("gameover.keyMoments")}</span>
+      <span>{t("gameover.legendTown")}</span>
+      <span>{t("gameover.legendMine")}</span>
+      <span>{t("gameover.legendCombat")}</span>
     </div>
   );
 }
@@ -228,6 +232,7 @@ function ProgressionChart({
   events: KeyMoment[];
   playersById: Map<string, Player>;
 }) {
+  const { t, locale } = useI18n();
   const [hovered, setHovered] = useState<number | null>(null);
   const [view, setView] = useState<ChartView>(FULL_VIEW);
   const [dragging, setDragging] = useState(false);
@@ -281,12 +286,12 @@ function ProgressionChart({
   }, []);
 
   if (snapshots === null) {
-    return <div className="grid h-[240px] place-items-center text-sm text-amber-200/60">Chargement du graphique…</div>;
+    return <div className="grid h-[240px] place-items-center text-sm text-amber-200/60">{t("gameover.loadingChart")}</div>;
   }
   if (snapshots.length === 0) {
     return (
       <div className="grid h-[240px] place-items-center text-center text-sm text-amber-200/60">
-        Pas assez de données pour tracer la progression.
+        {t("gameover.notEnoughData")}
       </div>
     );
   }
@@ -351,7 +356,7 @@ function ProgressionChart({
       className="h-auto w-full touch-none select-none"
       style={{ cursor: dragging ? "grabbing" : "grab" }}
       role="img"
-      aria-label="Progression des scores par tour"
+      aria-label={t("gameover.chartAria")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPan}
@@ -362,7 +367,7 @@ function ProgressionChart({
         <g key={`y-${line.value}`}>
           <line x1={PAD.left} y1={line.y} x2={CHART_W - PAD.right} y2={line.y} stroke="rgba(252,211,77,0.12)" strokeWidth={1} />
           <text x={PAD.left - 6} y={line.y + 3} textAnchor="end" fontSize={9} fill="rgba(252,211,77,0.55)">
-            {Math.round(line.value).toLocaleString("fr-FR")}
+            {Math.round(line.value).toLocaleString(locale === "en" ? "en-US" : "fr-FR")}
           </text>
         </g>
       ))}
@@ -370,7 +375,7 @@ function ProgressionChart({
       {/* X labels */}
       {xTicks.map((tick) => (
         <text key={`x-${tick.turn}`} x={tick.x} y={CHART_H - 8} textAnchor="middle" fontSize={9} fill="rgba(252,211,77,0.55)">
-          J{tick.turn}
+          {t("gameover.dayShort", { turn: tick.turn })}
         </text>
       ))}
 
@@ -412,7 +417,7 @@ function ProgressionChart({
     {/* Zoom hint + reset */}
     <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-2">
       <span className="rounded bg-black/40 px-1.5 py-0.5 text-[0.6rem] uppercase tracking-wider text-amber-200/45">
-        Molette : zoom · glisser : déplacer
+        {t("gameover.zoomHint")}
       </span>
       {isZoomed && (
         <button
@@ -420,7 +425,7 @@ function ProgressionChart({
           onClick={() => setView(FULL_VIEW)}
           className="pointer-events-auto rounded border border-amber-500/50 bg-stone-950/80 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-amber-200/85 transition hover:border-amber-300/70 hover:text-amber-100"
         >
-          Réinitialiser
+          {t("gameover.reset")}
         </button>
       )}
     </div>
@@ -441,6 +446,7 @@ function KeyMomentTooltip({
   player: Player | undefined;
   view: ChartView;
 }) {
+  const { t } = useI18n();
   // Map the marker's viewBox coordinates to a percentage of the (possibly
   // zoomed/panned) visible area, so the HTML tooltip tracks the SVG content.
   const leftPct = ((marker.x - view.x) / view.w) * 100;
@@ -455,13 +461,13 @@ function KeyMomentTooltip({
     >
       <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-100">
         <span className="text-sm">{KEY_MOMENT_ICON[marker.kind]}</span>
-        {KEY_MOMENT_LABEL[marker.kind]}
+        {t(KEY_MOMENT_LABEL_KEY[marker.kind])}
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 text-[0.7rem] text-amber-200/80">
         <span className="h-2 w-2 shrink-0 rounded-full border border-black/40" style={{ backgroundColor: player?.color ?? "#facc15" }} />
-        <span className="font-semibold text-amber-100">{player?.name ?? "Joueur"}</span>
+        <span className="font-semibold text-amber-100">{player?.name ?? t("common.player")}</span>
         <span className="text-amber-200/50">·</span>
-        <span>Jour {marker.turnNumber}</span>
+        <span>{t("gameover.day", { n: marker.turnNumber })}</span>
       </div>
       {marker.summary && <div className="mt-0.5 text-[0.68rem] italic text-amber-200/60">{marker.summary}</div>}
     </div>

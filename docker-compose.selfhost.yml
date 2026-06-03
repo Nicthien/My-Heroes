@@ -1,0 +1,60 @@
+# Option B — run the My Heroes app alongside a self-hosted Supabase stack.
+#
+# This is an OVERRIDE that adds only the `app` service and attaches it to the
+# network created by the official Supabase self-hosted compose. You do NOT run
+# this file alone — you run it together with Supabase's own compose:
+#
+#   1. Get the official Supabase self-hosted stack (creates ./supabase-docker):
+#        git clone --depth 1 https://github.com/supabase/supabase
+#        cp -r supabase/docker ./supabase-docker
+#        cp supabase/docker/.env.example ./supabase-docker/.env
+#      Edit ./supabase-docker/.env (POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY,
+#      SERVICE_ROLE_KEY, SITE_URL, API_EXTERNAL_URL, etc.) per:
+#        https://supabase.com/docs/guides/self-hosting/docker
+#
+#   2. Bring up Supabase (Kong gateway is published on the host, default :8000):
+#        docker compose -f ./supabase-docker/docker-compose.yml up -d
+#
+#   3. Apply this repo's schema to that Postgres, then build + run the app:
+#        docker compose \
+#          -f ./supabase-docker/docker-compose.yml \
+#          -f ./docker-compose.selfhost.yml \
+#          up -d --build app
+#
+# Why join Supabase's network: the app server talks to Kong over the internal
+# docker network. The browser, however, uses NEXT_PUBLIC_SUPABASE_URL, which
+# must be the HOST-reachable Kong URL (e.g. http://localhost:8000) — that value
+# is inlined at build time, so set it in this repo's .env before building.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Browser-facing Kong URL (published on the host by the Supabase stack).
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+    image: my-heroes:latest
+    container_name: my-heroes-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+    networks:
+      - supabase
+    depends_on:
+      - kong
+
+# The official Supabase compose defines these — we attach to them by name.
+networks:
+  supabase:
+    external: true
+    # The actual name depends on the directory Supabase's compose runs from.
+    # With ./supabase-docker it is typically "supabase-docker_default".
+    name: supabase-docker_default

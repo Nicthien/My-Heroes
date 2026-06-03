@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { getSavedLocale } from "@/lib/i18n/preferences";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import LanguageSelect from "@/components/i18n/LanguageSelect";
 
 export default function RegisterForm() {
-  const { t, setLocale } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,7 +40,7 @@ export default function RegisterForm() {
 
       if (!registerResponse.ok) {
         const data = await registerResponse.json().catch(() => null);
-        setError(data?.error || t("auth.register.genericError"));
+        setError(localizedServerMessage(data?.error, locale) || t("auth.register.genericError"));
         setLoading(false);
         return;
       }

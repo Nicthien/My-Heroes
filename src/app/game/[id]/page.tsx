@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import CombatChoiceModal from "@/components/game/combat/CombatChoiceModal";
 import CombatResultModal from "@/components/game/combat/CombatResultModal";
 import CombatScreen from "@/components/game/combat/CombatScreen";
@@ -32,6 +33,9 @@ export default function GamePage() {
   const searchParams = useSearchParams();
   const gameId = params?.id as string;
   const { data: session } = useSession();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const userId = session?.user?.id;
   const adminRequested = searchParams.get("admin") === "1";
   const adminObserverMode = session?.user?.role === "admin" && adminRequested;
@@ -66,12 +70,12 @@ export default function GamePage() {
       useGameStore.getState().setAdminObserverMode(adminObserverMode);
       const cached = readCachedGameState(gameId, userId, { revealMap });
       if (cached) {
-        beginLoading("Restauration de la partie locale...", 24);
+        beginLoading(tRef.current("game.loadingRestore"), 24);
         setCachedStaticGameMap(gameId, cached.staticMap);
         setGameState(cached.gameState);
         restoredCachedGame = true;
       } else {
-        beginLoading("Connexion à la partie...", 8);
+        beginLoading(tRef.current("game.loadingConnect"), 8);
       }
     }
 

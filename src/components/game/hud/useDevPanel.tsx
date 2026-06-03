@@ -4,6 +4,8 @@ import { type FormEvent, type PointerEvent as ReactPointerEvent, useCallback, us
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { goldDivider, goldText } from "./theme";
 import {
   DEV_PANEL_MARGIN,
@@ -40,6 +42,7 @@ const DEV_ROUTES = [
 
 export function useDevPanel(gameId: string | undefined) {
   const { data: session } = useSession();
+  const { t } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
@@ -165,17 +168,17 @@ export function useDevPanel(gameId: string | undefined) {
       body: JSON.stringify({ type: "DEV_GRANT_RESOURCES" }),
     });
     if (!response.ok) {
-      setCombatMessage("Impossible d'ajouter les ressources.");
+      setCombatMessage(t("dev.resourcesFailed"));
       return;
     }
     const refreshedState = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
-    setCombatMessage("+1000 pour chaque ressource.");
+    setCombatMessage(t("dev.resourcesDone"));
   };
 
   const grantHeroExperience = async () => {
     if (!gameId || !selectedHeroId) {
-      setCombatMessage("Sélectionnez un héros avant d'ajouter de l'XP.");
+      setCombatMessage(t("dev.selectHeroXp"));
       return;
     }
     const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
@@ -185,17 +188,17 @@ export function useDevPanel(gameId: string | undefined) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? "Impossible d'ajouter l'XP.");
+      setCombatMessage(data.error ?? t("dev.xpFailed"));
       return;
     }
     const refreshedState = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
-    setCombatMessage("+500 XP pour le héros sélectionné.");
+    setCombatMessage(t("dev.xpDone"));
   };
 
   const grantHeroSkills = async () => {
     if (!gameId || !selectedHeroId) {
-      setCombatMessage("Sélectionnez un héros avant d'ajouter les compétences.");
+      setCombatMessage(t("dev.selectHeroSkills"));
       return;
     }
     const response = await fetchWithSupabaseAuth(`/api/games/${gameId}/action`, {
@@ -205,17 +208,17 @@ export function useDevPanel(gameId: string | undefined) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setCombatMessage(data.error ?? "Impossible d'ajouter les compétences.");
+      setCombatMessage(data.error ?? t("dev.skillsFailed"));
       return;
     }
     const refreshedState = await refreshGameState(gameId, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
-    setCombatMessage("Toutes les compétences du héros sont au niveau expert.");
+    setCombatMessage(t("dev.skillsAllExpert"));
   };
 
   const toggleTeleport = () => {
     if (!selectedHeroId) {
-      setCombatMessage("Sélectionnez un héros avant d'armer la téléportation.");
+      setCombatMessage(t("dev.selectHeroTeleport"));
       return;
     }
     setDevTeleportArmed(!devTeleportArmed);
@@ -303,7 +306,7 @@ export function useDevPanel(gameId: string | undefined) {
             <div className="flex min-w-0 items-center gap-2">
               <div className={`min-w-0 truncate font-black uppercase ${goldText} ${
                 devPanelCollapsed ? "text-[10px] tracking-[0.14em]" : "text-xs tracking-[0.18em]"
-              }`}>Mode DEV</div>
+              }`}>{t("hud.devMode")}</div>
               <div className={`shrink-0 rounded border border-amber-700/50 bg-black/35 font-mono font-black leading-none text-amber-100 ${
                 devPanelCollapsed ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"
               }`}>
@@ -319,8 +322,8 @@ export function useDevPanel(gameId: string | undefined) {
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setDevPanelCollapse(!devPanelCollapsed)}
                 aria-expanded={!devPanelCollapsed}
-                aria-label={devPanelCollapsed ? "Deplier le mode DEV" : "Replier le mode DEV"}
-                title={devPanelCollapsed ? "Deplier" : "Replier"}
+                aria-label={devPanelCollapsed ? t("dev.expandPanel") : t("dev.collapsePanel")}
+                title={devPanelCollapsed ? t("panel.expand") : t("panel.collapse")}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -342,7 +345,7 @@ export function useDevPanel(gameId: string | undefined) {
                 }`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setDevPanelVisibility(false)}
-                aria-label="Fermer le mode DEV"
+                aria-label={t("dev.closePanel")}
               >
                 X
               </button>
@@ -398,7 +401,7 @@ export function useDevPanel(gameId: string | undefined) {
                       }`}
                       onClick={toggleDevReveal}
                     >
-                      {devRevealMap ? "Masquer la carte" : "Afficher la carte"}
+                      {devRevealMap ? t("dev.hideMap") : t("dev.showMap")}
                     </button>
                     <button
                       type="button"
@@ -409,7 +412,7 @@ export function useDevPanel(gameId: string | undefined) {
                       }`}
                       onClick={() => setDevGodMode(!devGodMode)}
                     >
-                      {devGodMode ? "Mode dieu actif" : "Activer le mode dieu"}
+                      {devGodMode ? t("dev.godActive") : t("dev.godEnable")}
                     </button>
                     <button
                       type="button"
@@ -420,7 +423,7 @@ export function useDevPanel(gameId: string | undefined) {
                       }`}
                       onClick={() => setDevInfiniteMana(!devInfiniteMana)}
                     >
-                      {devInfiniteMana ? "Mana infini actif" : "Activer mana infini"}
+                      {devInfiniteMana ? t("dev.manaActive") : t("dev.manaEnable")}
                     </button>
                     <button
                       type="button"
@@ -428,7 +431,7 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={() => void grantResources()}
                       disabled={!gameId}
                     >
-                      Donner +1000 ressources
+                      {t("dev.giveResources")}
                     </button>
                     <button
                       type="button"
@@ -436,7 +439,7 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={() => void grantHeroExperience()}
                       disabled={!gameId || !selectedHeroId}
                     >
-                      Donner +500 XP au héros
+                      {t("dev.giveXp")}
                     </button>
                     <button
                       type="button"
@@ -444,7 +447,7 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={() => void grantHeroSkills()}
                       disabled={!gameId || !selectedHeroId}
                     >
-                      Donner tous les skills
+                      {t("dev.giveSkills")}
                     </button>
                     <button
                       type="button"
@@ -455,10 +458,10 @@ export function useDevPanel(gameId: string | undefined) {
                       }`}
                       onClick={toggleTeleport}
                     >
-                      {devTeleportArmed ? "Téléportation armée" : "Téléporter au prochain clic"}
+                      {devTeleportArmed ? t("dev.teleportArmed") : t("dev.teleportNextClick")}
                     </button>
                     <div className="rounded-md border border-amber-900/45 bg-black/30 px-2.5 py-1.5 text-[10px] font-semibold leading-snug text-amber-200/75">
-                      Héros cible : {getSelectedHeroName(gameState, selectedHeroId)}
+                      {t("dev.targetHero", { name: getSelectedHeroName(gameState, selectedHeroId, t) })}
                     </div>
                   </div>
                 )}
@@ -475,9 +478,10 @@ export function useDevPanel(gameId: string | undefined) {
 
 function getSelectedHeroName(
   gameState: ReturnType<typeof useGameStore.getState>["gameState"],
-  selectedHeroId: string | null
+  selectedHeroId: string | null,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string
 ) {
-  if (!selectedHeroId) return "aucun";
+  if (!selectedHeroId) return t("dev.noneHero");
   const hero = gameState?.players.flatMap((player) => player.heroes).find((item) => item.id === selectedHeroId);
   return hero?.name ?? selectedHeroId;
 }

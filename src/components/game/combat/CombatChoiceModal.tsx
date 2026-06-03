@@ -11,6 +11,7 @@ import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 
@@ -69,7 +70,7 @@ export default function CombatChoiceModal() {
 
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setCombatMessage(data?.error ?? t("combat.impossible"));
+      setCombatMessage(localizedServerMessage(data?.error, locale) ?? t("combat.impossible"));
       setPendingCombat(null);
       return;
     }
@@ -91,7 +92,7 @@ export default function CombatChoiceModal() {
       }
     }
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
-  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat, t]);
+  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat, t, locale]);
 
   if (!gameState || !pendingCombat || !encounterInfo) return null;
 

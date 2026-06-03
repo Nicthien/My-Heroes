@@ -17,6 +17,8 @@ import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { getKnownActionLogEntries } from "./actionLogDisplay";
 import { HeroIcon, MineIcon, PortraitSeal, TowerIcon, ornateFrame } from "./theme";
 import { useDraggableWindow, type HudWindowPosition } from "./useDraggableWindow";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 
 type OverviewTab = "heroes" | "towns" | "mines" | "combats" | "journal";
 
@@ -42,6 +44,7 @@ function rightColumnDefault(y: number) {
 
 export default function DesktopHudWindows({ gameId, playerId }: { gameId: string; playerId?: string }) {
   const { data: session } = useSession();
+  const { t } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const activeMapLevel = useGameStore((state) => state.activeMapLevel);
   const setActiveMapLevel = useGameStore((state) => state.setActiveMapLevel);
@@ -54,11 +57,11 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
   const hasUnderground = Boolean(gameState.map.levels?.underground);
 
   const tabs: Array<{ id: OverviewTab; label: string; count: number; icon: ReactNode }> = [
-    { id: "heroes", label: "Héros", count: me?.heroes.length ?? 0, icon: <HeroIcon className="h-4 w-4" /> },
-    { id: "towns", label: "Châteaux", count: me?.towns.length ?? 0, icon: <TowerIcon className="h-4 w-4" /> },
-    { id: "mines", label: "Mines", count: me?.resourceBuildings.length ?? 0, icon: <MineIcon className="h-4 w-4" /> },
-    { id: "combats", label: "Combats", count: gameState.activeCombats?.length ?? 0, icon: <span className="text-sm font-black">!</span> },
-    { id: "journal", label: "Journal", count: knownJournalCount, icon: <span className="text-sm font-black">J</span> },
+    { id: "heroes", label: t("hud.navHeroes"), count: me?.heroes.length ?? 0, icon: <HeroIcon className="h-4 w-4" /> },
+    { id: "towns", label: t("hud.tabTowns"), count: me?.towns.length ?? 0, icon: <TowerIcon className="h-4 w-4" /> },
+    { id: "mines", label: t("hud.tabMines"), count: me?.resourceBuildings.length ?? 0, icon: <MineIcon className="h-4 w-4" /> },
+    { id: "combats", label: t("hud.tabCombats"), count: gameState.activeCombats?.length ?? 0, icon: <span className="text-sm font-black">!</span> },
+    { id: "journal", label: t("hud.tabJournal"), count: knownJournalCount, icon: <span className="text-sm font-black">J</span> },
   ];
 
   return (
@@ -210,6 +213,7 @@ function MapLevelHeaderToggle({
 }
 
 function HeroesList({ playerId }: { playerId: string }) {
+  const { t } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   if (!gameState) return null;
@@ -219,7 +223,7 @@ function HeroesList({ playerId }: { playerId: string }) {
   const selectHero = useGameStore.getState().selectHero;
   const selectTown = useGameStore.getState().selectTown;
 
-  if (player.heroes.length === 0) return <EmptyState>Aucun héros disponible.</EmptyState>;
+  if (player.heroes.length === 0) return <EmptyState>{t("side.noHeroes")}</EmptyState>;
   return (
     <>
       {player.heroes.map((hero) => {
@@ -239,15 +243,15 @@ function HeroesList({ playerId }: { playerId: string }) {
             }}
             left={<PortraitSeal color={player.color} label={hero.name.slice(0, 2)} active={active} size={40} />}
             title={hero.name}
-            subtitle={townAtHero ? `Niveau ${hero.level} · Au château` : `Niveau ${hero.level}`}
+            subtitle={townAtHero ? t("side.levelAtTown", { level: hero.level }) : t("side.level", { level: hero.level })}
             meta={
               <div className="flex items-center gap-2 text-[10px] text-amber-200/80">
                 {townAtHero && (
                   <button
                     type="button"
                     className="grid h-5 w-5 place-items-center rounded border border-sky-500/40 bg-sky-950/50 text-sky-200 transition hover:border-sky-300/70 hover:bg-sky-900/60 hover:text-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200/80"
-                    title={`Au château : ${townAtHero.name}`}
-                    aria-label={`Sélectionner le château ${townAtHero.name}`}
+                    title={t("side.atTownTitle", { name: townAtHero.name })}
+                    aria-label={t("side.selectTown", { name: townAtHero.name })}
                     onClick={(event) => {
                       event.stopPropagation();
                       selectTown(townAtHero.id);
@@ -268,6 +272,7 @@ function HeroesList({ playerId }: { playerId: string }) {
 }
 
 function TownsList({ playerId }: { playerId: string }) {
+  const { t } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
   if (!gameState) return null;
@@ -276,7 +281,7 @@ function TownsList({ playerId }: { playerId: string }) {
   const focusTile = useGameStore.getState().focusTile;
   const selectTown = useGameStore.getState().selectTown;
 
-  if (player.towns.length === 0) return <EmptyState>Aucun château disponible.</EmptyState>;
+  if (player.towns.length === 0) return <EmptyState>{t("side.noTowns")}</EmptyState>;
   return (
     <>
       {player.towns.map((town) => {
@@ -297,7 +302,7 @@ function TownsList({ playerId }: { playerId: string }) {
               </div>
             }
             title={town.name}
-            subtitle={`Niveau ${town.level}`}
+            subtitle={t("side.level", { level: town.level })}
           />
         );
       })}
@@ -306,18 +311,19 @@ function TownsList({ playerId }: { playerId: string }) {
 }
 
 function MinesList({ playerId }: { playerId: string }) {
+  const { t, locale } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   if (!gameState) return null;
   const player = gameState.players.find((item) => item.id === playerId);
   if (!player) return null;
   const focusTile = useGameStore.getState().focusTile;
 
-  if (player.resourceBuildings.length === 0) return <EmptyState>Aucune mine contrôlée.</EmptyState>;
+  if (player.resourceBuildings.length === 0) return <EmptyState>{t("side.noMines")}</EmptyState>;
   return (
     <>
       {player.resourceBuildings.map((mine) => {
         const rule = RESOURCE_BUILDING_RULES.find((item) => item.type === mine.type);
-        const label = rule?.label ?? mine.type;
+        const label = localizedLabelFromId(mine.type, rule?.label ?? mine.type, locale);
         const sprite = MAP_SPRITES.buildings[mine.type];
         return (
           <Row

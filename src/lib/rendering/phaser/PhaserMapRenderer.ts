@@ -3,6 +3,7 @@ import { getSavedAudioMuted, getSavedEffectsVolume } from "@/lib/audio/musicPref
 import { measureDevPerformance, recordDevPerformanceGauge, recordDevPerformanceMeasure } from "@/lib/dev/performanceMetrics";
 import { UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
+import type { Locale } from "@/lib/i18n/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
 import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
@@ -234,6 +235,7 @@ function splitHoverLabelText(text: string) {
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
   objects: MapObjectData[] = [];
+  locale: Locale = "fr";
   readyCallback?: () => void;
   loadingProgressCallback?: RendererLoadingProgress;
 
@@ -3321,7 +3323,7 @@ class PhaserMapScene extends Phaser.Scene {
       const dataObject = this.objectsByTile.get(`${tile.x},${tile.y}`)?.find((o) => o.id === mapObject.id);
       const text = mapObject.type === "adventure_building" && dataObject
         ? (dataObject.description ? `${dataObject.name}\n${dataObject.description}` : dataObject.name)
-        : getMapObjectHoverText(mapObject);
+        : getMapObjectHoverText(mapObject, this.locale);
       if (text) {
         const iso = cartToIso(tile.x, tile.y);
         const surfaceY = this.getSurfaceY(tile.x, tile.y);
@@ -3942,6 +3944,10 @@ export class PhaserMapRenderer implements MapRenderer {
 
   renderMap(map: GameMap) {
     if (this.isReady()) this.scene?.renderMap(map);
+  }
+
+  setLocale(locale: Locale) {
+    if (this.scene) this.scene.locale = locale;
   }
 
   setObjects(objects: MapObjectData[]) {

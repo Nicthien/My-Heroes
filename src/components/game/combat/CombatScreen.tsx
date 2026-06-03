@@ -32,6 +32,7 @@ import {
 
 import { IsoBattlefield } from "./IsoBattlefield";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 const RES_LABEL_KEY: Record<keyof Resources, TranslationKey> = {
@@ -46,7 +47,7 @@ const RES_LABEL_KEY: Record<keyof Resources, TranslationKey> = {
 
 export default function CombatScreen() {
   const { data: session } = useSession();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const resLabel = (key: keyof Resources) => t(RES_LABEL_KEY[key]);
   const activeCombat = useGameStore((state) => state.activeCombat);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
@@ -405,7 +406,7 @@ export default function CombatScreen() {
       });
       const data = await response.json();
       if (!response.ok && !data.combat) {
-        const message = typeof data?.error === "string" ? data.error : "Action impossible.";
+        const message = (typeof data?.error === "string" ? localizedServerMessage(data.error, locale) : null) ?? t("msg.actionImpossible");
         console.warn("[combat action]", response.status, message, action);
         setCombatMessage(message);
         return false;

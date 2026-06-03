@@ -8,6 +8,7 @@ import {
   goldText,
   ornateFrame,
 } from "./theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type CollapsiblePanelProps = {
   title: ReactNode;
@@ -42,8 +43,9 @@ export default function CollapsiblePanel({
   style,
   testId,
 }: CollapsiblePanelProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const collapseLabel = collapsed ? "Déplier" : "Replier";
+  const collapseLabel = collapsed ? t("panel.expand") : t("panel.collapse");
   const draggable = Boolean(dragHandleProps);
 
   const rootClassName = [
@@ -82,7 +84,7 @@ export default function CollapsiblePanel({
                 event.stopPropagation();
                 onResetPosition();
               }}
-              aria-label={`Réinitialiser la position ${String(title)}`}
+              aria-label={t("panel.resetPosition", { title: String(title) })}
               title="Position initiale"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

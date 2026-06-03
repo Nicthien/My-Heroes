@@ -3,8 +3,12 @@ import { getArtifactMapLabel } from "@/lib/game/artifacts";
 import { getCreatureBankDefinition, isCreatureBankType } from "@/lib/game/creature-banks";
 import { getResourceBuildingLabel, UNIT_RULES as ECONOMY_UNIT_RULES } from "@/lib/game/economy";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
+import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
+import { localizedLabelFromId, localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { translate } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
 import { TILE_HEIGHT } from "@/lib/rendering/phaser/iso";
 import type { MapObjectData } from "@/lib/rendering/mapRenderer";
 
@@ -155,48 +159,57 @@ export const TOWN_ORIGINS: Record<string, SpriteOrigin> = {
   conflux: { originX: 0.498, originY: 0.927 },
 };
 
-export function getMapObjectHoverText(object: MapObject) {
-  const title = getMapObjectHoverTitle(object);
+export function getMapObjectHoverText(object: MapObject, locale: Locale = "fr") {
+  const title = getMapObjectHoverTitle(object, locale);
   if (!title) return null;
 
-  const description = getMapObjectHoverDescription(object);
+  const description = getMapObjectHoverDescription(object, locale);
   return description ? `${title}\n${description}` : title;
 }
 
-export function getMapObjectHoverTitle(object: MapObject) {
+export function getMapObjectHoverTitle(object: MapObject, locale: Locale = "fr") {
   if (object.type === "resource" && object.subtype) {
-    return RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase();
+    return localizedLabelFromId(object.subtype, RESOURCE_LABELS[object.subtype] ?? object.subtype.slice(0, 3).toUpperCase(), locale);
   }
 
   if (object.type === "monster") return object.subtype && object.subtype in UNIT_RULES
-    ? UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label
-    : "Armée neutre";
-  if (object.type === "building" && object.subtype) return getResourceBuildingLabel(object.subtype) ?? object.subtype;
-  if (object.type === "adventure_building") {
-    if (isExternalDwellingType(object.subtype)) return getExternalDwellingLabel(object.targetId);
-    return getAdventureBuildingLabel(object.subtype);
+    ? localizedUnitLabel(object.subtype, UNIT_RULES[object.subtype as keyof typeof UNIT_RULES].label, locale)
+    : translate(locale, "map.neutralArmy");
+  if (object.type === "building" && object.subtype) {
+    return localizedLabelFromId(object.subtype, getResourceBuildingLabel(object.subtype) ?? object.subtype, locale);
   }
-  if (object.type === "artifact") return getArtifactMapLabel(object.subtype);
-  if (object.type === "gate") return object.ownerId ? "Porte controlee" : "Porte neutre";
-  if (object.type === "boat") return "Bateau";
+  if (object.type === "adventure_building") {
+    if (isExternalDwellingType(object.subtype)) {
+      return localizedLabelFromId(object.targetId ?? "", getExternalDwellingLabel(object.targetId), locale);
+    }
+    return localizedLabelFromId(object.subtype ?? "", getAdventureBuildingLabel(object.subtype), locale);
+  }
+  if (object.type === "artifact") return localizedLabelFromId(object.subtype ?? "", getArtifactMapLabel(object.subtype), locale);
+  if (object.type === "gate") return translate(locale, object.ownerId ? "map.gateOwned" : "map.gateNeutral");
+  if (object.type === "boat") return translate(locale, "build.boat");
 
   return null;
 }
 
-export function getMapObjectHoverDescription(object: MapObject): string | null {
+export function getMapObjectHoverDescription(object: MapObject, locale: Locale = "fr"): string | null {
   if (object.type !== "adventure_building") return null;
 
   if (isExternalDwellingType(object.subtype)) {
     const unit = object.targetId ? ECONOMY_UNIT_RULES[object.targetId as keyof typeof ECONOMY_UNIT_RULES] : undefined;
-    if (!unit) return "Permet de recruter des créatures sur la carte.";
-    return `Permet de recruter ${unit.label} chaque semaine. Croissance : ${unit.growth}.`;
+    if (!unit) return translate(locale, "map.dwellingGeneric");
+    return translate(locale, "map.dwellingRecruit", {
+      unit: localizedUnitLabel(object.targetId ?? "", unit.label, locale),
+      growth: unit.growth,
+    });
   }
 
   if (isCreatureBankType(object.subtype)) {
-    return getCreatureBankDefinition(object.subtype)?.description ?? "Combat protegeant un tresor.";
+    const description = getCreatureBankDefinition(object.subtype)?.description;
+    return description ? localizedBuildingDescription(description, locale) : translate(locale, "map.creatureBankGeneric");
   }
 
-  return getAdventureBuildingRule(object.subtype)?.description ?? null;
+  const ruleDescription = getAdventureBuildingRule(object.subtype)?.description;
+  return ruleDescription ? localizedBuildingDescription(ruleDescription, locale) : null;
 }
 
 export function getMapObjectHoverY(object: MapObject, surfaceY: number) {

@@ -84,6 +84,74 @@ Supabase `.env` for the publishable and service-role keys.
 > assumes Supabase's compose runs from `./supabase-docker`. If your directory
 > differs, check `docker network ls` and adjust that name.
 
+### Option C — Unraid (pull a prebuilt image)
+
+Unraid has no source checkout, so the app is **not built there**. You build the
+image on your dev machine, push it to a registry (Docker Hub), then on Unraid
+you only *pull* it and attach it to the self-hosted Supabase stack with
+[`docker-compose.unraid.yml`](docker-compose.unraid.yml).
+
+This setup uses the **proxy** network strategy: the browser never talks to
+Supabase directly. `NEXT_PUBLIC_SUPABASE_URL` is baked with a **private/LAN
+URL**, which makes the client route Supabase calls through the app's
+`/api/supabase` proxy (see [`src/lib/supabase/browser.ts`](src/lib/supabase/browser.ts)).
+The proxy forwards server-side to Kong over the shared docker network via
+`SUPABASE_INTERNAL_URL=http://kong:8000` (wired in the compose file). Only the
+app is exposed publicly (e.g. behind Zoraxy); Supabase stays internal.
+
+> ⚠️ `NEXT_PUBLIC_*` are inlined at **build time**, so the private URL must be
+> passed as a build arg — see the build command below. The exact IP doesn't
+> matter as long as it's private (`192.168.x`, `10.x`, `172.16–31.x`); it's just
+> the signal that flips the browser onto the proxy path.
+
+**1. Build + push the image (on your dev machine):**
+
+```bash
+docker build \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL="http://192.168.0.174:8000" \
+  --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<anon key>" \
+  --build-arg NEXT_PUBLIC_SITE_URL="https://myheroes.vnmaison.site" \
+  -t nicthien/my-heroes:latest .
+
+docker push nicthien/my-heroes:latest
+```
+
+**2. On Unraid — get the official Supabase stack and start it** (same as
+Option B, steps 1–2): clone `supabase/docker`, fill its `.env`, then
+`docker compose -f ./supabase-docker/docker-compose.yml up -d`.
+
+**3. Provide the app's runtime env.** In the dir holding the compose files
+(e.g. `/mnt/user/appdata/my-heroes`), set:
+
+```env
+REGISTRY_IMAGE=docker.io/nicthien/my-heroes:latest
+SERVICE_ROLE_KEY=<service role key from supabase-docker/.env>
+ANON_KEY=<anon key from supabase-docker/.env>
+NEXT_PUBLIC_SUPABASE_URL=http://192.168.0.174:8000   # same private URL you baked
+SITE_URL=https://myheroes.vnmaison.site
+```
+
+**4. Apply the schema, pull, and start the app:**
+
+```bash
+# Copy this repo's supabase/schema.sql next to the script (or point SCHEMA at it).
+# schema.sql is enough for a fresh DB (see scripts/apply-schema-unraid.sh).
+./apply-schema-unraid.sh
+
+docker compose \
+  -f ./supabase-docker/docker-compose.yml \
+  -f ./docker-compose.unraid.yml \
+  pull app
+docker compose \
+  -f ./supabase-docker/docker-compose.yml \
+  -f ./docker-compose.unraid.yml \
+  up -d app
+```
+
+> The `name: supabase-docker_default` external network in
+> `docker-compose.unraid.yml` must match Supabase's compose network — check
+> `docker network ls` and adjust if your layout differs.
+
 ---
 
 ## 3. Build & run the app

@@ -3,7 +3,7 @@ import "./globals.css";
 import AuthProvider from "@/components/providers/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "My Heroes - Heroes of Might and Magic",
+  title: "My Heroes",
   description: "Jeu de stratégie au tour par tour dans un monde héroïque fantasy",
 };
 

@@ -29,7 +29,7 @@ export const en: Record<TranslationKey, string> = {
   "language.en": "English",
 
   // --- Auth: login ---
-  "auth.login.tagline": "Inspired by Heroes of Might and Magic",
+  "auth.login.tagline": "Turn-based fantasy strategy",
   "auth.login.identifier": "Email or username",
   "auth.login.password": "Password",
   "auth.login.submit": "Sign in",

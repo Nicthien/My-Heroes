@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**My Heroes** is a turn-based strategy game inspired by Heroes of Might and Magic III. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, Supabase, and Phaser for isometric rendering.
+**My Heroes** is a turn-based fantasy strategy game. Players explore procedurally-generated maps, manage resources and heroes, recruit armies, and engage in tactical combat. Built with Next.js, React, Supabase, and Phaser for isometric rendering.
 
 ## Core Commands
 

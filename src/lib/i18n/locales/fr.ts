@@ -28,7 +28,7 @@ export const fr = {
   "language.en": "English",
 
   // --- Auth: login ---
-  "auth.login.tagline": "Inspiré de Heroes of Might and Magic",
+  "auth.login.tagline": "Stratégie fantastique au tour par tour",
   "auth.login.identifier": "Email ou pseudo",
   "auth.login.password": "Mot de passe",
   "auth.login.submit": "Se connecter",

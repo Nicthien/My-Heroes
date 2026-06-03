@@ -35,26 +35,26 @@ export async function showBrowserNotification(title: string, options: Notificati
 
 export function factionLabel(f: Faction, locale: Locale = "fr"): string {
   const labelsEn: Record<string, string> = {
-    castle: "Castle",
-    rampart: "Rampart",
-    tower: "Tower",
-    inferno: "Inferno",
-    necropolis: "Necropolis",
-    dungeon: "Dungeon",
-    stronghold: "Stronghold",
-    fortress: "Fortress",
-    conflux: "Conflux",
+    castle: "Steel Crowns",
+    rampart: "Sylvan Pact",
+    tower: "Azure Circle",
+    inferno: "Profane Embers",
+    necropolis: "Bone Veil",
+    dungeon: "Understone Realm",
+    stronghold: "Red Hammers",
+    fortress: "Swamp Oaths",
+    conflux: "Primordial Orb",
   };
   const labels: Record<string, string> = {
-    castle: "Château",
-    rampart: "Rempart",
-    tower: "Tour",
-    inferno: "Hadès",
-    necropolis: "Nécropole",
-    dungeon: "Donjon",
-    stronghold: "Bastion",
-    fortress: "Forteresse",
-    conflux: "Conflux",
+    castle: "Couronnes d'Acier",
+    rampart: "Pacte des Sylves",
+    tower: "Cercle d'Azur",
+    inferno: "Braises Profanes",
+    necropolis: "Voile d'Os",
+    dungeon: "Royaume Sous-Roche",
+    stronghold: "Marteaux Rouges",
+    fortress: "Serments du Marais",
+    conflux: "Orbe Primordial",
   };
   return (locale === "en" ? labelsEn[f] : labels[f]) || f;
 }

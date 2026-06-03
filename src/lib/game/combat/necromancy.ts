@@ -21,7 +21,7 @@ const UNDEAD_UNITS: ReadonlySet<UnitType> = new Set([
 
 const NON_LIVING_UNITS: ReadonlySet<UnitType> = new Set([
   ...UNDEAD_UNITS,
-  // Constructs/elementals — Heroes 3 treats these as non-living, not eligible
+  // Constructs/elementals are treated as non-living, so they are not eligible.
   UnitType.GARGOYLE,
   UnitType.OBSIDIAN_GARGOYLE,
   UnitType.IRON_GOLEM,

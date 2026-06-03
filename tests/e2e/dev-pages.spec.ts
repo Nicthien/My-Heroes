@@ -94,7 +94,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
 
   test("combat town preview renders siege sprites", async ({ page }) => {
     await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Château" }).click();
+    await page.getByRole("button", { name: "Ville" }).click();
 
     await expect(page.getByTestId("siege-overlay")).toBeAttached();
     await expect(page.locator('img[src*="/assets/sprites/map/wall-rampart-cube.png"]').first()).toBeVisible();
@@ -252,12 +252,12 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByText("Leon").first()).toBeVisible();
 
     await overview.getByRole("button", { name: /Châteaux/ }).click();
-    await expect(overview.getByText("Château Astral")).toBeVisible();
+    await expect(overview.getByText("Château Stellaire")).toBeVisible();
     await expect(overview.getByText("Aldric")).toHaveCount(0);
 
     await overview.getByRole("button", { name: /Mines/ }).click();
     await expect(overview.getByText("Mine d'or")).toBeVisible();
-    await expect(overview.getByText("Château Astral")).toHaveCount(0);
+    await expect(overview.getByText("Château Stellaire")).toHaveCount(0);
 
     await overview.getByRole("button", { name: /Combats/ }).click();
     await expect(overview.getByText("Aucun combat actif.")).toBeVisible();

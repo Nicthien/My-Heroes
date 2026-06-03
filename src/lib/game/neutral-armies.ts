@@ -48,7 +48,7 @@ const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
 
 /**
- * Builds a HoMM3-style homogeneous neutral guard: a single creature type is picked
+ * Builds a classic homogeneous neutral guard: a single creature type is picked
  * once, the total count is derived from the difficulty budget / the creature's
  * aiValue, then that count is split across identical stacks (slots).
  */
@@ -68,7 +68,7 @@ export function createNeutralArmyStacksForTile(
   // scales up with the budget.
   let unitType = selectSingleUnitType(pool, maxIndex, seed);
 
-  // HoMM3 upgrade flag: ~25% chance the whole troop becomes its upgraded variant.
+  // Classic upgrade flag: ~25% chance the whole troop becomes its upgraded variant.
   // Use the well-mixed high bits so this roll is independent of the type selection.
   if ((seed >>> 8) % 100 < 25) {
     unitType = getUpgradedVariant(unitType) ?? unitType;
@@ -117,7 +117,7 @@ export function isUnitType(value: unknown): value is UnitType {
 }
 
 // Number of identical stacks the total count is split into. Tuned to avoid
-// single-unit stacks while keeping a HoMM3-like spread of slots.
+// single-unit stacks while keeping a classic spread of slots.
 function calculateStackCount(totalCount: number) {
   if (totalCount < 5) return 1;
   if (totalCount < 20) return 2;
@@ -135,7 +135,7 @@ function getMaxPoolIndex(pool: UnitType[], budget: number) {
 // Picks one creature type from the lower-mid of the eligible band. The band already
 // scales up with the budget (getMaxPoolIndex), so staying below its top end keeps the
 // creature affordable enough to field a meaningful number of units instead of a few
-// elites — closer to the HoMM3 feel and to the legacy army sizes.
+// elites, closer to the intended feel and to the legacy army sizes.
 function selectSingleUnitType(pool: UnitType[], maxIndex: number, seed: number): UnitType {
   const lowerBound = Math.floor(maxIndex * GUARD_BAND_LOW);
   const upperBound = Math.max(lowerBound, Math.floor(maxIndex * GUARD_BAND_HIGH));

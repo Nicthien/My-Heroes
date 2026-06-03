@@ -396,7 +396,7 @@ export const en: Record<TranslationKey, string> = {
   "town.tabTavern": "Tavern",
   "town.tabMarket": "Market",
   "town.tabMercenary": "Mercenaries",
-  "town.tabGate": "Castle gate",
+  "town.tabGate": "Ember Gate",
   "town.tabUniversity": "Magic university",
   "town.tabBallista": "Ballista yard",
   "hud.townHeader": "{faction} · Level {level}",
@@ -682,9 +682,9 @@ export const en: Record<TranslationKey, string> = {
   "artifactsTab.buyer": "Buying hero: {name}",
 
   // --- Town: castle gate tab ---
-  "gate.needAnother": "You must own another Inferno town equipped with the Castle Gate to transfer units.",
+  "gate.needAnother": "You must own another Profane Embers town equipped with the Ember Gate to transfer units.",
   "gate.noCreatures": "No garrison creatures to transfer.",
-  "gate.info": "Instantly transfer garrison creatures to another equipped Inferno town.",
+  "gate.info": "Instantly transfer garrison creatures to another equipped Profane Embers town.",
   "gate.destination": "Destination",
   "gate.transfer": "Transfer",
 
@@ -904,7 +904,7 @@ export const en: Record<TranslationKey, string> = {
   "devpage.combat.scenario.hero": "Hero",
   "devpage.combat.scenario.naval": "Naval",
   "devpage.combat.scenario.mine": "Mine",
-  "devpage.combat.scenario.town": "Castle",
+  "devpage.combat.scenario.town": "Town",
   "devpage.combat.scenario.adventure": "Building",
   "devpage.combat.phase.start": "Start",
   "devpage.combat.phase.tactics": "Tactics",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
+import { isPlayableFaction } from "@/lib/game/playable-factions";
 import { GameMap } from "@/lib/game/types";
 import { createGamePlayerSetup, PLAYER_COLORS } from "@/lib/game/server/player-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,6 +19,9 @@ export async function POST(
   const { id } = await params;
   const body = await request.json();
   const faction = (body.faction || "castle") as string;
+  if (!isPlayableFaction(faction)) {
+    return NextResponse.json({ error: "Cette faction n'est pas jouable." }, { status: 400 });
+  }
   const supabase = createAdminClient();
 
   await supabase.from("profiles").upsert({

@@ -3,12 +3,13 @@ import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { makeRng } from "@/lib/game/engine/rng";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
+import { normalizePlayableFaction } from "@/lib/game/playable-factions";
 import { BuildingType, Faction, GameMap, HeroClass } from "@/lib/game/types";
 import { pickTownName } from "@/lib/game/town-generation";
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 
 export const PLAYER_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7", "#f97316", "#06b6d4", "#ec4899"];
-export const AI_NAMES = ["Sandro IA", "Kyrre IA", "Solmyr IA", "Mephala IA", "Crag Hack IA", "Gunnar IA", "Tazar IA", "Loynis IA"];
+export const AI_NAMES = ["Malrec IA", "Sylane IA", "Asterion IA", "Briselle IA", "Brogar IA", "Torvald IA", "Vornek IA", "Celian IA"];
 export const STARTING_RESOURCES = {
   gold: 15000,
   wood: 20,
@@ -116,7 +117,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
 
   const heroInsert: Record<string, unknown> = {
     game_player_id: playerRow.id,
-    name: hero?.name ?? "Sire Christian",
+    name: hero?.name ?? "Sire Corvin",
     hero_class: heroClass,
     specialty: hero?.specialty ?? null,
     attack: heroStats.attack,
@@ -202,7 +203,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
 }
 
 function normalizeFaction(faction: string | undefined): Faction {
-  return faction && faction in FACTION_UNITS ? (faction as Faction) : Faction.CASTLE;
+  return normalizePlayableFaction(faction);
 }
 
 function pickStartingHero(faction: Faction, seed: string) {

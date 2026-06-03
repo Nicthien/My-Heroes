@@ -155,7 +155,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
       onClick={close}
     >
       <div
-        className={`relative ${ornateFramePolished} my-auto flex w-full max-w-5xl flex-col p-4 sm:min-h-[36rem] sm:p-6`}
+        className={`relative ${ornateFramePolished} my-auto flex w-full max-w-6xl flex-col p-4 sm:min-h-[36rem] sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <CornerOrnaments />

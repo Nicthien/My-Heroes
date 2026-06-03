@@ -166,10 +166,10 @@ export async function handleGarrisonAction({
     const fromFaction = ((fromTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
     const toFaction = ((toTown.townType ?? gamePlayer.faction ?? Faction.CASTLE) as Faction);
     if (fromFaction !== Faction.INFERNO || toFaction !== Faction.INFERNO) {
-      return NextResponse.json({ error: "La Porte du château ne relie que les villes Hadès" }, { status: 400 });
+      return NextResponse.json({ error: "La Porte des Braises ne relie que les villes des Braises Profanes" }, { status: 400 });
     }
     if (!(fromTown.buildings ?? []).includes(BuildingType.UNIQUE_1) || !(toTown.buildings ?? []).includes(BuildingType.UNIQUE_1)) {
-      return NextResponse.json({ error: "Les deux villes doivent posséder la Porte du château" }, { status: 400 });
+      return NextResponse.json({ error: "Les deux villes doivent posséder la Porte des Braises" }, { status: 400 });
     }
 
     const unitType = action.unitType as UnitType;

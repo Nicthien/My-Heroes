@@ -229,7 +229,7 @@ const UNIQUE_BUILDINGS: Record<Faction, UniqueBuildingTemplate[]> = {
     { label: "Vaisseau céleste", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.INFERNO]: [
-    { label: "Porte du château", description: "Relie les villes Hadès pour transférer des créatures.", cost: { gold: 10000, wood: 5, ore: 5 } },
+    { label: "Porte des Braises", description: "Relie les villes des Braises Profanes pour transférer des créatures.", cost: { gold: 10000, wood: 5, ore: 5 } },
     { label: "Ordre du feu", description: "+1 Puissance magique définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { spellPower: 1 } },
     { label: "Nuages de soufre", description: "Ajoute des dégâts de feu aux défenses de la ville.", cost: { gold: 2000, sulfur: 5 } },
     { label: "Bassin de naissance", description: "+8 à la croissance hebdomadaire des diablotins.", cost: { gold: 1000 }, growthBonus: { [UnitType.IMP]: 8, [UnitType.FAMILIAR]: 8 } },

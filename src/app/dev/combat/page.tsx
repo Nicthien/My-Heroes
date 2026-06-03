@@ -140,7 +140,7 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
         resources: { gold: 0, wood: 0, ore: 0, mercury: 0, crystals: 0, gems: 0, sulfur: 0 },
         heroes: [{
           id: "h1",
-          name: "Astral",
+          name: "Astren",
           class: HeroClass.WIZARD,
           level: 6,
           experience: 2500,

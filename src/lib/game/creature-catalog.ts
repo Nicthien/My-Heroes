@@ -66,7 +66,7 @@ export function getCreature(unitType: UnitType | string): CreatureCatalogEntry {
 
 /**
  * Returns the upgraded variant of a creature (same group + tier, higher upgradeLevel),
- * mirroring the HoMM3 neutral "upgrade flag". Returns null when no upgrade exists
+ * mirroring the classic neutral "upgrade flag". Returns null when no upgrade exists
  * (e.g. the `neutral` group has no upgrades), so callers keep the base creature.
  */
 export function getUpgradedVariant(unitType: UnitType | string): UnitType | null {

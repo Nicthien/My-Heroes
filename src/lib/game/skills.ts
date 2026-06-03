@@ -106,7 +106,7 @@ export function countSkillLevels(skills: HeroSkills | null | undefined): number 
 
 export const MAX_HERO_SKILLS = 8;
 
-// H3 XP thresholds (cumulative XP required to reach level N).
+// XP thresholds (cumulative XP required to reach level N).
 // level 1 → 0, level 2 → 1000, level 3 → 2000, ... up to 30.
 export const HERO_LEVEL_XP_THRESHOLDS: number[] = (() => {
   const arr: number[] = [0, 1000];

@@ -4,8 +4,8 @@ This guide self-hosts the full stack on Unraid:
 
 | Piece | What it is | How it's managed | Address |
 | --- | --- | --- | --- |
-| **Supabase** | Official self-hosted stack (~11 containers) | `docker compose` (one folder) | its own LAN IP, e.g. `192.168.0.11:8000` |
-| **My Heroes** | The Next.js game (one container) | **native Unraid template** (Docker → Add Container) | its own LAN IP, e.g. `192.168.0.14:3000` |
+| **Supabase** | Official self-hosted stack (~11 containers) | `docker compose` (one folder) | its own LAN IP, e.g. `<supabase-ip>:8000` |
+| **My Heroes** | The Next.js game (one container) | **native Unraid template** (Docker → Add Container) | its own LAN IP, e.g. `<app-ip>:3000` |
 
 Two design choices drive everything:
 
@@ -111,7 +111,7 @@ sed -i 's|^\([[:space:]]*\)# ports:|\1ports:|' docker-compose.yml   # (only if p
 # Attach Kong to br0 with a fixed IP, via an addition to the kong service:
 #   networks:
 #     lan:
-#       ipv4_address: 192.168.0.11
+#       ipv4_address: <supabase-ip>
 # and a top-level:
 #   networks:
 #     lan:
@@ -123,8 +123,8 @@ sed -i 's|^\([[:space:]]*\)# ports:|\1ports:|' docker-compose.yml   # (only if p
 docker compose up -d
 ```
 
-Set `SUPABASE_PUBLIC_URL` / `API_EXTERNAL_URL` to `http://192.168.0.11:8000`.
-Studio is then at `http://192.168.0.11:8000` (login = `DASHBOARD_USERNAME` /
+Set `SUPABASE_PUBLIC_URL` / `API_EXTERNAL_URL` to `http://<supabase-ip>:8000`.
+Studio is then at `http://<supabase-ip>:8000` (login = `DASHBOARD_USERNAME` /
 `DASHBOARD_PASSWORD`).
 
 > If the pooler crash-loops on `ulimit ... Operation not permitted`, add to its
@@ -144,19 +144,19 @@ Unraid → **Docker → Add Container**:
 | Name | `my-heroes` |
 | Repository | `nicthien/my-heroes:latest` |
 | Network Type | `Custom: br0` |
-| Fixed IP address | `192.168.0.14` |
-| WebUI | `http://192.168.0.14:3000` |
+| Fixed IP address | `<app-ip>` |
+| WebUI | `http://<app-ip>:3000` |
 
 Add these **variables** (your own values — nothing is baked into the image):
 
 | Key | Value |
 | --- | --- |
-| `SUPABASE_URL` | `http://192.168.0.11:8000` |
+| `SUPABASE_URL` | `http://<supabase-ip>:8000` |
 | `SUPABASE_ANON_KEY` | *(your anon key)* |
 | `SUPABASE_SERVICE_ROLE_KEY` | *(your service role key)* |
-| `SUPABASE_INTERNAL_URL` | `http://192.168.0.11:8000` |
+| `SUPABASE_INTERNAL_URL` | `http://<supabase-ip>:8000` |
 
-Apply. Open `http://192.168.0.14:3000`, register a user (validates app ↔ Kong ↔
+Apply. Open `http://<app-ip>:3000`, register a user (validates app ↔ Kong ↔
 DB), then front it with Zoraxy on your public hostname.
 
 ---

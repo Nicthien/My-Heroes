@@ -82,10 +82,12 @@ IP keeps default ports free of host collisions (see docs/UNRAID.md → Networkin
 > private value (`192.168.x`, `10.x`, `172.16–31.x`) flips the browser onto the
 > `/api/supabase` proxy path. Nothing is baked, so the same image covers both.
 
-**Build + push the image (on your dev machine) — no build args, it's generic:**
+**Build + push the image (on your dev machine) — no build args, it's generic.**
+`--provenance=false --sbom=false` keeps it a plain image manifest so Unraid can
+detect updates (an OCI index + attestation manifest breaks Unraid's update check):
 
 ```bash
-docker build -t nicthien/my-heroes:latest .
+docker build --provenance=false --sbom=false -t nicthien/my-heroes:latest .
 docker push nicthien/my-heroes:latest
 ```
 

@@ -1,5 +1,7 @@
 # My Heroes
 
+**Français** · [English](README.en.md)
+
 Jeu video de strategie fantastique au tour par tour.
 
 ## Description

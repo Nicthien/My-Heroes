@@ -79,16 +79,27 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 > `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme
 > fallback de dev).
 
-## Compte admin local
+## Compte admin
 
-En local, `npm run dev`, `npm run db:reset`, `npm run admin:ensure` et le seed E2E garantissent
-la presence du compte de secours :
+Un compte admin est **créé automatiquement au premier démarrage** du serveur (sur
+toute installation), s'il n'existe pas déjà :
 
 - Email : `admin@myheroes.local`
 - Pseudo : `Admin`
 - Mot de passe : `ChangeMe`
 
-Le profil est marque `must_change_password`, donc l'interface demandera un changement de mot de passe.
+⚠️ **C'est un compte de gestion serveur uniquement — il ne peut pas jouer.** Il
+peut administrer et observer les parties, mais **ne peut pas rejoindre une partie
+comme joueur** (l'API renvoie un 403 à la tentative de jointure, et créer une
+partie en admin ne l'inscrit pas comme joueur).
+
+Le profil est marqué `must_change_password`, donc l'interface impose de changer le
+mot de passe à la première connexion. La création est **idempotente** (un compte
+existant n'est jamais écrasé).
+
+Personnalisation par variables d'environnement : `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
+`ADMIN_NAME`, et `ADMIN_SEED_DISABLED=1` pour désactiver complètement le seed. En
+local, `npm run admin:ensure` fait la même chose à la demande.
 
 ## Stack technique
 

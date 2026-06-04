@@ -1,48 +1,62 @@
-# Unraid deployment — pull the prebuilt app image and attach it to the
-# self-hosted Supabase stack. Use alongside the official Supabase compose:
+# My Heroes — APP stack for Unraid, deployed via PORTAINER → Stacks.
 #
-#   docker compose \
-#     -f ./supabase-docker/docker-compose.yml \
-#     -f ./docker-compose.unraid.yml \
-#     up -d
+# This file defines ONLY the Next.js app. Supabase (Postgres + Auth + Realtime +
+# Kong + Studio) is its OWN Portainer stack — see docs/UNRAID.md for the full
+# GUI walkthrough. The two stacks talk over a SHARED docker network so the app
+# can reach Kong by name; nothing else is published.
 #
-# The app image is PULLED from a registry (built + pushed elsewhere), so there
-# is no `build:` here. NEXT_PUBLIC_* were baked at build time — see RELEASE.md.
-# Only the runtime, server-only secret and the (already-inlined, but harmless to
-# repeat) public values are passed here.
+# How to use in Portainer:
+#   1. Deploy the Supabase stack first (docs/UNRAID.md, steps 1–3).
+#   2. Portainer → Stacks → Add stack → "my-heroes-app" → paste this file in the
+#      web editor, fill the env vars below in the "Environment variables" panel
+#      (or paste env.unraid.example), then Deploy.
 #
-# Network strategy: PROXY. NEXT_PUBLIC_SUPABASE_URL is baked with a PRIVATE/LAN
-# URL (e.g. http://192.168.x.x:8000), so the browser routes Supabase calls
-# through the app's /api/supabase proxy (see src/lib/supabase/browser.ts).
-# SUPABASE_INTERNAL_URL below tells that proxy where to forward server-side —
-# over the shared docker network, Kong is reachable as http://kong:8000.
-# Supabase therefore never needs to be exposed publicly; only the app is
-# fronted by Zoraxy.
+# The app image is PULLED from a registry (built + pushed from your dev machine —
+# Unraid has no source checkout). The image is GENERIC: nothing is baked at
+# build. ALL config is passed at RUNTIME via the env vars below and read by
+# src/lib/config/supabaseEnv.ts; the public subset (URL + anon key) is injected
+# to the browser at runtime (RuntimeConfigScript). One image fits any deployment.
+#
+# Network strategy: PROXY. A PRIVATE/LAN SUPABASE_URL makes the browser route
+# Supabase calls through the app's /api/supabase proxy
+# (src/lib/supabase/browser.ts). The proxy forwards server-side to Kong over the
+# shared docker network via SUPABASE_INTERNAL_URL. Because of this, Supabase does
+# NOT need to publish ANY host port for the game to work — that is what removes
+# the br0 (192.168.0.x) port-collision risk entirely. Publish Kong only if you
+# want the Studio dashboard. See docs/UNRAID.md → "Networking".
 
 services:
   app:
     image: ${REGISTRY_IMAGE:-docker.io/nicthien/my-heroes:latest}
     container_name: my-heroes-app
     restart: unless-stopped
-    # No host port needed if Zoraxy reaches it over the shared docker network;
-    # publish it too if you prefer Zoraxy to proxy via <unraid-ip>:3000.
+    # Only the app is published. Front it with Zoraxy. Change APP_PORT in the
+    # Portainer env panel if 3000 is already taken on the Unraid host.
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      # All config is RUNTIME (the image is generic — nothing baked at build).
+      # Browser-facing Supabase URL; a private/LAN value flips the client onto
+      # the /api/supabase proxy (src/lib/supabase/browser.ts).
+      SUPABASE_URL: ${SUPABASE_URL}
+      # Anon / publishable key (public by design). Injected to the browser at runtime.
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      # Server-only secret.
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       # Where the /api/supabase proxy forwards server-side: Kong on the shared
       # docker network. This is what makes the PROXY strategy work.
-      SUPABASE_INTERNAL_URL: http://kong:8000
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
-      NEXT_PUBLIC_SITE_URL: ${SITE_URL}
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://kong:8000}
     networks:
       - supabase
-    depends_on:
-      - kong
+    # No depends_on: Kong lives in a SEPARATE Portainer stack, so it can't be
+    # referenced here. Deploy the Supabase stack first; restart policy handles
+    # the rest.
 
 networks:
   supabase:
     external: true
-    # Adjust to match the dir Supabase's compose runs from (docker network ls).
-    name: supabase-docker_default
+    # The network created by the Supabase stack. Portainer names it
+    # "<stackname>_default" — if you named that stack "supabase", this is
+    # "supabase_default". Confirm in Portainer → Networks and override via the
+    # SUPABASE_NETWORK env var if your stack has a different name.
+    name: ${SUPABASE_NETWORK:-supabase_default}

@@ -15,13 +15,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# NEXT_PUBLIC_* values are inlined at build time, so they must be present here.
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-ARG NEXT_PUBLIC_SITE_URL
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+# No NEXT_PUBLIC_* build args on purpose: this image is GENERIC. The Supabase
+# URL and keys are read at RUNTIME from the container env (see
+# src/lib/config/supabaseEnv.ts) and injected into the page for the browser (see
+# RuntimeConfigScript). Nothing deployment-specific is baked in, so the same
+# image works for anyone with their own SUPABASE_URL / SUPABASE_ANON_KEY.
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

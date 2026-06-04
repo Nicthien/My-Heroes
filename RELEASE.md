@@ -11,11 +11,11 @@ The repo ships the app side: [`Dockerfile`](Dockerfile) (multi-stage, Node 24,
 standalone output) and [`docker-compose.yml`](docker-compose.yml). You provide
 Supabase via one of the options below.
 
-> ⚠️ `NEXT_PUBLIC_*` values are **inlined at build time** by Next.js. The
-> Supabase URL and publishable key must be set *before* `docker build`, not just
-> at runtime — otherwise the browser won't know how to reach Supabase. They are
-> wired as build args in the Dockerfile/compose. `SUPABASE_SERVICE_ROLE_KEY` is
-> server-only and read at runtime.
+> ✅ The image is **generic**: nothing is baked at build. All config (Supabase
+> URL, anon key, service key) is read at **runtime** from the container env (see
+> `src/lib/config/supabaseEnv.ts`; the public subset is injected to the browser
+> by `RuntimeConfigScript`). So one published image works for any deployment, and
+> no IP or key is ever compiled in. No build args are needed.
 
 ---
 
@@ -28,11 +28,15 @@ cp .env.example .env
 ```
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL="http://host.docker.internal:56021"   # or your Supabase URL
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<anon / publishable key>"
+# Runtime config (production / Docker). Read at runtime — nothing is baked.
+SUPABASE_URL="http://host.docker.internal:56021"   # or your Supabase URL
+SUPABASE_ANON_KEY="<anon / publishable key>"
 SUPABASE_SERVICE_ROLE_KEY="<service role key>"
-NEXT_PUBLIC_SITE_URL="http://localhost:3000"
+SUPABASE_INTERNAL_URL="http://host.docker.internal:56021"   # optional; defaults to SUPABASE_URL
 ```
+
+> Local `next dev` still reads the conventional `NEXT_PUBLIC_SUPABASE_URL` /
+> `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from `.env` as a fallback.
 
 ---
 
@@ -84,73 +88,36 @@ Supabase `.env` for the publishable and service-role keys.
 > assumes Supabase's compose runs from `./supabase-docker`. If your directory
 > differs, check `docker network ls` and adjust that name.
 
-### Option C — Unraid (pull a prebuilt image)
+### Option C — Unraid (self-hosted Supabase, managed in Portainer)
 
-Unraid has no source checkout, so the app is **not built there**. You build the
-image on your dev machine, push it to a registry (Docker Hub), then on Unraid
-you only *pull* it and attach it to the self-hosted Supabase stack with
-[`docker-compose.unraid.yml`](docker-compose.unraid.yml).
+**Full GUI walkthrough: [`docs/UNRAID.md`](docs/UNRAID.md).** Summary:
 
-This setup uses the **proxy** network strategy: the browser never talks to
-Supabase directly. `NEXT_PUBLIC_SUPABASE_URL` is baked with a **private/LAN
-URL**, which makes the client route Supabase calls through the app's
-`/api/supabase` proxy (see [`src/lib/supabase/browser.ts`](src/lib/supabase/browser.ts)).
-The proxy forwards server-side to Kong over the shared docker network via
-`SUPABASE_INTERNAL_URL=http://kong:8000` (wired in the compose file). Only the
-app is exposed publicly (e.g. behind Zoraxy); Supabase stays internal.
+Unraid has no source checkout, so the app is **not built there** — you build +
+push the **generic** image on your dev machine and only *pull* it on Unraid. The
+recommended layout: Supabase as a `docker compose` stack on its own `br0` LAN IP,
+and the app as a **native Unraid template** (Docker → Add Container) on its own
+`br0` LAN IP. Full walkthrough in [`docs/UNRAID.md`](docs/UNRAID.md).
 
-> ⚠️ `NEXT_PUBLIC_*` are inlined at **build time**, so the private URL must be
-> passed as a build arg — see the build command below. The exact IP doesn't
-> matter as long as it's private (`192.168.x`, `10.x`, `172.16–31.x`); it's just
-> the signal that flips the browser onto the proxy path.
+The **proxy** strategy is chosen at runtime from `SUPABASE_URL`: a private/LAN
+value makes the browser route Supabase calls through the app's `/api/supabase`
+proxy (see [`src/lib/supabase/browser.ts`](src/lib/supabase/browser.ts)), which
+forwards server-side via `SUPABASE_INTERNAL_URL`. Giving each piece its own LAN
+IP keeps default ports free of host collisions (see docs/UNRAID.md → Networking).
 
-**1. Build + push the image (on your dev machine):**
+> The PROXY vs DIRECT choice is made at **runtime** from `SUPABASE_URL`: a
+> private value (`192.168.x`, `10.x`, `172.16–31.x`) flips the browser onto the
+> `/api/supabase` proxy path. Nothing is baked, so the same image covers both.
+
+**Build + push the image (on your dev machine) — no build args, it's generic:**
 
 ```bash
-docker build \
-  --build-arg NEXT_PUBLIC_SUPABASE_URL="http://192.168.0.174:8000" \
-  --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<anon key>" \
-  --build-arg NEXT_PUBLIC_SITE_URL="https://myheroes.vnmaison.site" \
-  -t nicthien/my-heroes:latest .
-
+docker build -t nicthien/my-heroes:latest .
 docker push nicthien/my-heroes:latest
 ```
 
-**2. On Unraid — get the official Supabase stack and start it** (same as
-Option B, steps 1–2): clone `supabase/docker`, fill its `.env`, then
-`docker compose -f ./supabase-docker/docker-compose.yml up -d`.
-
-**3. Provide the app's runtime env.** In the dir holding the compose files
-(e.g. `/mnt/user/appdata/my-heroes`), set:
-
-```env
-REGISTRY_IMAGE=docker.io/nicthien/my-heroes:latest
-SERVICE_ROLE_KEY=<service role key from supabase-docker/.env>
-ANON_KEY=<anon key from supabase-docker/.env>
-NEXT_PUBLIC_SUPABASE_URL=http://192.168.0.174:8000   # same private URL you baked
-SITE_URL=https://myheroes.vnmaison.site
-```
-
-**4. Apply the schema, pull, and start the app:**
-
-```bash
-# Copy this repo's supabase/schema.sql next to the script (or point SCHEMA at it).
-# schema.sql is enough for a fresh DB (see scripts/apply-schema-unraid.sh).
-./apply-schema-unraid.sh
-
-docker compose \
-  -f ./supabase-docker/docker-compose.yml \
-  -f ./docker-compose.unraid.yml \
-  pull app
-docker compose \
-  -f ./supabase-docker/docker-compose.yml \
-  -f ./docker-compose.unraid.yml \
-  up -d app
-```
-
-> The `name: supabase-docker_default` external network in
-> `docker-compose.unraid.yml` must match Supabase's compose network — check
-> `docker network ls` and adjust if your layout differs.
+Then follow [`docs/UNRAID.md`](docs/UNRAID.md) for the Portainer steps (deploy
+Supabase, apply the schema, deploy the app stack, front with Zoraxy). App env
+template: [`docker/unraid/env.unraid.example`](docker/unraid/env.unraid.example).
 
 ---
 

@@ -6,16 +6,20 @@
 # container). schema.sql is the source of truth for a fresh install, so it is
 # sufficient on its own for a brand-new database.
 #
+# GUI-only alternative (no script): Portainer → Containers → supabase-db →
+# Console → `psql -U postgres -d postgres`, then paste schema.sql. See
+# docs/UNRAID.md → step 3.
+#
 # Usage (from the dir holding the compose files, e.g. /mnt/user/appdata/my-heroes):
 #   ./apply-schema-unraid.sh
 #
 # Override paths if your layout differs:
-#   SUPABASE_COMPOSE=./supabase-docker/docker-compose.yml \
+#   SUPABASE_COMPOSE=./supabase-stack/docker-compose.yml \
 #   SCHEMA=./schema.sql ./apply-schema-unraid.sh
 
 set -euo pipefail
 
-SUPABASE_COMPOSE="${SUPABASE_COMPOSE:-./supabase-docker/docker-compose.yml}"
+SUPABASE_COMPOSE="${SUPABASE_COMPOSE:-./supabase-stack/docker-compose.yml}"
 SCHEMA="${SCHEMA:-./schema.sql}"
 DB_SERVICE="${DB_SERVICE:-db}"
 DB_USER="${DB_USER:-postgres}"

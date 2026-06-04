@@ -46,7 +46,11 @@ async function proxyRequest(request: NextRequest) {
 }
 
 function getSupabaseInternalUrl() {
-  return readDotEnvValue("SUPABASE_INTERNAL_URL") || process.env.SUPABASE_INTERNAL_URL || readDotEnvValue("NEXT_PUBLIC_SUPABASE_URL") || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  return (
+    readDotEnvValue("SUPABASE_INTERNAL_URL") || process.env.SUPABASE_INTERNAL_URL ||
+    readDotEnvValue("SUPABASE_URL") || process.env.SUPABASE_URL ||
+    readDotEnvValue("NEXT_PUBLIC_SUPABASE_URL") || process.env.NEXT_PUBLIC_SUPABASE_URL
+  );
 }
 
 function readDotEnvValue(name: string) {

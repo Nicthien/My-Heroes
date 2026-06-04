@@ -164,10 +164,12 @@ DB), then front it with Zoraxy on your public hostname.
 ## Building & publishing the image (maintainers)
 
 The image is built and pushed from a dev machine (Unraid has no source checkout).
-No build args are needed — it's generic:
+No build args are needed — it's generic. Pass `--provenance=false --sbom=false`
+so the push is a plain image manifest (not an OCI index with an attestation
+manifest), otherwise **Unraid can't detect updates** for it:
 
 ```bash
-docker build -t nicthien/my-heroes:latest .
+docker build --provenance=false --sbom=false -t nicthien/my-heroes:latest .
 docker push nicthien/my-heroes:latest
 ```
 

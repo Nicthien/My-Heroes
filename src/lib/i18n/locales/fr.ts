@@ -224,6 +224,7 @@ export const fr = {
   "hud.turnEnded": "Tour terminé",
   "hud.turnInProgress": "Tour en cours",
   "hud.movement": "Mouvement",
+  "hud.kingHealth": "Roi",
   "hud.calYear": "An {n}",
   "hud.calMonth": "Mois {n}",
   "hud.calWeek": "Sem. {n}",

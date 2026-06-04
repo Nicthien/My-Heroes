@@ -11,6 +11,7 @@ import { type DamagePreview, formatRange, getEffectiveCombatUnitStats } from "./
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { localizeCreatureAbilities, localizeCreatureSpecial } from "@/lib/i18n/creatureAbilities";
 
 export function DamagePreviewPanel({ preview, actor, target }: { preview: DamagePreview; actor?: CombatBoardUnit; target?: CombatBoardUnit }) {
   const { t, locale } = useI18n();
@@ -117,7 +118,7 @@ export function InitiativeQueue({
                 onClick={() => onInspectUnit(unit.id)}
               >
                 <span className={`${active ? "h-12" : "h-10"} absolute inset-x-0 top-0 overflow-hidden bg-gradient-to-b from-stone-900/55 to-black/30`}>
-                  <InitiativeMiniature unit={unit} />
+                  <InitiativeMiniature unit={unit} unitFaction={getCombatUnitFaction(unit, gameState)} />
                 </span>
                 {active && <span className="absolute inset-x-1 bottom-4 h-px bg-amber-200/80" />}
                 <span className="absolute inset-x-0 bottom-0 grid h-4 place-items-center bg-black/72 px-1 text-[10px] font-black leading-none text-stone-100">
@@ -247,6 +248,12 @@ function getCombatUnitAccentColor(unit: CombatBoardUnit, gameState: GameState) {
   return unit.side === "attacker" ? "#2563eb" : "#dc2626";
 }
 
+function getCombatUnitFaction(unit: CombatBoardUnit, gameState: GameState) {
+  return unit.ownerPlayerId
+    ? gameState.players.find((player) => player.id === unit.ownerPlayerId)?.faction
+    : undefined;
+}
+
 function hexToRgba(hex: string, alpha: number) {
   const normalized = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#64748b";
   const r = parseInt(normalized.slice(1, 3), 16);
@@ -255,7 +262,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
+function InitiativeMiniature({ unit, unitFaction }: { unit: CombatBoardUnit; unitFaction?: string }) {
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
@@ -265,7 +272,7 @@ function InitiativeMiniature({ unit }: { unit: CombatBoardUnit }) {
       className="absolute left-1/2 top-1/2 block h-14 w-12 drop-shadow-[0_6px_5px_rgba(0,0,0,0.65)]"
       style={{ transform: `translate(-50%, -45%) scale(0.9) ${sideFlip}`, transformOrigin: "50% 50%" }}
     >
-      <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+      <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitFaction={unitFaction} unitType={unit.unitType} />
     </span>
   );
 }
@@ -285,7 +292,7 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
   return (
     <div className="flex gap-3">
       <div className="relative grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-md border border-amber-700/60 bg-gradient-to-b from-stone-900 to-black shadow-[0_0_0_1px_rgba(252,211,77,0.15)_inset]">
-        <UnitPortrait unit={unit} />
+        <UnitPortrait unit={unit} unitFaction={getCombatUnitFaction(unit, gameState)} />
       </div>
       <div className="min-w-0 flex-1">
         <div className={`font-black ${goldText}`}>{localizedUnitLabel(unit.unitType, rule.label, locale)} x{unit.count}</div>
@@ -303,9 +310,9 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
         </div>
         {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">{t("combat.statShots", { n: unit.shots })}</div>}
         {creature.abilities.length > 0 && (
-          <div className="mt-2 text-xs text-stone-300">{creature.abilities.join(", ")}</div>
+          <div className="mt-2 text-xs text-stone-300">{localizeCreatureAbilities(creature.abilities, locale)}</div>
         )}
-        {creature.special && <div className="mt-1 text-xs text-amber-100/85">{creature.special}</div>}
+        {creature.special && <div className="mt-1 text-xs text-amber-100/85">{localizeCreatureSpecial(creature.special, locale)}</div>}
         {states.length > 0 && <div className="mt-2 text-xs font-bold text-sky-200">{states.join(" | ")}</div>}
       </div>
     </div>
@@ -325,7 +332,7 @@ function moraleClass(value: number | undefined) {
   return "text-stone-300";
 }
 
-function UnitPortrait({ unit }: { unit: CombatBoardUnit }) {
+function UnitPortrait({ unit, unitFaction }: { unit: CombatBoardUnit; unitFaction?: string }) {
   const model = getUnitModel(unit);
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
@@ -336,7 +343,7 @@ function UnitPortrait({ unit }: { unit: CombatBoardUnit }) {
         className="absolute left-1/2 top-1/2 block h-[104px] w-[80px] drop-shadow-[0_8px_8px_rgba(0,0,0,0.55)]"
         style={{ transform: `translate(-50%, -50%) scale(0.95) ${sideFlip}`, transformOrigin: "50% 50%" }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitFaction={unitFaction} unitType={unit.unitType} />
       </span>
     </div>
   );

@@ -16,6 +16,7 @@ import { PlayersListPanel } from "./PlayersListPanel";
 import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { getKnownActionLogEntries } from "./actionLogDisplay";
 import { HeroIcon, MineIcon, PortraitSeal, TowerIcon, ornateFrame } from "./theme";
+import { kingPortraitSprite } from "./helpers";
 import { useDraggableWindow, type HudWindowPosition } from "./useDraggableWindow";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
@@ -241,7 +242,7 @@ function HeroesList({ playerId }: { playerId: string }) {
               selectHero(hero.id);
               focusTile(hero.position.x, hero.position.y);
             }}
-            left={<PortraitSeal color={player.color} label={hero.name.slice(0, 2)} active={active} size={40} />}
+            left={<PortraitSeal color={player.color} label={hero.name.slice(0, 2)} active={active} size={40} imageSrc={kingPortraitSprite(hero.armies, player.faction) ?? undefined} imageAlt={t("hud.kingHealth")} />}
             title={hero.name}
             subtitle={townAtHero ? t("side.levelAtTown", { level: hero.level }) : t("side.level", { level: hero.level })}
             meta={

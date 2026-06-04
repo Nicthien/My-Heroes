@@ -13,6 +13,7 @@ export const COMMON_TOWN_BUILDING_SPRITES: Partial<Record<BuildingType, string>>
   [BuildingType.MAGE_GUILD_3]: "/assets/sprites/town-buildings/mage_guild.webp",
   [BuildingType.MAGE_GUILD_4]: "/assets/sprites/town-buildings/mage_guild.webp",
   [BuildingType.MAGE_GUILD_5]: "/assets/sprites/town-buildings/mage_guild.webp",
+  [BuildingType.SHIPYARD]: "/assets/sprites/town-buildings/shipyard.webp",
   [BuildingType.RESOURCE_SILO]: "/assets/sprites/town-buildings/resource_silo.webp",
 };
 

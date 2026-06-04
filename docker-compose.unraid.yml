@@ -22,7 +22,7 @@
 # (src/lib/supabase/browser.ts). The proxy forwards server-side to Kong over the
 # shared docker network via SUPABASE_INTERNAL_URL. Because of this, Supabase does
 # NOT need to publish ANY host port for the game to work — that is what removes
-# the br0 (192.168.0.x) port-collision risk entirely. Publish Kong only if you
+# the br0 (192.168.x.x) port-collision risk entirely. Publish Kong only if you
 # want the Studio dashboard. See docs/UNRAID.md → "Networking".
 
 services:

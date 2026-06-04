@@ -65,7 +65,7 @@ export function TownRecruitTab({
           <div key={rule.type} className="relative rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <UnitSprite unitType={rule.type} />
+                <UnitSprite unitType={rule.type} describe />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-bold text-amber-100">{localizedUnitLabel(rule.type, rule.label, locale)}</div>
                   <div className="text-xs text-amber-200/60">{t("recruit.unitStats", { health: rule.health, cost: formatCost(rule.cost) })}</div>

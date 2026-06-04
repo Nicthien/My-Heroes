@@ -14,6 +14,7 @@ import {
   ornateFrame,
 } from "./theme";
 import ActiveCombatsPanel from "../combat/ActiveCombatsPanel";
+import { kingPortraitSprite } from "./helpers";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
@@ -68,6 +69,8 @@ export default function SidePanel({ mode = "all" }: { mode?: SidePanelMode }) {
                     label={h.name.slice(0, 2)}
                     active={active}
                     size={40}
+                    imageSrc={kingPortraitSprite(h.armies, me.faction) ?? undefined}
+                    imageAlt={t("hud.kingHealth")}
                   />
                 }
                 title={h.name}

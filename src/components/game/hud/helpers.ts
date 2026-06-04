@@ -1,8 +1,20 @@
-import { Faction, UnitType } from "@/lib/game/types";
+import { Faction, UnitType, type UnitStack } from "@/lib/game/types";
 import { UNIT_RULES, getFactionBuildingRule } from "@/lib/game/economy";
+import { KING_UNIT_SPRITES } from "@/lib/rendering/phaser/assets";
 import type { Locale } from "@/lib/i18n/types";
 import { unitTypeToEnglishLabel } from "@/lib/i18n/gameLabels";
 import { localizedServerMessage } from "@/lib/i18n/serverMessages";
+
+const DEFAULT_KING_SPRITE = "/assets/sprites/units/kings/king-castle.webp";
+
+/**
+ * Returns the King's faction portrait sprite when a hero carries the King unit,
+ * so panels can show his head instead of the hero's initials. Null otherwise.
+ */
+export function kingPortraitSprite(armies: UnitStack[] | undefined, faction: string): string | null {
+  if (!armies?.some((stack) => stack.unitType === UnitType.KING)) return null;
+  return KING_UNIT_SPRITES[faction as keyof typeof KING_UNIT_SPRITES] ?? DEFAULT_KING_SPRITE;
+}
 
 export const NOTIFICATION_PROMPT_DISMISSED_KEY = "my-heroes:notifications:prompt-dismissed";
 

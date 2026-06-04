@@ -60,6 +60,7 @@ import {
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
+import { KingHealthGauge } from "./gauges";
 import MiniMap from "./MiniMap";
 import DesktopHudWindows from "./DesktopHudWindows";
 import { ActiveCombatsList } from "../combat/ActiveCombatsPanel";
@@ -1114,6 +1115,14 @@ export function HUDContent() {
             <div className="text-xs uppercase tracking-wider text-amber-200/60">
               {t("hud.townHeader", { faction: factionLabel(selectedTownFaction, locale), level: selectedTown.level })}
             </div>
+            {(() => {
+              const kingStack = selectedTown.garrison.find((stack) => stack.unitType === UnitType.KING);
+              return kingStack ? (
+                <div className="mt-2">
+                  <KingHealthGauge health={kingStack.health} maxHealth={kingStack.maxHealth} />
+                </div>
+              ) : null;
+            })()}
             {!isMyTown && (
               <div className="mt-2 rounded-md border border-red-500/50 bg-red-950/60 px-2 py-1 text-sm text-red-200">
                 {t("hud.enemyTown")}

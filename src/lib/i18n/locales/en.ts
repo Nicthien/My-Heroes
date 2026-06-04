@@ -225,6 +225,7 @@ export const en: Record<TranslationKey, string> = {
   "hud.turnEnded": "Turn ended",
   "hud.turnInProgress": "Turn in progress",
   "hud.movement": "Movement",
+  "hud.kingHealth": "King",
   "hud.calYear": "Year {n}",
   "hud.calMonth": "Month {n}",
   "hud.calWeek": "Week {n}",

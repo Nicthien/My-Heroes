@@ -16,13 +16,13 @@ import { getHeroMaxMana, spellRequiresAdventureTarget, type SpellDefinition } fr
 import { SKILL_DEFINITIONS, type SkillId, type SkillLevel } from "@/lib/game/skills";
 import { localizedSkillDescription } from "@/lib/game/skills-i18n";
 import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP } from "@/lib/game/army-stacks";
-import type { Hero, Town, UnitStack } from "@/lib/game/types";
+import { UnitType, type Hero, type Town, type UnitStack } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
 import CollapsiblePanel from "./CollapsiblePanel";
-import { MovementGauge, Stat } from "./gauges";
+import { KingHealthGauge, MovementGauge, Stat } from "./gauges";
 import { UnitSprite } from "./UnitSprite";
 import { unitTypeLabel } from "./helpers";
 import { goldDivider, ornateFramePolished } from "./theme";
@@ -66,6 +66,7 @@ export function HeroPanel({
     fallbackSize: { width: 352, height: 520 },
   });
   const displayHero = devInfiniteMana ? { ...hero, mana: getHeroMaxMana(hero) } : hero;
+  const kingStack = hero.armies.find((stack) => stack.unitType === UnitType.KING) ?? null;
   const effectiveStats = getEffectiveHeroStats(hero);
   const artifactBonus = getArtifactStatsBonus(hero);
   const eligibleTransferHeroes = gameState?.players
@@ -176,6 +177,11 @@ export function HeroPanel({
           <div className="text-xs uppercase tracking-wider text-amber-200/60">
             {t("hero.levelXp", { level: hero.level, xp: hero.experience })}
           </div>
+          {kingStack && (
+            <div className="mt-2">
+              <KingHealthGauge health={kingStack.health} maxHealth={kingStack.maxHealth} />
+            </div>
+          )}
           {(hero.warMachines?.ballista || hero.warMachines?.firstAid || hero.warMachines?.ammoCart) && (
             <div className="mt-2 flex flex-wrap gap-1">
               {hero.warMachines.ballista && (
@@ -499,7 +505,7 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
       {selected && (
         <div className="mb-3 rounded-md border border-amber-700/35 bg-black/40 p-2">
           <div className="flex items-center gap-2 text-xs text-amber-100">
-            <UnitSprite unitType={selected.unitType} size="xs" />
+            <UnitSprite unitType={selected.unitType} size="xs" describe />
             <span className="min-w-0 flex-1 truncate font-black">{unitTypeLabel(selected.unitType, locale)}</span>
             <span>{selected.count}/{UNIT_STACK_COUNT_CAP}</span>
           </div>
@@ -555,7 +561,7 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
               }`}
               title={`${unitTypeLabel(unit.unitType, locale)} x ${unit.count}`}
             >
-              <UnitSprite unitType={unit.unitType} size="xs" />
+              <UnitSprite unitType={unit.unitType} size="xs" describe />
               <span className="min-w-0">
                 <span className="block truncate text-[11px] font-black leading-tight text-amber-100">{unitTypeLabel(unit.unitType, locale)}</span>
                 <span className="mt-1 block text-sm font-black leading-none text-amber-50">{unit.count}</span>

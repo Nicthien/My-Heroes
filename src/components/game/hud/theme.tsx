@@ -98,11 +98,16 @@ export function PortraitSeal({
   label,
   active,
   size = 44,
+  imageSrc,
+  imageAlt,
 }: {
   color: string;
   label: string;
   active?: boolean;
   size?: number;
+  /** When set, the portrait (e.g. the King's head) replaces the initials inside the seal. */
+  imageSrc?: string;
+  imageAlt?: string;
 }) {
   return (
     <div
@@ -110,7 +115,7 @@ export function PortraitSeal({
       style={{ width: size, height: size }}
     >
       <div
-        className="grid place-items-center rounded-full text-[10px] font-black uppercase text-white drop-shadow"
+        className="grid place-items-center overflow-hidden rounded-full text-[10px] font-black uppercase text-white drop-shadow"
         style={{
           width: size - 10,
           height: size - 10,
@@ -118,7 +123,22 @@ export function PortraitSeal({
           boxShadow: "inset 0 0 6px rgba(0,0,0,0.6)",
         }}
       >
-        {label}
+        {imageSrc ? (
+          // Full-body King sprite framed on the head: zoom in and anchor near the top
+          // so the crown/face fill the seal (a background image makes this framing easy).
+          <div
+            role="img"
+            aria-label={imageAlt ?? ""}
+            className="h-full w-full bg-no-repeat"
+            style={{
+              backgroundImage: `url(${imageSrc})`,
+              backgroundSize: "280%",
+              backgroundPosition: "center 6%",
+            }}
+          />
+        ) : (
+          label
+        )}
       </div>
     </div>
   );

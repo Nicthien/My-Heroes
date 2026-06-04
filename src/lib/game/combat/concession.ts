@@ -58,6 +58,27 @@ export function buildConcessionBoardState(params: {
   };
 }
 
+/** HP the King loses every time he flees a combat (permanent — he never heals). */
+export const KING_FLEE_HP_PENALTY = 5;
+
+/** Apply the flat flee penalty to a King stack; he dies if it brings him to 0 HP. */
+export function applyKingFleePenalty<T extends { unitType: string; count: number; health: number }>(unit: T): T {
+  const nextHealth = Math.max(0, unit.health - KING_FLEE_HP_PENALTY);
+  return { ...unit, count: nextHealth > 0 ? 1 : 0, health: nextHealth };
+}
+
+/**
+ * True when applying the flee penalty would drop this hero's King to 0 HP — i.e.
+ * fleeing would kill him. The flee handlers use this to refuse a suicidal retreat
+ * (the King keeps the -5 HP cost otherwise, but can never die by fleeing).
+ */
+export function wouldFleeKillKing(units: CombatBoardUnit[], heroId: string, playerId: string): boolean {
+  const king = units.find(
+    (unit) => unit.unitType === "king" && unit.count > 0 && isHeroCombatUnit(unit, heroId, playerId),
+  );
+  return Boolean(king && king.health - KING_FLEE_HP_PENALTY <= 0);
+}
+
 export function buildHalfLossConcessionPersistenceUnits(params: {
   units: CombatBoardUnit[];
   heroId: string;
@@ -65,6 +86,8 @@ export function buildHalfLossConcessionPersistenceUnits(params: {
 }) {
   return params.units.map((unit) => {
     if (!isHeroCombatUnit(unit, params.heroId, params.playerId)) return unit;
+    // The King keeps his single body but bleeds a flat 5 HP for fleeing.
+    if (unit.unitType === "king") return applyKingFleePenalty(unit);
     const lostCount = Math.floor(Math.max(0, unit.count) / 2);
     const nextCount = Math.max(0, unit.count - lostCount);
     const nextHealth = Math.max(0, Math.min(unit.health - lostCount * unit.maxHealth, nextCount * unit.maxHealth));

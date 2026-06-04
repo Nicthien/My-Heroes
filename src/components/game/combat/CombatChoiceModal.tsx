@@ -6,7 +6,7 @@ import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
-import { GameMap, GameState, Hero, MapObject, MapTile, UnitStack, UnitType, type MapLevelId } from "@/lib/game/types";
+import { GameMap, GameState, Hero, MapObject, MapTile, UnitStack, type MapLevelId } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -352,26 +352,32 @@ function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): 
   }
 
   if (pendingCombat.targetType === "building") {
-    const destination = pendingCombat.targetPosition ?? pendingCombat.destination;
-    const building = gameState.players
+    // A neutral mine lives only as a map tile object (not in any player's
+    // resourceBuildings), so read the guard data from the building's own tile —
+    // targetPosition, not destination (which is the hero's adjacent approach tile).
+    const buildingPos = pendingCombat.targetPosition ?? pendingCombat.destination;
+    const tile = buildingPos ? gameState.map.tiles[buildingPos.y]?.[buildingPos.x] : undefined;
+    const ownedBuilding = gameState.players
       .flatMap((player) => player.resourceBuildings)
       .find((item) =>
         item.id === pendingCombat.targetId ||
-        Boolean(destination && item.position.x === destination.x && item.position.y === destination.y)
+        Boolean(buildingPos && item.position.x === buildingPos.x && item.position.y === buildingPos.y)
       );
-    const tilePower = destination
-      ? gameState.map.tiles[destination.y]?.[destination.x]?.object?.guardianPower
-      : undefined;
-    const guardianPower = Math.max(0, building?.guardianPower ?? tilePower ?? 0);
-    const count = Math.max(5, Math.ceil(guardianPower / 12));
-    return [{
-      id: `${pendingCombat.targetId}-guards-preview`,
-      unitType: UnitType.PIKEMAN,
-      count,
-      health: count * 12,
-      maxHealth: 12,
-      position: 0,
-    }];
+    const guardianPower = Math.max(0, ownedBuilding?.guardianPower ?? Number(tile?.object?.guardianPower ?? 0));
+    if (!buildingPos || !tile || guardianPower <= 0) return [];
+    // Mirror the server-side guard generation exactly (combats/route.ts: getDefender
+    // "building" branch / getBuildingDefender) so the preview matches the actual
+    // combat. createNeutralArmyStacksForTile is deterministic (seeded by
+    // armyId/x/y/terrain/budget), and the server seeds with the building's id —
+    // which is exactly the tile object id we sent as targetId.
+    return createNeutralArmyStacksForTile(
+      { x: buildingPos.x, y: buildingPos.y, terrain: tile.terrain },
+      guardianPower,
+      pendingCombat.targetId,
+    ).map((stack) => ({
+      ...stack,
+      id: `${pendingCombat.targetId}-stack-${stack.position}`,
+    }));
   }
 
   if (pendingCombat.targetType === "gate") {

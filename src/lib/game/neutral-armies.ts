@@ -40,10 +40,14 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
 }
 
 // Difficulty tuning for neutral guards. GUARD_STRENGTH_MULTIPLIER scales the budget
-// to offset aiValue being ~1.3× the legacy gold-cost basis the guardianPower values
-// were calibrated against. GUARD_BAND_LOW/HIGH bound which slice of the eligible
+// into a unit count: a base of ~1.3 offsets aiValue being ~1.3× the legacy gold-cost
+// basis the guardianPower budgets were calibrated against, and the extra headroom on
+// top is a deliberate difficulty boost so early mines/wandering monsters are an actual
+// fight instead of a thin handful of units. It only affects the *count* (uniformly
+// across every guard source — mines, zone guardians, patrols, gates), not the unit
+// tier or the creature band. GUARD_BAND_LOW/HIGH bound which slice of the eligible
 // creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
-const GUARD_STRENGTH_MULTIPLIER = 1.3;
+const GUARD_STRENGTH_MULTIPLIER = 2.1;
 const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
 

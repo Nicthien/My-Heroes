@@ -1,33 +1,27 @@
-# Docker Compose for the My Heroes app container.
+# Docker Compose for the My Heroes app container (local build & run).
 #
-# This builds and runs the Next.js app only. Supabase (Postgres + Auth +
-# Realtime) is a separate stack — see RELEASE.md for the two supported ways to
-# provide it (host-run `supabase start`, or self-hosted Supabase compose).
+# Builds and runs the Next.js app only. Supabase (Postgres + Auth + Realtime) is
+# a separate stack you provide — see RELEASE.md and docs/UNRAID.md.
 #
-# Build-time NEXT_PUBLIC_* values are inlined into the client bundle, so they
-# are passed as build args AND as runtime env. Values come from a local .env
-# file (copy .env.example to .env and fill them in).
+# The image is GENERIC: nothing is baked at build. All config is passed at
+# RUNTIME via the env below, from a local .env (copy .env.example to .env).
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
     image: my-heroes:latest
     container_name: my-heroes-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      # Server-only secret, read at runtime (never inlined into the bundle).
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      # Defaults to SUPABASE_URL in code when empty (see src/lib/config/supabaseEnv.ts).
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-}
     # Lets the container reach a Supabase stack running on the host machine
     # (e.g. `supabase start`) via http://host.docker.internal:<port>.
     extra_hosts:

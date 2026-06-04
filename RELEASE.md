@@ -50,45 +50,19 @@ The same stack you use for dev. The app container reaches it through
 supabase start          # serves the API on the port from supabase/config.toml (56021)
 ```
 
-Set `NEXT_PUBLIC_SUPABASE_URL="http://host.docker.internal:56021"` in `.env`.
-Grab the anon + service_role keys from `supabase status`.
+Set `SUPABASE_URL="http://host.docker.internal:56021"` (and
+`SUPABASE_INTERNAL_URL` to the same) in `.env`. Grab the anon + service_role keys
+from `supabase status`.
 
 ### Option B — Self-hosted Supabase stack
-Fully containerized: run the **official** Supabase self-hosted compose
-(Postgres, GoTrue, PostgREST, Realtime, Storage, Kong, Studio) and attach the
-app to its network via [`docker-compose.selfhost.yml`](docker-compose.selfhost.yml).
-Don't hand-roll the Supabase services — reuse their compose so it tracks
-upstream versions.
+Run the **official** Supabase self-hosted compose (Postgres, GoTrue, PostgREST,
+Realtime, Storage, Kong, Studio) and point the app at it through the runtime env
+vars above — don't hand-roll the Supabase services. The full self-host
+walkthrough (dedicated LAN IPs, schema, and the Unraid template) is in
+[`docs/UNRAID.md`](docs/UNRAID.md). To run the app on the same docker network as
+Supabase, see [`docker-compose.unraid.yml`](docker-compose.unraid.yml).
 
-```bash
-# 1. Get the official stack
-git clone --depth 1 https://github.com/supabase/supabase
-cp -r supabase/docker ./supabase-docker
-cp supabase/docker/.env.example ./supabase-docker/.env
-# Edit ./supabase-docker/.env: POSTGRES_PASSWORD, JWT_SECRET, ANON_KEY,
-# SERVICE_ROLE_KEY, SITE_URL, API_EXTERNAL_URL, etc.
-
-# 2. Start Supabase (Kong gateway published on the host, default :8000)
-docker compose -f ./supabase-docker/docker-compose.yml up -d
-
-# 3. Apply this repo's schema to that Postgres (psql or Studio SQL editor),
-#    then build + run the app attached to Supabase's network
-docker compose \
-  -f ./supabase-docker/docker-compose.yml \
-  -f ./docker-compose.selfhost.yml \
-  up -d --build app
-```
-
-In this repo's `.env`, set `NEXT_PUBLIC_SUPABASE_URL` to the **host-reachable
-Kong URL** (e.g. `http://localhost:8000`) — it is inlined into the browser
-bundle at build time. Use the `ANON_KEY` / `SERVICE_ROLE_KEY` you set in the
-Supabase `.env` for the publishable and service-role keys.
-
-> The `name: supabase-docker_default` network in `docker-compose.selfhost.yml`
-> assumes Supabase's compose runs from `./supabase-docker`. If your directory
-> differs, check `docker network ls` and adjust that name.
-
-### Option C — Unraid (self-hosted Supabase, managed in Portainer)
+### Option C — Unraid (self-hosted Supabase + native template)
 
 **Full GUI walkthrough: [`docs/UNRAID.md`](docs/UNRAID.md).** Summary:
 

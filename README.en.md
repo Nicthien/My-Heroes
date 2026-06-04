@@ -77,16 +77,26 @@ IPs): [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging: [`Dockerfile`](Dockerfile
 > Locally, `npm run dev` injects the config automatically from `supabase status`
 > (via the `NEXT_PUBLIC_*` names in `.env`, kept as a dev fallback).
 
-## Local admin account
+## Admin account
 
-Locally, `npm run dev`, `npm run db:reset`, `npm run admin:ensure` and the E2E seed
-guarantee a fallback account:
+An admin account is **created automatically on the server's first boot** (on any
+install), if it doesn't already exist:
 
 - Email: `admin@myheroes.local`
 - Username: `Admin`
 - Password: `ChangeMe`
 
-The profile is flagged `must_change_password`, so the UI will require a password change.
+⚠️ **This is a server-management account only — it cannot play.** It can
+administer and observe games, but **cannot join a game as a player** (the API
+returns 403 on join, and creating a game as admin does not add them as a player).
+
+The profile is flagged `must_change_password`, so the UI requires changing the
+password on first login. Seeding is **idempotent** (an existing account is never
+overwritten).
+
+Override via environment variables: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`,
+and `ADMIN_SEED_DISABLED=1` to turn the seed off entirely. Locally, `npm run
+admin:ensure` does the same on demand.
 
 ## Tech stack
 

@@ -795,21 +795,17 @@ export default function DashboardPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900 flex items-center justify-center">
-        <div className={`text-xl font-black uppercase tracking-widest ${goldText}`}>{t("common.loading")}</div>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900">
+        <DashboardBackgroundLayers />
+        <div className={`relative z-10 text-xl font-black uppercase tracking-widest ${goldText}`}>{t("common.loading")}</div>
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle at 15% 10%, rgba(217,119,6,0.08) 0, transparent 40%), radial-gradient(circle at 85% 80%, rgba(120,53,15,0.12) 0, transparent 45%)",
-      }}
-    >
-      <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900">
+      <DashboardBackgroundLayers />
+      <div className="relative z-10 mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
         <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <FleurDeLis className="h-10 w-10 text-amber-400 drop-shadow" />
@@ -1631,3 +1627,22 @@ export default function DashboardPage() {
   );
 }
 
+function DashboardBackgroundLayers() {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 opacity-35"
+        style={{
+          backgroundImage:
+            "linear-gradient(135deg, rgba(245,158,11,0.12), transparent 36%), linear-gradient(45deg, rgba(16,185,129,0.10), transparent 42%), url('/assets/textures/terrain/mountain/mountain-dark-rock.webp')",
+          backgroundSize: "auto, auto, 220px 220px",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.7),rgba(0,0,0,0.18)_44%,rgba(0,0,0,0.72))]"
+      />
+    </>
+  );
+}

@@ -604,8 +604,8 @@ test.describe("Mobile smoke - core screens stay usable", () => {
       const page = await context.newPage();
       try {
         await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
-        await expect(page.getByRole("heading", { name: "My Heroes" })).toBeVisible();
         await expect(page.locator("#login-email")).toBeVisible();
+        await expect(page.locator("#login-password")).toBeVisible();
         await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
         await expectNoHorizontalOverflow(page);
       } finally {

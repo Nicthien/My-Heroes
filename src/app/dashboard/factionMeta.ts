@@ -144,6 +144,7 @@ export interface FactionShowcaseCreature {
 
 export interface FactionShowcase {
   townSprite: string;
+  kingSprite: string;
   hero: { name: string; specialty: string; sprite: string } | null;
   creatures: FactionShowcaseCreature[];
 }
@@ -157,6 +158,7 @@ const SHOWCASE_TIER_INDICES = [0, 3, 6] as const;
  */
 export function getFactionShowcase(faction: string): FactionShowcase {
   const townSprite = `/assets/sprites/map/town-${faction}.webp`;
+  const kingSprite = `/assets/sprites/units/kings/king-${faction}.webp`;
 
   const heroTemplate = HERO_ROSTER.find((hero) => hero.faction === (faction as Faction)) ?? null;
   const hero = heroTemplate
@@ -181,5 +183,5 @@ export function getFactionShowcase(faction: string): FactionShowcase {
     };
   });
 
-  return { townSprite, hero, creatures };
+  return { townSprite, kingSprite, hero, creatures };
 }

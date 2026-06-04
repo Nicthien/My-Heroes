@@ -1,10 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getSupabaseAnonKey, getSupabaseInternalUrl } from "@/lib/config/supabaseEnv";
 
 export async function createClient() {
   const cookieStore = await cookies();
-  const url = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const url = getSupabaseInternalUrl();
+  const key = getSupabaseAnonKey();
 
   if (!url || !key) {
     throw new Error("Variables Supabase publiques manquantes");

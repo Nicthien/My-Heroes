@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AuthProvider from "@/components/providers/AuthProvider";
+import RuntimeConfigScript from "@/components/providers/RuntimeConfigScript";
 
 export const metadata: Metadata = {
   title: "My Heroes",
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className="antialiased">
+        <RuntimeConfigScript />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

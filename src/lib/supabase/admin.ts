@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseInternalUrl, getSupabaseServiceRoleKey } from "@/lib/config/supabaseEnv";
 
 export function createAdminClient() {
-  const url = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getSupabaseInternalUrl();
+  const key = getSupabaseServiceRoleKey();
 
   if (!url || !key) {
     throw new Error("Variables Supabase serveur manquantes");

@@ -1,6 +1,23 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import { RUNTIME_CONFIG_GLOBAL, type PublicRuntimeConfig } from "@/lib/config/supabaseEnv";
+
+/**
+ * Reads the public config injected at runtime by the server (see
+ * RuntimeConfigScript). Falls back to build-time NEXT_PUBLIC_* values, which are
+ * only present during local `next dev` — in the production image nothing is
+ * baked, so the injected runtime config is authoritative.
+ */
+function getPublicConfig(): PublicRuntimeConfig {
+  if (typeof window !== "undefined" && window[RUNTIME_CONFIG_GLOBAL]?.supabaseUrl) {
+    return window[RUNTIME_CONFIG_GLOBAL]!;
+  }
+  return {
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "",
+  };
+}
 
 function isLoopbackUrl(value: string) {
   try {
@@ -32,14 +49,15 @@ function shouldUseSupabaseProxy(value: string) {
 }
 
 export function isUsingSupabaseProxy() {
-  const directUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const directUrl = getPublicConfig().supabaseUrl || "https://placeholder.supabase.co";
   return typeof window !== "undefined" && shouldUseSupabaseProxy(directUrl);
 }
 
 export function createClient() {
-  const directUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const { supabaseUrl, supabaseAnonKey } = getPublicConfig();
+  const directUrl = supabaseUrl || "https://placeholder.supabase.co";
   const url = isUsingSupabaseProxy() ? new URL("/api/supabase", window.location.origin).toString() : directUrl;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "placeholder";
+  const key = supabaseAnonKey || "placeholder";
 
   return createBrowserClient(url, key);
 }

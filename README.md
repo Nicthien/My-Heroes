@@ -43,42 +43,39 @@ Le schema local est versionne dans [`supabase/migrations`](supabase/migrations).
 [`supabase/schema.sql`](supabase/schema.sql) reste utile pour appliquer le schema dans un projet
 Supabase cloud via le SQL Editor.
 
-## Déploiement Docker sur Unraid (un conteneur)
+## Déploiement self-hosté (Unraid / Docker)
 
-1. Depuis le dossier `docker`, crée un fichier `.env` (non versionné) basé sur `.env.example`.
-2. Remplis les variables Supabase de production.
-3. Lance le conteneur :
+L'image Docker est **générique** : aucune URL ni clé n'est compilée dedans. Toute
+la configuration est lue **au runtime** depuis l'environnement du conteneur, donc
+la même image publique (`nicthien/my-heroes` sur Docker Hub) fonctionne pour
+n'importe qui, avec ses propres valeurs.
 
 ```bash
-cd docker
-docker compose up -d --build
+docker run -d --name my-heroes -p 3000:3000 \
+  -e SUPABASE_URL="http://<supabase-host>:8000" \
+  -e SUPABASE_ANON_KEY="<anon / publishable key>" \
+  -e SUPABASE_SERVICE_ROLE_KEY="<service role key>" \
+  -e SUPABASE_INTERNAL_URL="http://<supabase-host>:8000" \
+  nicthien/my-heroes:latest
 ```
 
-4. L'application est accessible sur `http://<IP_UNRAID>:3000`.
+Le conteneur ne lance que le frontend Next.js : un backend Supabase doit déjà
+tourner. **Guide Unraid complet (Supabase self-hosté + template Unraid + IP
+dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Dockerfile),
+[`RELEASE.md`](RELEASE.md).
 
-Notes importantes:
-- Le conteneur lance uniquement le frontend Next.js. Un backend Supabase doit être déjà opérationnel.
-- `SUPABASE_INTERNAL_URL` n'est utile que si le client doit passer par le proxy `/api/supabase`; sinon, laisser vide.
+## Variables d'environnement (runtime)
 
-Variables minimales:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NEXT_PUBLIC_SITE_URL`
+| Variable | Requis | Description |
+|----------|--------|-------------|
+| `SUPABASE_URL` | oui | URL Supabase côté navigateur. Une valeur privée/LAN active le proxy `/api/supabase`. |
+| `SUPABASE_ANON_KEY` | oui | Clé anon / publishable (publique par nature). |
+| `SUPABASE_SERVICE_ROLE_KEY` | oui | Clé service role, serveur uniquement. |
+| `SUPABASE_INTERNAL_URL` | non | Où le serveur joint Supabase. Défaut : `SUPABASE_URL`. |
 
-## Variables d'environnement
-
-Voir [`.env.example`](.env.example) pour la liste des variables requises :
-
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | URL du projet Supabase |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Cle publique/anon Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Cle service role, serveur uniquement |
-| `NEXT_PUBLIC_SITE_URL` | URL publique de l'application |
-
-Ces variables sont surtout utiles pour Supabase cloud ou la production. En local, `npm run dev`
-les injecte automatiquement depuis `supabase status`.
+> En local, `npm run dev` injecte automatiquement la config depuis
+> `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme
+> fallback de dev).
 
 ## Compte admin local
 

@@ -48,16 +48,18 @@ export function UnitSilhouette({
   kind,
   palette,
   ranged,
+  unitFaction,
   unitType,
 }: {
   kind: UnitModelKind;
   palette: ReturnType<typeof getUnitPalette>;
   ranged: boolean;
+  unitFaction?: string;
   unitType?: string;
 }) {
   const gradId = `g-${useId().replace(/:/g, "")}`;
   if (unitType) {
-    const spritePath = getUnitSpritePath(unitType);
+    const spritePath = getUnitSpritePath(unitType, unitFaction);
 
     return (
       <Image

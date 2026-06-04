@@ -1,5 +1,5 @@
 import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
-import { getUnitRule } from "../units";
+import { canRegenerateHealth, getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 import {
   COMBAT_BASE_ROWS,
@@ -275,10 +275,10 @@ export function executeManualCombatAction(params: {
     if (actor.unitType === "first_aid_tent") {
       // Cible explicite si le joueur a passé targetUnitId, sinon allié le plus blessé adjacent
       const explicit = params.action.targetUnitId
-        ? units.find((u) => u.id === params.action.targetUnitId && u.side === actor.side && u.count > 0 && getHexDistance(actor, u) <= 1)
+        ? units.find((u) => u.id === params.action.targetUnitId && u.side === actor.side && u.count > 0 && canRegenerateHealth(u.unitType) && getHexDistance(actor, u) <= 1)
         : null;
       const wounded = explicit ?? units
-        .filter((u) => u.id !== actor.id && u.side === actor.side && u.count > 0 && u.health < u.count * u.maxHealth && getHexDistance(actor, u) <= 1)
+        .filter((u) => u.id !== actor.id && u.side === actor.side && u.count > 0 && canRegenerateHealth(u.unitType) && u.health < u.count * u.maxHealth && getHexDistance(actor, u) <= 1)
         .sort((a, b) => (b.count * b.maxHealth - b.health) - (a.count * a.maxHealth - a.health))[0];
       if (wounded) {
         const heroSkills = getStats(actor.side, params).skills ?? {};

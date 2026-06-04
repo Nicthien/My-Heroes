@@ -14,6 +14,7 @@ export function UnitModel({
   lifted = false,
   depthScale = 1,
   interactive = false,
+  ownerFaction,
   persistentLuckIcon = false,
   onClick,
   onContextMenu,
@@ -26,6 +27,7 @@ export function UnitModel({
   lifted?: boolean;
   depthScale?: number;
   interactive?: boolean;
+  ownerFaction?: string;
   persistentLuckIcon?: boolean;
   onClick?: () => void;
   onContextMenu?: (event: React.MouseEvent<HTMLSpanElement>) => void;
@@ -74,7 +76,7 @@ export function UnitModel({
           className="pointer-events-none absolute left-1/2 top-0 block h-[140px] w-[107px] -translate-x-1/2 drop-shadow-[0_10px_8px_rgba(0,0,0,0.55)]"
           style={{ transform: `translateX(-50%) ${sideFlip}` }}
         >
-          <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unit.unitType} />
+          <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitFaction={ownerFaction} unitType={unit.unitType} />
         </span>
       </span>
       {damaged && <span className="combat-unit-hit-flash absolute left-1/2 top-4 h-24 w-24 -translate-x-1/2 rounded-full bg-red-500/35 blur-sm" />}

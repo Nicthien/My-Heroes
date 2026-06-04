@@ -4,6 +4,7 @@ import {
   getTownWeeklyGrowth,
   UNIT_RULES,
 } from "@/lib/game/economy";
+import { canRegenerateHealth } from "@/lib/game/units";
 import { makeRng } from "@/lib/game/engine/rng";
 import {
   createExternalDwellingState,
@@ -254,6 +255,7 @@ export async function completePlayerTurn(
       const firstAidPct = firstAidLvl === "expert" ? 15 : firstAidLvl === "advanced" ? 10 : firstAidLvl === "basic" ? 5 : 0;
       if (firstAidPct > 0) {
         for (const army of hero.armies ?? []) {
+          if (!canRegenerateHealth(army.unitType)) continue; // the King never heals
           const fullHealth = (army.count ?? 0) * (army.maxHealth ?? 0);
           if (fullHealth <= 0) continue;
           const currentHealth = army.health ?? 0;

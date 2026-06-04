@@ -1,16 +1,19 @@
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { computePlayerScore, scorableFromDbPlayer, type DbScorablePlayer } from "@/lib/game/score";
 import { evaluateVictory, normalizeVictoryCondition, type VictoryContenderSnapshot } from "@/lib/game/victory";
+import type { VictoryConditionType } from "@/lib/game/types";
 import { recordRoundScoreSnapshots } from "./scoreHistory";
 
-type LifecycleTown = { x?: number; y?: number; mapLevel?: string };
+type LifecycleStack = { unitType?: string; count?: number };
+type LifecycleHero = { armies?: LifecycleStack[] };
+type LifecycleTown = { x?: number; y?: number; mapLevel?: string; garrison?: LifecycleStack[] };
 
 type LifecyclePlayer = {
   id: string;
   isAlive?: boolean;
   turnOrder?: number;
   gold?: number;
-  heroes?: unknown[];
+  heroes?: LifecycleHero[];
   towns?: LifecycleTown[];
 };
 
@@ -31,7 +34,7 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
   const sourcePlayers = game.players as unknown as ScoreSourcePlayer[];
   const victory = normalizeVictoryCondition((game.gameConfig as Record<string, unknown> | null)?.victory);
   const players = (game.players as unknown as LifecyclePlayer[]).filter((player) => player.isAlive);
-  const eliminated = players.filter((player) => !hasPlayerSeat(player));
+  const eliminated = players.filter((player) => !hasPlayerSeat(player, victory.type));
 
   for (const player of eliminated) {
     await supabase.from("game_players").update({ is_alive: false }).eq("id", player.id);
@@ -43,7 +46,7 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
   }
 
   const eliminatedIds = new Set(eliminated.map((player) => player.id));
-  const contenders = players.filter((player) => !eliminatedIds.has(player.id) && hasPlayerSeat(player));
+  const contenders = players.filter((player) => !eliminatedIds.has(player.id) && hasPlayerSeat(player, victory.type));
 
   const turnNumber = Number(game.turnNumber ?? 1);
   const turns = game.turns as LifecycleTurn[];
@@ -114,8 +117,22 @@ function isRoundComplete(contenders: LifecyclePlayer[], turnNumber: number, turn
   return contenders.length > 0 && contenders.every((player) => completed.has(player.id));
 }
 
-function hasPlayerSeat(player: LifecyclePlayer) {
-  return (player.heroes?.length ?? 0) > 0 || (player.towns?.length ?? 0) > 0;
+function hasPlayerSeat(player: LifecyclePlayer, victoryType: VictoryConditionType) {
+  const hasHeroOrTown = (player.heroes?.length ?? 0) > 0 || (player.towns?.length ?? 0) > 0;
+  // In King mode a player is eliminated the moment their King falls, even if they
+  // still own heroes or towns.
+  if (victoryType === "KING") return hasHeroOrTown && playerHasLivingKing(player);
+  return hasHeroOrTown;
+}
+
+function playerHasLivingKing(player: LifecyclePlayer) {
+  const inArmy = (player.heroes ?? []).some((hero) =>
+    (hero.armies ?? []).some((stack) => stack.unitType === "king" && Number(stack.count ?? 0) > 0)
+  );
+  const inGarrison = (player.towns ?? []).some((town) =>
+    (town.garrison ?? []).some((stack) => stack.unitType === "king" && Number(stack.count ?? 0) > 0)
+  );
+  return inArmy || inGarrison;
 }
 
 /** Upsert cross-game leaderboard aggregates for every human player when a game completes. */

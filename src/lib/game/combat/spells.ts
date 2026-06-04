@@ -1,7 +1,7 @@
 import { getCreature } from "@/lib/game/creature-catalog";
 import { calculateSpellDamage, getSpell, type SpellDefinition, type SpellSchool } from "@/lib/game/spells";
 import { CombatBoardUnit, CombatSide, CombatTerrainFeature, UnitType } from "@/lib/game/types";
-import { getUnitRule } from "@/lib/game/units";
+import { canRegenerateHealth, getUnitRule } from "@/lib/game/units";
 import { applyDamageToStack } from "./rules";
 import { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isInsideCombatCell, isTerrainBlocked } from "./movement";
 import {
@@ -473,6 +473,7 @@ function applyCure(spell: SpellDefinition, units: CombatBoardUnit[], action: Com
   const target = units.find((u) => u.id === action.targetUnitId && u.count > 0);
   if (!target) return { ok: false, error: "Cible invalide" };
   if (target.side !== caster.side) return { ok: false, error: "Cible alliee requise" };
+  if (!canRegenerateHealth(target.unitType)) return { ok: false, error: "Le Roi ne peut pas etre soigne" };
   const heal = Math.floor((calculateSpellDamage(spell, caster.spellPower, masteryIndex(caster, spell)) || 0) + 10 + caster.spellPower * 5);
   const maxHealth = target.count * target.maxHealth;
   const cured = withoutEffects({ ...target, health: Math.min(maxHealth, target.health + heal) }, (e) => e.kind === "debuff");
@@ -494,6 +495,7 @@ function applyResurrect(spell: SpellDefinition, units: CombatBoardUnit[], action
   const target = units.find((u) => u.id === action.targetUnitId && u.count > 0);
   if (!target) return { ok: false, error: "Cible invalide" };
   if (target.side !== caster.side) return { ok: false, error: "Cible alliee requise" };
+  if (!canRegenerateHealth(target.unitType)) return { ok: false, error: "Le Roi ne peut pas etre ranime" };
   if (spell.id === "animate_dead" && !isUndead(target)) return { ok: false, error: "Animation des morts : cible morte-vivante requise" };
   const healPool = Math.floor((calculateSpellDamage(spell, caster.spellPower, masteryIndex(caster, spell)) || 0) + 40 + caster.spellPower * 10);
   const maxHealth = target.count * target.maxHealth; // current alive max
@@ -511,6 +513,7 @@ function applySacrifice(spell: SpellDefinition, units: CombatBoardUnit[], action
   if (!beneficiary || !sacrificed) return { ok: false, error: "Sacrifice : deux cibles alliees requises" };
   if (beneficiary.side !== caster.side || sacrificed.side !== caster.side) return { ok: false, error: "Cibles alliees requises" };
   if (beneficiary.id === sacrificed.id) return { ok: false, error: "Cibles distinctes requises" };
+  if (!canRegenerateHealth(beneficiary.unitType) || !canRegenerateHealth(sacrificed.unitType)) return { ok: false, error: "Le Roi ne peut pas etre implique dans un sacrifice" };
   const sacrificeValue = sacrificed.count * sacrificed.maxHealth;
   const healPool = sacrificeValue + Math.floor(caster.spellPower * sacrificed.maxHealth);
   const maxHealth = beneficiary.count * beneficiary.maxHealth;

@@ -362,6 +362,9 @@ export const UNIT_RULES = Object.fromEntries([
   [UnitType.FIRST_AID_TENT, { type: UnitType.FIRST_AID_TENT, label: "Tente de premiers secours", cost: { gold: 750 }, health: 75, dwelling: BuildingType.DWELLING_1, growth: 0 }],
   [UnitType.AMMO_CART, { type: UnitType.AMMO_CART, label: "Chariot de munitions", cost: { gold: 1000 }, health: 100, dwelling: BuildingType.DWELLING_1, growth: 0 }],
   [UnitType.CATAPULT, { type: UnitType.CATAPULT, label: "Catapulte", cost: { gold: 0 }, health: 500, dwelling: BuildingType.DWELLING_1, growth: 0 }],
+  // King mode unique unit: not recruitable (absent from CREATURES/FACTION_UNITS), but
+  // needs an economy entry so garrison/army transfers and lookups resolve it.
+  [UnitType.KING, { type: UnitType.KING, label: "Roi", cost: { gold: 0 }, health: 100, dwelling: BuildingType.DWELLING_1, growth: 0 }],
 ]) as Record<UnitType, UnitRule>;
 
 export function canAfford(resources: Resources, cost: ResourceCost) {

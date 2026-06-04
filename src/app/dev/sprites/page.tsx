@@ -42,16 +42,18 @@ import {
   Faction,
   ResourceBuildingType,
   TerrainType,
+  UnitType,
   type CombatBoardUnit,
   type Resources,
-  type UnitType,
 } from "@/lib/game/types";
 import {
   BOAT_SPRITESHEETS,
   HERO_DIRECTIONS,
   HERO_SPRITESHEETS,
+  KING_SPRITE_FACTIONS,
   ROAD_TEXTURES,
   TERRAIN_TOP_TEXTURES,
+  getKingUnitSpritePath,
   getTerrainSideTexturePath,
   getUnitSpritePath,
   type BoatSpritesheet,
@@ -723,6 +725,20 @@ function buildUnitEntry(unitType: UnitType): SpriteEntry {
   };
 }
 
+function buildKingEntry(faction: Faction): SpriteEntry {
+  const rule = UNIT_RULES[UnitType.KING];
+  return {
+    kind: "unit",
+    path: getKingUnitSpritePath(faction),
+    label: `Roi - ${FACTION_TOWN_NAMES[faction] ?? faction}`,
+    detail: "Mode Roi",
+    width: 480,
+    height: 480,
+    unitType: UnitType.KING,
+    unit: { model: "Infanterie", rule },
+  };
+}
+
 function buildArtifactEntry(artifact: ArtifactDefinition): SpriteEntry {
   return {
     kind: "artifact",
@@ -1018,6 +1034,8 @@ const WAR_MACHINE_GROUP: SpriteEntry[] = [
   },
 ];
 
+const KING_UNIT_GROUP: SpriteEntry[] = KING_SPRITE_FACTIONS.map(buildKingEntry);
+
 const SIEGE_FORTIFICATION_GROUP: SpriteEntry[] = [
   {
     kind: "generic",
@@ -1092,6 +1110,7 @@ const TEXTURE_GROUPS: WebpGroup[] = [
 ];
 
 const COMBAT_GROUPS: WebpGroup[] = [
+  { label: "Rois de faction", entries: KING_UNIT_GROUP },
   { label: "Machines de guerre", entries: WAR_MACHINE_GROUP },
   { label: "Fortifications de siège", entries: SIEGE_FORTIFICATION_GROUP },
 ];

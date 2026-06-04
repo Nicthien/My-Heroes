@@ -109,6 +109,12 @@ function resolveBattlefieldEnvironment(combat: PersistentCombat, gameState: Game
   return storedEnvironment;
 }
 
+function getUnitOwnerFaction(unit: CombatBoardUnit, gameState: GameState) {
+  return unit.ownerPlayerId
+    ? gameState.players.find((player) => player.id === unit.ownerPlayerId)?.faction
+    : undefined;
+}
+
 export function IsoBattlefield({
   combat,
   gameState,
@@ -687,6 +693,7 @@ export function IsoBattlefield({
           attacking={attacking}
           lifted
           depthScale={getDepthScale(unit.r)}
+          ownerFaction={getUnitOwnerFaction(unit, gameState)}
           persistentLuckIcon={combat.gameId === "dev-combat-game"}
           interactive={Boolean(isTacticsActive && isMyAction && tacticsPhase && unit.side === tacticsPhase.side && !selectedTacticsUnitId)}
           onClick={() => {

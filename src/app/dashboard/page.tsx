@@ -246,7 +246,7 @@ export default function DashboardPage() {
   const [templateId, setTemplateId] = useState<string>("auto");
   const [rmgTuning, setRmgTuning] = useState<RmgTuning>(DEFAULT_RMG_TUNING);
   const [undergroundEnabled, setUndergroundEnabled] = useState(false);
-  const [victoryType, setVictoryType] = useState<VictoryConditionType>("DOMINATION");
+  const [victoryType, setVictoryType] = useState<VictoryConditionType>("KING");
   const [goldTarget, setGoldTarget] = useState(DEFAULT_GOLD_TARGET);
   const [turnLimit, setTurnLimit] = useState(DEFAULT_TURN_LIMIT);
   const [previewLevel, setPreviewLevel] = useState<MapLevelId>(SURFACE_LEVEL);

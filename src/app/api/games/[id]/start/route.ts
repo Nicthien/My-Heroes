@@ -5,6 +5,7 @@ import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { recordGameAction } from "@/lib/game/server/action-log";
 import { createGamePlayerSetup, PLAYER_COLORS, pickAiFaction, pickAiName } from "@/lib/game/server/player-setup";
 import { syncResourceBuildingsFromMap } from "@/lib/game/server/resource-buildings";
+import { normalizeVictoryCondition } from "@/lib/game/victory";
 import { GameMap } from "@/lib/game/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
@@ -38,6 +39,7 @@ export async function POST(
   const maxPlayers = Number(game.maxPlayers);
   const existingTurnOrders = new Set(players.map((player) => Number(player.turnOrder)));
   const mapData = game.mapData as GameMap;
+  const victory = normalizeVictoryCondition((game.gameConfig as Record<string, unknown> | null)?.victory);
 
   for (let turnOrder = 0; turnOrder < maxPlayers; turnOrder++) {
     if (existingTurnOrders.has(turnOrder)) continue;
@@ -54,6 +56,7 @@ export async function POST(
         aiDifficulty: "simple",
         faction,
         color: PLAYER_COLORS[turnOrder] || "#ffffff",
+        victoryType: victory.type,
       });
       await recordGameAction(supabase, {
         gameId: id,

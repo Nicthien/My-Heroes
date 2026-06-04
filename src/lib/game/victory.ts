@@ -15,7 +15,7 @@ export const DEFAULT_TURN_LIMIT = 100;
 export const GOLD_TARGET_BOUNDS = { min: 10_000, max: 1_000_000 } as const;
 export const TURN_LIMIT_BOUNDS = { min: 10, max: 500 } as const;
 
-const VICTORY_TYPES: readonly VictoryConditionType[] = ["DOMINATION", "GOLD", "TURN_LIMIT", "CAPTURE_TOWN"];
+const VICTORY_TYPES: readonly VictoryConditionType[] = ["KING", "DOMINATION", "GOLD", "TURN_LIMIT", "CAPTURE_TOWN"];
 
 export interface VictoryConditionMeta {
   type: VictoryConditionType;
@@ -27,6 +27,13 @@ export interface VictoryConditionMeta {
 }
 
 export const VICTORY_CONDITION_META: Record<VictoryConditionType, VictoryConditionMeta> = {
+  KING: {
+    type: "KING",
+    label: "Roi",
+    labelEn: "King",
+    description: "Protégez votre Roi : s'il meurt, vous perdez la partie.",
+    descriptionEn: "Protect your King: if he dies, you lose the game.",
+  },
   DOMINATION: {
     type: "DOMINATION",
     label: "Domination",
@@ -83,6 +90,10 @@ function isVictoryType(value: unknown): value is VictoryConditionType {
 export function normalizeVictoryCondition(raw: unknown): VictoryCondition {
   const source = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const type = isVictoryType(source.type) ? source.type : "DOMINATION";
+
+  if (type === "KING") {
+    return { type };
+  }
 
   if (type === "GOLD") {
     return { type, goldTarget: clamp(Number(source.goldTarget ?? DEFAULT_GOLD_TARGET), GOLD_TARGET_BOUNDS.min, GOLD_TARGET_BOUNDS.max) };
@@ -192,6 +203,8 @@ function highestScoreContenderId(contenders: VictoryContenderSnapshot[]): string
 export function describeVictoryCondition(condition: VictoryCondition, locale: Locale = "fr"): string {
   const en = locale === "en";
   switch (condition.type) {
+    case "KING":
+      return en ? "Protect your King" : "Protégez votre Roi";
     case "GOLD": {
       const amount = (condition.goldTarget ?? DEFAULT_GOLD_TARGET).toLocaleString(en ? "en-US" : "fr-FR");
       return en ? `Reach ${amount} gold` : `Atteindre ${amount} or`;

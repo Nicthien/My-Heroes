@@ -3,6 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { isPlayableFaction } from "@/lib/game/playable-factions";
 import { GameMap } from "@/lib/game/types";
 import { createGamePlayerSetup, PLAYER_COLORS } from "@/lib/game/server/player-setup";
+import { normalizeVictoryCondition } from "@/lib/game/victory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameWithRelations } from "@/lib/supabase/game-db";
 
@@ -48,6 +49,7 @@ export async function POST(
   const turnOrder = Array.from({ length: Number(game.maxPlayers) }, (_, index) => index)
     .find((index) => !usedTurnOrders.has(index)) ?? players.length;
   const mapData = game.mapData as GameMap;
+  const victory = normalizeVictoryCondition((game.gameConfig as Record<string, unknown> | null)?.victory);
   let playerRow;
   try {
     playerRow = await createGamePlayerSetup({
@@ -58,6 +60,7 @@ export async function POST(
       color: PLAYER_COLORS[turnOrder] || "#ffffff",
       turnOrder,
       mapData,
+      victoryType: victory.type,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Impossible de rejoindre la partie";

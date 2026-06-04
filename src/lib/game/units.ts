@@ -23,6 +23,15 @@ const WAR_MACHINE_RULES: Array<[UnitType, UnitRule]> = [
   [UnitType.CATAPULT, { type: UnitType.CATAPULT, label: "Catapulte", health: 500, speed: 0, attack: 10, defense: 5, minDamage: 30, maxDamage: 50, power: 0, ranged: true, shots: 99, abilities: ["war_machine", "siege"] }],
 ];
 
+/**
+ * Special unit for the "Roi" victory mode. Unique per player, melee, and never
+ * regenerates health (see {@link canRegenerateHealth}). Defined here rather than
+ * in creature-catalog.json so it stays out of faction rosters and recruitment.
+ */
+const SPECIAL_UNIT_RULES: Array<[UnitType, UnitRule]> = [
+  [UnitType.KING, { type: UnitType.KING, label: "Roi", health: 100, speed: 10, attack: 20, defense: 50, minDamage: 30, maxDamage: 30, power: 1500 }],
+];
+
 export const UNIT_RULES = Object.fromEntries([
   ...CREATURES.map((creature) => [
     creature.type,
@@ -42,8 +51,14 @@ export const UNIT_RULES = Object.fromEntries([
     },
   ]),
   ...WAR_MACHINE_RULES,
+  ...SPECIAL_UNIT_RULES,
 ]) as Record<UnitType, UnitRule>;
 
 export function getUnitRule(unitType: UnitType | string): UnitRule {
   return UNIT_RULES[unitType as UnitType] ?? UNIT_RULES[UnitType.PIKEMAN];
+}
+
+/** The King never regains health (no daily First Aid, no combat heal/resurrect). */
+export function canRegenerateHealth(unitType: UnitType | string): boolean {
+  return unitType !== UnitType.KING;
 }

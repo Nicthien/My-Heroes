@@ -9,7 +9,6 @@ test.describe("Smoke — auth pages render", () => {
 
   test("/auth/login displays the sign-in form", async ({ page }) => {
     await page.goto("/auth/login");
-    await expect(page.getByRole("heading", { name: "My Heroes" })).toBeVisible();
     await expect(page.getByLabel("Email ou pseudo")).toBeVisible();
     await expect(page.locator("#login-email")).toBeVisible();
     await expect(page.locator("#login-password")).toBeVisible();

@@ -31,8 +31,8 @@ export default function LanguageSelect({ value, onChange, className }: LanguageS
             aria-pressed={active}
             className={`flex flex-1 items-center justify-center gap-2 rounded border p-3 text-sm font-semibold transition ${
               active
-                ? "border-blue-500 bg-blue-600/30 text-white"
-                : "border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500"
+                ? "border-amber-400/70 bg-amber-700/35 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]"
+                : "border-amber-800/45 bg-stone-950/55 text-amber-100/65 hover:border-amber-500/60 hover:text-amber-100"
             }`}
           >
             <span aria-hidden>{FLAGS[locale]}</span>

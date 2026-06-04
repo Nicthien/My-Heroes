@@ -139,6 +139,17 @@ function FactionDetail({ faction }: { faction: string }) {
 
       {showcase.hero && (
         <div className="mt-4">
+          <div className="mb-3 flex justify-center rounded-md border border-amber-700/30 bg-black/25 py-2">
+            <Image
+              src={showcase.kingSprite}
+              alt=""
+              aria-hidden
+              width={72}
+              height={72}
+              unoptimized
+              className="h-20 w-20 object-contain drop-shadow-[0_3px_5px_rgba(0,0,0,0.7)]"
+            />
+          </div>
           <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/80">{t("faction.startingHero")}</div>
           <div className="flex items-center gap-3 rounded-md border border-amber-700/30 bg-black/30 p-2.5">
             <HeroIdleSprite

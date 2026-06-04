@@ -219,6 +219,8 @@ const SERVER_MESSAGE_EN: Record<string, string> = {
   "Vous avez déjà terminé votre tour": "You have already ended your turn",
   "Vous avez perdu cette partie": "You have lost this game",
   "Vous n'etes pas dans cette partie": "You are not in this game",
+  "Votre Roi est trop affaibli pour fuir.": "Your King is too weak to flee.",
+  "Sans château pour héberger votre Roi, la fuite est impossible.": "Without a castle to shelter your King, fleeing is impossible.",
   "Échange invalide": "Invalid exchange",
   "École de guerre : choisissez l'entraînement pour 1000 Or.": "War school: choose the training for 1000 Gold.",
   "École de magie : choisissez l'étude pour 1000 Or.": "Magic school: choose the study for 1000 Gold.",

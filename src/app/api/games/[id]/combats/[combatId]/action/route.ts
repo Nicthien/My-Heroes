@@ -10,6 +10,8 @@ import {
   findNextPrimaryParticipant,
   getHeroCombatUnits,
   sideHasActivePlayerUnits,
+  wouldFleeKillKing,
+  KING_FLEE_HP_PENALTY,
   type CombatConcessionParticipant,
 } from "@/lib/game/combat/concession";
 import { findMeleeApproach, getReachableCombatCells, isInsideCombatCell, isTerrainBlocked } from "@/lib/game/combat/movement";
@@ -400,6 +402,11 @@ export async function POST(
     const siegeEffects = (boardState as { siegeEffects?: { escapeTunnel?: boolean } }).siegeEffects;
     if (!siegeEffects?.escapeTunnel) return NextResponse.json({ error: "Aucun Tunnel d'évasion" }, { status: 400 });
     if (gamePlayerId !== combat.defender_player_id) return NextResponse.json({ error: "Seul le défenseur peut fuir" }, { status: 403 });
+    // The King keeps his -5 HP flee cost, but fleeing must never kill him: refuse a
+    // retreat that would bring him to 0 HP (he has to win or surrender instead).
+    if (wouldFleeKillKing(boardState.units ?? [], combat.defender_hero_id ?? "", combat.defender_player_id ?? "")) {
+      return NextResponse.json({ error: "Votre Roi est trop affaibli pour fuir." }, { status: 400 });
+    }
     const result = {
       winnerId: "defender" as const,
       winnerPlayerId: combat.defender_player_id,
@@ -415,6 +422,18 @@ export async function POST(
       .select("*, combat_participants(*), combat_reinforcement_requests(*), combat_surrender_negotiations(*), combat_truces(*)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // King mode: fleeing through the escape tunnel still costs the defender's King 5 HP.
+    const fleeingKing = (boardState.units ?? []).find(
+      (unit) => unit.side === "defender" && unit.unitType === "king" && Number(unit.count) > 0 && unit.heroId === combat.defender_hero_id,
+    );
+    if (fleeingKing) {
+      const nextHealth = Math.max(0, Number(fleeingKing.health) - KING_FLEE_HP_PENALTY);
+      if (nextHealth <= 0) {
+        await supabase.from("armies").delete().eq("id", fleeingKing.id);
+      } else {
+        await supabase.from("armies").update({ health: nextHealth }).eq("id", fleeingKing.id);
+      }
+    }
     await evaluateGameLifecycle(supabase, id);
     const mapped = toCombat(data);
     await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
@@ -454,6 +473,29 @@ export async function POST(
     if (!concedingSide) return NextResponse.json({ error: "Camp de combat invalide" }, { status: 400 });
     if (!concedingParticipant?.heroId) return NextResponse.json({ error: "Héros introuvable" }, { status: 400 });
     const concedingHeroId = concedingParticipant.heroId;
+
+    // The King keeps his -5 HP flee cost, but fleeing must never kill him: refuse a
+    // retreat that would bring him to 0 HP (he has to win or surrender instead).
+    if (wouldFleeKillKing(boardState.units ?? [], concedingHeroId, gamePlayerId)) {
+      return NextResponse.json({ error: "Votre Roi est trop affaibli pour fuir." }, { status: 400 });
+    }
+
+    // A fleeing King retreats into a town garrison; with no castle to shelter him the
+    // flee is impossible (he would otherwise be lost and the player eliminated).
+    const fleeingHeroHasKing = getHeroCombatUnits(boardState.units ?? [], concedingHeroId, gamePlayerId)
+      .some((unit) => unit.unitType === "king" && Number(unit.count) > 0);
+    if (fleeingHeroHasKing) {
+      const { data: shelterTown } = await supabase
+        .from("towns")
+        .select("id")
+        .eq("game_id", id)
+        .eq("game_player_id", gamePlayerId)
+        .limit(1)
+        .maybeSingle();
+      if (!shelterTown) {
+        return NextResponse.json({ error: "Sans château pour héberger votre Roi, la fuite est impossible." }, { status: 400 });
+      }
+    }
 
     if (hasHeroCastCombatSpell(boardState.spellCastsByRound, combat.round ?? 1, concedingHeroId) && (combat.round ?? 1) <= 1) {
       return NextResponse.json({ error: "Impossible de fuir au premier round apres avoir lance un sort." }, { status: 400 });
@@ -1450,6 +1492,18 @@ async function persistConcededCombat(
   if (!options.preserveArmy) {
     await supabase.from("armies").delete().eq("hero_id", options.concedingHeroId);
   }
+  // A fleeing King is pulled out of the retreating hero's army and stashed in the
+  // player's town garrison (where he starts the game in King mode); the hero himself
+  // retreats to the tavern like any other concession, re-hireable later. This keeps
+  // the King alive in a castle instead of vanishing with the tavern hero — which in
+  // King mode would wrongly eliminate the player. The RETREAT handler refuses the
+  // flee up front when the King's owner has no town, so a town exists here.
+  const concedingPlayerId = options.concedingSide === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
+  const fleeingKing = getHeroCombatUnits(after, options.concedingHeroId, concedingPlayerId ?? "")
+    .find((unit) => unit.unitType === "king" && unit.count > 0);
+  if (fleeingKing && concedingPlayerId) {
+    await stashKingInGarrison(supabase, combat.game_id, concedingPlayerId, fleeingKing);
+  }
   await supabase
     .from("heroes")
     .update({ status: "TAVERN", x: -1, y: -1, movement: 0, max_movement: 0, is_moving: false })
@@ -1468,6 +1522,42 @@ async function persistConcededCombat(
     await applyCombatXp(supabase, combat.game_id, options.winnerHeroId, before, after);
   }
   await applyCombatXp(supabase, combat.game_id, options.concedingHeroId, before, after);
+}
+
+/**
+ * Moves a fleeing King out of the retreating hero's army into the owner's town
+ * garrison so he survives the retreat (in King mode the King starts in the garrison).
+ * He keeps his flee-reduced HP — the King never heals. No-op if the player somehow has
+ * no town; the RETREAT handler blocks the flee before reaching here in that case.
+ */
+async function stashKingInGarrison(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  playerId: string,
+  king: CombatBoardUnit,
+) {
+  const { data: town } = await supabase
+    .from("towns")
+    .select("id, garrison")
+    .eq("game_id", gameId)
+    .eq("game_player_id", playerId)
+    .limit(1)
+    .maybeSingle();
+  if (!town) return;
+  await supabase.from("armies").delete().eq("id", king.id);
+  const garrison = Array.isArray(town.garrison) ? (town.garrison as Array<Record<string, unknown>>) : [];
+  const nextGarrison = [
+    ...garrison,
+    {
+      id: king.id,
+      unitType: "king",
+      count: 1,
+      health: king.health,
+      maxHealth: king.maxHealth,
+      position: garrison.length,
+    },
+  ];
+  await supabase.from("towns").update({ garrison: nextGarrison }).eq("id", town.id);
 }
 
 async function persistCombatUnitCounts(

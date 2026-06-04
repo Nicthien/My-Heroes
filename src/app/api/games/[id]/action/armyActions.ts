@@ -158,6 +158,9 @@ export async function handleArmyAction({
     if (!source || source.count <= 1 || count >= source.count) {
       return NextResponse.json({ error: "Quantité invalide" }, { status: 400 });
     }
+    if (source.unitType === "king") {
+      return NextResponse.json({ error: "Le Roi ne peut pas être séparé" }, { status: 400 });
+    }
 
     const removal = removeUnitsFromStack(source, count);
     const position = stacks.length;

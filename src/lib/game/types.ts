@@ -284,6 +284,7 @@ export enum UnitType {
   FIRST_AID_TENT = "first_aid_tent",
   AMMO_CART = "ammo_cart",
   CATAPULT = "catapult",
+  KING = "king",
 }
 
 export interface Resources {
@@ -935,7 +936,7 @@ export interface CombatState {
  * "DOMINATION" (last player with a hero or a town) is always evaluated as a
  * fallback; the other types add an alternative, often faster, path to victory.
  */
-export type VictoryConditionType = "DOMINATION" | "GOLD" | "TURN_LIMIT" | "CAPTURE_TOWN";
+export type VictoryConditionType = "DOMINATION" | "GOLD" | "TURN_LIMIT" | "CAPTURE_TOWN" | "KING";
 
 export interface VictoryCondition {
   type: VictoryConditionType;

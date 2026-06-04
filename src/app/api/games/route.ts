@@ -214,6 +214,7 @@ export async function POST(request: Request) {
         color: "#3b82f6",
         turnOrder: 0,
         mapData,
+        victoryType: victory.type,
       });
     }
 

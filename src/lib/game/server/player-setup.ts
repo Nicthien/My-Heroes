@@ -2,9 +2,10 @@ import { computeVisibleTiles, getDailyAdventureMovement, placePlayerStart } from
 import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { makeRng } from "@/lib/game/engine/rng";
 import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { getUnitRule } from "@/lib/game/units";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { normalizePlayableFaction } from "@/lib/game/playable-factions";
-import { BuildingType, Faction, GameMap, HeroClass } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, HeroClass, UnitType, type VictoryConditionType } from "@/lib/game/types";
 import { pickTownName } from "@/lib/game/town-generation";
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 
@@ -43,6 +44,23 @@ export interface CreateGamePlayerSetupOptions {
   isAi?: boolean;
   aiName?: string;
   aiDifficulty?: string;
+  victoryType?: VictoryConditionType;
+}
+
+/** King mode: every player starts with their unique King in the castle garrison. */
+function buildStartingGarrison(victoryType: VictoryConditionType | undefined) {
+  if (victoryType !== "KING") return [];
+  const rule = getUnitRule(UnitType.KING);
+  return [
+    {
+      id: crypto.randomUUID(),
+      unitType: UnitType.KING,
+      count: 1,
+      health: rule.health,
+      maxHealth: rule.health,
+      position: 0,
+    },
+  ];
 }
 
 export function pickAiFaction(turnOrder: number) {
@@ -86,6 +104,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     isAi = false,
     aiName,
     aiDifficulty = "simple",
+    victoryType,
   } = options;
   const factionKey = normalizeFaction(options.faction);
   const startPos = placePlayerStart(mapData, turnOrder);
@@ -194,7 +213,7 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     x: startPos.x,
     y: startPos.y,
     buildings: [BuildingType.VILLAGE_HALL],
-    garrison: [],
+    garrison: buildStartingGarrison(victoryType),
     is_neutral: false,
   });
   if (townError) throw townError;

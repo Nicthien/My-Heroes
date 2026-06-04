@@ -1,4 +1,4 @@
-import { RoadType, TerrainType, UnitType } from "@/lib/game/types";
+import { Faction, RoadType, TerrainType, UnitType } from "@/lib/game/types";
 import { EXTERNAL_DWELLING_UNIT_TYPES } from "@/lib/game/external-dwellings";
 import { ARTIFACTS } from "@/lib/game/artifacts";
 import type { Diagonal4, Direction8 } from "@/lib/rendering/phaser/directions";
@@ -130,7 +130,28 @@ const UNIT_SPRITE_OVERRIDES: Partial<Record<UnitType, string>> = {
   [UnitType.MAGIC_ELEMENTAL]: "/assets/sprites/units/magic_elemental.webp",
   [UnitType.FIREBIRD]: "/assets/sprites/units/firebird.webp",
   [UnitType.PHOENIX]: "/assets/sprites/units/phoenix.webp",
+  // King mode unique unit — sprite to be generated (Codex/imagegen) at this path.
+  [UnitType.KING]: "/assets/sprites/units/kings/king-castle.webp",
 };
+
+export const KING_SPRITE_FACTIONS = [
+  Faction.CASTLE,
+  Faction.RAMPART,
+  Faction.TOWER,
+  Faction.INFERNO,
+  Faction.NECROPOLIS,
+  Faction.DUNGEON,
+  Faction.STRONGHOLD,
+  Faction.FORTRESS,
+  Faction.CONFLUX,
+] as const;
+
+export const KING_UNIT_SPRITES = Object.fromEntries(
+  KING_SPRITE_FACTIONS.map((faction) => [
+    faction,
+    `/assets/sprites/units/kings/king-${faction}.webp`,
+  ]),
+) as Record<(typeof KING_SPRITE_FACTIONS)[number], string>;
 
 export const UNIT_SPRITES = Object.values(UnitType).reduce((sprites, unitType) => {
   sprites[unitType] = UNIT_SPRITE_OVERRIDES[unitType] ?? `/assets/sprites/units/${unitType}.webp`;
@@ -521,7 +542,12 @@ export function getTownSpritePath(faction: string) {
   return MAP_SPRITES.towns[faction] ?? MAP_SPRITES.town;
 }
 
-export function getUnitSpritePath(unitType: string | undefined) {
+export function getKingUnitSpritePath(faction?: string) {
+  return KING_UNIT_SPRITES[faction as keyof typeof KING_UNIT_SPRITES] ?? KING_UNIT_SPRITES[Faction.CASTLE];
+}
+
+export function getUnitSpritePath(unitType: string | undefined, faction?: string) {
+  if (unitType === UnitType.KING) return getKingUnitSpritePath(faction);
   return UNIT_SPRITES[unitType as UnitType] ?? UNIT_SPRITES[UnitType.PIKEMAN];
 }
 

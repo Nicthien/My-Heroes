@@ -1,8 +1,8 @@
 import Phaser from "phaser";
 import { TerrainType, type GameMap, type MapTile } from "@/lib/game/types";
+import { getTerrainSideTexturePath } from "@/lib/rendering/phaser/assets";
 import { cartToIso } from "@/lib/rendering/phaser/iso";
 import {
-  type CubeFace,
   type CubeFaceQuad,
   getCubeCorners,
   getCubeFacePoints,
@@ -13,11 +13,13 @@ import { getTileDepth } from "@/lib/rendering/phaser/terrainFaceRender";
 
 const STARFIELD_PADDING = 520;
 const WORLD_EDGE_DROP_CUBE_HEIGHT = Math.round(VISUAL_ELEVATION_SCALE * 1.7);
+const WORLD_EDGE_STONE_TEXTURE = "/assets/textures/terrain/mountain/mountain-cracked-rock.webp";
+const WORLD_EDGE_STONE_TEXTURE_ALPHA = 0.72;
 
 // For each map edge, the outward face is the cube face visible from the camera that
 // faces away from the map interior. The return face is the other camera-visible face,
 // orthogonal to the wall direction; it picks up the cap color at kind transitions.
-const RETURN_FACE: Record<"SE" | "SW", CubeFace> = {
+const RETURN_FACE: Record<"SE" | "SW", "SE" | "SW"> = {
   SE: "SW",
   SW: "SE",
 };
@@ -118,7 +120,7 @@ function drawVoxelDropForFace(
   if (tile.terrain === TerrainType.WATER) {
     drawWaterDropFace(graphics, tile, outwardFace, iso.x, iso.y, depth, dropDepth, frameIndex, capTransition);
   } else {
-    drawVoxelDropColumn(graphics, tile, outwardFace, iso.x, iso.y, depth, dropDepth, frameIndex, capTransition);
+    drawVoxelDropColumn(scene, graphics, tile, outwardFace, iso.x, iso.y, depth, dropDepth, frameIndex, capTransition, layer, layerDepth);
   }
   layer.add(graphics);
 }
@@ -197,6 +199,7 @@ function drawCheapWaterDropDetails(
 }
 
 function drawVoxelDropColumn(
+  scene: Phaser.Scene,
   graphics: Phaser.GameObjects.Graphics,
   tile: MapTile,
   outwardFace: "SE" | "SW",
@@ -205,16 +208,19 @@ function drawVoxelDropColumn(
   depth: number,
   dropDepth: number,
   frameIndex: number,
-  capTransition: boolean
+  capTransition: boolean,
+  layer: Phaser.GameObjects.Container,
+  layerDepth: number
 ) {
   for (let step = 0; step < dropDepth; step++) {
     const topDepth = depth - step * WORLD_EDGE_DROP_CUBE_HEIGHT;
     const bottomDepth = depth - (step + 1) * WORLD_EDGE_DROP_CUBE_HEIGHT;
-    drawVoxelDropCube(graphics, tile, outwardFace, isoX, isoY, topDepth, bottomDepth, step, frameIndex, capTransition);
+    drawVoxelDropCube(scene, graphics, tile, outwardFace, isoX, isoY, topDepth, bottomDepth, step, frameIndex, capTransition, layer, layerDepth);
   }
 }
 
 function drawVoxelDropCube(
+  scene: Phaser.Scene,
   graphics: Phaser.GameObjects.Graphics,
   tile: MapTile,
   outwardFace: "SE" | "SW",
@@ -224,7 +230,9 @@ function drawVoxelDropCube(
   bottomDepth: number,
   step: number,
   frameIndex: number,
-  capTransition: boolean
+  capTransition: boolean,
+  layer: Phaser.GameObjects.Container,
+  layerDepth: number
 ) {
   const corners = getCubeCorners(isoX, isoY, topDepth, bottomDepth);
   const returnFace = RETURN_FACE[outwardFace];
@@ -237,6 +245,9 @@ function drawVoxelDropCube(
 
   graphics.fillStyle(palette.mainFill, palette.mainAlpha);
   fillQuad(graphics, outwardQuad);
+
+  addProjectedStoneTexture(scene, layer, returnQuad, returnFace, layerDepth + 0.001 + step * 0.00001);
+  addProjectedStoneTexture(scene, layer, outwardQuad, outwardFace, layerDepth + 0.002 + step * 0.00001);
 
   graphics.lineStyle(1, palette.edge, palette.edgeAlpha);
   strokeQuad(graphics, outwardQuad);
@@ -423,6 +434,133 @@ function drawRockVoxelDetails(
   graphics.moveTo(returnQuad.topA.x, returnQuad.topA.y + 1);
   graphics.lineTo(returnQuad.bottomB.x, returnQuad.bottomB.y - 1);
   graphics.strokePath();
+}
+
+function addProjectedStoneTexture(
+  scene: Phaser.Scene,
+  layer: Phaser.GameObjects.Container,
+  quad: CubeFaceQuad,
+  face: "SE" | "SW",
+  depth: number
+) {
+  const texturePath = getTerrainSideTexturePath(WORLD_EDGE_STONE_TEXTURE, face);
+  if (!scene.textures.exists(texturePath)) return;
+
+  const minX = Math.min(quad.topA.x, quad.topB.x, quad.bottomA.x, quad.bottomB.x);
+  const maxX = Math.max(quad.topA.x, quad.topB.x, quad.bottomA.x, quad.bottomB.x);
+  const minY = Math.min(quad.topA.y, quad.topB.y, quad.bottomA.y, quad.bottomB.y);
+  const maxY = Math.max(quad.topA.y, quad.topB.y, quad.bottomA.y, quad.bottomB.y);
+  const width = Math.max(1, Math.ceil(maxX - minX));
+  const height = Math.max(1, Math.ceil(maxY - minY));
+  const localQuad = {
+    topA: { x: quad.topA.x - minX, y: quad.topA.y - minY },
+    topB: { x: quad.topB.x - minX, y: quad.topB.y - minY },
+    bottomA: { x: quad.bottomA.x - minX, y: quad.bottomA.y - minY },
+    bottomB: { x: quad.bottomB.x - minX, y: quad.bottomB.y - minY },
+  };
+  const textureKey = getProjectedStoneTextureKey(scene, texturePath, face, localQuad, width, height);
+  if (!textureKey) return;
+
+  const sprite = scene.add.image(minX, minY, textureKey);
+  sprite.setOrigin(0);
+  sprite.setAlpha(WORLD_EDGE_STONE_TEXTURE_ALPHA);
+  sprite.setDepth(depth);
+  layer.add(sprite);
+}
+
+function getProjectedStoneTextureKey(
+  scene: Phaser.Scene,
+  texturePath: string,
+  face: "SE" | "SW",
+  localQuad: CubeFaceQuad,
+  width: number,
+  height: number
+) {
+  const shapeKey = [
+    localQuad.topA.x, localQuad.topA.y,
+    localQuad.topB.x, localQuad.topB.y,
+    localQuad.bottomA.x, localQuad.bottomA.y,
+    localQuad.bottomB.x, localQuad.bottomB.y,
+  ].map((value) => Math.round(value * 10) / 10).join(",");
+  const key = `world-edge-stone:${texturePath}:${face}:${width}x${height}:${shapeKey}`;
+  if (scene.textures.exists(key)) return key;
+
+  const frame = scene.textures.getFrame(texturePath);
+  const source = frame?.source.image as CanvasImageSource | undefined;
+  const sourceWidth = frame?.width ?? 0;
+  const sourceHeight = frame?.height ?? 0;
+  if (!source || sourceWidth <= 0 || sourceHeight <= 0) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const sourcePoints = getSourceSideTextureProjectionPoints(face, sourceWidth, sourceHeight);
+  const matrix = getAffineTextureProjection(sourcePoints, localQuad);
+  if (!matrix) return null;
+
+  context.save();
+  context.beginPath();
+  context.moveTo(localQuad.topA.x, localQuad.topA.y);
+  context.lineTo(localQuad.topB.x, localQuad.topB.y);
+  context.lineTo(localQuad.bottomB.x, localQuad.bottomB.y);
+  context.lineTo(localQuad.bottomA.x, localQuad.bottomA.y);
+  context.closePath();
+  context.clip();
+  context.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f);
+  context.drawImage(source, 0, 0);
+  context.restore();
+
+  return scene.textures.addCanvas(key, canvas) ? key : null;
+}
+
+function getSourceSideTextureProjectionPoints(face: "SE" | "SW", width: number, height: number) {
+  return face === "SW"
+    ? {
+        topA: { x: 0, y: 0 },
+        topB: { x: width, y: height / 2 },
+        bottomA: { x: 0, y: height / 2 },
+      }
+    : {
+        topA: { x: 0, y: height / 2 },
+        topB: { x: width, y: 0 },
+        bottomA: { x: 0, y: height },
+      };
+}
+
+function getAffineTextureProjection(
+  source: { topA: { x: number; y: number }; topB: { x: number; y: number }; bottomA: { x: number; y: number } },
+  target: { topA: { x: number; y: number }; topB: { x: number; y: number }; bottomA: { x: number; y: number } }
+) {
+  const sourceX = {
+    x: source.topB.x - source.topA.x,
+    y: source.topB.y - source.topA.y,
+  };
+  const sourceY = {
+    x: source.bottomA.x - source.topA.x,
+    y: source.bottomA.y - source.topA.y,
+  };
+  const targetX = {
+    x: target.topB.x - target.topA.x,
+    y: target.topB.y - target.topA.y,
+  };
+  const targetY = {
+    x: target.bottomA.x - target.topA.x,
+    y: target.bottomA.y - target.topA.y,
+  };
+  const determinant = sourceX.x * sourceY.y - sourceX.y * sourceY.x;
+  if (Math.abs(determinant) < 0.0001) return null;
+
+  const a = (targetX.x * sourceY.y - targetY.x * sourceX.y) / determinant;
+  const b = (targetX.y * sourceY.y - targetY.y * sourceX.y) / determinant;
+  const c = (-targetX.x * sourceY.x + targetY.x * sourceX.x) / determinant;
+  const d = (-targetX.y * sourceY.x + targetY.y * sourceX.x) / determinant;
+  const e = target.topA.x - a * source.topA.x - c * source.topA.y;
+  const f = target.topA.y - b * source.topA.x - d * source.topA.y;
+
+  return { a, b, c, d, e, f };
 }
 
 function fillQuad(graphics: Phaser.GameObjects.Graphics, quad: CubeFaceQuad) {

@@ -7,7 +7,7 @@ import { translate } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
-import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTownSpritePath, type DirectionalSpriteState, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
+import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTerrainSideTexturePath, getTownSpritePath, type DirectionalSpriteState, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
 import {
   DEFAULT_SPRITE_ORIGIN,
   GATE_DEPTH_CLEARANCE,
@@ -115,6 +115,7 @@ import {
   getTerrainTopStroke,
   getTileDepth,
   type TerrainSideExposure,
+  type TerrainSideFacePoints,
   type TerrainSideVisibility,
 } from "@/lib/rendering/phaser/terrainFaceRender";
 import { getCubeCorners, getCubeFacePoints } from "@/lib/rendering/phaser/isoCube";
@@ -151,6 +152,12 @@ type FailedLoaderFile = {
   key?: unknown;
   src?: unknown;
   url?: unknown;
+};
+
+type TextureProjectionPoints = {
+  topA: Position;
+  topB: Position;
+  bottomA: Position;
 };
 
 const UNDERGROUND_VOID_TOP_TEXTURE: TerrainTopTexture = {
@@ -236,6 +243,36 @@ function splitHoverLabelText(text: string) {
 // Night-mode overlay side length (px). Far larger than any viewport so the
 // scrollFactor(0) rectangle still covers the screen at the minimum camera zoom.
 const NIGHT_OVERLAY_SIZE = 20000;
+
+function getAffineTextureProjection(source: TextureProjectionPoints, target: TextureProjectionPoints) {
+  const sourceX = {
+    x: source.topB.x - source.topA.x,
+    y: source.topB.y - source.topA.y,
+  };
+  const sourceY = {
+    x: source.bottomA.x - source.topA.x,
+    y: source.bottomA.y - source.topA.y,
+  };
+  const targetX = {
+    x: target.topB.x - target.topA.x,
+    y: target.topB.y - target.topA.y,
+  };
+  const targetY = {
+    x: target.bottomA.x - target.topA.x,
+    y: target.bottomA.y - target.topA.y,
+  };
+  const determinant = sourceX.x * sourceY.y - sourceX.y * sourceY.x;
+  if (Math.abs(determinant) < 0.0001) return null;
+
+  const a = (targetX.x * sourceY.y - targetY.x * sourceX.y) / determinant;
+  const b = (targetX.y * sourceY.y - targetY.y * sourceX.y) / determinant;
+  const c = (-targetX.x * sourceY.x + targetY.x * sourceX.x) / determinant;
+  const d = (-targetX.y * sourceY.x + targetY.y * sourceX.x) / determinant;
+  const e = target.topA.x - a * source.topA.x - c * source.topA.y;
+  const f = target.topA.y - b * source.topA.x - d * source.topA.y;
+
+  return { a, b, c, d, e, f };
+}
 
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
@@ -1723,6 +1760,7 @@ class PhaserMapScene extends Phaser.Scene {
         coverGraphics.lineTo(points.bottomA.x, points.bottomA.y);
         coverGraphics.closePath();
         coverGraphics.fillPath();
+        this.renderTerrainSideTexture(terrainTexture, face, points);
       }
 
       if (renderMicroDetails) {
@@ -1899,6 +1937,7 @@ class PhaserMapScene extends Phaser.Scene {
         tileGraphics.lineTo(points.bottomA.x, points.bottomA.y);
         tileGraphics.closePath();
         tileGraphics.fillPath();
+        this.renderTerrainSideTexture(terrainTexture, face, points, tileDepth);
       }
 
       if (renderMicroDetails) {
@@ -2067,6 +2106,93 @@ class PhaserMapScene extends Phaser.Scene {
     sprite.setDepth(depth);
     layer.add(sprite);
     return true;
+  }
+
+  private renderTerrainSideTexture(
+    texture: TerrainTopTexture | null,
+    face: keyof TerrainSideVisibility,
+    points: TerrainSideFacePoints,
+    depth = Math.max(points.bottomA.y, points.bottomB.y) - 0.25,
+    layer: Phaser.GameObjects.Container = this.mapLayer
+  ) {
+    if (!texture || !this.shouldRenderDetailedTerrainTextures()) return false;
+
+    const texturePath = getTerrainSideTexturePath(texture.path, face);
+    if (!this.textures.exists(texturePath)) return false;
+
+    const minX = Math.min(points.topA.x, points.topB.x, points.bottomA.x, points.bottomB.x);
+    const maxX = Math.max(points.topA.x, points.topB.x, points.bottomA.x, points.bottomB.x);
+    const minY = Math.min(points.topA.y, points.topB.y, points.bottomA.y, points.bottomB.y);
+    const maxY = Math.max(points.topA.y, points.topB.y, points.bottomA.y, points.bottomB.y);
+    const width = Math.max(1, Math.ceil(maxX - minX));
+    const height = Math.max(1, Math.ceil(maxY - minY));
+    const projectedTextureKey = this.getProjectedTerrainSideTextureKey(texturePath, face, width, height);
+    if (!projectedTextureKey) return false;
+
+    const sprite = this.add.image(minX, minY, projectedTextureKey);
+    sprite.setOrigin(0);
+    sprite.setDepth(depth);
+    layer.add(sprite);
+    return true;
+  }
+
+  private getProjectedTerrainSideTextureKey(texturePath: string, face: keyof TerrainSideVisibility, width: number, height: number) {
+    const key = `terrain-side-projected:${texturePath}:${face}:${width}x${height}`;
+    if (this.textures.exists(key)) return key;
+
+    const frame = this.textures.getFrame(texturePath);
+    const source = frame?.source.image as CanvasImageSource | undefined;
+    const sourceWidth = frame?.width ?? 0;
+    const sourceHeight = frame?.height ?? 0;
+    if (!source || sourceWidth <= 0 || sourceHeight <= 0) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+
+    const topOffset = TILE_HEIGHT / 2;
+    const localPoints = face === "SW"
+      ? {
+          topA: { x: 0, y: 0 },
+          topB: { x: width, y: topOffset },
+          bottomA: { x: 0, y: height - topOffset },
+          bottomB: { x: width, y: height },
+        }
+      : {
+          topA: { x: 0, y: topOffset },
+          topB: { x: width, y: 0 },
+          bottomA: { x: 0, y: height },
+          bottomB: { x: width, y: height - topOffset },
+        };
+    const sourcePoints = face === "SW"
+      ? {
+          topA: { x: 0, y: 0 },
+          topB: { x: sourceWidth, y: sourceHeight / 2 },
+          bottomA: { x: 0, y: sourceHeight / 2 },
+        }
+      : {
+          topA: { x: 0, y: sourceHeight / 2 },
+          topB: { x: sourceWidth, y: 0 },
+          bottomA: { x: 0, y: sourceHeight },
+        };
+    const matrix = getAffineTextureProjection(sourcePoints, localPoints);
+    if (!matrix) return null;
+
+    context.save();
+    context.beginPath();
+    context.moveTo(localPoints.topA.x, localPoints.topA.y);
+    context.lineTo(localPoints.topB.x, localPoints.topB.y);
+    context.lineTo(localPoints.bottomB.x, localPoints.bottomB.y);
+    context.lineTo(localPoints.bottomA.x, localPoints.bottomA.y);
+    context.closePath();
+    context.clip();
+    context.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f);
+    context.drawImage(source, 0, 0);
+    context.restore();
+
+    return this.textures.addCanvas(key, canvas) ? key : null;
   }
 
   private shouldRenderDetailedTerrainTextures() {

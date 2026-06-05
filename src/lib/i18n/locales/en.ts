@@ -224,6 +224,8 @@ export const en: Record<TranslationKey, string> = {
   "hud.turnProgressOf": "Progress of {name}",
   "hud.turnEnded": "Turn ended",
   "hud.turnInProgress": "Turn in progress",
+  "hud.dayProgress": "Day in progress: {percent}% remaining",
+  "hud.nightAllEnded": "Night — all players have finished",
   "hud.movement": "Movement",
   "hud.kingHealth": "King",
   "hud.calYear": "Year {n}",

@@ -223,6 +223,8 @@ export const fr = {
   "hud.turnProgressOf": "Avancement de {name}",
   "hud.turnEnded": "Tour terminé",
   "hud.turnInProgress": "Tour en cours",
+  "hud.dayProgress": "Journée en cours : {percent}% restant",
+  "hud.nightAllEnded": "Nuit — tous les joueurs ont terminé",
   "hud.movement": "Mouvement",
   "hud.kingHealth": "Roi",
   "hud.calYear": "An {n}",

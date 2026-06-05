@@ -37,6 +37,13 @@ import { buildObjects } from "./gameMapObjects";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedLabelFromId } from "@/lib/i18n/gameLabels";
 import { resourceLabel } from "@/lib/game/economy";
+import {
+  playAdventureBuildingVisit,
+  playCaptureFlourish,
+  playResourcePickup,
+  playTeleportWhoosh,
+  playTreasureReward,
+} from "@/lib/audio/soundEffects";
 import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
@@ -233,6 +240,15 @@ export default function GameMapComponent() {
 
     renderer.setSpellRevealHighlights(spellRevealHighlight.tiles, 0x7dd3fc, 0.24, spellRevealHighlight.hints);
   }, [gameState, rendererReadyVersion, session?.user?.id, setSpellRevealHighlight, spellRevealHighlight]);
+
+  // Night mode while the local player waits for the others after ending their turn.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isReady() || !gameState) return;
+    const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
+    const waiting = Boolean(myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn);
+    renderer.setNightMode(waiting);
+  }, [gameState, rendererReadyVersion, session?.user?.id]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -777,11 +793,13 @@ export default function GameMapComponent() {
         ? tRef.current("map.goldFound", { amount })
         : tRef.current("map.collected", { amount, res: resourceLabel(interaction.resource, localeRef.current) });
       setCombatMessage(msg);
+      playResourcePickup(interaction.resource);
       return true;
     }
 
     if (interaction.type === "ARTIFACT") {
       setCombatMessage(tRef.current("map.artifactCollected", { label: interaction.label }));
+      playTreasureReward();
       return true;
     }
 
@@ -789,17 +807,20 @@ export default function GameMapComponent() {
       const rule = RESOURCE_BUILDING_RULES.find((r) => r.type === interaction.buildingType);
       const name = rule ? localizedLabelFromId(rule.type, rule.label, localeRef.current) : tRef.current("map.buildingFallback");
       setCombatMessage(tRef.current("map.buildingCaptured", { name }));
+      playCaptureFlourish();
       return true;
     }
 
     if (interaction.type === "CAPTURE_TOWN") {
       setCombatMessage(tRef.current("map.townCaptured"));
+      playCaptureFlourish();
       return true;
     }
 
     if (interaction.type === "CAPTURE_GATE") {
       setCombatMessage(tRef.current("map.gateControlled"));
       setSelectedGateId(interaction.gateId);
+      playCaptureFlourish();
       return true;
     }
 
@@ -807,6 +828,8 @@ export default function GameMapComponent() {
       if (interaction.alreadyVisited) {
         return true;
       }
+      // Distinct sound per building nature (knowledge, magic, vision, reward…).
+      playAdventureBuildingVisit(interaction.buildingType);
       if (interaction.choices?.length && interaction.buildingId) {
         setPendingAdventureChoice({
           heroId,
@@ -837,6 +860,7 @@ export default function GameMapComponent() {
 
     if (interaction.type === "TELEPORT") {
       setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ??tRef.current("map.teleported"));
+      playTeleportWhoosh();
       setActiveMapLevel(normalizeMapLevel(interaction.to.level));
       renderedMapRef.current = null;
       rendererRef.current?.centerOnTile(interaction.to.x, interaction.to.y);

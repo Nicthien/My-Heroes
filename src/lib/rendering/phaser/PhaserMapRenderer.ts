@@ -233,6 +233,10 @@ function splitHoverLabelText(text: string) {
   };
 }
 
+// Night-mode overlay side length (px). Far larger than any viewport so the
+// scrollFactor(0) rectangle still covers the screen at the minimum camera zoom.
+const NIGHT_OVERLAY_SIZE = 20000;
+
 class PhaserMapScene extends Phaser.Scene {
   map: GameMap | null = null;
   objects: MapObjectData[] = [];
@@ -254,6 +258,8 @@ class PhaserMapScene extends Phaser.Scene {
   private movementLabelLayer!: Phaser.GameObjects.Container;
   private fogLayer!: Phaser.GameObjects.Container;
   private hoverLabelLayer!: Phaser.GameObjects.Container;
+  private nightOverlay?: Phaser.GameObjects.Rectangle;
+  private nightOverlayTween?: Phaser.Tweens.Tween;
   private hoverLabelBackground?: Phaser.GameObjects.Graphics;
   private hoverLabelText?: Phaser.GameObjects.Text;
   private hoverLabelDescriptionText?: Phaser.GameObjects.Text;
@@ -1088,6 +1094,44 @@ class PhaserMapScene extends Phaser.Scene {
       this.rebuildObjectSpatialIndex();
       this.renderObjects();
     });
+  }
+
+  /**
+   * Fades a night-time darkening overlay over the whole viewport. The overlay is
+   * a camera-fixed rectangle above the fog but below hover labels, so it dims the
+   * map and objects without touching the DOM HUD.
+   */
+  setNightMode(enabled: boolean) {
+    if (!this.nightOverlay) {
+      const camera = this.cameras.main;
+      // Oversized rectangle centred on the camera's zoom pivot. A scrollFactor(0)
+      // object is still scaled by camera zoom, so sizing it to the viewport would
+      // shrink and leak at the edges when zoomed out — a huge centred rect always
+      // covers the screen at any zoom in [MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM].
+      this.nightOverlay = this.add
+        .rectangle(camera.width / 2, camera.height / 2, NIGHT_OVERLAY_SIZE, NIGHT_OVERLAY_SIZE, 0x0a1838, 1)
+        .setOrigin(0.5, 0.5)
+        .setScrollFactor(0)
+        .setDepth(25)
+        .setAlpha(0);
+      // Keep it centred on the viewport as it resizes.
+      this.scale.on(Phaser.Scale.Events.RESIZE, this.resizeNightOverlay, this);
+    }
+
+    const target = enabled ? 0.45 : 0;
+    this.nightOverlayTween?.stop();
+    this.nightOverlayTween = this.tweens.add({
+      targets: this.nightOverlay,
+      alpha: target,
+      duration: 600,
+      ease: "Sine.easeInOut",
+    });
+  }
+
+  private resizeNightOverlay() {
+    if (!this.nightOverlay) return;
+    const camera = this.cameras.main;
+    this.nightOverlay.setPosition(camera.width / 2, camera.height / 2);
   }
 
   private rebuildObjectSpatialIndex() {
@@ -4020,6 +4064,10 @@ export class PhaserMapRenderer implements MapRenderer {
 
   getObjectsAtScreen(screenX: number, screenY: number) {
     return this.isReady() ? this.scene?.getObjectsAtScreen(screenX, screenY) ?? [] : [];
+  }
+
+  setNightMode(enabled: boolean) {
+    if (this.isReady()) this.scene?.setNightMode(enabled);
   }
 
   destroy() {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
+import { playBattleStart } from "@/lib/audio/soundEffects";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
@@ -32,6 +33,21 @@ export default function CombatChoiceModal() {
     () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat, t, locale) : null,
     [gameState, pendingCombat, t, locale]
   );
+
+  // War horn when the engagement screen opens, once per pending encounter.
+  const battleStartKeyRef = useRef<string | null>(null);
+  const pendingKey = pendingCombat
+    ? `${pendingCombat.attackerHeroId}:${pendingCombat.targetType}:${pendingCombat.targetId ?? ""}`
+    : null;
+  useEffect(() => {
+    if (!pendingKey) {
+      battleStartKeyRef.current = null;
+      return;
+    }
+    if (battleStartKeyRef.current === pendingKey) return;
+    battleStartKeyRef.current = pendingKey;
+    playBattleStart();
+  }, [pendingKey]);
 
   const startCombat = useCallback(async (mode: "AUTO" | "MANUAL") => {
     if (!gameState || !pendingCombat) return;

@@ -97,6 +97,7 @@ function DevMapShowcaseContent() {
   const searchParams = useSearchParams();
   const perfSize = parsePerfMapSize(searchParams.get("size"));
   const perfFogMode = parsePerfFogMode(searchParams.get("fog"));
+  const night = searchParams.get("night") === "1";
   const devPerformanceStats = useDevPerformanceStats(Boolean(perfSize));
   const modeLabel = perfSize
     ? t("devpage.mapShowcase.perfLabel", {
@@ -108,7 +109,7 @@ function DevMapShowcaseContent() {
 
   useEffect(() => {
     const store = useGameStore.getState();
-    const nextState = perfSize ? buildGeneratedPerfState(perfSize, perfFogMode) : buildShowcaseState();
+    const nextState = perfSize ? buildGeneratedPerfState(perfSize, perfFogMode) : buildShowcaseState(night);
     store.setAdminObserverMode(false);
     store.setDevRevealMap(!perfSize || perfFogMode !== "partial");
     store.setActiveCombat(null);
@@ -125,7 +126,7 @@ function DevMapShowcaseContent() {
     }
 
     return () => useGameStore.getState().resetGame();
-  }, [perfFogMode, perfSize]);
+  }, [night, perfFogMode, perfSize]);
 
   return (
     <AuthContext.Provider value={mockAuthValue}>
@@ -161,7 +162,7 @@ function parsePerfFogMode(value: string | null): PerfFogMode {
   return value === "partial" ? "partial" : "revealed";
 }
 
-function buildShowcaseState(): GameState {
+function buildShowcaseState(night = false): GameState {
   const map = buildShowcaseMap();
   const gates = buildShowcaseGates();
   const townPositions = [
@@ -242,7 +243,8 @@ function buildShowcaseState(): GameState {
         isAlive: true,
         turnOrder: 0,
         exploredTiles: allTiles,
-        hasEndedTurn: false,
+        // `?night=1` marks the local player as waiting → GameMap fades the map to night.
+        hasEndedTurn: night,
       },
       {
         id: "p2",

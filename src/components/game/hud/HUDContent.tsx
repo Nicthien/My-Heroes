@@ -950,7 +950,7 @@ export function HUDContent() {
               </div>
             </div>
             <div className="desktop-only">
-              <AdventureMusicControl />
+              <AdventureMusicControl faction={(myPlayer?.faction ?? null) as Faction | null} night={isWaitingForPlayers} />
             </div>
           </div>
 

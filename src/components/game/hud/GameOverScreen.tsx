@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { rankPlayers } from "@/lib/game/score";
+import { playDefeatStinger, playVictoryFanfare } from "@/lib/audio/soundEffects";
 import { describeVictoryCondition } from "@/lib/game/victory";
 import type { GameState, Player } from "@/lib/game/types";
 import { CornerOrnaments, ParchmentBackground, goldText, ornateFramePolished } from "./theme";
@@ -90,6 +91,15 @@ export function GameOverScreen({ gameState, myPlayer, onLeave, onDismiss }: Game
   // Admin observers have no seat in the game: show a neutral outcome, not "Défaite".
   const isObserver = !myPlayer;
   const iWon = Boolean(myPlayer && winner && winner.id === myPlayer.id);
+
+  // Play the end-of-game stinger once when the review opens (skip observers/draws).
+  const playedOutcomeRef = useRef(false);
+  useEffect(() => {
+    if (playedOutcomeRef.current || isObserver || isDraw) return;
+    playedOutcomeRef.current = true;
+    if (iWon) playVictoryFanfare();
+    else playDefeatStinger();
+  }, [iWon, isDraw, isObserver]);
 
   const title = isDraw ? t("gameover.draw") : isObserver ? t("gameover.finished") : iWon ? t("gameover.victory") : t("gameover.defeat");
   const titleColor = isDraw || isObserver ? "text-amber-200" : iWon ? "text-emerald-300" : "text-red-300";

@@ -15,6 +15,8 @@ const STARFIELD_PADDING = 520;
 const WORLD_EDGE_DROP_CUBE_HEIGHT = Math.round(VISUAL_ELEVATION_SCALE * 1.7);
 const WORLD_EDGE_STONE_TEXTURE = "/assets/textures/terrain/mountain/mountain-cracked-rock.webp";
 const WORLD_EDGE_STONE_TEXTURE_ALPHA = 0.72;
+const WATER_DROP_FADE_SEGMENTS = 14;
+const WATER_DROP_BOTTOM_ALPHA_RATIO = 0.14;
 
 // For each map edge, the outward face is the cube face visible from the camera that
 // faces away from the map interior. The return face is the other camera-visible face,
@@ -144,13 +146,10 @@ function drawWaterDropFace(
   const returnQuad = getCubeFacePoints(returnFace, corners);
   const palette = getVoxelDropPalette(tile, outwardFace, 0);
 
-  graphics.fillStyle(capTransition ? palette.capFill : palette.returnFill, 0.82);
-  fillQuad(graphics, returnQuad);
+  fillFadedWaterDropQuad(graphics, returnQuad, capTransition ? palette.capFill : palette.returnFill, 0.82);
+  fillFadedWaterDropQuad(graphics, outwardQuad, palette.mainFill, 0.86);
 
-  graphics.fillStyle(palette.mainFill, 0.86);
-  fillQuad(graphics, outwardQuad);
-
-  graphics.lineStyle(1, palette.edge, 0.14);
+  graphics.lineStyle(1, palette.edge, 0.12);
   strokeQuad(graphics, outwardQuad);
   strokeQuad(graphics, returnQuad);
 
@@ -176,26 +175,56 @@ function drawCheapWaterDropDetails(
   const waveColor = outwardFace === "SW" ? 0xb9f2ff : 0x91e8ff;
   const shadowColor = outwardFace === "SW" ? 0x064b76 : 0x083f68;
 
-  graphics.lineStyle(1, waveColor, 0.18);
-  graphics.beginPath();
   for (const v of [0.16, 0.32, 0.48, 0.64, 0.8]) {
     const drift = (phase - 0.5) * 0.05;
     const a = pointOnFace(quadToPolygon(outwardQuad), 0.08, Math.min(0.94, v + drift));
     const b = pointOnFace(quadToPolygon(outwardQuad), 0.92, Math.max(0.06, v - drift));
+    graphics.lineStyle(1, waveColor, 0.18 * getWaterDropAlphaRatio(v));
+    graphics.beginPath();
     graphics.moveTo(a.x, a.y);
     graphics.lineTo(b.x, b.y);
+    graphics.strokePath();
   }
-  graphics.strokePath();
 
-  graphics.lineStyle(1, shadowColor, 0.16);
-  graphics.beginPath();
   for (const u of [0.22, 0.5, 0.78]) {
     const a = pointOnFace(quadToPolygon(returnQuad), u, 0.08);
     const b = pointOnFace(quadToPolygon(returnQuad), Math.min(0.9, u + 0.08), 0.94);
+    graphics.lineStyle(1, shadowColor, 0.16 * getWaterDropAlphaRatio(0.51));
+    graphics.beginPath();
     graphics.moveTo(a.x, a.y);
     graphics.lineTo(b.x, b.y);
+    graphics.strokePath();
   }
-  graphics.strokePath();
+}
+
+function fillFadedWaterDropQuad(
+  graphics: Phaser.GameObjects.Graphics,
+  quad: CubeFaceQuad,
+  color: number,
+  topAlpha: number
+) {
+  for (let index = 0; index < WATER_DROP_FADE_SEGMENTS; index++) {
+    const topT = index / WATER_DROP_FADE_SEGMENTS;
+    const bottomT = (index + 1) / WATER_DROP_FADE_SEGMENTS;
+    const alpha = topAlpha * getWaterDropAlphaRatio((topT + bottomT) / 2);
+    const topA = lerpPoint(quad.topA, quad.bottomA, topT);
+    const topB = lerpPoint(quad.topB, quad.bottomB, topT);
+    const bottomA = lerpPoint(quad.topA, quad.bottomA, bottomT);
+    const bottomB = lerpPoint(quad.topB, quad.bottomB, bottomT);
+
+    graphics.fillStyle(color, alpha);
+    graphics.beginPath();
+    graphics.moveTo(topA.x, topA.y);
+    graphics.lineTo(topB.x, topB.y);
+    graphics.lineTo(bottomB.x, bottomB.y);
+    graphics.lineTo(bottomA.x, bottomA.y);
+    graphics.closePath();
+    graphics.fillPath();
+  }
+}
+
+function getWaterDropAlphaRatio(v: number) {
+  return Phaser.Math.Linear(1, WATER_DROP_BOTTOM_ALPHA_RATIO, Phaser.Math.Clamp(v, 0, 1));
 }
 
 function drawVoxelDropColumn(

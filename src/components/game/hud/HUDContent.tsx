@@ -26,7 +26,7 @@ import {
   TownTabIcon,
   type TownTab,
 } from "./icons";
-import { ResourceBar, combatInvolvesPlayer } from "./topBar";
+import { ResourceBar, TURN_SKY_WIDTH, TurnSkyArc, combatInvolvesPlayer } from "./topBar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import {
@@ -954,26 +954,38 @@ export function HUDContent() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 text-center md:block">
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0 text-center md:flex">
             {isPending && (
-              <span className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-amber-400/50 bg-gradient-to-b from-amber-900/60 to-stone-950/80 px-5 py-2 text-sm font-black uppercase tracking-widest text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]">
+              <span className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-amber-400/50 bg-gradient-to-b from-amber-900/60 to-stone-950/80 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]">
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
                 {t("hud.waiting")}
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
               </span>
             )}
             {!isPending && !adminObserverMode && (
-              <span
-                className={`inline-flex max-w-[19rem] items-center gap-2 rounded-full border px-5 py-2 text-sm font-black uppercase tracking-widest shadow-[inset_0_0_0_1px_rgba(0,0,0,0.4)] ${
-                  myPlayer?.isAlive === false
-                    ? "border-stone-400/50 bg-gradient-to-b from-stone-700/70 to-stone-950 text-stone-100"
-                    : canAct
-                    ? "border-emerald-300/60 bg-gradient-to-b from-emerald-700/70 to-emerald-950 text-emerald-50"
-                    : "border-red-400/40 bg-gradient-to-b from-red-900/60 to-red-950 text-red-100"
-                }`}
-              >
-                {myPlayer?.isAlive === false ? t("gameover.defeat") : canAct ? t("hud.statusYourTurn") : isWaitingForPlayers ? t("hud.turnEnded") : t("hud.statusObservation")}
-              </span>
+              <>
+                {gameState.status === "ACTIVE" && (
+                  <TurnSkyArc gameState={gameState} faction={(myPlayer?.faction ?? null) as Faction | null} />
+                )}
+                <span
+                  style={gameState.status === "ACTIVE" ? { width: TURN_SKY_WIDTH } : undefined}
+                  className={`relative inline-flex items-center justify-center whitespace-nowrap border text-xs font-black uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_6px_rgba(0,0,0,0.55)] ${
+                    gameState.status === "ACTIVE"
+                      ? "-mt-px rounded-b-2xl rounded-t-none border-t-0 px-2 py-1.5"
+                      : "max-w-[19rem] rounded-full px-4 py-1.5"
+                  } ${
+                    myPlayer?.isAlive === false
+                      ? "border-stone-400/50 bg-gradient-to-b from-stone-600 to-stone-900 text-stone-100"
+                      : canAct
+                      ? "border-emerald-300/55 bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-800 text-white"
+                      : isWaitingForPlayers
+                      ? "border-indigo-300/45 bg-gradient-to-b from-indigo-500 via-indigo-600 to-indigo-900 text-indigo-50"
+                      : "border-amber-300/45 bg-gradient-to-b from-amber-600 to-amber-900 text-amber-50"
+                  }`}
+                >
+                  {myPlayer?.isAlive === false ? t("gameover.defeat") : canAct ? t("hud.statusYourTurn") : isWaitingForPlayers ? t("hud.turnEnded") : t("hud.statusObservation")}
+                </span>
+              </>
             )}
           </div>
 

@@ -6,7 +6,7 @@ import { findActiveCombatTruce } from "@/lib/game/combat/truce";
 import { RESOURCE_BUILDING_RULES, getFactionBuildingRule } from "@/lib/game/economy";
 import { getEstatesGold } from "@/lib/game/skills";
 import { getTownGoldProduction } from "@/lib/game/town-buildings";
-import { HourglassIcon } from "./theme";
+import { HourglassIcon, MoonIcon, SunIcon } from "./theme";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
@@ -185,6 +185,162 @@ export function TurnStatusIcon({ ended }: { ended: boolean }) {
     </span>
   );
 }
+
+/**
+ * Aggregate day/night state across all living players, used to drive the sun arc
+ * above the turn-status badge. The "day" runs while players still have actions
+ * left and ends (night/moon) once everyone has ended their turn.
+ */
+export function getGlobalTurnProgress(gameState: GameState) {
+  const alive = gameState.players.filter((player) => player.isAlive);
+  if (alive.length === 0) return { ratio: 0, allEnded: true };
+
+  const total = alive.reduce(
+    (sum, player) => sum + getPlayerTurnProgress(player, gameState).ratio,
+    0
+  );
+  const allEnded = alive.every((player) => player.hasEndedTurn);
+
+  return { ratio: total / alive.length, allEnded };
+}
+
+/**
+ * Sun/moon day cycle shown above the turn-status badge. The sun rises on the
+ * left when the global turn begins (ratio ~1), travels along a half-circle arc
+ * to its zenith (ratio ~0.5) and sets on the right (ratio ~0) as players spend
+ * their turn. When every living player has ended their turn, the moon rises.
+ */
+// Shared width of the dome and the status banner below it, so the emblem never
+// resizes between labels ("À VOUS" vs the longer "TOUR TERMINÉ" / "OBSERVATION").
+export const TURN_SKY_WIDTH = 150;
+
+// Half-dome geometry (viewBox units == container px) the celestial body travels.
+const SKY_W = TURN_SKY_WIDTH;
+const SKY_H = 46;
+const SKY_CX = SKY_W / 2;
+const SKY_CY = SKY_H - 5;
+const SKY_RX = SKY_W / 2 - 12;
+const SKY_RY = SKY_H - 12;
+
+export function TurnSkyArc({
+  gameState,
+  faction,
+}: {
+  gameState: GameState;
+  faction?: Faction | null;
+}) {
+  const { t } = useI18n();
+  const { ratio, allEnded } = getGlobalTurnProgress(gameState);
+  const castleSrc = `/assets/sprites/map/town-${faction ?? Faction.CASTLE}.webp`;
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const percent = Math.round(ratio * 100);
+  const label = allEnded ? t("hud.nightAllEnded") : t("hud.dayProgress", { percent });
+
+  // Travel the elliptical arc: ratio 1 -> left horizon, 0.5 -> zenith, 0 -> right.
+  // The moon simply rests at the zenith once everyone has ended their turn.
+  const theta = (allEnded ? 0.5 : clamped) * Math.PI;
+  const bodyX = SKY_CX + SKY_RX * Math.cos(theta);
+  const bodyY = SKY_CY - SKY_RY * Math.sin(theta);
+  const leftPct = (bodyX / SKY_W) * 100;
+  const topPct = (bodyY / SKY_H) * 100;
+
+  return (
+    <div
+      className="pointer-events-none relative h-[46px] select-none"
+      style={{ width: TURN_SKY_WIDTH }}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      {/* Sky dome */}
+      <div
+        className={`absolute inset-0 overflow-hidden rounded-t-[999px] border-x border-t backdrop-blur-[1px] transition-colors duration-1000 ${
+          allEnded
+            ? "border-indigo-300/25 bg-gradient-to-b from-indigo-950/70 via-indigo-950/30 to-slate-950/10"
+            : "border-amber-300/25 bg-gradient-to-b from-sky-900/30 via-amber-900/15 to-stone-950/5"
+        }`}
+      >
+        {allEnded &&
+          NIGHT_STARS.map((star, i) => (
+            <span
+              key={i}
+              className="absolute h-[2px] w-[2px] rounded-full bg-slate-100 shadow-[0_0_3px_rgba(226,232,240,0.9)] animate-pulse"
+              style={{ left: `${star.x}%`, top: `${star.y}%`, animationDelay: `${star.delay}s` }}
+            />
+          ))}
+      </div>
+
+      {/* Castle silhouette resting at the centre of the dome */}
+      <Image
+        src={castleSrc}
+        alt=""
+        aria-hidden
+        width={48}
+        height={48}
+        className={`absolute bottom-[5px] left-1/2 h-[26px] w-auto -translate-x-1/2 object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-[filter] duration-1000 ${
+          allEnded ? "brightness-[0.65] saturate-50" : "brightness-110"
+        }`}
+      />
+
+      {/* Arc track */}
+      <svg viewBox={`0 0 ${SKY_W} ${SKY_H}`} className="absolute inset-0 h-full w-full" aria-hidden="true">
+        <defs>
+          <linearGradient id="turn-sky-arc" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={allEnded ? "rgba(165,180,252,0)" : "rgba(251,191,36,0)"} />
+            <stop offset="50%" stopColor={allEnded ? "rgba(165,180,252,0.55)" : "rgba(251,191,36,0.6)"} />
+            <stop offset="100%" stopColor={allEnded ? "rgba(165,180,252,0)" : "rgba(251,191,36,0)"} />
+          </linearGradient>
+        </defs>
+        <path
+          d={`M ${SKY_CX - SKY_RX} ${SKY_CY} A ${SKY_RX} ${SKY_RY} 0 0 1 ${SKY_CX + SKY_RX} ${SKY_CY}`}
+          fill="none"
+          stroke="url(#turn-sky-arc)"
+          strokeWidth="1"
+          strokeDasharray="2 3"
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Horizon glow */}
+      <div
+        className={`absolute inset-x-3 bottom-0 h-px ${
+          allEnded ? "bg-indigo-300/40" : "bg-amber-300/50"
+        }`}
+      />
+
+      {/* Celestial body + halo */}
+      <div
+        className="absolute -translate-x-1/2 -translate-y-1/2 transition-[left,top] duration-700 ease-out"
+        style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+      >
+        {allEnded ? (
+          <>
+            <span className="absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-200/25 blur-lg" />
+            <span className="relative grid place-items-center text-slate-100 drop-shadow-[0_0_6px_rgba(226,232,240,0.85)]">
+              <MoonIcon className="h-[18px] w-[18px]" />
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400/25 blur-xl" />
+            <span className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200/50 blur-md" />
+            <span className="relative grid place-items-center text-amber-200 drop-shadow-[0_0_8px_rgba(251,191,36,0.95)]">
+              <SunIcon className="h-[18px] w-[18px]" />
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const NIGHT_STARS = [
+  { x: 22, y: 55, delay: 0 },
+  { x: 38, y: 32, delay: 0.6 },
+  { x: 52, y: 22, delay: 1.2 },
+  { x: 66, y: 30, delay: 0.3 },
+  { x: 80, y: 50, delay: 0.9 },
+] as const;
 
 function getPlayerTurnProgress(player: Player, gameState: GameState) {
   if (!player.isAlive || player.hasEndedTurn) return { ratio: 0, activeCombatCount: 0 };

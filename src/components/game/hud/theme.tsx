@@ -177,3 +177,29 @@ export function HourglassIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function SunIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <circle cx="12" cy="12" r="5" />
+      <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <line x1="12" y1="1" x2="12" y2="4" />
+        <line x1="12" y1="20" x2="12" y2="23" />
+        <line x1="1" y1="12" x2="4" y2="12" />
+        <line x1="20" y1="12" x2="23" y2="12" />
+        <line x1="4.2" y1="4.2" x2="6.3" y2="6.3" />
+        <line x1="17.7" y1="17.7" x2="19.8" y2="19.8" />
+        <line x1="4.2" y1="19.8" x2="6.3" y2="17.7" />
+        <line x1="17.7" y1="6.3" x2="19.8" y2="4.2" />
+      </g>
+    </svg>
+  );
+}
+
+export function MoonIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M21 13.5 A9 9 0 1 1 10.5 3 A7 7 0 0 0 21 13.5 Z" />
+    </svg>
+  );
+}

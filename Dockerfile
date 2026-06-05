@@ -41,8 +41,19 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Boot-time migration runner. The standalone trace does NOT include these (they
+# live outside the Next build), so copy them explicitly: the entrypoint, the
+# runner, the migration SQL, and the dependency-free `postgres` driver.
+COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.mjs ./docker-entrypoint.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/migrate-db.mjs ./scripts/migrate-db.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/supabase/migrations ./supabase/migrations
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/postgres ./node_modules/postgres
+
 USER nextjs
 EXPOSE 3000
 
-# SUPABASE_SERVICE_ROLE_KEY is read at runtime (server-only) — pass it via env.
+# The entrypoint runs pending DB migrations (gated on SUPABASE_DB_URL /
+# MIGRATE_ON_BOOT), then execs the CMD. SUPABASE_SERVICE_ROLE_KEY and
+# SUPABASE_DB_URL are read at runtime (server-only) — pass them via env.
+ENTRYPOINT ["node", "docker-entrypoint.mjs"]
 CMD ["node", "server.js"]

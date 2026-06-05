@@ -177,7 +177,7 @@ export async function POST(
   if (targetDefender.heroId && isHeroInActiveCombat(game.combats, targetDefender.heroId)) {
     return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
-  const devGodModeHeroId = typeof body.devGodModeHeroId === "string" && body.devGodModeHeroId === attacker.id
+  const devGodModeHeroId = user.godModeEnabled && typeof body.devGodModeHeroId === "string" && body.devGodModeHeroId === attacker.id
     ? attacker.id
     : null;
 

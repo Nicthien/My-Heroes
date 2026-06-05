@@ -57,7 +57,7 @@ export default function CombatScreen() {
   const setGameState = useGameStore((state) => state.setGameState);
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
-  const devGodMode = useGameStore((state) => state.devGodMode);
+  const godModeEnabled = Boolean(session?.user?.godModeEnabled);
   const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const minimizeCombat = useGameStore((state) => state.minimizeCombat);
   const focusTile = useGameStore((state) => state.focusTile);
@@ -291,7 +291,7 @@ export default function CombatScreen() {
         const response = await fetchWithSupabaseAuth(`/api/games/${combat.gameId}/combats/${combat.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+          body: JSON.stringify(godModeEnabled && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
         });
         if (!response.ok) {
           neutralActionKeyRef.current = null;
@@ -323,7 +323,7 @@ export default function CombatScreen() {
         releaseSubmissionLock(submissionToken);
       }
     };
-  }, [activeCombat, combatAnimationBlocked, devGodMode, gameState, releaseSubmissionLock, selectedHeroId, setActiveCombat, settleResolvedCombat]);
+  }, [activeCombat, combatAnimationBlocked, godModeEnabled, gameState, releaseSubmissionLock, selectedHeroId, setActiveCombat, settleResolvedCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -395,7 +395,7 @@ export default function CombatScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...action,
-          ...(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+          ...(godModeEnabled && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
           ...(devInfiniteMana && (actionDevInfiniteManaHeroId || selectedHeroId)
             ? { devInfiniteManaHeroId: actionDevInfiniteManaHeroId ?? selectedHeroId }
             : {}),

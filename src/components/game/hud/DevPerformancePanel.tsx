@@ -14,7 +14,6 @@ import type { TranslationKey } from "@/lib/i18n/translate";
 
 type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
-const DEV_PANEL_VISIBLE_KEY = "my-heroes:dev-panel-visible";
 const DEV_PANEL_COLLAPSED_KEY = "my-heroes:dev-panel-collapsed";
 const DEV_PANEL_POSITION_KEY = "my-heroes:dev-panel-position";
 const DEV_PANEL_DEFAULT_POSITION = { x: 12, y: 112 };
@@ -72,11 +71,6 @@ const DEFAULT_DEV_PERFORMANCE_STATS: DevPerformanceStats = {
   gauges: [],
 };
 
-export function getDevPanelVisible() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(DEV_PANEL_VISIBLE_KEY) === "true";
-}
-
 export function getDevPanelCollapsed() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_PANEL_COLLAPSED_KEY) === "true";
@@ -115,15 +109,6 @@ export function getDevPanelPosition(): DevPanelPosition {
 export function saveDevPanelPosition(position: DevPanelPosition) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DEV_PANEL_POSITION_KEY, JSON.stringify(position));
-}
-
-export function setDevPanelVisibilityStorage(visible: boolean) {
-  if (typeof window === "undefined") return;
-  if (visible) {
-    window.localStorage.setItem(DEV_PANEL_VISIBLE_KEY, "true");
-  } else {
-    window.localStorage.removeItem(DEV_PANEL_VISIBLE_KEY);
-  }
 }
 
 export function setDevPanelCollapsedStorage(collapsed: boolean) {

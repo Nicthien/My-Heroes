@@ -43,6 +43,11 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       # Server-only secret.
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      # Direct Postgres URL (real DB login) for boot-time schema migrations only.
+      # `db` is the Postgres service on the shared network — no host port needed.
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      # Set to "false" to skip the boot-time migration step.
+      MIGRATE_ON_BOOT: ${MIGRATE_ON_BOOT:-true}
       # Where the /api/supabase proxy forwards server-side: Kong on the shared
       # docker network. This is what makes the PROXY strategy work.
       SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://kong:8000}

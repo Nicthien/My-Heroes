@@ -102,6 +102,7 @@ interface AdminUserInfo {
   name: string | null;
   role: string;
   mustChangePassword: boolean;
+  godModeEnabled: boolean;
   createdAt: string | null;
   lastSignInAt: string | null;
   gameCount: number;
@@ -233,6 +234,7 @@ export default function DashboardPage() {
   const [adminNewUserPassword, setAdminNewUserPassword] = useState("");
   const [adminNewUserRole, setAdminNewUserRole] = useState<"user" | "admin">("user");
   const [adminNewUserMustChangePassword, setAdminNewUserMustChangePassword] = useState(true);
+  const [adminNewUserGodModeEnabled, setAdminNewUserGodModeEnabled] = useState(false);
   const [forcedPassword, setForcedPassword] = useState("");
   const [forcedPasswordConfirm, setForcedPasswordConfirm] = useState("");
   const [savingForcedPassword, setSavingForcedPassword] = useState(false);
@@ -562,6 +564,7 @@ export default function DashboardPage() {
         password,
         role: adminNewUserRole,
         mustChangePassword: adminNewUserMustChangePassword,
+        godModeEnabled: adminNewUserGodModeEnabled,
       }),
     });
 
@@ -577,9 +580,28 @@ export default function DashboardPage() {
     setAdminNewUserPassword("");
     setAdminNewUserRole("user");
     setAdminNewUserMustChangePassword(true);
+    setAdminNewUserGodModeEnabled(false);
     setAdminMessage({ kind: "success", text: t("admin.userCreated") });
     setCreatingAdminUser(false);
     await loadAdminData();
+  };
+
+  const updateAdminUserGodMode = async (target: AdminUserInfo, godModeEnabled: boolean) => {
+    setAdminMessage(null);
+    const response = await fetchWithAuth("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: target.id, godModeEnabled }),
+    });
+
+    if (!response.ok) {
+      const data = await parseJsonResponse(response);
+      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.godModeUpdateFailed") });
+      return;
+    }
+
+    setAdminUsers((current) => current.map((item) => item.id === target.id ? { ...item, godModeEnabled } : item));
+    setAdminMessage({ kind: "success", text: godModeEnabled ? t("admin.godModeEnabled") : t("admin.godModeDisabled") });
   };
 
   const deleteAdminGame = async (target: AdminGameInfo) => {
@@ -1341,15 +1363,26 @@ export default function DashboardPage() {
                       {creatingAdminUser ? t("admin.creating") : t("admin.create")}
                     </button>
                   </div>
-                  <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-amber-100/75">
-                    <input
-                      type="checkbox"
-                      checked={adminNewUserMustChangePassword}
-                      onChange={(event) => setAdminNewUserMustChangePassword(event.target.checked)}
-                      className="h-4 w-4 accent-amber-500"
-                    />
-                    {t("admin.requirePasswordChange")}
-                  </label>
+                  <div className="mt-3 flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                      <input
+                        type="checkbox"
+                        checked={adminNewUserMustChangePassword}
+                        onChange={(event) => setAdminNewUserMustChangePassword(event.target.checked)}
+                        className="h-4 w-4 accent-amber-500"
+                      />
+                      {t("admin.requirePasswordChange")}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                      <input
+                        type="checkbox"
+                        checked={adminNewUserGodModeEnabled}
+                        onChange={(event) => setAdminNewUserGodModeEnabled(event.target.checked)}
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                      {t("admin.godMode")}
+                    </label>
+                  </div>
                 </form>
                 <div className="overflow-x-auto rounded-md border border-amber-700/35">
                   <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
@@ -1358,6 +1391,7 @@ export default function DashboardPage() {
                         <th className="px-3 py-2">{t("dashboard.options.name")}</th>
                         <th className="px-3 py-2">{t("auth.register.email")}</th>
                         <th className="px-3 py-2">{t("admin.role")}</th>
+                        <th className="px-3 py-2">{t("admin.godMode")}</th>
                         <th className="px-3 py-2">{t("admin.colCreatedAt")}</th>
                         <th className="px-3 py-2">{t("dashboard.colLastLogin")}</th>
                         <th className="px-3 py-2">{t("admin.colGames")}</th>
@@ -1372,6 +1406,18 @@ export default function DashboardPage() {
                           <td className="px-3 py-2">
                             {item.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}
                             {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">{t("admin.tempPassword")}</span> : null}
+                          </td>
+                          <td className="px-3 py-2">
+                            <label className="inline-flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                              <input
+                                type="checkbox"
+                                checked={item.godModeEnabled}
+                                onChange={(event) => updateAdminUserGodMode(item, event.target.checked).catch(console.error)}
+                                className="h-4 w-4 accent-emerald-500"
+                                aria-label={t("admin.godModeFor", { name: item.name || item.email || item.id })}
+                              />
+                              {item.godModeEnabled ? t("common.yes") : t("common.no")}
+                            </label>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.createdAt)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.lastSignInAt, "Jamais")}</td>
@@ -1390,7 +1436,7 @@ export default function DashboardPage() {
                       ))}
                       {adminUsers.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-3 py-6 text-center italic text-amber-200/50">
+                          <td colSpan={8} className="px-3 py-6 text-center italic text-amber-200/50">
                             {t("admin.noUsers")}
                           </td>
                         </tr>

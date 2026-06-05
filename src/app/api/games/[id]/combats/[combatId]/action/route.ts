@@ -152,7 +152,7 @@ export async function POST(
   if (!gamePlayer.isAlive && !isAutomatedTurn) {
     return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
   }
-  const devGodModeHeroId = typeof action.devGodModeHeroId === "string" &&
+  const devGodModeHeroId = user.godModeEnabled && typeof action.devGodModeHeroId === "string" &&
     ((gamePlayer as { heroes?: Array<{ id: string }> }).heroes ?? []).some((hero) => hero.id === action.devGodModeHeroId)
       ? action.devGodModeHeroId
       : null;

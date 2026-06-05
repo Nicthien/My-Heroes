@@ -931,14 +931,9 @@ export function HUDContent() {
       <div className="mobile-game-topbar pointer-events-auto absolute left-0 right-0 top-0 border-b-2 border-amber-700/60 bg-gradient-to-b from-[#1a1208] via-[#0e0904] to-[#1a1208] px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(252,211,77,0.15)]">
         <div className="relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:gap-3">
           <div className="flex min-w-0 items-center gap-3 justify-self-start text-left">
-            <button
-              type="button"
-              aria-label={t("hud.devMode")}
-              className="grid h-7 w-7 shrink-0 place-items-center text-amber-400 drop-shadow outline-none transition hover:text-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/70"
-              onDoubleClick={devPanel.openPassword}
-            >
+            <div className="grid h-7 w-7 shrink-0 place-items-center text-amber-400 drop-shadow">
               <FleurDeLis className="h-6 w-6" />
-            </button>
+            </div>
             <div>
               <div className={`whitespace-nowrap text-xl font-black tracking-[0.15em] md:text-2xl ${goldText}`}>
                 MY HEROES
@@ -1045,7 +1040,7 @@ export function HUDContent() {
         </div>
       )}
 
-      {!adminObserverMode && devPanel.overlay}
+      {devPanel.overlay}
       {turnNotifications.promptUI}
 
       {mobileDrawer && (

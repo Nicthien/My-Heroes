@@ -33,6 +33,7 @@ SUPABASE_URL="http://host.docker.internal:56021"   # or your Supabase URL
 SUPABASE_ANON_KEY="<anon / publishable key>"
 SUPABASE_SERVICE_ROLE_KEY="<service role key>"
 SUPABASE_INTERNAL_URL="http://host.docker.internal:56021"   # optional; defaults to SUPABASE_URL
+SUPABASE_DB_URL="postgresql://postgres:<password>@<db-host>:5432/postgres"  # optional; enables boot-time migrations (see §4)
 ```
 
 > Local `next dev` still reads the conventional `NEXT_PUBLIC_SUPABASE_URL` /
@@ -122,6 +123,16 @@ The app expects the schema to already exist in the target Supabase DB:
 - Incremental → apply `supabase/migrations/` in order.
 
 Both must stay aligned (see AGENTS.md → Database Schema).
+
+**Auto-migration at boot (optional).** Set `SUPABASE_DB_URL` (a direct Postgres
+URL) and the container applies any pending `supabase/migrations/` before starting
+the server — tracked in `supabase_migrations.schema_migrations`, same as the
+Supabase CLI. A failed migration aborts startup (non-zero exit) so the app never
+serves a half-applied schema. On a DB that already exists, do a one-time
+`MIGRATE_MODE=baseline` boot first to adopt the current schema; set
+`MIGRATE_ON_BOOT=false` to disable. Full walkthrough in
+[`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. From a dev machine you can also run
+`npm run db:migrate:status` / `npm run db:migrate`.
 
 ---
 

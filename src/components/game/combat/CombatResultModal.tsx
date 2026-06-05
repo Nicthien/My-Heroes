@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import { playDefeatStinger, playVictoryFanfare } from "@/lib/audio/soundEffects";
 import { CreatureBankReward } from "@/lib/game/creature-banks";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -22,6 +23,25 @@ export default function CombatResultModal() {
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
   const setGameState = useGameStore((state) => state.setGameState);
+
+  // Play a victory/defeat stinger once per resolved combat. Kept above the early
+  // return so the hook order stays stable; outcome is recomputed here from the
+  // result because the derived booleans below are after the guard.
+  const playedResultRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!result) {
+      playedResultRef.current = null;
+      return;
+    }
+    const resultKey = `${result.winnerPlayerId ?? result.winnerId ?? ""}:${result.log.length}`;
+    if (playedResultRef.current === resultKey) return;
+    playedResultRef.current = resultKey;
+    const me = gameState?.players.find((p) => p.userId === session?.user?.id);
+    const won = Boolean(me && result.winnerPlayerId === me.id);
+    if (won) playVictoryFanfare();
+    else if (me) playDefeatStinger();
+  }, [result, gameState, session?.user?.id]);
+
   if (!result) return null;
 
   const myPlayer = gameState?.players.find((p) => p.userId === session?.user?.id);

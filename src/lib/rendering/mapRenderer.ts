@@ -53,5 +53,7 @@ export interface MapRenderer {
   zoomCamera(direction: number, screenX?: number, screenY?: number): void;
   getTileAtScreen(screenX: number, screenY: number): Position | null;
   getObjectsAtScreen(screenX: number, screenY: number): MapObjectData[];
+  /** Fades a night-time darkening overlay in (true) or out (false). */
+  setNightMode(enabled: boolean): void;
   destroy(): void;
 }

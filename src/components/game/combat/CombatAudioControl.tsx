@@ -1,26 +1,51 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createCombatMusicEngine, type CombatMusicEngine } from "@/lib/audio/combatAudio";
+import {
+  createCombatMusicEngine,
+  getCombatMusicProfile,
+  type CombatMusicEngine,
+} from "@/lib/audio/combatAudio";
 import {
   MUSIC_PREFERENCE_EVENT,
   getSavedAudioMuted,
   getSavedCombatMusicVolume,
 } from "@/lib/audio/musicPreferences";
+import { useGameStore } from "@/lib/stores/gameStore";
+import type { CombatEnvironmentTheme } from "@/lib/game/types";
 import AudioSettingsButton from "@/components/game/audio/AudioSettingsButton";
 
 type MusicStatus = "idle" | "waiting" | "playing" | "error";
 
 export default function CombatAudioControl() {
+  // Battlefield theme of the active combat selects the musical profile.
+  const theme = useGameStore(
+    (state) => state.activeCombat?.boardState?.environment?.theme
+  ) as CombatEnvironmentTheme | undefined;
   const [muted, setMuted] = useState(getSavedAudioMuted);
   const [volume, setVolume] = useState(getSavedCombatMusicVolume);
   const [status, setStatus] = useState<MusicStatus>("idle");
   const engineRef = useRef<CombatMusicEngine | null>(null);
+  // The theme the live engine was built for, so we can rebuild it on change.
+  const engineThemeRef = useRef<CombatEnvironmentTheme | undefined>(undefined);
+
+  const stopEngine = useCallback(() => {
+    engineRef.current?.stop();
+    engineRef.current = null;
+    engineThemeRef.current = undefined;
+  }, []);
 
   const getEngine = useCallback((initialVolume = volume) => {
-    engineRef.current ??= createCombatMusicEngine(initialVolume);
+    // Rebuild the engine if the battlefield theme changed.
+    if (engineRef.current && engineThemeRef.current !== theme) {
+      stopEngine();
+    }
+    if (!engineRef.current) {
+      engineRef.current = createCombatMusicEngine(getCombatMusicProfile(theme), initialVolume);
+      engineThemeRef.current = theme;
+    }
     return engineRef.current;
-  }, [volume]);
+  }, [stopEngine, theme, volume]);
 
   const startMusic = useCallback(async (targetVolume = getSavedCombatMusicVolume()) => {
     if (getSavedAudioMuted() || targetVolume <= 0) return;
@@ -34,11 +59,6 @@ export default function CombatAudioControl() {
       setStatus("error");
     }
   }, [getEngine]);
-
-  const stopEngine = useCallback(() => {
-    engineRef.current?.stop();
-    engineRef.current = null;
-  }, []);
 
   const stopMusic = useCallback(() => {
     stopEngine();
@@ -69,6 +89,19 @@ export default function CombatAudioControl() {
 
     engineRef.current?.setVolume(volume);
   }, [muted, stopEngine, volume]);
+
+  // Restart the theme when the battlefield changes mid-session. Status is set
+  // only after start() resolves, so no state is mutated synchronously here.
+  useEffect(() => {
+    if (engineThemeRef.current === undefined || engineThemeRef.current === theme) return;
+    if (muted || volume <= 0) {
+      stopEngine();
+      return;
+    }
+    const engine = getEngine(volume);
+    engine.setVolume(volume);
+    engine.start().then(() => setStatus("playing"), () => setStatus("error"));
+  }, [getEngine, muted, stopEngine, theme, volume]);
 
   useEffect(() => () => stopEngine(), [stopEngine]);
 

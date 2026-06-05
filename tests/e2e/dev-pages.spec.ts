@@ -27,7 +27,9 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
   { path: "/dev/map-showcase?size=S", expect: { selector: "body", description: "Generated Phaser map showcase body" } },
   { path: "/dev/map-showcase?size=S&fog=partial", expect: { selector: "body", description: "Generated Phaser partial fog map showcase body" } },
+  { path: "/dev/map-showcase?night=1", expect: { selector: "body", description: "Night-mode map showcase body" } },
   { path: "/dev/rmg",          expect: { selector: "body",   description: "RMG preview body" } },
+  { path: "/dev/sound",        expect: { selector: "[data-testid='dev-sound-volume']", description: "Audio test bench" } },
   { path: "/dev/leaderboard",  expect: { selector: "body",   description: "Leaderboard preview body" } },
   { path: "/dev/ai",           expect: { selector: "[data-testid='ai-navigation-decisions']", description: "AI navigation decisions panel" } },
 ];

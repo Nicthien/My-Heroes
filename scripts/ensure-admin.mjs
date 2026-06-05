@@ -9,40 +9,52 @@ const ADMIN_NAME = "Admin";
 const ADMIN_PASSWORD = "ChangeMe";
 
 export async function ensureAdminAccount(supabase) {
-  const existing = await findUserByEmail(supabase, ADMIN_EMAIL);
+  const email = process.env.ADMIN_EMAIL || ADMIN_EMAIL;
+  const name = process.env.ADMIN_NAME || ADMIN_NAME;
+  const password = process.env.ADMIN_PASSWORD || ADMIN_PASSWORD;
+
+  const existing = await findUserByEmail(supabase, email);
   let userId = existing?.id;
+  let mustChangePassword = false;
 
   if (userId) {
-    const { error } = await supabase.auth.admin.updateUserById(userId, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      email_confirm: true,
-      user_metadata: { name: ADMIN_NAME },
-    });
-    if (error) throw error;
+    const existingProfile = await findProfileById(supabase, userId);
+    mustChangePassword = Boolean(existingProfile?.must_change_password);
   } else {
     const { data, error } = await supabase.auth.admin.createUser({
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
+      email,
+      password,
       email_confirm: true,
-      user_metadata: { name: ADMIN_NAME },
+      user_metadata: { name },
     });
     if (error) throw error;
     userId = data.user.id;
+    mustChangePassword = true;
   }
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: userId,
-    email: ADMIN_EMAIL,
-    name: ADMIN_NAME,
+    email,
+    name,
     role: "admin",
-    must_change_password: true,
+    must_change_password: mustChangePassword,
   }, { onConflict: "id" });
 
   if (profileError) throw profileError;
 
-  console.log(`Admin account ready: ${ADMIN_NAME} <${ADMIN_EMAIL}>`);
-  return { userId, email: ADMIN_EMAIL, name: ADMIN_NAME };
+  console.log(`Admin account ready: ${name} <${email}>`);
+  return { userId, email, name };
+}
+
+async function findProfileById(supabase, userId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("must_change_password")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
 }
 
 async function findUserByEmail(supabase, email) {

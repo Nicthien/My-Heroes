@@ -32,7 +32,6 @@ interface GameStore {
   loadingNonce: number;
   isMovePending: boolean;
   devRevealMap: boolean;
-  devGodMode: boolean;
   devInfiniteMana: boolean;
   devTeleportArmed: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
@@ -61,7 +60,6 @@ interface GameStore {
   beginLoading: (message?: string, progress?: number) => void;
   updateLoadingProgress: (progress: number, message?: string) => void;
   setDevRevealMap: (reveal: boolean) => void;
-  setDevGodMode: (enabled: boolean) => void;
   setDevInfiniteMana: (enabled: boolean) => void;
   setDevTeleportArmed: (armed: boolean) => void;
   setAdminObserverMode: (enabled: boolean) => void;
@@ -93,7 +91,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadingNonce: 0,
   isMovePending: false,
   devRevealMap: false,
-  devGodMode: false,
   devInfiniteMana: false,
   devTeleportArmed: false,
   cameraTarget: null,
@@ -197,7 +194,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadingMessage: message ?? state.loadingMessage,
     })),
   setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
-  setDevGodMode: (enabled) => set({ devGodMode: enabled }),
   setDevInfiniteMana: (enabled) => set({ devInfiniteMana: enabled }),
   setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
   setAdminObserverMode: (enabled) => set({ adminObserverMode: enabled }),
@@ -224,7 +220,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadingNonce: 0,
       isMovePending: false,
       devRevealMap: false,
-      devGodMode: false,
       devInfiniteMana: false,
       devTeleportArmed: false,
       cameraTarget: null,

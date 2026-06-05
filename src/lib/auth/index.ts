@@ -15,6 +15,7 @@ export async function getCurrentUser(request?: Request) {
       role: profile?.role ?? "user",
       mustChangePassword: profile?.must_change_password ?? false,
       language: profile?.language ?? "fr",
+      godModeEnabled: profile?.god_mode_enabled ?? false,
     };
   }
 
@@ -37,6 +38,7 @@ export async function getCurrentUser(request?: Request) {
     role: profile?.role ?? "user",
     mustChangePassword: profile?.must_change_password ?? false,
     language: profile?.language ?? "fr",
+    godModeEnabled: profile?.god_mode_enabled ?? false,
   };
 }
 
@@ -72,11 +74,44 @@ export async function requireAdminUser(request?: Request) {
 
 async function getUserProfile(userId: string) {
   const adminSupabase = createAdminClient();
-  const { data } = await adminSupabase
+  const { data, error } = await adminSupabase
     .from("profiles")
-    .select("name,role,must_change_password,language")
+    .select("name,role,must_change_password,language,god_mode_enabled")
     .eq("id", userId)
     .maybeSingle();
 
-  return data as { name: string | null; role: string | null; must_change_password: boolean | null; language: string | null } | null;
+  if (error && isMissingGodModeColumnError(error)) {
+    const { data: fallbackData } = await adminSupabase
+      .from("profiles")
+      .select("name,role,must_change_password,language")
+      .eq("id", userId)
+      .maybeSingle();
+
+    return fallbackData
+      ? {
+          ...fallbackData,
+          god_mode_enabled: false,
+        } as {
+          name: string | null;
+          role: string | null;
+          must_change_password: boolean | null;
+          language: string | null;
+          god_mode_enabled: boolean | null;
+        }
+      : null;
+  }
+
+  return data as {
+    name: string | null;
+    role: string | null;
+    must_change_password: boolean | null;
+    language: string | null;
+    god_mode_enabled: boolean | null;
+  } | null;
+}
+
+function isMissingGodModeColumnError(error: unknown) {
+  const maybeError = error as { code?: unknown; message?: unknown; details?: unknown };
+  const text = `${String(maybeError.code ?? "")} ${String(maybeError.message ?? "")} ${String(maybeError.details ?? "")}`;
+  return text.includes("god_mode_enabled") || text.includes("42703") || text.includes("PGRST204");
 }

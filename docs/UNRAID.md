@@ -155,9 +155,52 @@ Add these **variables** (your own values — nothing is baked into the image):
 | `SUPABASE_ANON_KEY` | *(your anon key)* |
 | `SUPABASE_SERVICE_ROLE_KEY` | *(your service role key)* |
 | `SUPABASE_INTERNAL_URL` | `http://<supabase-ip>:8000` |
+| `SUPABASE_DB_URL` | `postgresql://postgres:<postgres-password>@<supabase-ip>:5432/postgres` *(optional — enables auto-migration, see Step 5)* |
 
 Apply. Open `http://<app-ip>:3000`, register a user (validates app ↔ Kong ↔
 DB), then front it with Zoraxy on your public hostname.
+
+## Step 5 — Automatic schema migrations (optional but recommended)
+
+Instead of pasting SQL by hand every time the schema changes, the app can bring
+the database up to date **at boot**: it checks which migrations from
+[`supabase/migrations/`](../supabase/migrations/) are already applied (tracked in
+`supabase_migrations.schema_migrations`, the same table the Supabase CLI uses)
+and runs only the missing ones, each in its own transaction. If a migration
+fails, the container exits non-zero and Unraid's restart policy retries — the
+app never serves against a half-applied schema.
+
+This needs a **direct Postgres connection** (DDL can't go through the anon/Kong
+API), so it uses a real DB login — the `postgres` user + your stack's
+`POSTGRES_PASSWORD` — passed as `SUPABASE_DB_URL`. This is the only secret here
+that goes beyond the service role key; keep it in the Unraid template only,
+never in the repo.
+
+**Reachability — pick the one matching your layout:**
+
+| App layout | `SUPABASE_DB_URL` host | Note |
+| --- | --- | --- |
+| Same docker network as Supabase (Portainer stack) | `db:5432` | `db` is the Postgres service name; no published port needed. |
+| Own br0 IP (the template above) | `<supabase-ip>:5432` | Postgres must be reachable on that IP — give the `db` service a br0 IP or publish `5432` in the Supabase stack. Connect to **`db` (5432) directly, not the pooler** — DDL needs a session connection. |
+
+**First run on your EXISTING database (built from `schema.sql` in Step 3):** its
+tracking table is empty, so a plain boot would try to replay all migrations and
+fail with "already exists". Adopt the current schema **once** with a one-time
+boot in baseline mode:
+
+1. Add the variable `MIGRATE_MODE` = `baseline`, start the container once. The
+   log shows `baselined …` for every migration (none are executed).
+2. Remove `MIGRATE_MODE` (or set it back to `apply`) and restart. From now on
+   each deploy applies only genuinely new migrations.
+
+For a **brand-new empty database** you can skip Step 3 entirely and just boot
+with `SUPABASE_DB_URL` set — the runner applies every migration in order, which
+builds the full schema.
+
+To disable the whole thing, set `MIGRATE_ON_BOOT` = `false` (or leave
+`SUPABASE_DB_URL` unset). You can also inspect/apply manually from a dev machine
+with `npm run db:migrate:status` / `npm run db:migrate` (reads `SUPABASE_DB_URL`
+from your environment).
 
 ---
 

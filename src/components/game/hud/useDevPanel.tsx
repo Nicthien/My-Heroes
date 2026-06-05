@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
@@ -14,10 +14,8 @@ import {
   clampDevPanelPosition,
   getDevPanelCollapsed,
   getDevPanelPosition,
-  getDevPanelVisible,
   saveDevPanelPosition,
   setDevPanelCollapsedStorage,
-  setDevPanelVisibilityStorage,
   useDevPerformanceStats,
 } from "./DevPerformancePanel";
 
@@ -43,23 +41,19 @@ const DEV_ROUTES = [
 export function useDevPanel(gameId: string | undefined) {
   const { data: session } = useSession();
   const { t } = useI18n();
+  const [profileGodModeEnabled, setProfileGodModeEnabled] = useState(Boolean(session?.user?.godModeEnabled));
+  const isGodModeEnabled = profileGodModeEnabled;
   const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const setDevRevealMap = useGameStore((state) => state.setDevRevealMap);
-  const devGodMode = useGameStore((state) => state.devGodMode);
-  const setDevGodMode = useGameStore((state) => state.setDevGodMode);
   const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const setDevInfiniteMana = useGameStore((state) => state.setDevInfiniteMana);
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const setDevTeleportArmed = useGameStore((state) => state.setDevTeleportArmed);
 
-  const [showDevPassword, setShowDevPassword] = useState(false);
-  const [devPassword, setDevPassword] = useState("");
-  const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
-  const [showDevPanel, setShowDevPanel] = useState(getDevPanelVisible);
   const [devPanelCollapsed, setDevPanelCollapsed] = useState(getDevPanelCollapsed);
   const [devPanelPosition, setDevPanelPosition] = useState(getDevPanelPosition);
   const [activeTab, setActiveTab] = useState<DevPanelTab>("performances");
@@ -76,16 +70,34 @@ export function useDevPanel(gameId: string | undefined) {
     latestPosition: DevPanelPosition;
   } | null>(null);
 
-  const openPassword = useCallback(() => {
-    setDevPassword("");
-    setDevPasswordError(null);
-    setShowDevPassword(true);
-  }, []);
+  useEffect(() => {
+    if (!session?.user?.id) {
+      const timeout = window.setTimeout(() => setProfileGodModeEnabled(false), 0);
+      return () => window.clearTimeout(timeout);
+    }
 
-  const setDevPanelVisibility = useCallback((visible: boolean) => {
-    setShowDevPanel(visible);
-    setDevPanelVisibilityStorage(visible);
-  }, []);
+    let cancelled = false;
+    const loadGodMode = async () => {
+      try {
+        const response = await fetchWithSupabaseAuth("/api/auth/profile", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json().catch(() => null);
+        if (!cancelled) setProfileGodModeEnabled(Boolean(data?.godModeEnabled));
+      } catch {
+        // Keep the last known value; profile polling must not disrupt the HUD.
+      }
+    };
+
+    const syncTimeout = window.setTimeout(() => setProfileGodModeEnabled(Boolean(session.user.godModeEnabled)), 0);
+    void loadGodMode();
+    const interval = window.setInterval(() => void loadGodMode(), 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(syncTimeout);
+      window.clearInterval(interval);
+    };
+  }, [session?.user?.id, session?.user?.godModeEnabled]);
 
   const setDevPanelCollapse = useCallback((collapsed: boolean) => {
     setDevPanelCollapsed(collapsed);
@@ -137,18 +149,6 @@ export function useDevPanel(gameId: string | undefined) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     saveDevPanelPosition(drag.latestPosition);
-  };
-
-  const unlockDevPanel = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (devPassword === "godmode") {
-      setShowDevPassword(false);
-      setDevPanelVisibility(true);
-      setDevPassword("");
-      setDevPasswordError(null);
-      return;
-    }
-    setDevPasswordError("Mauvais mot de passe.");
   };
 
   const setDevReveal = async (reveal: boolean) => {
@@ -225,7 +225,7 @@ export function useDevPanel(gameId: string | undefined) {
   };
 
   useEffect(() => {
-    if (!showDevPanel) return;
+    if (!isGodModeEnabled) return;
     if (typeof window === "undefined") return;
 
     const clampPosition = () => {
@@ -240,49 +240,11 @@ export function useDevPanel(gameId: string | undefined) {
     window.addEventListener("resize", clampPosition);
 
     return () => window.removeEventListener("resize", clampPosition);
-  }, [showDevPanel, getDevPanelSize]);
+  }, [isGodModeEnabled, getDevPanelSize]);
 
   const overlay = (
     <>
-      {showDevPassword && (
-        <div className="pointer-events-auto absolute left-1/2 top-24 z-50 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-amber-500/60 bg-stone-950/95 p-4 text-amber-100 shadow-2xl shadow-black/70">
-          <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>Mode dieu</div>
-          <div className={goldDivider + " my-3"} />
-          <form onSubmit={unlockDevPanel} className="space-y-3">
-            <label className="block text-xs font-bold uppercase tracking-wider text-amber-200/80">
-              Mot de passe
-              <input
-                autoFocus
-                type="password"
-                value={devPassword}
-                onChange={(event) => {
-                  setDevPassword(event.target.value);
-                  setDevPasswordError(null);
-                }}
-                className="mt-2 w-full rounded-md border border-amber-700/50 bg-black/70 px-3 py-2 text-sm text-amber-50 outline-none ring-0 transition focus:border-amber-300"
-              />
-            </label>
-            {devPasswordError && <div className="text-xs font-bold text-red-300">{devPasswordError}</div>}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-stone-600 bg-stone-900 px-3 py-1.5 text-[10px] font-black uppercase leading-snug tracking-wide text-stone-200 transition hover:border-stone-400"
-                onClick={() => setShowDevPassword(false)}
-              >
-                Fermer
-              </button>
-              <button
-                type="submit"
-                className="rounded-md border border-amber-400/70 bg-amber-500 px-3 py-1.5 text-[10px] font-black uppercase leading-snug tracking-wide text-stone-950 transition hover:bg-amber-300"
-              >
-                Entrer
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {showDevPanel && (
+      {isGodModeEnabled && (
         <div
           ref={devPanelRef}
           className={`pointer-events-auto absolute z-50 max-w-[calc(100vw-1.5rem)] overflow-hidden border border-amber-500/60 bg-stone-950/95 text-amber-100 shadow-2xl shadow-black/70 ${
@@ -338,17 +300,6 @@ export function useDevPanel(gameId: string | undefined) {
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
-              <button
-                type="button"
-                className={`grid place-items-center rounded-md border border-amber-700/50 font-black text-amber-200 transition hover:border-amber-300 ${
-                  devPanelCollapsed ? "h-6 w-6 text-xs" : "h-7 w-7 text-sm"
-                }`}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => setDevPanelVisibility(false)}
-                aria-label={t("dev.closePanel")}
-              >
-                X
-              </button>
             </div>
           </div>
           {!devPanelCollapsed && (
@@ -402,17 +353,6 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={toggleDevReveal}
                     >
                       {devRevealMap ? t("dev.hideMap") : t("dev.showMap")}
-                    </button>
-                    <button
-                      type="button"
-                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
-                        devGodMode
-                          ? "border-emerald-400/50 bg-emerald-900/70 text-emerald-100 hover:border-emerald-200"
-                          : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
-                      }`}
-                      onClick={() => setDevGodMode(!devGodMode)}
-                    >
-                      {devGodMode ? t("dev.godActive") : t("dev.godEnable")}
                     </button>
                     <button
                       type="button"
@@ -473,7 +413,7 @@ export function useDevPanel(gameId: string | undefined) {
     </>
   );
 
-  return { fpsText: devFpsText, openPassword, overlay };
+  return { fpsText: devFpsText, overlay };
 }
 
 function getSelectedHeroName(

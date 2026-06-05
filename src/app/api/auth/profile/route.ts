@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     role: user.role ?? "user",
     mustChangePassword: Boolean(user.mustChangePassword),
     language: user.language ?? "fr",
+    godModeEnabled: Boolean(user.godModeEnabled),
   });
 }
 

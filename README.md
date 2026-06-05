@@ -61,6 +61,11 @@ docker run -d --name my-heroes -p 3000:3000 \
   nicthien/my-heroes:latest
 ```
 
+Pour appliquer automatiquement les migrations de schéma au démarrage, ajoute
+`-e SUPABASE_DB_URL="postgresql://postgres:<mot-de-passe>@<supabase-host>:5432/postgres"`
+(voir [`docs/UNRAID.md`](docs/UNRAID.md) → « Step 5 », notamment la mise en
+service `baseline` la première fois).
+
 Le conteneur ne lance que le frontend Next.js : un backend Supabase doit déjà
 tourner. **Guide Unraid complet (Supabase self-hosté + template Unraid + IP
 dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Dockerfile),
@@ -74,6 +79,8 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `SUPABASE_ANON_KEY` | oui | Clé anon / publishable (publique par nature). |
 | `SUPABASE_SERVICE_ROLE_KEY` | oui | Clé service role, serveur uniquement. |
 | `SUPABASE_INTERNAL_URL` | non | Où le serveur joint Supabase. Défaut : `SUPABASE_URL`. |
+| `SUPABASE_DB_URL` | non | URL Postgres directe (`postgres` + `POSTGRES_PASSWORD`) pour appliquer les migrations au démarrage. Absente = pas d'auto-migration. Voir [`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. |
+| `MIGRATE_ON_BOOT` | non | `false` pour désactiver la migration au démarrage. Défaut : `true`. |
 
 > En local, `npm run dev` injecte automatiquement la config depuis
 > `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme

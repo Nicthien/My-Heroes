@@ -750,6 +750,12 @@ export const en: Record<TranslationKey, string> = {
   "buildtree.catUpgrade": "Upgrades",
   "buildtree.catUnique": "Unique buildings",
   "buildtree.free": "Free",
+  "buildtree.zoomIn": "Zoom in",
+  "buildtree.zoomOut": "Zoom out",
+  "buildtree.fit": "Fit",
+  "buildtree.panZoomHint": "Wheel: zoom · Drag: pan",
+  "buildtree.missingResourcesList": "Missing: {list}",
+  "buildtree.costList": "Cost: {list}",
 
   // --- Adventure map (GameMap) ---
   "map.prepEngine": "Preparing the rendering engine...",

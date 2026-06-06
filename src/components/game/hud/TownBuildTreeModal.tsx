@@ -1,13 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { BuildingType, type Faction, type GameState, type Player, type Town } from "@/lib/game/types";
 import { canAfford, formatCost } from "@/lib/game/economy";
 import {
-  BASE_DWELLING_TYPES,
-  UPGRADED_DWELLING_TYPES,
   hasTownBuilding,
   type TownBuildingRule,
 } from "@/lib/game/town-buildings";
@@ -28,17 +26,10 @@ type BuildNodeState =
   | { kind: "buildable"; label: string; canBuild: true }
   | { kind: "missingRequirement"; label: string; canBuild: false }
   | { kind: "capitolLimit"; label: string; canBuild: false }
-  | { kind: "missingResources"; label: string; canBuild: false }
+  | { kind: "missingResources"; label: string; canBuild: false; missing: string }
   | { kind: "unavailable"; label: string; canBuild: false };
 
-type BuildTreeGroup = {
-  id: string;
-  label: string;
-  rules: TownBuildingRule[];
-};
-
 type BuildTreeNodeLayout = {
-  group: BuildTreeGroup;
   rule: TownBuildingRule;
   state: BuildNodeState;
   x: number;
@@ -47,10 +38,99 @@ type BuildTreeNodeLayout = {
 
 const NODE_WIDTH = 190;
 const NODE_HEIGHT = 148;
-const GROUP_GAP = 58;
-const ROW_GAP = 66;
-const CANVAS_PADDING_X = 44;
-const CANVAS_PADDING_Y = 36;
+const H_GAP = 28; // horizontal gap between nodes within a layer
+const V_GAP = 72; // vertical gap between layers
+const CANVAS_PADDING_X = 60;
+const CANVAS_PADDING_Y = 40;
+
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 2.5;
+const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+type Transform = { scale: number; x: number; y: number };
+
+/** Pan (drag) + zoom (wheel/buttons) for the build-tree canvas. */
+function usePanZoom(contentWidth: number, contentHeight: number, onBackgroundTap?: () => void) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [transform, setTransform] = useState<Transform>({ scale: 1, x: 0, y: 0 });
+  const pan = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0, moved: false });
+
+  const fit = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp || contentWidth <= 0 || contentHeight <= 0) return;
+    const pad = 32;
+    const scale = clampScale(Math.min(
+      (vp.clientWidth - pad * 2) / contentWidth,
+      (vp.clientHeight - pad * 2) / contentHeight,
+      1,
+    ));
+    setTransform({
+      scale,
+      x: Math.max(pad, (vp.clientWidth - contentWidth * scale) / 2),
+      y: pad,
+    });
+  }, [contentWidth, contentHeight]);
+
+  useEffect(() => { fit(); }, [fit]);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = vp.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      setTransform((t) => {
+        const next = clampScale(t.scale * (e.deltaY < 0 ? 1.12 : 0.893));
+        const ratio = next / t.scale;
+        return { scale: next, x: mx - (mx - t.x) * ratio, y: my - (my - t.y) * ratio };
+      });
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // Let clicks on a node (and its Build button) through; pan from empty canvas.
+    if ((e.target as HTMLElement).closest("[data-build-node]")) return;
+    pan.current = { active: true, startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pan.current.active) return;
+    const dx = e.clientX - pan.current.startX;
+    const dy = e.clientY - pan.current.startY;
+    if (!pan.current.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) pan.current.moved = true;
+    setTransform((t) => ({ ...t, x: pan.current.originX + dx, y: pan.current.originY + dy }));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const wasTap = pan.current.active && !pan.current.moved;
+    pan.current.active = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* pointer already released */ }
+    if (wasTap) onBackgroundTap?.(); // click on empty canvas clears the selection
+  };
+
+  const zoomBy = (factor: number) => setTransform((t) => {
+    const vp = viewportRef.current;
+    const cx = vp ? vp.clientWidth / 2 : 0;
+    const cy = vp ? vp.clientHeight / 2 : 0;
+    const next = clampScale(t.scale * factor);
+    const ratio = next / t.scale;
+    return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio };
+  });
+
+  return {
+    viewportRef,
+    transform,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    fit,
+    zoomIn: () => zoomBy(1.2),
+    zoomOut: () => zoomBy(1 / 1.2),
+  };
+}
 
 export function TownBuildTreeModal({
   selectedTown,
@@ -80,10 +160,9 @@ export function TownBuildTreeModal({
   const { t, locale } = useI18n();
   const portalTarget = typeof document === "undefined" ? null : document.body;
   const ruleByType = useMemo(() => new Map(rules.map((rule) => [rule.type, rule])), [rules]);
-  const groups = useMemo(() => buildTreeGroups(rules, t), [rules, t]);
   const layout = useMemo(() => {
-    return buildTreeLayout({
-      groups,
+    return buildLayeredLayout({
+      rules,
       selectedTown,
       selectedTownFaction,
       myPlayer,
@@ -95,10 +174,32 @@ export function TownBuildTreeModal({
       t,
       locale,
     });
-  }, [canAct, gameState, groups, hasPlayerCapitol, isMyTown, isPending, myPlayer, selectedTown, selectedTownFaction, t, locale]);
+  }, [canAct, gameState, rules, hasPlayerCapitol, isMyTown, isPending, myPlayer, selectedTown, selectedTownFaction, t, locale]);
+
+  // Click a building → select it and light up its construction route (all
+  // prerequisites up to the roots). Click again or click empty canvas to clear.
+  const [selectedType, setSelectedType] = useState<BuildingType | null>(null);
+  const toggleSelect = useCallback((type: BuildingType) => {
+    setSelectedType((prev) => (prev === type ? null : type));
+  }, []);
+  const routeTypes = useMemo(() => {
+    if (!selectedType) return null;
+    const set = new Set<BuildingType>();
+    const visit = (type: BuildingType) => {
+      if (set.has(type)) return;
+      set.add(type);
+      for (const req of ruleByType.get(type)?.requires ?? []) {
+        if (ruleByType.has(req)) visit(req);
+      }
+    };
+    visit(selectedType);
+    return set;
+  }, [selectedType, ruleByType]);
+
+  const { viewportRef, transform, onPointerDown, onPointerMove, onPointerUp, fit, zoomIn, zoomOut } = usePanZoom(layout.width, layout.height, () => setSelectedType(null));
 
   const modal = (
-    <div className="fixed inset-0 z-[999] grid bg-black/75 p-0 text-amber-50 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label={t("town.buildTree")}>
+    <div className="fixed inset-0 z-[999] grid bg-black/75 p-0 text-amber-50 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label={t("town.buildTree")} onContextMenu={(e) => e.preventDefault()}>
       <section className={`${ornateFramePolished} flex h-full w-full flex-col overflow-hidden sm:max-h-[min(50rem,calc(100vh-2rem))] sm:w-[min(82rem,calc(100vw-2rem))]`}>
         <header className="flex items-center gap-3 border-b border-amber-700/50 bg-stone-950/90 px-4 py-3">
           <BuildTreeHeaderIcon className="h-6 w-6 shrink-0 text-amber-200" />
@@ -117,35 +218,50 @@ export function TownBuildTreeModal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-stone-950/95 p-0">
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-gradient-to-b from-stone-950 via-stone-950 to-black">
+          {/* Fixed background — does not move with pan/zoom */}
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(245,158,11,0.10)_0,transparent_18rem),radial-gradient(circle_at_78%_72%,rgba(120,113,108,0.10)_0,transparent_16rem)]" />
           <div
-            className="relative overflow-hidden bg-gradient-to-b from-stone-950 via-stone-950 to-black"
-            style={{ width: layout.width, height: layout.height }}
+            ref={viewportRef}
+            className="absolute inset-0 cursor-grab touch-none select-none active:cursor-grabbing"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerUp}
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(245,158,11,0.10)_0,transparent_18rem),radial-gradient(circle_at_78%_72%,rgba(120,113,108,0.10)_0,transparent_16rem)]" />
-            <BuildTreeConnections nodes={layout.nodes} ruleByType={ruleByType} />
-            {layout.groups.map((group) => (
-              <div
-                key={group.id}
-                className="absolute z-10 rounded-md border border-amber-700/45 bg-black/45 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-100/80 shadow-lg shadow-black/30"
-                style={{ left: group.x, top: 14 }}
-              >
-                {group.label}
-              </div>
-            ))}
-            {layout.nodes.map((node) => (
-              <BuildTreeNode
-                key={node.rule.type}
-                rule={node.rule}
-                state={node.state}
-                selectedTownFaction={selectedTownFaction}
-                onBuild={onBuild}
-                x={node.x}
-                y={node.y}
-                t={t}
-                locale={locale}
-              />
-            ))}
+            <div
+              className="absolute left-0 top-0 origin-top-left"
+              style={{ width: layout.width, height: layout.height, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
+            >
+              <BuildTreeConnections nodes={layout.nodes} ruleByType={ruleByType} routeTypes={routeTypes} />
+              {layout.nodes.map((node) => (
+                <BuildTreeNode
+                  key={node.rule.type}
+                  rule={node.rule}
+                  state={node.state}
+                  selectedTownFaction={selectedTownFaction}
+                  onBuild={onBuild}
+                  onSelect={toggleSelect}
+                  isSelected={selectedType === node.rule.type}
+                  inRoute={routeTypes?.has(node.rule.type) ?? false}
+                  selectionActive={routeTypes !== null}
+                  x={node.x}
+                  y={node.y}
+                  t={t}
+                  locale={locale}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 text-[10px] font-bold text-amber-200/50 sm:block">
+            {t("buildtree.panZoomHint")}
+          </div>
+          <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-md border border-amber-700/50 bg-stone-950/90 p-1 shadow-lg shadow-black/40">
+            <button type="button" onClick={zoomOut} aria-label={t("buildtree.zoomOut")} className="grid h-7 w-7 place-items-center rounded border border-amber-700/40 bg-black/40 text-lg font-black leading-none text-amber-100 transition hover:border-amber-300">−</button>
+            <span className="w-12 text-center text-[11px] font-bold tabular-nums text-amber-100/80">{Math.round(transform.scale * 100)}%</span>
+            <button type="button" onClick={zoomIn} aria-label={t("buildtree.zoomIn")} className="grid h-7 w-7 place-items-center rounded border border-amber-700/40 bg-black/40 text-lg font-black leading-none text-amber-100 transition hover:border-amber-300">+</button>
+            <button type="button" onClick={fit} className="ml-1 rounded border border-amber-700/40 bg-black/40 px-2 py-1 text-[11px] font-bold text-amber-100 transition hover:border-amber-300">{t("buildtree.fit")}</button>
           </div>
         </div>
       </section>
@@ -160,6 +276,10 @@ function BuildTreeNode({
   state,
   selectedTownFaction,
   onBuild,
+  onSelect,
+  isSelected,
+  inRoute,
+  selectionActive,
   x,
   y,
   t,
@@ -169,6 +289,10 @@ function BuildTreeNode({
   state: BuildNodeState;
   selectedTownFaction: Faction;
   onBuild: (building: BuildingType) => void;
+  onSelect: (building: BuildingType) => void;
+  isSelected: boolean;
+  inRoute: boolean;
+  selectionActive: boolean;
   x: number;
   y: number;
   t: TFn;
@@ -177,14 +301,23 @@ function BuildTreeNode({
   const localizedName = localizedLabelFromId(rule.type, rule.label, locale);
   const stateClass = getNodeStateClass(state.kind);
   const buildingSprite = getTownBuildingSprite(rule, selectedTownFaction);
+  const costLabel = formatCost(rule.cost);
+  const dimmed = selectionActive && !inRoute;
+  const routeRing = isSelected
+    ? "ring-4 ring-amber-300 shadow-[0_0_30px_rgba(251,191,36,0.6)]"
+    : inRoute
+      ? "ring-2 ring-amber-400/80"
+      : "";
   return (
     <article
-      className="absolute z-10"
+      data-build-node
+      onClick={() => onSelect(rule.type)}
+      className={`absolute z-10 cursor-pointer transition-opacity ${dimmed ? "opacity-25" : "opacity-100"}`}
       style={{ left: x, top: y, width: NODE_WIDTH, height: NODE_HEIGHT }}
     >
       <div className="relative h-full">
         <div
-          className={`group/sprite absolute left-1/2 top-0 z-20 grid h-20 w-24 -translate-x-1/2 place-items-center rounded-md border-2 bg-black/65 shadow-[0_12px_26px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80 ${stateClass.frame}`}
+          className={`group/sprite absolute left-1/2 top-0 z-20 grid h-20 w-24 -translate-x-1/2 place-items-center rounded-md border-2 bg-black/65 shadow-[0_12px_26px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80 ${stateClass.frame} ${routeRing}`}
           role="img"
           aria-label={`${localizedName} : ${localizedBuildingDescription(rule.description, locale)}`}
           tabIndex={0}
@@ -205,6 +338,14 @@ function BuildTreeNode({
           )}
           <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-md border border-amber-600/65 bg-stone-950/97 px-3 py-2 text-center text-[11px] font-bold leading-snug text-amber-100 opacity-0 shadow-xl shadow-black/60 transition group-hover/sprite:opacity-100 group-focus/sprite:opacity-100">
             {localizedBuildingDescription(rule.description, locale)}
+            <div className="mt-1.5 border-t border-amber-700/40 pt-1.5 text-amber-200/90">
+              {costLabel ? t("buildtree.costList", { list: costLabel }) : t("buildtree.free")}
+            </div>
+            {state.kind === "missingResources" && state.missing && (
+              <div className="mt-1 font-black text-red-300">
+                {t("buildtree.missingResourcesList", { list: state.missing })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -220,8 +361,11 @@ function BuildTreeNode({
           </div>
 
           <div className="relative mt-1 flex items-center justify-between gap-2 text-[10px] font-bold text-amber-100/65">
-            <span className="truncate">{formatCost(rule.cost) || t("buildtree.free")}</span>
-            <span className={`max-w-[6.7rem] truncate text-right ${getStateTextClass(state.kind)}`} title={state.label}>
+            <span className="truncate" title={costLabel || t("buildtree.free")}>{costLabel || t("buildtree.free")}</span>
+            <span
+              className={`max-w-[6.7rem] truncate text-right ${getStateTextClass(state.kind)}`}
+              title={state.kind === "missingResources" && state.missing ? t("buildtree.missingResourcesList", { list: state.missing }) : state.label}
+            >
               {getShortStateLabel(state, t)}
             </span>
           </div>
@@ -229,7 +373,7 @@ function BuildTreeNode({
           {state.canBuild && (
             <button
               type="button"
-              onClick={() => onBuild(rule.type)}
+              onClick={(e) => { e.stopPropagation(); onBuild(rule.type); }}
               className="relative mt-1 h-6 w-full rounded-md border border-emerald-300/70 bg-gradient-to-b from-emerald-600 to-emerald-800 text-[11px] font-black text-emerald-50 transition hover:from-emerald-500 hover:to-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/70"
             >
               {t("build.build")}
@@ -241,38 +385,14 @@ function BuildTreeNode({
   );
 }
 
-function buildTreeGroups(rules: TownBuildingRule[], t: TFn): BuildTreeGroup[] {
-  return [
-    {
-      id: "common",
-      label: t("buildtree.catCommon"),
-      rules: orderRules(rules.filter((rule) => rule.category === "common" && !BASE_DWELLING_TYPES.includes(rule.type) && !UPGRADED_DWELLING_TYPES.includes(rule.type))),
-    },
-    {
-      id: "mage",
-      label: t("buildtree.catMageGuild"),
-      rules: orderRules(rules.filter((rule) => rule.category === "mage_guild")),
-    },
-    {
-      id: "dwellings",
-      label: t("buildtree.catDwelling"),
-      rules: orderRules(rules.filter((rule) => rule.category === "dwelling")),
-    },
-    {
-      id: "upgrades",
-      label: t("buildtree.catUpgrade"),
-      rules: orderRules(rules.filter((rule) => rule.category === "dwelling_upgrade")),
-    },
-    {
-      id: "unique",
-      label: t("buildtree.catUnique"),
-      rules: orderRules(rules.filter((rule) => rule.category === "unique")),
-    },
-  ].filter((group) => group.rules.length > 0);
-}
-
-function buildTreeLayout({
-  groups,
+/**
+ * Mermaid-style top-down layered layout: roots (no prerequisite — Tavern, Fort,
+ * Mage Guild lvl 1, tier-1 dwelling, …) sit on the top row, and every building
+ * is placed one row below its deepest prerequisite. A barycenter pass orders
+ * each row by the average position of its parents to limit edge crossings.
+ */
+function buildLayeredLayout({
+  rules,
   selectedTown,
   selectedTownFaction,
   myPlayer,
@@ -284,7 +404,7 @@ function buildTreeLayout({
   t,
   locale,
 }: {
-  groups: BuildTreeGroup[];
+  rules: TownBuildingRule[];
   selectedTown: Town;
   selectedTownFaction: Faction;
   myPlayer: Player | undefined;
@@ -296,17 +416,59 @@ function buildTreeLayout({
   t: TFn;
   locale: Locale;
 }) {
-  const maxRows = Math.max(1, ...groups.map((group) => group.rules.length));
-  const nodes: BuildTreeNodeLayout[] = [];
-  const groupHeaders: Array<{ id: string; label: string; x: number }> = [];
-  let x = CANVAS_PADDING_X;
+  const present = new Set(rules.map((rule) => rule.type));
+  const ruleByType = new Map(rules.map((rule) => [rule.type, rule]));
+  const parentsOf = (rule: TownBuildingRule) => (rule.requires ?? []).filter((req) => present.has(req));
 
-  for (const group of groups) {
-    const groupWidth = NODE_WIDTH;
-    groupHeaders.push({ id: group.id, label: group.label, x });
-    group.rules.forEach((rule, index) => {
+  const depthCache = new Map<string, number>();
+  const computeDepth = (type: BuildingType, stack: Set<string>): number => {
+    const cached = depthCache.get(type);
+    if (cached !== undefined) return cached;
+    if (stack.has(type)) return 0; // defensive cycle guard
+    const rule = ruleByType.get(type);
+    const parents = rule ? parentsOf(rule) : [];
+    if (parents.length === 0) {
+      depthCache.set(type, 0);
+      return 0;
+    }
+    stack.add(type);
+    const depth = 1 + Math.max(...parents.map((p) => computeDepth(p, stack)));
+    stack.delete(type);
+    depthCache.set(type, depth);
+    return depth;
+  };
+
+  const layers: TownBuildingRule[][] = [];
+  for (const rule of rules) {
+    const depth = computeDepth(rule.type, new Set());
+    (layers[depth] ??= []).push(rule);
+  }
+
+  // Barycenter ordering to reduce crossing edges, layer by layer top-down.
+  const orderIndex = new Map<string, number>();
+  layers[0]?.forEach((rule, i) => orderIndex.set(rule.type, i));
+  for (let d = 1; d < layers.length; d++) {
+    const layer = layers[d];
+    if (!layer) continue;
+    const barycenter = (rule: TownBuildingRule) => {
+      const parents = parentsOf(rule);
+      if (parents.length === 0) return orderIndex.get(rule.type) ?? 0;
+      return parents.reduce((sum, p) => sum + (orderIndex.get(p) ?? 0), 0) / parents.length;
+    };
+    layer.sort((a, b) => barycenter(a) - barycenter(b));
+    layer.forEach((rule, i) => orderIndex.set(rule.type, i));
+  }
+
+  const layerWidth = (count: number) => count * NODE_WIDTH + Math.max(0, count - 1) * H_GAP;
+  const maxRowWidth = Math.max(NODE_WIDTH, ...layers.map((layer) => layerWidth(layer?.length ?? 0)));
+
+  const nodes: BuildTreeNodeLayout[] = [];
+  layers.forEach((layer, depth) => {
+    if (!layer) return;
+    const startX = CANVAS_PADDING_X + (maxRowWidth - layerWidth(layer.length)) / 2;
+    const y = CANVAS_PADDING_Y + depth * (NODE_HEIGHT + V_GAP);
+    layer.forEach((rule, i) => {
       nodes.push({
-        group,
         rule,
         state: getBuildNodeState({
           rule,
@@ -321,28 +483,17 @@ function buildTreeLayout({
           t,
           locale,
         }),
-        x,
-        y: CANVAS_PADDING_Y + 38 + index * (NODE_HEIGHT + ROW_GAP),
+        x: startX + i * (NODE_WIDTH + H_GAP),
+        y,
       });
     });
-    x += groupWidth + GROUP_GAP;
-  }
+  });
 
   return {
-    groups: groupHeaders,
     nodes,
-    width: Math.max(1060, x + CANVAS_PADDING_X - GROUP_GAP),
-    height: CANVAS_PADDING_Y + 80 + maxRows * NODE_HEIGHT + Math.max(0, maxRows - 1) * ROW_GAP,
+    width: maxRowWidth + CANVAS_PADDING_X * 2,
+    height: CANVAS_PADDING_Y * 2 + layers.length * NODE_HEIGHT + Math.max(0, layers.length - 1) * V_GAP,
   };
-}
-
-function orderRules(rules: TownBuildingRule[]) {
-  const indexByType = new Map(rules.map((rule, index) => [rule.type, index]));
-  return [...rules].sort((a, b) => {
-    if (a.requires?.includes(b.type)) return 1;
-    if (b.requires?.includes(a.type)) return -1;
-    return (indexByType.get(a.type) ?? 0) - (indexByType.get(b.type) ?? 0);
-  });
 }
 
 function getBuildNodeState({
@@ -388,8 +539,20 @@ function getBuildNodeState({
     !selectedTown.buildings.includes(BuildingType.CAPITOL);
   if (blockedByCapitolLimit) return { kind: "capitolLimit", label: t("buildtree.capitolLimit"), canBuild: false };
 
-  const lacksResources = Boolean(myPlayer && !canAfford(myPlayer.resources, rule.cost));
-  if (lacksResources) return { kind: "missingResources", label: t("buildtree.missingResources"), canBuild: false };
+  if (myPlayer && !canAfford(myPlayer.resources, rule.cost)) {
+    const r = myPlayer.resources;
+    const c = rule.cost;
+    const deficit = {
+      gold: Math.max(0, (c.gold ?? 0) - r.gold),
+      wood: Math.max(0, (c.wood ?? 0) - r.wood),
+      ore: Math.max(0, (c.ore ?? 0) - r.ore),
+      mercury: Math.max(0, (c.mercury ?? 0) - r.mercury),
+      crystals: Math.max(0, (c.crystals ?? 0) - r.crystals),
+      gems: Math.max(0, (c.gems ?? 0) - r.gems),
+      sulfur: Math.max(0, (c.sulfur ?? 0) - r.sulfur),
+    };
+    return { kind: "missingResources", label: t("buildtree.missingResources"), canBuild: false, missing: formatCost(deficit) };
+  }
 
   if (!myPlayer || selectedTown.lastBuiltTurn === gameState.turnNumber || !canAct || !isMyTown || isPending) {
     return { kind: "unavailable", label: t("buildtree.unavailable"), canBuild: false };
@@ -452,9 +615,11 @@ function getShortStateLabel(state: BuildNodeState, t: TFn) {
 function BuildTreeConnections({
   nodes,
   ruleByType,
+  routeTypes,
 }: {
   nodes: BuildTreeNodeLayout[];
   ruleByType: Map<BuildingType, TownBuildingRule>;
+  routeTypes: Set<BuildingType> | null;
 }) {
   const nodeByType = new Map(nodes.map((node) => [node.rule.type, node]));
   const width = Math.max(...nodes.map((node) => node.x + NODE_WIDTH + CANVAS_PADDING_X));
@@ -483,11 +648,25 @@ function BuildTreeConnections({
             const endY = node.y + 8;
             const midY = startY + Math.max(24, (endY - startY) / 2);
             const path = `M ${startX} ${startY} V ${midY} H ${endX} V ${endY}`;
+            const onRoute = !!routeTypes && routeTypes.has(node.rule.type) && routeTypes.has(requirement);
+            const common = { d: path, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
             return (
               <g key={`${requirement}-${node.rule.type}`}>
-                <path d={path} fill="none" stroke="rgba(0,0,0,0.85)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-                <path d={path} fill="none" stroke="rgba(146,64,14,0.76)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" filter="url(#build-tree-glow)" />
-                <path d={path} fill="none" stroke="rgba(251,191,36,0.42)" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
+                {routeTypes && onRoute ? (
+                  <>
+                    <path {...common} stroke="rgba(0,0,0,0.9)" strokeWidth="9" />
+                    <path {...common} stroke="rgba(251,191,36,0.95)" strokeWidth="3.4" filter="url(#build-tree-glow)" />
+                    <path {...common} stroke="rgba(255,240,205,0.8)" strokeWidth="1.2" />
+                  </>
+                ) : routeTypes ? (
+                  <path {...common} stroke="rgba(120,113,108,0.22)" strokeWidth="2" />
+                ) : (
+                  <>
+                    <path {...common} stroke="rgba(0,0,0,0.85)" strokeWidth="8" />
+                    <path {...common} stroke="rgba(146,64,14,0.76)" strokeWidth="2.2" filter="url(#build-tree-glow)" />
+                    <path {...common} stroke="rgba(251,191,36,0.42)" strokeWidth="0.8" />
+                  </>
+                )}
               </g>
             );
           })

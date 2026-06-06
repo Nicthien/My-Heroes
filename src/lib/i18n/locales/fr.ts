@@ -749,6 +749,12 @@ export const fr = {
   "buildtree.catUpgrade": "Améliorations",
   "buildtree.catUnique": "Bâtiments uniques",
   "buildtree.free": "Gratuit",
+  "buildtree.zoomIn": "Zoom avant",
+  "buildtree.zoomOut": "Zoom arrière",
+  "buildtree.fit": "Ajuster",
+  "buildtree.panZoomHint": "Molette : zoom · Glisser : déplacer",
+  "buildtree.missingResourcesList": "Manque : {list}",
+  "buildtree.costList": "Coût : {list}",
 
   // --- Adventure map (GameMap) ---
   "map.prepEngine": "Préparation du moteur de rendu...",

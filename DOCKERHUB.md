@@ -47,6 +47,12 @@ the same table the Supabase CLI uses. A failed migration aborts startup
 The connection uses a direct Postgres login (the `postgres` user + your stack's
 `POSTGRES_PASSWORD`), not the service role key — keep it out of source control.
 
+If the database isn't reachable yet at boot (e.g. the app and Supabase start
+together after a host reboot), the runner waits and retries instead of failing
+immediately. Tune with `MIGRATE_CONNECT_RETRIES` (default `60`) and
+`MIGRATE_CONNECT_DELAY_MS` (default `2000`). A real migration SQL error still
+aborts startup.
+
 ## Docs
 
 - Self-host / Unraid guide: <https://github.com/Nicthien/My-Heroes/blob/master/docs/UNRAID.md>

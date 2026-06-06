@@ -717,6 +717,7 @@ export default function CombatScreen() {
           targetLabel={pendingTargetSpell ? t("combat.spellTargetLabel", { label: pendingTargetSpell.label }) : null}
           canCast={canCastHeroSpell}
           ignoreManaCost={devInfiniteMana}
+          grantAllSpells={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
           onCast={(spell) => castCombatSpell(spell)}
         />

@@ -931,7 +931,7 @@ export const fr = {
   "audio.musicAdventure": "Musique aventure",
   "audio.musicCombat": "Musique combat",
   "audio.effects": "Effets",
-  "score.detailHidden": "Détail masqué par le brouillard de guerre.",
+  "score.detailHidden": "Détail masqué.",
   "score.rank": "Rang #{rank}/{count}",
   "score.cat.towns": "Châteaux",
   "score.cat.heroes": "Héros",

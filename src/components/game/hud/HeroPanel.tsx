@@ -19,6 +19,7 @@ import { localizedSkillDescription } from "@/lib/game/skills-i18n";
 import { HERO_ARMY_STACK_LIMIT, UNIT_STACK_COUNT_CAP } from "@/lib/game/army-stacks";
 import { UnitType, type Hero, type Town, type UnitStack } from "@/lib/game/types";
 import { refreshGameState } from "@/lib/game/refresh";
+import type { ScoreBreakdown } from "@/lib/game/score";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
@@ -117,6 +118,10 @@ export function HeroPanel({
     const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
     if (revealedTiles.length > 0 && gameState) {
       setSpellRevealHighlight({ turnNumber: gameState.turnNumber, tiles: revealedTiles, hints: revealHints, label: spell.label });
+    }
+    const revealedScores = normalizeRevealedScores(data?.interaction?.revealedScores);
+    if (revealedScores && gameState) {
+      useGameStore.getState().revealRivalScores(gameState.turnNumber, revealedScores);
     }
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshed) setGameState(refreshed);
@@ -274,28 +279,6 @@ export function HeroPanel({
               <span aria-hidden="true">🏆</span> {t("grail.carrying")}
             </div>
           )}
-          {(canDig || showPuzzleButton) && (
-            <div className="mt-2 flex gap-2">
-              {canDig && (
-                <button
-                  type="button"
-                  className="flex-1 rounded-md border border-amber-600/55 bg-amber-950/55 px-3 py-2 text-sm font-black text-amber-100 transition hover:border-amber-300"
-                  onClick={() => void digGrail()}
-                >
-                  {t("grail.dig")}
-                </button>
-              )}
-              {showPuzzleButton && (
-                <button
-                  type="button"
-                  className="flex-1 rounded-md border border-violet-500/45 bg-violet-950/55 px-3 py-2 text-sm font-black text-violet-100 transition hover:border-violet-300"
-                  onClick={() => setPuzzleOpen(true)}
-                >
-                  {t("grail.puzzleOpen")}
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="mobile-hero-tabs flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
@@ -309,9 +292,12 @@ export function HeroPanel({
               onClick={() => setActiveTab(tab.id)}
             />
           ))}
-          {!readOnly && (
-            <div className="ml-auto shrink-0">
-              <SpellBookButton onClick={() => setSpellBookOpen(true)} />
+          {(showPuzzleButton || !readOnly) && (
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {showPuzzleButton && (
+                <PuzzleMapButton label={t("grail.puzzleOpen")} onClick={() => setPuzzleOpen(true)} />
+              )}
+              {!readOnly && <SpellBookButton onClick={() => setSpellBookOpen(true)} tooltipAlign="right" />}
             </div>
           )}
         </div>
@@ -335,7 +321,9 @@ export function HeroPanel({
             </div>
           )}
 
-          {activeTab === "skills" && <HeroSkillsPanel hero={hero} t={t} locale={locale} />}
+          {activeTab === "skills" && (
+            <HeroSkillsPanel hero={hero} canDig={canDig} onDig={() => void digGrail()} t={t} locale={locale} />
+          )}
 
           {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} t={t} locale={locale} />}
 
@@ -362,6 +350,7 @@ export function HeroPanel({
           context="adventure"
           title={t("spell.bookAdventure")}
           ignoreManaCost={devInfiniteMana}
+          grantAllSpells={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
           onCast={castAdventureSpell}
         />
@@ -403,18 +392,32 @@ function luckStatColor(value: number | undefined) {
   return "text-amber-200/80";
 }
 
-function HeroSkillsPanel({ hero, t, locale }: { hero: Hero; t: TFn; locale: Locale }) {
+function HeroSkillsPanel({ hero, canDig, onDig, t, locale }: { hero: Hero; canDig: boolean; onDig: () => void; t: TFn; locale: Locale }) {
   const skills = getHeroSkillEntries(hero, t, locale);
+  const digButton = canDig ? (
+    <button
+      type="button"
+      className="mb-2 w-full rounded-md border border-amber-600/55 bg-amber-950/55 px-3 py-2 text-sm font-black text-amber-100 transition hover:border-amber-300"
+      onClick={onDig}
+    >
+      {t("grail.dig")}
+    </button>
+  ) : null;
+
   if (skills.length === 0) {
     return (
-      <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
-        {t("hero.noSkills")}
+      <div>
+        {digButton}
+        <div className="rounded-md border border-amber-900/40 bg-black/30 px-3 py-2 text-xs text-amber-200/55">
+          {t("hero.noSkills")}
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      {digButton}
       <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">{t("hero.tabSkills")}</div>
       <div className="space-y-1">
         {skills.map(({ id, label, description, levelLabel }) => (
@@ -461,6 +464,25 @@ function skillLevelLabel(level: SkillLevel, t: TFn) {
   if (level === "basic") return t("skill.levelBasic");
   if (level === "advanced") return t("skill.levelAdvanced");
   return t("skill.levelExpert");
+}
+
+function PuzzleMapButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-violet-400/50 bg-violet-950/70 text-violet-100 shadow-[0_0_0_1px_rgba(221,214,254,0.14)_inset] transition hover:border-violet-200 hover:bg-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200/80"
+    >
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10 3h4a1 1 0 0 1 1 1 2 2 0 1 0 4 0 1 1 0 0 1 1 1v3a1 1 0 0 0 1 1 2 2 0 1 1 0 4 1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1 2 2 0 1 0-4 0 1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1 2 2 0 1 1 0-4 1 1 0 0 0 1-1V5a1 1 0 0 1 1-1h3a1 1 0 0 0 1-1Z" />
+      </svg>
+      <span className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 whitespace-nowrap rounded-md border border-violet-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-violet-100 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
 }
 
 function HeroTabButton({
@@ -809,6 +831,19 @@ function normalizeRevealedTiles(value: unknown) {
     const y = Number((item as { y?: unknown })?.y);
     return Number.isInteger(x) && Number.isInteger(y) ? [{ x, y }] : [];
   });
+}
+
+function normalizeRevealedScores(value: unknown): Record<string, ScoreBreakdown> | null {
+  if (!Array.isArray(value)) return null;
+  const result: Record<string, ScoreBreakdown> = {};
+  for (const entry of value) {
+    const playerId = (entry as { playerId?: unknown })?.playerId;
+    const breakdown = (entry as { breakdown?: unknown })?.breakdown;
+    if (typeof playerId !== "string" || !breakdown || typeof breakdown !== "object") continue;
+    if (!Array.isArray((breakdown as ScoreBreakdown).categories)) continue;
+    result[playerId] = breakdown as ScoreBreakdown;
+  }
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 function normalizeRevealHints(value: unknown) {

@@ -4,6 +4,7 @@ import { processAction } from "@/lib/game/engine";
 import { normalizeMapLevel, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import type { SpellId } from "@/lib/game/spells";
 import type { SpellRevealHint } from "@/lib/rendering/mapRenderer";
+import type { ScoreBreakdown } from "@/lib/game/score";
 
 interface GameStore {
   gameState: GameState | null;
@@ -22,6 +23,9 @@ interface GameStore {
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
   pendingAdventureSpell: { heroId: string; spellId: SpellId; label: string } | null;
   spellRevealHighlight: { turnNumber: number; tiles: Position[]; label: string; hints?: SpellRevealHint[] } | null;
+  // Rival score breakdowns revealed by the Visions spell. Valid for the turn they
+  // were cast on; consumers re-hide them once gameState.turnNumber advances.
+  revealedScores: { turnNumber: number; byPlayerId: Record<string, ScoreBreakdown> } | null;
   activeCombat: PersistentCombat | null;
   minimizedCombatIds: string[];
   lastCombatResult: CombatSummary | null;
@@ -48,6 +52,7 @@ interface GameStore {
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
   setPendingAdventureSpell: (spell: GameStore["pendingAdventureSpell"]) => void;
   setSpellRevealHighlight: (highlight: GameStore["spellRevealHighlight"]) => void;
+  revealRivalScores: (turnNumber: number, scores: Record<string, ScoreBreakdown>) => void;
   setActiveCombat: (combat: PersistentCombat | null) => void;
   minimizeCombat: (combatId: string) => void;
   restoreCombat: (combat: PersistentCombat) => void;
@@ -81,6 +86,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   pendingJoinCombat: null,
   pendingAdventureSpell: null,
   spellRevealHighlight: null,
+  revealedScores: null,
   activeCombat: null,
   minimizedCombatIds: [],
   lastCombatResult: null,
@@ -126,6 +132,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setPendingJoinCombat: (combat) => set({ pendingJoinCombat: combat }),
   setPendingAdventureSpell: (spell) => set({ pendingAdventureSpell: spell }),
   setSpellRevealHighlight: (highlight) => set({ spellRevealHighlight: highlight }),
+  revealRivalScores: (turnNumber, scores) =>
+    set((state) => {
+      // Merge with any reveals already made this turn; drop stale ones from a past turn.
+      const base = state.revealedScores?.turnNumber === turnNumber ? state.revealedScores.byPlayerId : {};
+      return { revealedScores: { turnNumber, byPlayerId: { ...base, ...scores } } };
+    }),
   setActiveCombat: (combat) => {
     const openCombat = combat?.visibility === "joinable_summary" ? null : combat;
     set({ activeCombat: openCombat, isCombatMode: Boolean(openCombat) });
@@ -210,6 +222,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pendingJoinCombat: null,
       pendingAdventureSpell: null,
       spellRevealHighlight: null,
+      revealedScores: null,
       activeCombat: null,
       minimizedCombatIds: [],
       lastCombatResult: null,

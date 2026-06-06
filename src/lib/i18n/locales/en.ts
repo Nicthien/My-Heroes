@@ -932,7 +932,7 @@ export const en: Record<TranslationKey, string> = {
   "audio.musicAdventure": "Adventure music",
   "audio.musicCombat": "Combat music",
   "audio.effects": "Effects",
-  "score.detailHidden": "Details hidden by the fog of war.",
+  "score.detailHidden": "Details hidden.",
   "score.rank": "Rank #{rank}/{count}",
   "score.cat.towns": "Towns",
   "score.cat.heroes": "Heroes",

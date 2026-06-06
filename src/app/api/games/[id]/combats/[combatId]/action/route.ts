@@ -29,7 +29,8 @@ import {
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
-import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
+import { GRAIL_ARTIFACT_ID, getEffectiveHeroStatsFromValues, normalizeArtifactBag } from "@/lib/game/artifacts";
+import { getAllyGrailAura, getGrailNecromancyPercent } from "@/lib/game/grail";
 import { computeRaisedSkeletons } from "@/lib/game/combat/necromancy";
 import { computeSurrenderGoldCost } from "@/lib/game/combat/surrender";
 import { UNIT_RULES } from "@/lib/game/economy";
@@ -262,6 +263,16 @@ export async function POST(
     }
 
     const casterStats = getEffectiveHeroStatsFromValues(caster.hero);
+    if (caster.playerId) {
+      // Dungeon Grail (warlock lore) raises the caster's effective spell power.
+      const { data: casterTowns } = await supabase.from("towns").select("town_type,buildings").eq("game_player_id", caster.playerId);
+      casterStats.spellPower += getAllyGrailAura({
+        towns: (casterTowns ?? []).map((t) => ({
+          townType: (t as { town_type?: string | null }).town_type ?? null,
+          buildings: (t as { buildings?: string[] | null }).buildings ?? [],
+        })),
+      }).spellPower;
+    }
     const mana = getHeroMana({ mana: caster.hero.mana, knowledge: casterStats.knowledge });
     const cost = getSpellCost(spell);
     const hasDevInfiniteMana = action.devInfiniteManaHeroId === caster.heroId;
@@ -1449,6 +1460,7 @@ async function persistResolvedCombat(
       }
     }
     if (combat.defender_hero_id && combat.defender_player_id) {
+      await transferGrailOnDefeat(supabase, combat.game_id, combat.defender_hero_id, combat.attacker_hero_id);
       await supabase.from("armies").delete().eq("hero_id", combat.defender_hero_id);
       await supabase.from("heroes").delete().eq("id", combat.defender_hero_id);
     }
@@ -1458,6 +1470,7 @@ async function persistResolvedCombat(
     if (!combat.defender_player_id && !combat.neutral_army_id && !combat.gate_id) {
       await persistGeneratedNeutralDefenderSurvivorsAt(supabase, combat.game_id, combat.x, combat.y, after);
     }
+    await transferGrailOnDefeat(supabase, combat.game_id, combat.attacker_hero_id, combat.defender_hero_id);
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
     await supabase.from("heroes").delete().eq("id", combat.attacker_hero_id);
     if (combat.defender_hero_id && combat.defender_player_id) {
@@ -1467,6 +1480,37 @@ async function persistResolvedCombat(
   }
 
   await applyCombatScoreOutcome(supabase, combat, winnerSide);
+}
+
+/**
+ * Carry the Grail across a lethal defeat: a defeated hero who held the Grail
+ * passes it to the victorious hero. If the victor is a neutral army (no hero to
+ * carry it), the Grail returns to its buried tile so it stays obtainable.
+ */
+async function transferGrailOnDefeat(
+  supabase: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  loserHeroId: string | null,
+  winnerHeroId: string | null,
+) {
+  if (!loserHeroId) return;
+  const { data: loser } = await supabase.from("heroes").select("artifacts").eq("id", loserHeroId).maybeSingle();
+  const loserBag = normalizeArtifactBag(loser?.artifacts);
+  if (!loserBag.inventory.includes(GRAIL_ARTIFACT_ID)) return;
+
+  if (winnerHeroId) {
+    const { data: winner } = await supabase.from("heroes").select("artifacts").eq("id", winnerHeroId).maybeSingle();
+    const winnerBag = normalizeArtifactBag(winner?.artifacts);
+    await supabase
+      .from("heroes")
+      .update({ artifacts: { ...winnerBag, inventory: [...winnerBag.inventory, GRAIL_ARTIFACT_ID] } })
+      .eq("id", winnerHeroId);
+    return;
+  }
+
+  const { data: gameRow } = await supabase.from("games").select("map_state").eq("id", gameId).maybeSingle();
+  const mapState = (gameRow?.map_state as Record<string, unknown>) ?? {};
+  await supabase.from("games").update({ map_state: { ...mapState, grailFound: false } }).eq("id", gameId);
 }
 
 async function persistConcededCombat(
@@ -1749,7 +1793,8 @@ async function applyNecromancyPostCombat(
     }
   }
 
-  const raised = computeRaisedSkeletons(killsByType, skills, playerTowns);
+  const grailNecromancyBonus = getGrailNecromancyPercent({ towns: playerTowns });
+  const raised = computeRaisedSkeletons(killsByType, skills, playerTowns, grailNecromancyBonus);
   if (!raised) return;
 
   const rule = UNIT_RULES[raised.unitType];

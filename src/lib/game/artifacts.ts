@@ -103,13 +103,22 @@ export const ARTIFACTS = [
   artifact("glyph_gallantry", "Glyphe de bravoure", "Glyph of Gallantry", "treasure", 1000, miscSlots, { morale: 1 }),
   artifact("speculum", "Speculum", "Speculum", "treasure", 4000, miscSlots, {}, ["Rayon de vision +1"]),
   artifact("spyglass", "Longue-vue", "Spyglass", "treasure", 4000, miscSlots, {}, ["Rayon de vision +1"]),
+  // The Grail is a carried, non-equippable relic (no slot). It is excluded from
+  // every random/merchant pool below — it can only be dug up from its buried
+  // tile — and is consumed when erected as a town's Grail structure.
+  artifact("grail", "Graal", "Grail", "relic", 0, [], {}, ["Bâtiment du Graal : à porter jusqu'à une ville alliée pour ériger la structure monumentale."]),
 ] as const satisfies readonly ArtifactDefinition[];
+
+/** Carried, non-equippable Grail relic — see {@link import("./grail").GRAIL_ARTIFACT_ID}. */
+export const GRAIL_ARTIFACT_ID = "grail";
 
 export type ArtifactId = string;
 
 export const ARTIFACTS_BY_ID = Object.fromEntries(ARTIFACTS.map((item) => [item.id, item])) as Record<ArtifactId, ArtifactDefinition>;
 export const ARTIFACT_POOLS = ARTIFACT_CLASSES.reduce((pools, artifactClass) => {
-  pools[artifactClass] = ARTIFACTS.filter((artifact) => artifact.class === artifactClass).map((artifact) => artifact.id);
+  pools[artifactClass] = ARTIFACTS
+    .filter((artifact) => artifact.class === artifactClass && artifact.id !== GRAIL_ARTIFACT_ID)
+    .map((artifact) => artifact.id);
   return pools;
 }, {} as Record<ArtifactClass, ArtifactId[]>);
 

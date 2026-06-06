@@ -56,8 +56,10 @@ export function computeRaisedSkeletons(
   killsByType: Partial<Record<UnitType, number>>,
   attackerSkills: HeroSkills | null | undefined,
   attackerTowns: Array<{ townType?: string | null; buildings?: string[] | null }>,
+  /** Extra flat necromancy percentage points (e.g. Necropolis Grail effect). */
+  extraNecromancyPercent = 0,
 ): { unitType: UnitType; count: number } | null {
-  const amplifierBonus = hasAmplifier(attackerTowns) ? 10 : 0;
+  const amplifierBonus = (hasAmplifier(attackerTowns) ? 10 : 0) + Math.max(0, extraNecromancyPercent);
   const pct = getNecromancyPercent(attackerSkills, amplifierBonus);
   if (pct <= 0) return null;
   const transformer = hasTransformer(attackerTowns);

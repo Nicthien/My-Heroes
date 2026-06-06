@@ -503,6 +503,7 @@ function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequ
     current_turn_player_id,
     winner_id,
     map_state,
+    game_config,
     updated_at,
     ${includeCreatedBy ? "created_by_user_id," : ""}
     game_players!game_players_game_id_fkey(

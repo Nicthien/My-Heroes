@@ -1,3 +1,54 @@
+import { computeGrailHintFromCounts, countVisitedObelisks, getGrailLocation, getObeliskIds, type GrailHint } from "@/lib/game/grail";
+import type { GameMap } from "@/lib/game/types";
+
+/**
+ * Server-side, per-viewer Grail hint. The exact buried tile is only included
+ * once the viewer has earned the reveal (or the game/map is fully revealed) — it
+ * is computed here so the raw location never leaves the server (see
+ * {@link stripGrailFromGameConfig}).
+ */
+export function buildViewerGrailHint(
+  game: { gameConfig?: unknown; mapData?: unknown; mapState?: unknown; mapWidth?: unknown; mapHeight?: unknown },
+  viewerPlayerId: string | undefined,
+  reveal = false,
+): GrailHint | null {
+  const grail = getGrailLocation(game.gameConfig);
+  if (!grail) return null;
+  const mapState = (game.mapState as Record<string, unknown> | undefined) ?? {};
+  const dug = Boolean(mapState.grailFound);
+  if (reveal) {
+    return { obelisksTotal: 0, obelisksVisited: 0, revealed: true, dug, mapLevel: grail.mapLevel, tile: { x: grail.x, y: grail.y } };
+  }
+
+  // Works without the full map: prefer the obelisk total stored in game_config
+  // (the sync payload omits map_data). Fall back to counting from the map only
+  // when it happens to be present (full GET / legacy games).
+  const config = (game.gameConfig as Record<string, unknown> | undefined) ?? {};
+  const map = game.mapData as GameMap | undefined;
+  const obelisksTotal = typeof config.obelisksTotal === "number"
+    ? config.obelisksTotal
+    : map?.tiles ? getObeliskIds(map).length : 0;
+  const visits = viewerPlayerId
+    ? (mapState.playerAdventureVisits as Record<string, string[]> | undefined)?.[viewerPlayerId] ?? []
+    : [];
+  return computeGrailHintFromCounts({
+    grail,
+    obelisksTotal,
+    obelisksVisited: countVisitedObelisks(visits),
+    mapWidth: Number(game.mapWidth ?? map?.width ?? 0),
+    mapHeight: Number(game.mapHeight ?? map?.height ?? 0),
+    dug,
+  });
+}
+
+/** Remove the secret buried-Grail location from the game_config sent to clients. */
+export function stripGrailFromGameConfig(gameConfig: unknown): unknown {
+  if (!gameConfig || typeof gameConfig !== "object") return gameConfig;
+  const { grail: _grail, ...rest } = gameConfig as Record<string, unknown>;
+  void _grail;
+  return rest;
+}
+
 export function computeTurnProgressRatio(
   player: {
     heroes?: Array<Record<string, unknown>>;

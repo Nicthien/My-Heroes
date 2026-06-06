@@ -16,6 +16,7 @@ import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId }
 import { normalizeTownBuildings } from "./town-buildings";
 import { normalizeScoreStats } from "./score";
 import { normalizeVictoryCondition } from "./victory";
+import { computeGrailHint, getGrailLocation, playerHasGrailEffect } from "./grail";
 
 interface ApiPlayer {
   id: string;
@@ -715,7 +716,10 @@ export function mapApiToGameState(
   staticGameMaps.set(mapId, normalizedStaticMap);
 
   // A finished game reveals the whole map for everyone (end-of-game review).
-  const revealMap = Boolean(options.revealMap) || data.status === "COMPLETED";
+  // A built Tower Grail (Celestial Vessel) reveals it permanently for its owner.
+  const revealMap = Boolean(options.revealMap)
+    || data.status === "COMPLETED"
+    || (currentPlayer ? playerHasGrailEffect(currentPlayer, "revealMap") : false);
 
   const map = cloneGameMap(normalizedStaticMap);
   applyDynamicMapState(
@@ -729,6 +733,7 @@ export function mapApiToGameState(
   );
 
   const adventureVisits = extractAdventureVisitState(data.mapState);
+  const grailHint = buildGrailHint(normalizedStaticMap, data, currentPlayer, adventureVisits, revealMap);
 
   return {
     id: mapId,
@@ -747,6 +752,7 @@ export function mapApiToGameState(
     activeCombats,
     adventureVisits,
     actionLog,
+    grailHint,
   };
 }
 
@@ -769,7 +775,10 @@ export function mergeGameDynamicState(
   const currentPlayer = players.find((player) => player.userId === currentUserId);
 
   // A finished game reveals the whole map for everyone (end-of-game review).
-  const revealMap = Boolean(options.revealMap) || data.status === "COMPLETED";
+  // A built Tower Grail (Celestial Vessel) reveals it permanently for its owner.
+  const revealMap = Boolean(options.revealMap)
+    || data.status === "COMPLETED"
+    || (currentPlayer ? playerHasGrailEffect(currentPlayer, "revealMap") : false);
 
   applyDynamicMapState(
     baseGameState.map,
@@ -795,7 +804,34 @@ export function mergeGameDynamicState(
     activeCombats,
     adventureVisits: extractAdventureVisitState(data.mapState),
     actionLog,
+    grailHint: buildGrailHint(staticMap, data, currentPlayer, extractAdventureVisitState(data.mapState), revealMap),
   };
+}
+
+/**
+ * Sanitized per-player Grail hint. The exact buried tile is only included once
+ * the player has earned the reveal (or the game/map is fully revealed); before
+ * that only the shrinking probable zone is exposed.
+ */
+function buildGrailHint(
+  map: GameMap,
+  data: Record<string, unknown>,
+  currentPlayer: Player | undefined,
+  adventureVisits: AdventureBuildingState,
+  revealMap: boolean,
+) {
+  // The server computes and sanitizes the hint (the raw buried location never
+  // reaches the client). Prefer it when present; only fall back to a local
+  // computation for dev mocks / cached payloads that still embed the location.
+  if ("grailHint" in data) return (data.grailHint as import("./grail").GrailHint | null) ?? null;
+  const grailLocation = getGrailLocation(data.gameConfig);
+  if (!grailLocation) return null;
+  const dug = Boolean((data.mapState as Record<string, unknown> | undefined)?.grailFound);
+  if (revealMap) {
+    return { obelisksTotal: 0, obelisksVisited: 0, revealed: true, dug, mapLevel: grailLocation.mapLevel, tile: { x: grailLocation.x, y: grailLocation.y } };
+  }
+  const visited = currentPlayer ? adventureVisits.playerAdventureVisits?.[currentPlayer.id] ?? [] : [];
+  return computeGrailHint(map, grailLocation, visited, dug);
 }
 
 function extractAdventureVisitState(rawMapState: unknown): AdventureBuildingState {

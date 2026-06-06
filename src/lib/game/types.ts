@@ -900,6 +900,7 @@ export type GameAction =
   | { type: "EMBARK_BOAT"; heroId: string; boatId: string }
   | { type: "DISEMBARK_BOAT"; heroId: string; position: Position }
   | { type: "VISIT_ADVENTURE_BUILDING"; heroId: string; buildingId: string; choice?: "attack" | "defense" | "spellPower" | "knowledge" }
+  | { type: "DIG_GRAIL"; heroId: string }
   | { type: "CAST_ADVENTURE_SPELL"; heroId: string; spellId: string; target?: Position | { townId?: string } }
   | { type: "ATTACK"; heroId: string; targetId: string }
   | { type: "CAPTURE_TOWN"; heroId: string; townId: string }
@@ -971,4 +972,6 @@ export interface GameState {
   boats?: Boat[];
   adventureVisits?: AdventureBuildingState;
   actionLog?: import("./server/action-log").GameActionLogEntry[];
+  /** Per-(requesting-)player view of the buried Grail; absent on legacy games. */
+  grailHint?: import("./grail").GrailHint | null;
 }

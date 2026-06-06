@@ -13,6 +13,7 @@ import { makeRng } from "@/lib/game/engine/rng";
 import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { AdventureBuildingType, GameMap, MapObject, Position, Resources } from "@/lib/game/types";
 import { computeVisibleTiles, isTileTraversable } from "@/lib/game/engine";
+import { getObeliskIds, OBELISK_REVEAL_THRESHOLD } from "@/lib/game/grail";
 import { SPELLS, getHeroMana, type SpellId } from "@/lib/game/spells";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { getAdventureWeekKey, getLatestMapState } from "./actionHelpers";
@@ -580,13 +581,24 @@ export async function runAdventureBuildingVisit({
     const revealed = computeVisibleTiles(mapData, [position], OBELISK_REVEAL_RADIUS);
     for (const key of revealed) explored.add(key);
     await supabase.from("game_players").update({ explored_tiles: Array.from(explored) }).eq("id", gamePlayer.id);
+    const nextPlayerVisits = addVisit(playerAdventureVisits, gamePlayer.id, object.id);
     await supabase.from("games").update({
       map_state: {
         ...mapState,
-        playerAdventureVisits: addVisit(playerAdventureVisits, gamePlayer.id, object.id),
+        playerAdventureVisits: nextPlayerVisits,
       },
     }).eq("id", gameId);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Obelisque visite : region revelee." };
+
+    // Obelisks double as the Grail puzzle map: report progress toward revealing
+    // the buried Grail's exact tile (reached at OBELISK_REVEAL_THRESHOLD).
+    const obeliskIds = new Set(getObeliskIds(mapData));
+    const total = obeliskIds.size;
+    const visitedCount = (nextPlayerVisits[gamePlayer.id] ?? []).filter((id: string) => obeliskIds.has(id)).length;
+    const required = Math.max(1, Math.ceil(total * OBELISK_REVEAL_THRESHOLD));
+    const message = total > 0 && visitedCount >= required
+      ? `Obélisque visité : l'emplacement du Graal est révélé ! (${visitedCount}/${total})`
+      : `Obélisque visité : la carte-énigme du Graal se précise (${visitedCount}/${total}).`;
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message };
   }
 
   if (buildingType === AdventureBuildingType.WARRIOR_TOMB) {

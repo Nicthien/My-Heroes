@@ -11,6 +11,7 @@
     "db:migrate": "node scripts/migrate-db.mjs",
     "db:migrate:status": "node scripts/migrate-db.mjs --status",
     "db:migrate:baseline": "node scripts/migrate-db.mjs --baseline",
+    "dockerhub:overview": "node scripts/update-dockerhub-overview.mjs",
     "admin:ensure": "node scripts/ensure-admin.mjs",
     "build": "next build",
     "start": "next start",

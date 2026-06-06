@@ -92,6 +92,13 @@ docker build --provenance=false --sbom=false -t nicthien/my-heroes:latest .
 docker push nicthien/my-heroes:latest
 ```
 
+`docker push` uploads only the image — the Docker Hub **Overview** page is never
+synced by it. After a push, refresh it from [`DOCKERHUB.md`](DOCKERHUB.md):
+
+```bash
+DOCKERHUB_USERNAME=<user> DOCKERHUB_TOKEN=<access-token> npm run dockerhub:overview
+```
+
 Then follow [`docs/UNRAID.md`](docs/UNRAID.md) for the Portainer steps (deploy
 Supabase, apply the schema, deploy the app stack, front with Zoraxy). App env
 template: [`docker/unraid/env.unraid.example`](docker/unraid/env.unraid.example).

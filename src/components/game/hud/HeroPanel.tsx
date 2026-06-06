@@ -157,6 +157,7 @@ export function HeroPanel({
         onResetPosition={heroDraggable.isEnabled ? heroDraggable.resetPosition : undefined}
         rootRef={heroDraggable.ref}
         style={heroDraggable.style}
+        testId="hud-hero-panel"
         right={
           <button
             type="button"

@@ -6,6 +6,8 @@ import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
 import { HeroPanel } from "./HeroPanel";
 import { GameOverScreen } from "./GameOverScreen";
+import { GameRulesPopup } from "./GameRulesPopup";
+import { HudTutorial } from "./HudTutorial";
 import { PlayersListPanel } from "./PlayersListPanel";
 import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { CountDialog } from "./townDialogs";
@@ -32,6 +34,8 @@ import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import {
   factionLabel,
   getApiErrorMessage,
+  getGameRulesSeen,
+  getTutorialSeen,
 } from "./helpers";
 import {
   addUnitsToLocalStackList,
@@ -97,6 +101,12 @@ export function HUDContent() {
   const [returnDialog, setReturnDialog] = useState<{ townId: string; heroId: string; unitType: UnitType; count: number } | null>(null);
   // Admin observers can dismiss the end-of-game review to inspect the final board.
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
+  // One-time welcome popup explaining the game type's rules when the game starts.
+  const [rulesDismissed, setRulesDismissed] = useState(false);
+  // Guided HUD tutorial: auto-launches once after the rules popup, and can be
+  // reopened on demand via the top-bar help button.
+  const [tutorialClosed, setTutorialClosed] = useState(false);
+  const [tutorialManuallyOpen, setTutorialManuallyOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
@@ -131,6 +141,28 @@ export function HUDContent() {
     myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn
   );
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
+
+  // One-time rules popup: shown once a seated player reaches an ACTIVE game and
+  // hasn't already dismissed it for this seat. Derived at render time (HUDContent
+  // only mounts client-side, so the localStorage read is safe and catches the
+  // PENDING → ACTIVE transition without a setState-in-effect).
+  const showRules = Boolean(
+    !rulesDismissed &&
+      !adminObserverMode &&
+      gameState.status === "ACTIVE" &&
+      myPlayer &&
+      !getGameRulesSeen(gameState.id, myPlayer.id)
+  );
+
+  // The guided tour auto-starts once the rules popup is gone (or already seen),
+  // for a seated player who hasn't completed it; the help button forces it open.
+  const canShowTutorial = Boolean(!adminObserverMode && gameState.status === "ACTIVE" && myPlayer);
+  const autoTutorial = canShowTutorial && !showRules && !tutorialClosed && !getTutorialSeen();
+  const showTutorial = canShowTutorial && (tutorialManuallyOpen || autoTutorial);
+  const closeTutorial = () => {
+    setTutorialManuallyOpen(false);
+    setTutorialClosed(true);
+  };
 
   const allTowns = gameState.players.flatMap((p) => p.towns);
   const playersById = new Map(gameState.players.map((player) => [player.id, player]));
@@ -949,7 +981,7 @@ export function HUDContent() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0 text-center md:flex">
+          <div data-tutorial="turn-status" className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0 text-center md:flex">
             {isPending && (
               <span className="inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-amber-400/50 bg-gradient-to-b from-amber-900/60 to-stone-950/80 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]">
                 <FleurDeLis className="h-3 w-3 text-amber-300" />
@@ -1011,10 +1043,23 @@ export function HUDContent() {
             ) : myPlayer ? (
               <ResourceBar player={myPlayer} />
             ) : null}
+            {!isPending && !adminObserverMode && myPlayer && (
+              <button
+                type="button"
+                className="touch-target hidden shrink-0 items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-3 text-lg font-black text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-amber-400/70 hover:bg-amber-950/40 hover:text-amber-100 md:flex"
+                onClick={() => setTutorialManuallyOpen(true)}
+                title={t("tutorial.help")}
+                aria-label={t("tutorial.help")}
+                data-testid="hud-help-button"
+              >
+                ?
+              </button>
+            )}
             <button
               className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
               onClick={handleLeaveGame}
               title={myPlayer?.turnOrder !== 0 && isPending ? t("hud.leaveGame") : t("hud.backToDashboard")}
+              data-tutorial="menu"
             >
               <span className="text-sm font-black uppercase tracking-wider leading-none">
                 {myPlayer?.turnOrder !== 0 && isPending ? t("hud.quit") : t("hud.back")}
@@ -1042,6 +1087,18 @@ export function HUDContent() {
 
       {devPanel.overlay}
       {turnNotifications.promptUI}
+
+      {showRules && myPlayer && (
+        <GameRulesPopup gameState={gameState} myPlayer={myPlayer} onDismiss={() => setRulesDismissed(true)} />
+      )}
+
+      {showTutorial && (
+        <HudTutorial
+          heroId={myPlayer?.heroes[0]?.id}
+          townId={myPlayer?.towns[0]?.id}
+          onClose={closeTutorial}
+        />
+      )}
 
       {mobileDrawer && (
         <div className="mobile-hud-drawer pointer-events-auto rounded-xl" data-testid="mobile-hud-drawer">
@@ -1102,6 +1159,7 @@ export function HUDContent() {
       {selectedTown && (
         <CollapsiblePanel
           title={selectedTown.name}
+          testId="hud-town-panel"
           className={`${ornateFramePolished} mobile-bottom-sheet pointer-events-auto absolute left-4 top-[7rem] flex max-h-[calc(100vh-9rem)] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden`}
           bodyClassName="flex min-h-0 flex-1 flex-col"
           dragHandleProps={townDraggable.isEnabled ? townDraggable.dragHandleProps : undefined}
@@ -1430,6 +1488,7 @@ export function HUDContent() {
             disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn"
+            data-tutorial="end-turn"
             title={isWaitingForPlayers ? t("hud.cancelEndTurn") : t("hud.endTurn")}
           >
             <HourglassIcon className="mx-auto h-9 w-9 drop-shadow" />

@@ -28,6 +28,44 @@ export function markNotificationPromptDismissed() {
   window.localStorage.setItem(NOTIFICATION_PROMPT_DISMISSED_KEY, "true");
 }
 
+/**
+ * The start-of-game rules popup is shown once per game per player. We remember
+ * the dismissal in localStorage keyed by game + player so it never reappears
+ * for that seat (a fresh game/seat gets a fresh prompt).
+ */
+export function gameRulesSeenKey(gameId: string, playerId: string | undefined) {
+  return `my-heroes:rules-seen:${gameId}:${playerId ?? "viewer"}`;
+}
+
+export function getGameRulesSeen(gameId: string, playerId: string | undefined) {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(gameRulesSeenKey(gameId, playerId)) === "true";
+}
+
+export function markGameRulesSeen(gameId: string, playerId: string | undefined) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(gameRulesSeenKey(gameId, playerId), "true");
+}
+
+/**
+ * The HUD tutorial (guided UI tour) is a one-time onboarding shown the first
+ * time a player reaches an active game. Unlike the per-game rules popup, the
+ * interface tour is the same across every game, so the "seen" flag is global.
+ * The in-game help button can always re-open it.
+ */
+export const TUTORIAL_SEEN_KEY = "my-heroes:tutorial:seen";
+
+export function getTutorialSeen() {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(TUTORIAL_SEEN_KEY) === "true";
+}
+
+export function setTutorialSeen(seen: boolean) {
+  if (typeof window === "undefined") return;
+  if (seen) window.localStorage.setItem(TUTORIAL_SEEN_KEY, "true");
+  else window.localStorage.removeItem(TUTORIAL_SEEN_KEY);
+}
+
 export async function showBrowserNotification(title: string, options: NotificationOptions) {
   if (typeof window === "undefined" || typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;

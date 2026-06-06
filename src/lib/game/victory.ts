@@ -199,6 +199,84 @@ function highestScoreContenderId(contenders: VictoryContenderSnapshot[]): string
   return bestId;
 }
 
+/**
+ * Detailed, actionable rules for the active objective — shown in the
+ * start-of-game rules popup. Returns a short list of localized bullet points
+ * tailored to the configured victory condition.
+ */
+export function victoryConditionRules(condition: VictoryCondition, locale: Locale = "fr"): string[] {
+  const en = locale === "en";
+  switch (condition.type) {
+    case "KING":
+      return en
+        ? [
+            "Your King stands in the garrison of your starting town — keep him safe.",
+            "If a player's King is slain, that player is eliminated.",
+            "Hunt down and kill the enemy King to defeat them.",
+          ]
+        : [
+            "Votre Roi se trouve dans la garnison de votre ville de départ — gardez-le en sécurité.",
+            "Si le Roi d'un joueur est tué, ce joueur est éliminé.",
+            "Traquez et tuez le Roi adverse pour le vaincre.",
+          ];
+    case "GOLD": {
+      const amount = (condition.goldTarget ?? DEFAULT_GOLD_TARGET).toLocaleString(en ? "en-US" : "fr-FR");
+      return en
+        ? [
+            `Accumulate ${amount} gold to win the game instantly.`,
+            "Capture gold mines and build up your towns to boost your income.",
+            "Eliminating every rival is still a winning backup path.",
+          ]
+        : [
+            `Accumulez ${amount} d'or pour remporter la partie instantanément.`,
+            "Capturez les mines d'or et développez vos villes pour augmenter vos revenus.",
+            "Éliminer tous vos rivaux reste une victoire de secours.",
+          ];
+    }
+    case "TURN_LIMIT": {
+      const turns = condition.turnLimit ?? DEFAULT_TURN_LIMIT;
+      return en
+        ? [
+            `The game lasts ${turns} turns.`,
+            "When the final turn ends, the player with the highest score wins.",
+            "Score rewards towns, armies, heroes and territory — expand steadily.",
+          ]
+        : [
+            `La partie dure ${turns} tours.`,
+            "À la fin du dernier tour, le joueur avec le meilleur score l'emporte.",
+            "Le score récompense villes, armées, héros et territoire — développez-vous régulièrement.",
+          ];
+    }
+    case "CAPTURE_TOWN": {
+      const name = condition.targetTownName;
+      return en
+        ? [
+            name ? `Capture ${name}, the designated target town, to win.` : "Capture the designated target town to win.",
+            "The target is marked on the map — fight your way to it.",
+            "Eliminating every rival is still a winning backup path.",
+          ]
+        : [
+            name ? `Capturez ${name}, la ville cible désignée, pour gagner.` : "Capturez la ville cible désignée pour gagner.",
+            "La cible est indiquée sur la carte — frayez-vous un chemin jusqu'à elle.",
+            "Éliminer tous vos rivaux reste une victoire de secours.",
+          ];
+    }
+    case "DOMINATION":
+    default:
+      return en
+        ? [
+            "Be the last player left holding a hero or a town.",
+            "Capture enemy towns and defeat their heroes to eliminate them.",
+            "A player with no town and no hero is knocked out of the game.",
+          ]
+        : [
+            "Soyez le dernier joueur à posséder un héros ou une ville.",
+            "Capturez les villes adverses et battez leurs héros pour les éliminer.",
+            "Un joueur sans ville ni héros est éliminé de la partie.",
+          ];
+  }
+}
+
 /** Human-readable summary of the active condition (lobby, banners). */
 export function describeVictoryCondition(condition: VictoryCondition, locale: Locale = "fr"): string {
   const en = locale === "en";

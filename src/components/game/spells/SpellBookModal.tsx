@@ -36,9 +36,12 @@ const SCHOOL_LABEL_KEY: Record<SpellSchool, TranslationKey> = {
   all: "spell.schoolAll",
 };
 
-export function SpellBookButton({ onClick, label, disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) {
+export function SpellBookButton({ onClick, label, disabled = false, tooltipAlign = "center" }: { onClick: () => void; label?: string; disabled?: boolean; tooltipAlign?: "center" | "right" }) {
   const { t } = useI18n();
   const resolvedLabel = label ?? t("spell.book");
+  // Right-anchor the tooltip when the button sits at a container's right edge so
+  // the wide label doesn't overflow and get clipped by an overflow-hidden panel.
+  const tooltipPosition = tooltipAlign === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
   return (
     <button
       type="button"
@@ -49,7 +52,7 @@ export function SpellBookButton({ onClick, label, disabled = false }: { onClick:
       className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-violet-400/50 bg-violet-950/70 text-violet-100 shadow-[0_0_0_1px_rgba(221,214,254,0.14)_inset] transition hover:border-violet-200 hover:bg-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200/80 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-violet-400/50 disabled:hover:bg-violet-950/70"
     >
       <BookIcon className="h-5 w-5" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-violet-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-violet-100 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-visible:opacity-100">
+      <span className={`pointer-events-none absolute bottom-full ${tooltipPosition} z-50 mb-2 whitespace-nowrap rounded-md border border-violet-400/50 bg-stone-950/95 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-violet-100 opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-visible:opacity-100`}>
         {resolvedLabel}
       </span>
     </button>
@@ -64,6 +67,7 @@ export function SpellBookModal({
   onCast,
   canCast = true,
   ignoreManaCost = false,
+  grantAllSpells = false,
   targetLabel,
 }: {
   hero: Hero;
@@ -73,6 +77,8 @@ export function SpellBookModal({
   onCast?: (spell: SpellDefinition, target?: { x: number; y: number }) => Promise<void> | void;
   canCast?: boolean;
   ignoreManaCost?: boolean;
+  /** Dev cheat: list and allow every spell regardless of what the hero knows. */
+  grantAllSpells?: boolean;
   targetLabel?: string | null;
 }) {
   const { t, locale } = useI18n();
@@ -87,10 +93,10 @@ export function SpellBookModal({
   const spells = useMemo(() => {
     return SPELLS
       .filter((spell) => spell.context === context)
-      .filter((spell) => heroKnowsSpell(hero, spell.id))
+      .filter((spell) => grantAllSpells || heroKnowsSpell(hero, spell.id))
       .filter((spell) => activeSchool === "all_schools" || spell.school === activeSchool || spell.school === "all")
       .sort((a, b) => a.level - b.level || a.school.localeCompare(b.school) || a.label.localeCompare(b.label));
-  }, [activeSchool, context, hero]);
+  }, [activeSchool, context, hero, grantAllSpells]);
 
   async function castSpell(spell: SpellDefinition) {
     if (!onCast) return;
@@ -159,9 +165,9 @@ export function SpellBookModal({
           ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {spells.map((spell) => {
-              const known = heroKnowsSpell(hero, spell.id);
+              const known = grantAllSpells || heroKnowsSpell(hero, spell.id);
               const cost = getSpellCost(spell);
-              const disabledReason = getDisabledReason({ spell, known, mana, cost, canCast, hasSpellBook: hero.hasSpellBook, ignoreManaCost, t });
+              const disabledReason = getDisabledReason({ spell, known, mana, cost, canCast, hasSpellBook: hero.hasSpellBook || grantAllSpells, ignoreManaCost, t });
               const disabled = Boolean(disabledReason) || pendingSpellId !== null;
               return (
                 <article

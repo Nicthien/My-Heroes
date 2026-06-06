@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { GameState, Player } from "@/lib/game/types";
 import { computePlayerScore, scorableFromPlayer } from "@/lib/game/score";
+import { useGameStore } from "@/lib/stores/gameStore";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { PlayerProgressGauge, TurnStatusIcon } from "./topBar";
 import { PlayerScoreTooltip } from "./PlayerScoreTooltip";
@@ -31,6 +32,13 @@ export function PlayersListPanel({
   const rankByPlayerId = new Map(ranked.map((entry) => [entry.player.id, entry]));
   const myBreakdown = myPlayer ? computePlayerScore(scorableFromPlayer(myPlayer)) : undefined;
   const playerCount = gameState.players.length;
+  // Rival breakdowns unveiled by the Visions spell this turn (re-hidden once the
+  // turn advances). Lets the tooltip show an opponent's composition, not just the total.
+  const revealedScoresState = useGameStore((state) => state.revealedScores);
+  const revealedScores =
+    revealedScoresState && revealedScoresState.turnNumber === gameState.turnNumber
+      ? revealedScoresState.byPlayerId
+      : null;
 
   // Tooltip is fixed-positioned (anchored to the hovered row) so it escapes the
   // panel's scroll/overflow clipping. Tracks the hovered row's screen rectangle.
@@ -89,7 +97,11 @@ export function PlayersListPanel({
       {hovered && hoveredEntry && (
         <PlayerScoreTooltip
           total={hoveredEntry.total}
-          breakdown={hoveredEntry.player.id === myPlayer?.id ? myBreakdown : undefined}
+          breakdown={
+            hoveredEntry.player.id === myPlayer?.id
+              ? myBreakdown
+              : revealedScores?.[hoveredEntry.player.id]
+          }
           rank={hoveredEntry.rank}
           playerCount={playerCount}
           style={{ position: "fixed", top: hovered.top, right: hovered.right }}

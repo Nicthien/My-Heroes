@@ -257,8 +257,11 @@ export async function POST(
 
     const spell = getSpell(String(action.spellId ?? ""));
     if (!spell || spell.context !== "combat") return NextResponse.json({ error: "Sort de combat invalide" }, { status: 400 });
-    if (caster.hero.has_spell_book === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
-    if (!heroKnowsSpell({ knownSpellIds: caster.hero.known_spells ?? null }, spell.id)) {
+    // The infinite-mana dev cheat also grants every spell: skip the spell-book and
+    // known-spell gates so any spell is castable on the selected hero.
+    const hasDevInfiniteMana = action.devInfiniteManaHeroId === caster.heroId;
+    if (!hasDevInfiniteMana && caster.hero.has_spell_book === false) return NextResponse.json({ error: "Ce héros n'a pas de livre de sorts" }, { status: 400 });
+    if (!hasDevInfiniteMana && !heroKnowsSpell({ knownSpellIds: caster.hero.known_spells ?? null }, spell.id)) {
       return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
     }
 
@@ -275,7 +278,6 @@ export async function POST(
     }
     const mana = getHeroMana({ mana: caster.hero.mana, knowledge: casterStats.knowledge });
     const cost = getSpellCost(spell);
-    const hasDevInfiniteMana = action.devInfiniteManaHeroId === caster.heroId;
     if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
     if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });
 

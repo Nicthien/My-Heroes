@@ -49,6 +49,7 @@ import { SPELLS, getHeroMana } from "@/lib/game/spells";
 import { isFaction, pickTownFactionForTerrain, pickTownName } from "@/lib/game/town-generation";
 import { buildActionLogInput, recordGameAction } from "@/lib/game/server/action-log";
 import { applyScoreDelta, scoreDeltaForAction } from "@/lib/game/server/score-stats";
+import { computePlayerScore, scorableFromDbPlayer, type DbScorablePlayer, type ScoreBreakdown } from "@/lib/game/score";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
 import { handleAdventureAction } from "./adventureActions";
@@ -1243,7 +1244,7 @@ async function applyAdventureSpell({
 }: {
   supabase: ReturnType<typeof createAdminClient>;
   gamePlayer: MinimalPlayer;
-  players: Array<{ id: string; isAlive?: boolean; heroes?: MinimalHero[] }>;
+  players: Array<{ id: string; isAlive?: boolean; heroes?: MinimalHero[]; towns?: MinimalTown[] }>;
   boats: MinimalBoat[];
   hero: MinimalHero;
   spellId: string;
@@ -1251,7 +1252,7 @@ async function applyAdventureSpell({
   mapData: GameMap;
   mapState: Record<string, unknown>;
   explored: Set<string>;
-}): Promise<{ ok: true; interaction: { type: "ADVENTURE_SPELL"; spellId: string; message: string; destination?: Position; revealedTiles?: Position[]; revealHints?: Array<Position & { kind: string; subtype?: string }> } } | { ok: false; error: string }> {
+}): Promise<{ ok: true; interaction: { type: "ADVENTURE_SPELL"; spellId: string; message: string; destination?: Position; revealedTiles?: Position[]; revealHints?: Array<Position & { kind: string; subtype?: string }>; revealedScores?: Array<{ playerId: string; breakdown: ScoreBreakdown }> } } | { ok: false; error: string }> {
   const heroPosition = { x: hero.x, y: hero.y };
 
   if (spellId === "view_air" || spellId === "view_earth") {
@@ -1274,24 +1275,41 @@ async function applyAdventureSpell({
   }
 
   if (spellId === "visions") {
+    const VISIONS_RADIUS = 6;
+    const within = (x: number, y: number) =>
+      Math.max(Math.abs(x - hero.x), Math.abs(y - hero.y)) <= VISIONS_RADIUS;
     const nearbyObjects = mapData.tiles
       .flatMap((row) => row)
-      .filter((tile) => {
-        const dx = tile.x - hero.x;
-        const dy = tile.y - hero.y;
-        return Math.max(Math.abs(dx), Math.abs(dy)) <= 6 && (
-          tile.object?.type === "monster" ||
-          tile.object?.type === "hero" ||
-          tile.object?.type === "gate" ||
-          tile.object?.type === "town"
-        );
+      .filter((tile) => within(tile.x, tile.y) && (
+        tile.object?.type === "monster" ||
+        tile.object?.type === "hero" ||
+        tile.object?.type === "gate" ||
+        tile.object?.type === "town"
+      ));
+    // Reveal the full score breakdown of each rival whose hero or town sits within
+    // range, computed from authoritative (un-sanitized) server data. The client
+    // gates it to the current turn only — fog of war re-hides it next turn.
+    const revealedScores: Array<{ playerId: string; breakdown: ScoreBreakdown }> = [];
+    for (const player of players) {
+      if (player.id === gamePlayer.id || player.isAlive === false) continue;
+      const seen =
+        (player.heroes ?? []).some((other) => within(other.x, other.y)) ||
+        (player.towns ?? []).some((town) => within(town.x, town.y));
+      if (!seen) continue;
+      revealedScores.push({
+        playerId: player.id,
+        breakdown: computePlayerScore(scorableFromDbPlayer(player as unknown as DbScorablePlayer)),
       });
+    }
     return {
       ok: true,
       interaction: {
         type: "ADVENTURE_SPELL",
         spellId,
-        message: `Visions : ${nearbyObjects.length} presence(s) notable(s) detectee(s).`,
+        message: revealedScores.length > 0
+          ? `Visions : ${nearbyObjects.length} presence(s) notable(s) ; score de ${revealedScores.length} rival(aux) devoile.`
+          : `Visions : ${nearbyObjects.length} presence(s) notable(s) detectee(s).`,
+        ...(revealedScores.length > 0 ? { revealedScores } : {}),
       },
     };
   }

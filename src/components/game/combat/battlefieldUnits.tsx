@@ -3,7 +3,13 @@
 import Image from "next/image";
 import type { CombatBoardUnit } from "@/lib/game/types";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "./unitSvg";
-import { getUnitRenderOffsetX } from "./combatLayout";
+import { getUnitRenderOffsetX, getUnitRenderOffsetY } from "./combatLayout";
+
+// The unit silhouette art sits a fixed ~44px (in the unit's local, pre-scale
+// coordinate space) to the LEFT of its 125px box centre — consistent across
+// every sprite and row. Status badges (luck/morale) anchor to this so they sit
+// centred above the creature's head rather than over the empty right of the box.
+const STATUS_BADGE_SPRITE_OFFSET_X = 44;
 
 export function UnitModel({
   unit,
@@ -36,7 +42,7 @@ export function UnitModel({
   const palette = getUnitPalette(unit);
   const sideFlip = unit.side === "defender" ? "scaleX(-1)" : "scaleX(1)";
   const renderOffsetX = getUnitRenderOffsetX(unit);
-  const centeredOverlayOffsetX = renderOffsetX / depthScale;
+  const renderOffsetY = getUnitRenderOffsetY(unit);
   const attackClass = attacking
     ? `combat-unit-attacking-${attacking}-${unit.side}`
     : "";
@@ -66,7 +72,7 @@ export function UnitModel({
       }`}
       style={{
         left: `calc(50% + ${renderOffsetX}px)`,
-        top: lifted ? -64 : 4,
+        top: (lifted ? -64 : 4) + renderOffsetY,
         transform: `translateX(-50%) scale(${depthScale})`,
         transformOrigin: "50% 100%",
       }}
@@ -83,7 +89,7 @@ export function UnitModel({
       {unit.luckTriggered && (
         <span
           className={`${persistentLuckIcon ? "combat-luck-icon-static h-12 w-12" : "combat-luck-icon h-10 w-10"} absolute top-[-20px] grid -translate-x-1/2 place-items-center`}
-          style={{ left: `calc(50% - ${centeredOverlayOffsetX}px)` }}
+          style={{ left: `calc(50% - ${STATUS_BADGE_SPRITE_OFFSET_X}px)` }}
           aria-hidden="true"
         >
           <span className="absolute inset-0 rounded-full bg-amber-200/25 blur-sm" />
@@ -101,7 +107,7 @@ export function UnitModel({
       {moraleIcon && (
         <span
           className={`${moraleIcon.className} absolute top-[-22px] grid h-10 w-10 -translate-x-1/2 place-items-center`}
-          style={{ left: `calc(50% - ${centeredOverlayOffsetX}px)` }}
+          style={{ left: `calc(50% - ${STATUS_BADGE_SPRITE_OFFSET_X}px)` }}
           aria-hidden="true"
         >
           <span className={`absolute inset-0 rounded-full ${moraleIcon.glow} blur-sm`} />
@@ -132,6 +138,7 @@ export function UnitBadges({
   depthScale?: number;
 }) {
   const renderOffsetX = getUnitRenderOffsetX(unit);
+  const renderOffsetY = getUnitRenderOffsetY(unit);
   const badgeOffsetX = renderOffsetX / depthScale;
 
   return (
@@ -139,7 +146,7 @@ export function UnitBadges({
       className="absolute block h-[159px] w-[125px]"
       style={{
         left: `calc(50% + ${renderOffsetX}px)`,
-        top: lifted ? -64 : 4,
+        top: (lifted ? -64 : 4) + renderOffsetY,
         transform: `translateX(-50%) scale(${depthScale})`,
         transformOrigin: "50% 100%",
       }}

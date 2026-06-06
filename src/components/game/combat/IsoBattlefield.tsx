@@ -595,10 +595,10 @@ export function IsoBattlefield({
               }
               return;
             }
-            // First Aid Tent : clic sur allié adjacent pour soigner
+            // First Aid Tent : clic sur n'importe quel allié pour le soigner
+            // (la tente soigne toute pile du champ de bataille, sans adjacence).
             if (currentUnit?.unitType === "first_aid_tent" && unit && unit.side === currentUnit.side && unit.id !== currentUnit.id) {
-              const dist = Math.max(Math.abs(unit.q - currentUnit.q), Math.abs(unit.r - currentUnit.r));
-              if (dist <= 1 && canClick) {
+              if (canClick) {
                 onAction({ type: "HEAL", targetUnitId: unit.id });
                 return;
               }

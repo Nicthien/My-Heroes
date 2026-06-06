@@ -5,6 +5,34 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.0.1] - 2026-06-06
+
+### Ajouté
+
+- **Sort Visions** — révèle désormais le détail du score (par catégorie) de
+  chaque adversaire dont un héros ou une ville est à portée, pour le tour en
+  cours ; le brouillard de guerre le re-masque au tour suivant.
+- **Triche Mana infini** — donne aussi tous les sorts au héros sélectionné
+  (grimoire complet, en aventure comme en combat).
+- **Aperçu `/dev/combat`** — affiche désormais les machines de guerre (baliste,
+  tente de premiers secours, charrette de munitions, et catapulte en siège),
+  placées derrière les créatures.
+
+### Modifié
+
+- Reformulation du libellé « Détail masqué » du panneau de score (suppression
+  de la mention trompeuse au brouillard de guerre).
+- Boutons du Graal (creuser / carte au trésor) déplacés dans l'onglet
+  compétences et la barre d'onglets du héros.
+- **Fortifications de siège** — déterminées par les bâtiments de la ville
+  (Fort = remparts, Citadelle = +1 tour de tir, Château = 3 tours) au lieu du
+  niveau du centre-ville.
+- **Tente de premiers secours (combat)** — soins conformes aux règles de
+  référence : montant aléatoire selon Premiers Secours (1-25 / 40-50 / 60-75 /
+  80-100), soin de n'importe quelle pile alliée sans contrainte d'adjacence,
+  créatures uniquement, ciblage manuel à partir de la compétence.
+- Badges d'état (chance/moral) recentrés au-dessus de la tête de l'unité.
+
 ## [1.0.0] - 2026-06-02
 
 Première version stable. Le jeu est jouable de bout en bout : création de
@@ -37,4 +65,5 @@ partie, exploration, économie, combats et fin de partie.
   routes, décor) et interface (HUD, écran de ville, écran de combat) en français.
 - **Déploiement** — image Docker mono-conteneur pour héberger le frontend.
 
+[1.0.1]: https://github.com/Nicthien/My-Heroes/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/

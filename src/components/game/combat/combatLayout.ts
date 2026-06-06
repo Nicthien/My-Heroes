@@ -73,6 +73,15 @@ export function getUnitRenderOffsetX(unit: CombatBoardUnit) {
   return UNIT_RENDER_OFFSET_X + (unit.side === "defender" ? DEFENDER_RENDER_NUDGE_X : 0);
 }
 
+// War machine sprites (ballista, tent, ammo cart, catapult) have their ground
+// contact higher in the frame than creature sprites, so they float above the
+// hex. Nudge them down to plant them on the tile.
+export const WAR_MACHINE_RENDER_OFFSET_Y = 19;
+
+export function getUnitRenderOffsetY(unit: CombatBoardUnit) {
+  return getUnitRule(unit.unitType).abilities?.includes("war_machine") ? WAR_MACHINE_RENDER_OFFSET_Y : 0;
+}
+
 export function getUnitMoveTransition(durationMs: number) {
   if (durationMs <= 0) return "none";
   return `left ${durationMs}ms ${UNIT_MOVE_EASING}, top ${durationMs}ms ${UNIT_MOVE_EASING}`;

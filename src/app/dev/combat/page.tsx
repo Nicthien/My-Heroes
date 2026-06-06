@@ -9,6 +9,7 @@ import { buildCombatEnvironment } from "@/lib/game/combat/environment";
 import { COMBAT_BASE_ROWS, COMBAT_COLS } from "@/lib/game/combat/movement";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
 import { createCastleSiegeState, filterSiegeTerrain } from "@/lib/game/combat/siege";
+import { getUnitRule } from "@/lib/game/units";
 import { useGameStore } from "@/lib/stores/gameStore";
 import {
   CombatBoardUnit,
@@ -67,6 +68,36 @@ function buildUnit(params: Partial<CombatBoardUnit> & Pick<CombatBoardUnit, "id"
     luckTriggered: false,
     ...params,
   };
+}
+
+// War machines fielded by the attacker, mirroring the real combat injection:
+// the Catapult only shows up in a siege (town scenario). They sit in the
+// attacker's back area (column 2, columns 0-1 are full of regular stacks),
+// move at speed 0 and act last in the round.
+const ATTACKER_WAR_MACHINES: Array<{ id: string; unitType: UnitType; r: number; siegeOnly?: boolean }> = [
+  { id: "atk-ballista", unitType: UnitType.BALLISTA, r: 2 },
+  { id: "atk-first-aid", unitType: UnitType.FIRST_AID_TENT, r: 4 },
+  { id: "atk-ammo", unitType: UnitType.AMMO_CART, r: 6 },
+  { id: "atk-catapult", unitType: UnitType.CATAPULT, r: 8, siegeOnly: true },
+];
+
+function buildWarMachine(spec: { id: string; unitType: UnitType; r: number }, q: number): CombatBoardUnit {
+  const rule = getUnitRule(spec.unitType);
+  return buildUnit({
+    id: spec.id,
+    unitType: spec.unitType,
+    count: 1,
+    side: "attacker",
+    q,
+    r: spec.r,
+    health: rule.health,
+    maxHealth: rule.health,
+    speed: 0,
+    minDamage: rule.minDamage,
+    maxDamage: rule.maxDamage,
+    ranged: Boolean(rule.ranged),
+    shots: rule.shots ?? 0,
+  });
 }
 
 function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPhase): { gameState: GameState; combat: PersistentCombat } {
@@ -208,12 +239,19 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
     UnitType.TROGLODYTE, UnitType.HARPY, UnitType.BEHOLDER, UnitType.MINOTAUR, UnitType.MANTICORE,
   ];
   const units = [
+    // War machines first so they render behind the creatures at an equal row
+    // (unit z-index depends only on the row). Placed in the rear column (q=0).
+    ...ATTACKER_WAR_MACHINES
+      .filter((spec) => !spec.siegeOnly || scenario === "town")
+      .map((spec) => buildWarMachine(spec, 0)),
     ...attackerTypes.map((unitType, index) => buildUnit({
       id: `atk-${index}`,
       unitType,
       count: 12 + index * 3,
       side: "attacker" as const,
-      q: index < COMBAT_BASE_ROWS ? 1 : 0,
+      // Front rank at q=2, back rank at q=1 — leaves column 0 free at the rear
+      // for the war machines (added below, behind the creatures).
+      q: index < COMBAT_BASE_ROWS ? 2 : 1,
       r: index % COMBAT_BASE_ROWS,
       ranged: [UnitType.ARCHER, UnitType.MONK, UnitType.WOOD_ELF, UnitType.GREMLIN, UnitType.GOG, UnitType.BEHOLDER, UnitType.MEDUSA].includes(unitType),
       shots: 12,
@@ -243,7 +281,11 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
       ? { ...unit, moraleTriggered: "good" as const }
       : unit.id === "def-2"
         ? { ...unit, moraleTriggered: "bad" as const }
-        : unit
+        // Wound a friendly stack (outside the start/tactics phases) so the First
+        // Aid Tent has something to heal when previewing its turn.
+        : unit.id === "atk-0" && phase !== "start" && phase !== "tactics"
+          ? { ...unit, health: Math.max(1, Math.floor(unit.count * unit.maxHealth * 0.4)) }
+          : unit
   );
   const fullTurnQueue = buildTurnQueue(combatUnits, 1);
   const phaseTurnQueue = getPhaseTurnQueue(fullTurnQueue, phase);

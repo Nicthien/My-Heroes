@@ -572,6 +572,21 @@ export function getTownBuildingRules(
   return [...common, ...FORTIFICATION_BUILDINGS, ...baseDwellingRules, ...upgradedDwellingRules, ...uniqueRules];
 }
 
+// Fortification ladder: Fort (walls + gate) → Citadel (+1 shooting tower) →
+// Castle Keep (+2 more towers, 3 total). Drives siege defenses in combat — kept
+// separate from the town-center ladder (Village/Town/City Hall/Capitol), which
+// only governs daily gold income.
+const FORT_LEVELS: Array<{ type: BuildingType; level: number }> = [
+  { type: BuildingType.CASTLE_KEEP, level: 3 },
+  { type: BuildingType.CITADEL, level: 2 },
+  { type: BuildingType.FORT, level: 1 },
+];
+
+export function getTownFortLevel(buildings: Array<BuildingType | string>): number {
+  const built = new Set(buildings);
+  return FORT_LEVELS.find((entry) => built.has(entry.type))?.level ?? 0;
+}
+
 export function getTownGoldProduction(buildings: Array<BuildingType | string>) {
   const built = new Set(buildings);
   return TOWN_CENTER_PRODUCTION.find((entry) => built.has(entry.type))?.gold ?? 500;

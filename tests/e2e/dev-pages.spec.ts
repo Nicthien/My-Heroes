@@ -589,7 +589,9 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await page.mouse.click(unitBox!.x + unitBox!.width / 2, unitBox!.y + unitBox!.height / 2);
     await expect(page.locator('[data-tactics-selected="true"]')).toHaveCount(1);
     await expect(page.locator('[data-tactics-destination="true"]')).not.toHaveCount(0);
-    await page.getByTestId("combat-cell-2-0").click();
+    // Column 0 is the war-machine rear rank and columns 1-2 hold the creature
+    // ranks, so click a free in-zone cell (column 3) to reposition + deselect.
+    await page.getByTestId("combat-cell-3-0").click();
     await expect(page.locator('[data-tactics-selected="true"]')).toHaveCount(0);
 
     await page.getByRole("button", { name: "Terminer la phase de tactique" }).click();

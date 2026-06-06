@@ -2,19 +2,44 @@
 // Hub. `docker push` only uploads the image — never the description — so run
 // this after a push to keep the Hub page in sync with the repo.
 //
-// Usage:
-//   DOCKERHUB_USERNAME=<user> DOCKERHUB_TOKEN=<password> npm run dockerhub:overview
+// Credentials come from the environment or, if absent, from a local
+// `.env.dockerhub` file at the repo root (gitignored via the `.env*` rule — it
+// is NEVER committed, even by `git add -A`). Format:
+//   DOCKERHUB_USERNAME=nicthien
+//   DOCKERHUB_TOKEN=<token-or-password>
+// Override the file path with DOCKERHUB_ENV_FILE.
 //
-// IMPORTANT: editing the repository Overview (full_description) needs an account
-// password login — Docker Hub access tokens (PATs) push/pull images but return
-// "403 insufficient scope" on this endpoint. So DOCKERHUB_TOKEN must be your
-// account password (works only without 2FA). With 2FA, edit the Overview by
-// hand on the website instead. Override the repo with DOCKERHUB_REPO
-// (defaults to nicthien/my-heroes).
+// Usage:
+//   npm run dockerhub:overview            # reads .env.dockerhub
+//   DOCKERHUB_USERNAME=... DOCKERHUB_TOKEN=... npm run dockerhub:overview
+//
+// IMPORTANT: editing the Overview (full_description) needs write scope. A
+// Docker Hub PAT with **Read/Write/Delete** usually works; a read-only token
+// returns "403 insufficient scope". If a full-scope PAT still 403s, the account
+// password works (only without 2FA). Prefer a revocable PAT over the password.
+// Override the repo with DOCKERHUB_REPO (defaults to nicthien/my-heroes).
 
 import { readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Load creds from a gitignored file when not provided via the environment.
+function loadCredsFile() {
+  const path = process.env.DOCKERHUB_ENV_FILE || join(root, ".env.dockerhub");
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (!match) continue;
+    const key = match[1];
+    const value = match[2].replace(/^["']|["']$/g, "");
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+loadCredsFile();
 
 const REPO = process.env.DOCKERHUB_REPO || "nicthien/my-heroes";
 const username = process.env.DOCKERHUB_USERNAME;
@@ -22,12 +47,11 @@ const token = process.env.DOCKERHUB_TOKEN;
 
 if (!username || !token) {
   console.error(
-    "[dockerhub] Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a Docker Hub access token) and retry.",
+    "[dockerhub] No credentials. Create .env.dockerhub (DOCKERHUB_USERNAME / DOCKERHUB_TOKEN) " +
+      "or pass them as env vars, then retry.",
   );
   process.exit(1);
 }
-
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fullDescription = await readFile(join(root, "DOCKERHUB.md"), "utf8");
 
 // Docker Hub caps full_description at 25000 characters.

@@ -31,6 +31,7 @@ import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { getUnitRule } from "@/lib/game/units";
+import { getTownFortLevel } from "@/lib/game/town-buildings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations, toCombat } from "@/lib/supabase/game-db";
 
@@ -820,23 +821,31 @@ function getSiegeFortifications(
   },
 ): { towerCount: number; towerDamage: number; wallHp: number; gateHp: number } {
   const defaults = { towerCount: 0, towerDamage: 0, wallHp: 0, gateHp: 0 };
-  let level = 1;
+  // Fortifications come from the Fort/Citadel/Castle Keep ladder, NOT the
+  // town-center (Village/Town/City Hall/Capitol) level: a town with a Capitol
+  // but no Fort fights with open walls, while a Fort on a level-1 town still
+  // raises ramparts. Citadel adds 1 shooting tower, Castle Keep adds 2 more.
+  let buildings: string[] | null = null;
   if (params.ownerPlayerId) {
     const owner = players.find((p) => p.id === params.ownerPlayerId);
     const town = owner?.towns?.find((t) => t.x === params.x && t.y === params.y);
-    if (town) level = town.level ?? 1;
-  } else if (params.townDefender?.townLevel) {
-    level = params.townDefender.townLevel ?? 1;
+    buildings = town?.buildings ?? null;
+  } else if (params.townDefender?.townBuildings) {
+    buildings = params.townDefender.townBuildings;
   } else {
-    // Ville neutre/inconnue : forfait niveau 2 pour que les sièges aient toujours des fortifications minimales.
-    level = 2;
+    // Ville neutre/inconnue : forfait Citadelle pour que les sièges aient
+    // toujours des fortifications minimales (remparts + une tour de tir).
+    return { towerCount: 1, towerDamage: 20, wallHp: 200, gateHp: 160 };
   }
-  if (level < 2) return defaults;
+
+  const fortLevel = getTownFortLevel(buildings ?? []);
+  if (fortLevel <= 0) return defaults;
+  const towerCount = fortLevel >= 3 ? 3 : fortLevel >= 2 ? 1 : 0;
   return {
-    towerCount: level >= 4 ? 3 : 2,
-    towerDamage: level * 10,
-    wallHp: 100 * level,
-    gateHp: 80 * level,
+    towerCount,
+    towerDamage: towerCount > 0 ? fortLevel * 10 : 0,
+    wallHp: 100 * fortLevel,
+    gateHp: 80 * fortLevel,
   };
 }
 

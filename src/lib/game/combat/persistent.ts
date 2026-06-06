@@ -36,6 +36,17 @@ import {
 
 export { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeighbors, isTerrainBlocked };
 
+// First Aid Tent heal ranges by First Aid skill level (Shadow of Death rules):
+// index 0 = no skill, 1 = basic, 2 = advanced, 3 = expert. The tent rolls a
+// random amount within the range and restores only the top creature of the
+// targeted stack (no resurrection). See https://heroes.thelazy.net/index.php/First_Aid
+const FIRST_AID_HEAL_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [1, 25],
+  [40, 50],
+  [60, 75],
+  [80, 100],
+];
+
 export interface CombatParticipantSnapshot {
   id: string;
   playerId: string | null;
@@ -273,22 +284,35 @@ export function executeManualCombatAction(params: {
   }
   if (actor.unitType === "first_aid_tent" || actor.unitType === "ammo_cart") {
     if (actor.unitType === "first_aid_tent") {
-      // Cible explicite si le joueur a passé targetUnitId, sinon allié le plus blessé adjacent
-      const explicit = params.action.targetUnitId
-        ? units.find((u) => u.id === params.action.targetUnitId && u.side === actor.side && u.count > 0 && canRegenerateHealth(u.unitType) && getHexDistance(actor, u) <= 1)
+      const heroSkills = getStats(actor.side, params).skills ?? {};
+      const lvl = heroSkills.first_aid === "expert" ? 3 : heroSkills.first_aid === "advanced" ? 2 : heroSkills.first_aid === "basic" ? 1 : 0;
+      const [healMin, healMax] = FIRST_AID_HEAL_RANGES[lvl];
+      // The tent heals any allied living creature stack on the field (no adjacency
+      // requirement) but never war machines or the King.
+      const canHeal = (u: CombatBoardUnit) =>
+        u.id !== actor.id &&
+        u.side === actor.side &&
+        u.count > 0 &&
+        canRegenerateHealth(u.unitType) &&
+        !getUnitRule(u.unitType).abilities?.includes("war_machine") &&
+        u.health < u.count * u.maxHealth;
+      // With the First Aid skill the player picks the target; without it the tent
+      // is AI-controlled and auto-targets the most wounded allied stack.
+      const explicit = lvl > 0 && params.action.targetUnitId
+        ? units.find((u) => u.id === params.action.targetUnitId && canHeal(u))
         : null;
       const wounded = explicit ?? units
-        .filter((u) => u.id !== actor.id && u.side === actor.side && u.count > 0 && canRegenerateHealth(u.unitType) && u.health < u.count * u.maxHealth && getHexDistance(actor, u) <= 1)
+        .filter(canHeal)
         .sort((a, b) => (b.count * b.maxHealth - b.health) - (a.count * a.maxHealth - a.health))[0];
       if (wounded) {
-        const heroSkills = getStats(actor.side, params).skills ?? {};
-        const lvl = heroSkills.first_aid === "expert" ? 3 : heroSkills.first_aid === "advanced" ? 2 : heroSkills.first_aid === "basic" ? 1 : 0;
-        const healAmount = 50 + lvl * 50;
+        // Random roll within the skill range; capped at count*maxHealth so it only
+        // refills the top wounded creature and never overheals or resurrects.
+        const healAmount = healMin + Math.floor(Math.random() * (healMax - healMin + 1));
         const maxHealth = wounded.count * wounded.maxHealth;
         wounded.health = Math.min(maxHealth, wounded.health + healAmount);
         log.push(`Tente de premiers secours soigne ${getUnitRule(wounded.unitType).label} (+${healAmount} PV).`);
       } else {
-        log.push(`Tente de premiers secours : aucun allié blessé adjacent.`);
+        log.push(`Tente de premiers secours : aucun allié blessé.`);
       }
     } else {
       log.push(`Chariot de munitions : actif (tirs alliés illimités).`);

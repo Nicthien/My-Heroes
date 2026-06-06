@@ -3,12 +3,17 @@
 import { useEffect } from "react";
 import HUD from "@/components/game/hud/HUD";
 import { AuthContext } from "@/lib/auth/client";
+import { gameRulesSeenKey, TUTORIAL_SEEN_KEY } from "@/components/game/hud/helpers";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { buildMockState, mockAuthValue } from "../hud/mockState";
 
 export default function DevHudBuildPage() {
   useEffect(() => {
-    useGameStore.getState().setGameState(buildMockState());
+    const mockState = buildMockState();
+    // Suppress the rules popup and the guided tutorial so they don't cover the build UI.
+    window.localStorage.setItem(gameRulesSeenKey(mockState.id, "p1"), "true");
+    window.localStorage.setItem(TUTORIAL_SEEN_KEY, "true");
+    useGameStore.getState().setGameState(mockState);
     useGameStore.getState().selectTown("t1");
   }, []);
 

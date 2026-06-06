@@ -203,6 +203,59 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     expect(Math.abs(panelCenterY - 360)).toBeLessThanOrEqual(8);
   });
 
+  test("start-of-game rules popup shows the objective and can be dismissed", async ({ page }) => {
+    await page.goto("/dev/hud?rules=1", { waitUntil: "domcontentloaded" });
+
+    const popup = page.getByTestId("game-rules-popup");
+    await expect(popup).toBeVisible();
+    await expect(popup.getByText("Règles de la partie")).toBeVisible();
+    await expect(popup.getByText(/Objectif\s*:/)).toBeVisible();
+    await expect(popup.getByText("Comment jouer")).toBeVisible();
+
+    await page.getByTestId("game-rules-dismiss").click();
+    await expect(page.getByTestId("game-rules-popup")).toHaveCount(0);
+  });
+
+  test("guided tutorial steps through the HUD and opens the hero panel", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/dev/hud?tutorial=1", { waitUntil: "domcontentloaded" });
+
+    const tutorial = page.getByTestId("hud-tutorial");
+    await expect(tutorial).toBeVisible();
+    await expect(tutorial.getByText("Bienvenue dans My Heroes")).toBeVisible();
+    await expect(tutorial.getByText("1/11")).toBeVisible();
+
+    await page.getByTestId("tutorial-next").click();
+    await expect(tutorial.getByText("2/11")).toBeVisible();
+    await expect(page.getByTestId("tutorial-prev")).toBeVisible();
+
+    await page.getByTestId("tutorial-prev").click();
+    await expect(tutorial.getByText("1/11")).toBeVisible();
+
+    // Advance to the hero-sheet step (7/11): the tour should open the hero panel.
+    for (let i = 0; i < 6; i++) await page.getByTestId("tutorial-next").click();
+    await expect(tutorial.getByText("7/11")).toBeVisible();
+    await expect(page.getByTestId("hud-hero-panel")).toBeVisible();
+
+    // The town step (8/11) opens the town panel.
+    await page.getByTestId("tutorial-next").click();
+    await expect(tutorial.getByText("8/11")).toBeVisible();
+    await expect(page.getByTestId("hud-town-panel")).toBeVisible();
+
+    await page.getByTestId("tutorial-skip").click();
+    await expect(page.getByTestId("hud-tutorial")).toHaveCount(0);
+  });
+
+  test("help button reopens the tutorial after it was dismissed", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+
+    // Default preview suppresses the auto-tour; the help button forces it open.
+    await expect(page.getByTestId("hud-tutorial")).toHaveCount(0);
+    await page.getByTestId("hud-help-button").click();
+    await expect(page.getByTestId("hud-tutorial")).toBeVisible();
+  });
+
   test("admin observer can start an empty pending lobby from the center panel", async ({ page }) => {
     await page.goto("/dev/hud?status=pending&admin=1", { waitUntil: "domcontentloaded" });
 

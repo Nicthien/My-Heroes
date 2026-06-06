@@ -28,7 +28,7 @@ export function ResourceBar({ player }: { player: Player }) {
   const income = getPlayerResourceIncomePerTurn(player);
 
   return (
-    <div className="mobile-resource-bar grid w-[clamp(21rem,34vw,27rem)] grid-cols-[1.15fr_repeat(3,1fr)] grid-rows-2 gap-1.5 text-xs xl:text-sm">
+    <div data-tutorial="resources" className="mobile-resource-bar grid w-[clamp(21rem,34vw,27rem)] grid-cols-[1.15fr_repeat(3,1fr)] grid-rows-2 gap-1.5 text-xs xl:text-sm">
       {RESOURCE_ITEMS.map((item) => {
         const isGold = item.key === "gold";
         const amount = resources[item.key];

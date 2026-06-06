@@ -73,6 +73,7 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
         defaultPosition={rightColumnDefault(RIGHT_COLUMN_TOP)}
         className="w-72"
         fallbackSize={{ width: 288, height: 210 }}
+        testId="hud-map-window"
         beforeReset={
           hasUnderground ? (
             <MapLevelHeaderToggle activeMapLevel={activeMapLevel} onChange={setActiveMapLevel} />
@@ -89,6 +90,7 @@ export default function DesktopHudWindows({ gameId, playerId }: { gameId: string
         className="w-72"
         bodyClassName="max-h-44 overflow-y-auto overscroll-contain px-2 py-2 text-sm"
         fallbackSize={{ width: 288, height: 210 }}
+        testId="hud-players-window"
       >
         <PlayersListPanel gameState={gameState} myPlayer={me} embedded />
       </HudWindow>

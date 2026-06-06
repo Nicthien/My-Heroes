@@ -32,6 +32,7 @@ import { ResourceBar, TURN_SKY_WIDTH, TurnSkyArc, combatInvolvesPlayer } from ".
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import {
+  buildingTypeLabel,
   factionLabel,
   getApiErrorMessage,
   getGameRulesSeen,
@@ -62,6 +63,7 @@ import {
   subtractCost,
 } from "@/lib/game/economy";
 import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
+import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { KingHealthGauge } from "./gauges";
@@ -89,6 +91,7 @@ export function HUDContent() {
     townId: null,
     tab: "summary",
   });
+  const [grailPromptDismissedTownId, setGrailPromptDismissedTownId] = useState<string | null>(null);
   const [showBuildableBuildings, setShowBuildableBuildings] = useState(true);
   const [showMissingBuildRequirements, setShowMissingBuildRequirements] = useState(false);
   const [showBuiltBuildings, setShowBuiltBuildings] = useState(false);
@@ -189,6 +192,58 @@ export function HUDContent() {
     : [];
   const selectedGarrisonTargetHero = heroesAtSelectedTown.find((hero) => hero.id === garrisonTargetHeroId);
   const garrisonTargetHero = selectedGarrisonTargetHero ?? heroesAtSelectedTown[0];
+
+  // Grail: a faction Grail structure can be erected only while a hero carrying
+  // the dug-up Grail stands in the town, and only once per map.
+  const grailAlreadyBuilt = gameState.players.some((player) =>
+    player.towns.some((town) => {
+      const faction = ((town.townType ?? town.faction ?? Faction.CASTLE) as Faction);
+      const rules = getFactionBuildingRules(faction);
+      return town.buildings.some((b) => rules.find((r) => r.type === b)?.grail);
+    }),
+  );
+  const grailCarrierAtTown = heroesAtSelectedTown.some((hero) =>
+    normalizeArtifactBag(hero.artifacts).inventory.includes(GRAIL_ARTIFACT_ID),
+  );
+  const grailBuildable = !grailAlreadyBuilt && grailCarrierAtTown;
+
+  // Auto-propose erecting the Grail when a carrier stands in any owned town.
+  const grailPromptTown = !grailAlreadyBuilt && myPlayer
+    ? myPlayer.towns.find((town) =>
+        myPlayer.heroes.some((hero) =>
+          hero.position.x === town.position.x &&
+          hero.position.y === town.position.y &&
+          normalizeMapLevel(hero.position.level) === normalizeMapLevel(town.position.level) &&
+          normalizeArtifactBag(hero.artifacts).inventory.includes(GRAIL_ARTIFACT_ID),
+        ),
+      )
+    : undefined;
+  const grailPromptFaction = grailPromptTown
+    ? ((grailPromptTown.townType ?? grailPromptTown.faction ?? Faction.CASTLE) as Faction)
+    : null;
+  const grailPromptBuilding = grailPromptFaction
+    ? getFactionBuildingRules(grailPromptFaction).find((rule) => rule.grail)?.type ?? null
+    : null;
+  const showGrailPrompt = Boolean(
+    grailPromptTown && grailPromptBuilding && canAct &&
+    grailPromptTown.id !== grailPromptDismissedTownId,
+  );
+
+  const confirmGrailBuild = async () => {
+    if (!gameState || !grailPromptTown || !grailPromptBuilding) return;
+    setGrailPromptDismissedTownId(grailPromptTown.id);
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "BUILD", townId: grailPromptTown.id, building: grailPromptBuilding }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, t("hud.buildFailed"), locale));
+      return;
+    }
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshed) setGameState(refreshed);
+  };
   const townAtSelectedHero = selectedHero
     ? allTowns.find((town) =>
         town.position.x === selectedHero.position.x &&
@@ -292,6 +347,10 @@ export function HUDContent() {
     const townFaction = (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? Faction.CASTLE) as Faction);
     const rule = getFactionBuildingRule(townFaction, building);
     if (!rule || !canAfford(myPlayer.resources, rule.cost)) return;
+    if (rule.grail && !grailBuildable) {
+      setCombatMessage(grailAlreadyBuilt ? t("hud.grailAlreadyBuilt") : t("hud.grailNeeded"));
+      return;
+    }
     if (
       building === BuildingType.CAPITOL &&
       myPlayer.towns.some((town) => town.id !== selectedTown.id && town.buildings.includes(BuildingType.CAPITOL))
@@ -1388,9 +1447,40 @@ export function HUDContent() {
           canAct={canAct}
           isPending={isPending}
           isMyTown={isMyTown}
+          grailBuildable={grailBuildable}
           onBuild={handleBuild}
           onClose={() => setBuildTreeTownId(null)}
         />
+      )}
+
+      {showGrailPrompt && grailPromptTown && grailPromptBuilding && grailPromptFaction && (
+        <div className="pointer-events-auto fixed inset-0 z-[1000] grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true">
+          <div className={`${ornateFramePolished} w-[min(28rem,calc(100vw-2rem))] p-5 text-amber-50`}>
+            <h2 className={`text-lg font-black ${goldText}`}>{t("grail.buildPromptTitle")}</h2>
+            <p className="mt-3 text-sm leading-snug text-amber-100/90">
+              {t("grail.buildPromptBody", {
+                building: buildingTypeLabel(grailPromptBuilding, grailPromptFaction, locale),
+                town: grailPromptTown.name,
+              })}
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void confirmGrailBuild()}
+                className="flex-1 rounded-md border border-emerald-300/70 bg-gradient-to-b from-emerald-600 to-emerald-800 px-3 py-2 text-sm font-black text-emerald-50 transition hover:from-emerald-500 hover:to-emerald-700"
+              >
+                {t("grail.buildConfirm")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setGrailPromptDismissedTownId(grailPromptTown.id)}
+                className="flex-1 rounded-md border border-amber-700/50 bg-black/35 px-3 py-2 text-sm font-bold text-amber-100 transition hover:border-amber-300"
+              >
+                {t("grail.buildLater")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedTown && activeUpgradeBaseEntry && activeUpgradeEntry && upgradeDialog?.townId === selectedTown.id && activeUpgradeMax > 0 && (

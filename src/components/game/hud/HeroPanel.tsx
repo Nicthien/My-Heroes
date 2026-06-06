@@ -6,6 +6,7 @@ import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import {
   ARTIFACT_SLOTS,
   ARTIFACTS_BY_ID,
+  GRAIL_ARTIFACT_ID,
   getArtifact,
   getArtifactStatsBonus,
   getEffectiveHeroStats,
@@ -21,6 +22,7 @@ import { refreshGameState } from "@/lib/game/refresh";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
+import { PuzzleMapModal } from "./PuzzleMapModal";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { KingHealthGauge, MovementGauge, Stat } from "./gauges";
 import { UnitSprite } from "./UnitSprite";
@@ -51,6 +53,7 @@ export function HeroPanel({
   const { data: session } = useSession();
   const { t, locale } = useI18n();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
+  const [puzzleOpen, setPuzzleOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<HeroTab>("profile");
   const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
@@ -74,6 +77,11 @@ export function HeroPanel({
     ?.heroes.filter((candidate) => candidate.id !== hero.id && canTransferArtifacts(hero, candidate, gameState.players.flatMap((player) => player.towns))) ?? [];
   const heroArtifactBag = normalizeArtifactBag(hero.artifacts);
   const artifactCount = heroArtifactBag.inventory.length + Object.values(heroArtifactBag.equipment).filter(Boolean).length;
+  const carriesGrail = heroArtifactBag.inventory.includes(GRAIL_ARTIFACT_ID);
+  const grailHint = gameState?.grailHint ?? null;
+  // The puzzle map only matters while the Grail is still buried.
+  const showPuzzleButton = Boolean(grailHint && !grailHint.dug);
+  const canDig = !readOnly && !townAtHero && hero.movement > 0 && !carriesGrail && !(grailHint?.dug);
   const skillEntries = getHeroSkillEntries(hero, t, locale);
   const heroTabs: { id: HeroTab; label: string; badge?: number }[] = [
     { id: "profile", label: t("hero.tabProfile") },
@@ -109,6 +117,29 @@ export function HeroPanel({
     const revealHints = normalizeRevealHints(data?.interaction?.revealHints);
     if (revealedTiles.length > 0 && gameState) {
       setSpellRevealHighlight({ turnNumber: gameState.turnNumber, tiles: revealedTiles, hints: revealHints, label: spell.label });
+    }
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshed) setGameState(refreshed);
+  }
+
+  async function digGrail() {
+    if (!gameState) return;
+    if (hero.movement <= 0) {
+      setCombatMessage(t("grail.digNoMovement"));
+      return;
+    }
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "DIG_GRAIL", heroId: hero.id }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setCombatMessage(localizedServerMessage(data.error, locale) ?? t("msg.actionImpossible"));
+      return;
+    }
+    if (typeof data?.interaction?.message === "string") {
+      setCombatMessage(localizedServerMessage(data.interaction.message, locale));
     }
     const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshed) setGameState(refreshed);
@@ -238,6 +269,33 @@ export function HeroPanel({
               {t("hero.atTown")} <span className="font-black">{townAtHero.name}</span>
             </button>
           )}
+          {carriesGrail && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/55 to-stone-950/70 px-3 py-2 text-sm font-black text-amber-100 shadow-inner shadow-black/40">
+              <span aria-hidden="true">🏆</span> {t("grail.carrying")}
+            </div>
+          )}
+          {(canDig || showPuzzleButton) && (
+            <div className="mt-2 flex gap-2">
+              {canDig && (
+                <button
+                  type="button"
+                  className="flex-1 rounded-md border border-amber-600/55 bg-amber-950/55 px-3 py-2 text-sm font-black text-amber-100 transition hover:border-amber-300"
+                  onClick={() => void digGrail()}
+                >
+                  {t("grail.dig")}
+                </button>
+              )}
+              {showPuzzleButton && (
+                <button
+                  type="button"
+                  className="flex-1 rounded-md border border-violet-500/45 bg-violet-950/55 px-3 py-2 text-sm font-black text-violet-100 transition hover:border-violet-300"
+                  onClick={() => setPuzzleOpen(true)}
+                >
+                  {t("grail.puzzleOpen")}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mobile-hero-tabs flex gap-1.5 overflow-visible border-b border-amber-700/30 px-3 py-2">
@@ -306,6 +364,13 @@ export function HeroPanel({
           ignoreManaCost={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
           onCast={castAdventureSpell}
+        />
+      )}
+      {puzzleOpen && showPuzzleButton && grailHint && gameState && (
+        <PuzzleMapModal
+          hint={grailHint}
+          map={gameState.map}
+          onClose={() => setPuzzleOpen(false)}
         />
       )}
     </>
@@ -643,7 +708,7 @@ function ArtifactPanel({
             <div key={`${artifactId}-${index}`} className="flex items-center gap-1 rounded-md border border-amber-700/35 bg-black/45 px-2 py-1 text-xs">
               <ArtifactIcon artifactId={artifactId} size="row" />
               <span className="min-w-0 flex-1 truncate text-amber-100" title={artifactTooltip(artifactId, t)}>{artifact.name}</span>
-              {!readOnly && <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
+              {!readOnly && artifact.slots.length > 0 && <button type="button" className="rounded border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-200" onClick={() => onEquip(artifactId, freeSlot)}>
                 {t("hero.equip")}
               </button>}
               {!readOnly && transferTargetId && (
@@ -662,16 +727,24 @@ function ArtifactPanel({
 function ArtifactIcon({ artifactId, size }: { artifactId: string; size: "row" | "slot" }) {
   const boxClass = size === "row" ? "h-7 w-7" : "h-9 w-9";
   const imageClass = size === "row" ? "h-5 w-5" : "h-7 w-7";
+  const [failed, setFailed] = useState(false);
   return (
     <span className={`${boxClass} grid shrink-0 place-items-center rounded border border-amber-700/45 bg-stone-950/70 shadow-inner shadow-black/40`}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- HUD sprites use direct public asset paths and fixed tiny dimensions. */}
-      <img
-        src={`/assets/sprites/artifacts/${artifactId}.webp`}
-        alt=""
-        className={`${imageClass} object-contain [image-rendering:auto]`}
-        loading="lazy"
-        draggable={false}
-      />
+      {failed ? (
+        // Graceful fallback when a sprite is missing (e.g. the Grail until its
+        // .webp is added). Keeps the inventory readable instead of a broken icon.
+        <span className={`${imageClass} grid place-items-center text-amber-300/80`} aria-hidden="true">◆</span>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element -- HUD sprites use direct public asset paths and fixed tiny dimensions. */
+        <img
+          src={`/assets/sprites/artifacts/${artifactId}.webp`}
+          alt=""
+          className={`${imageClass} object-contain [image-rendering:auto]`}
+          loading="lazy"
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      )}
     </span>
   );
 }

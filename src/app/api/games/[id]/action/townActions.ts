@@ -18,6 +18,8 @@ import {
   type TavernOffer,
 } from "@/lib/game/heroes";
 import { getTownCenterLevel, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
+import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
+import { SPELLS } from "@/lib/game/spells";
 import { BuildingType, Faction, type GameMap, type HeroClass, type Resources, type UnitType } from "@/lib/game/types";
 import type { MinimalHero, MinimalPlayer, MinimalTown, SupabaseAdminClient } from "./types";
 
@@ -91,6 +93,23 @@ export async function handleTownAction({
       return NextResponse.json({ error: "Un seul Capitole est autorisé par joueur" }, { status: 400 });
     }
 
+    // The Grail structure escapes the normal tree: it can only be erected when a
+    // hero carrying the dug-up Grail artifact stands in this town, and only once
+    // per map. The artifact is consumed on success (see below).
+    let grailCarrier: MinimalHero | undefined;
+    if (rule.grail) {
+      const mapStateForGrail = (game.mapState as Record<string, unknown>) ?? {};
+      if (mapStateForGrail.grailBuilt) {
+        return NextResponse.json({ error: "Le Graal a déjà été érigé sur cette carte" }, { status: 400 });
+      }
+      grailCarrier = (gamePlayer.heroes ?? []).find(
+        (hero) => hero.x === town.x && hero.y === town.y && normalizeArtifactBag(hero.artifacts).inventory.includes(GRAIL_ARTIFACT_ID),
+      );
+      if (!grailCarrier) {
+        return NextResponse.json({ error: "Un héros porteur du Graal doit se trouver dans cette ville" }, { status: 400 });
+      }
+    }
+
     const resources = helpers.playerResources(gamePlayer);
     if (!canAfford(resources, rule.cost)) return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
 
@@ -157,6 +176,24 @@ export async function handleTownAction({
       const townArtifactOffers = (mapStateForBuild.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
       mapStateNext.townArtifactOffers = { ...townArtifactOffers, [town.id]: artifactOffer };
       mapStatePatched = true;
+    }
+
+    if (rule.grail && grailCarrier) {
+      // Consume the carried Grail and lock the map to a single Grail structure.
+      const bag = normalizeArtifactBag(grailCarrier.artifacts);
+      const grailIndex = bag.inventory.indexOf(GRAIL_ARTIFACT_ID);
+      const nextInventory = grailIndex >= 0 ? bag.inventory.filter((_, index) => index !== grailIndex) : bag.inventory;
+      await supabase.from("heroes").update({ artifacts: { ...bag, inventory: nextInventory } }).eq("id", grailCarrier.id);
+      mapStateNext.grailBuilt = true;
+      mapStatePatched = true;
+
+      // Conflux monumental effect (Aurora Borealis): every combat spell appears
+      // in this town's Mage Guild.
+      if (townFaction === Faction.CONFLUX) {
+        const allSpells = SPELLS.filter((spell) => spell.context === "combat" && spell.implemented).map((spell) => spell.id);
+        const townSpellLibraries = (mapStateNext.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
+        mapStateNext.townSpellLibraries = { ...townSpellLibraries, [town.id]: allSpells };
+      }
     }
 
     if (mapStatePatched) {

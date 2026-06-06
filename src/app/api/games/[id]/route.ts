@@ -3,7 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { resumeAiActivityUntilHuman } from "@/lib/game/ai/simple-ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, getGameWithRelations } from "@/lib/supabase/game-db";
-import { computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer } from "./shared";
+import { buildViewerGrailHint, computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer, stripGrailFromGameConfig } from "./shared";
 import { computeDbPlayerScore, type DbScorablePlayer } from "@/lib/game/score";
 
 export async function GET(
@@ -38,6 +38,8 @@ export async function GET(
     if (shouldResumeAi) kickAiRunnerForAdminObserver(supabase, game);
     return NextResponse.json({
       ...game,
+      gameConfig: stripGrailFromGameConfig(game.gameConfig),
+      grailHint: buildViewerGrailHint(game, player?.id, true),
       players: players.map((item) => ({
         ...item,
         score: computeDbPlayerScore(item as unknown as DbScorablePlayer),
@@ -54,6 +56,8 @@ export async function GET(
   const allTileKeys = isSpectator ? getAllTileKeys(Number(game.mapWidth ?? 0), Number(game.mapHeight ?? 0)) : [];
   const filteredGame = {
     ...game,
+    gameConfig: stripGrailFromGameConfig(game.gameConfig),
+    grailHint: buildViewerGrailHint(game, player?.id, isSpectator),
     players: players.map((item) => ({
       ...sanitizePlayerForViewer(item, player?.id),
       score: computeDbPlayerScore(item as unknown as DbScorablePlayer),

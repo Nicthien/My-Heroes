@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { normalizeMapMovement } from "@/lib/game/engine";
+import { normalizeMapLevel } from "@/lib/game/map-levels";
+import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
+import { getGrailLocation } from "@/lib/game/grail";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
 import type { GameMap, Position } from "@/lib/game/types";
 import type { HeroStatKey, MapBuildingLocation, MinimalBoat, MinimalBuilding, MinimalHero, MinimalPlayer, MinimalTown, SupabaseAdminClient } from "./types";
@@ -54,7 +57,7 @@ type AdventureActionHelpers = {
 
 type HandleAdventureActionParams = {
   supabase: SupabaseAdminClient;
-  game: { turnNumber?: unknown; mapData?: unknown; mapState?: unknown; combats?: CombatLike[] | null };
+  game: { turnNumber?: unknown; mapData?: unknown; mapState?: unknown; gameConfig?: unknown; combats?: CombatLike[] | null };
   gameId: string;
   gamePlayer: MinimalPlayer;
   players: Array<{ id: string; isAlive: boolean; turnOrder: number; resourceBuildings: MinimalBuilding[]; towns: MinimalTown[]; heroes?: MinimalHero[] }>;
@@ -108,6 +111,64 @@ export async function handleAdventureAction({
     await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
 
     return NextResponse.json({ success: true, interaction });
+  }
+
+  if (action.type === "DIG_GRAIL") {
+    const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+    if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+    if (isHeroInActiveCombat(game.combats, hero.id)) {
+      return NextResponse.json({ error: heroInCombatError }, { status: 400 });
+    }
+    if (hero.movement <= 0) {
+      return NextResponse.json({ error: "Le héros doit disposer de points de mouvement pour creuser" }, { status: 400 });
+    }
+    const bag = normalizeArtifactBag(hero.artifacts);
+    if (bag.inventory.includes(GRAIL_ARTIFACT_ID)) {
+      return NextResponse.json({ error: "Ce héros porte déjà le Graal" }, { status: 400 });
+    }
+
+    const grail = getGrailLocation(game.gameConfig);
+    const mapState = (game.mapState as Record<string, unknown>) ?? {};
+    const grailFound = Boolean(mapState.grailFound);
+
+    // Digging always burns the rest of the day's movement (HOMM3 rule).
+    await supabase.from("heroes").update({ movement: 0 }).eq("id", hero.id);
+
+    const onSpot = Boolean(
+      grail &&
+      !grailFound &&
+      hero.x === grail.x &&
+      hero.y === grail.y &&
+      normalizeMapLevel(hero.mapLevel) === normalizeMapLevel(grail.mapLevel),
+    );
+
+    if (onSpot) {
+      await supabase.from("heroes").update({
+        artifacts: { ...bag, inventory: [...bag.inventory, GRAIL_ARTIFACT_ID] },
+      }).eq("id", hero.id);
+      await supabase.from("games").update({ map_state: { ...mapState, grailFound: true } }).eq("id", gameId);
+      await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+      return NextResponse.json({
+        success: true,
+        interaction: {
+          type: "DIG_GRAIL",
+          found: true,
+          message: "Vous avez déterré le Graal ! Conduisez ce héros dans une ville alliée pour ériger la structure monumentale.",
+        },
+      });
+    }
+
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+    return NextResponse.json({
+      success: true,
+      interaction: {
+        type: "DIG_GRAIL",
+        found: false,
+        message: grailFound
+          ? "Le Graal a déjà été déterré ailleurs sur la carte."
+          : "Vous creusez longuement... mais il n'y a rien à cet endroit.",
+      },
+    });
   }
 
   if (action.type === "CAST_ADVENTURE_SPELL") {

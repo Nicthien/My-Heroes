@@ -14,6 +14,7 @@ import {
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
 import { ARTIFACT_GUARDIAN_POWER, getArtifact, getEffectiveHeroStatsFromValues, isArtifactClass } from "@/lib/game/artifacts";
+import { getAllyGrailAura, getEnemyGrailMoraleMalus } from "@/lib/game/grail";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import { BuildingType, Faction, GameMap, UnitStack, UnitType } from "@/lib/game/types";
@@ -250,10 +251,26 @@ export async function POST(
   const defenderSkills = (targetDefender as unknown as { skills?: Record<string, string> }).skills;
   const attackerLeadership = skillLevelValue(attackerSkills, "leadership");
   const defenderLeadership = skillLevelValue(defenderSkills, "leadership");
-  const effectiveAttackerLuck = (attackerStats.luck ?? 0) + skillLevelValue(attackerSkills, "luck");
-  const effectiveDefenderLuck = (defenderStats.luck ?? 0) + skillLevelValue(defenderSkills, "luck");
-  const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus + attackerLeadership - siegeEffects.fearMoraleMalus;
-  const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus + defenderLeadership;
+  // Monumental Grail auras: a player's erected Grail buffs every one of their
+  // heroes (attack/defense/morale/luck/spellPower) and may project a morale
+  // malus onto enemy heroes (Inferno). Applied here so both AUTO resolution and
+  // the persisted manual board share the same effective stats.
+  const defenderPlayer = players.find((player) => player.id === targetDefender.playerId);
+  const attackerGrail = getAllyGrailAura(gamePlayer);
+  const defenderGrail = defenderPlayer ? getAllyGrailAura(defenderPlayer) : { attack: 0, defense: 0, spellPower: 0, morale: 0, luck: 0 };
+  const enemyMoraleMalusOnAttacker = defenderPlayer ? getEnemyGrailMoraleMalus(defenderPlayer) : 0;
+  const enemyMoraleMalusOnDefender = getEnemyGrailMoraleMalus(gamePlayer);
+  attackerStats.attack += attackerGrail.attack;
+  attackerStats.defense += attackerGrail.defense;
+  attackerStats.spellPower += attackerGrail.spellPower;
+  defenderStats.attack += defenderGrail.attack;
+  defenderStats.defense += defenderGrail.defense;
+  defenderStats.spellPower += defenderGrail.spellPower;
+
+  const effectiveAttackerLuck = (attackerStats.luck ?? 0) + skillLevelValue(attackerSkills, "luck") + attackerGrail.luck;
+  const effectiveDefenderLuck = (defenderStats.luck ?? 0) + skillLevelValue(defenderSkills, "luck") + defenderGrail.luck;
+  const effectiveAttackerMorale = attackerStats.morale + attackerTownMoraleBonus + attackerLeadership - siegeEffects.fearMoraleMalus + attackerGrail.morale + enemyMoraleMalusOnAttacker;
+  const effectiveDefenderMorale = defenderStats.morale + defenderTownMoraleBonus + defenderLeadership + defenderGrail.morale + enemyMoraleMalusOnDefender;
   const combatStart = createCombatBoard(
     {
       id: attacker.id,

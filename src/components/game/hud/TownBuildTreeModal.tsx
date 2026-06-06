@@ -142,6 +142,7 @@ export function TownBuildTreeModal({
   canAct,
   isPending,
   isMyTown,
+  grailBuildable = false,
   onBuild,
   onClose,
 }: {
@@ -154,6 +155,7 @@ export function TownBuildTreeModal({
   canAct: boolean;
   isPending: boolean;
   isMyTown: boolean;
+  grailBuildable?: boolean;
   onBuild: (building: BuildingType) => void;
   onClose: () => void;
 }) {
@@ -171,10 +173,11 @@ export function TownBuildTreeModal({
       canAct,
       isPending,
       isMyTown,
+      grailBuildable,
       t,
       locale,
     });
-  }, [canAct, gameState, rules, hasPlayerCapitol, isMyTown, isPending, myPlayer, selectedTown, selectedTownFaction, t, locale]);
+  }, [canAct, gameState, rules, hasPlayerCapitol, isMyTown, isPending, grailBuildable, myPlayer, selectedTown, selectedTownFaction, t, locale]);
 
   // Click a building → select it and light up its construction route (all
   // prerequisites up to the roots). Click again or click empty canvas to clear.
@@ -401,6 +404,7 @@ function buildLayeredLayout({
   canAct,
   isPending,
   isMyTown,
+  grailBuildable,
   t,
   locale,
 }: {
@@ -413,6 +417,7 @@ function buildLayeredLayout({
   canAct: boolean;
   isPending: boolean;
   isMyTown: boolean;
+  grailBuildable: boolean;
   t: TFn;
   locale: Locale;
 }) {
@@ -480,6 +485,7 @@ function buildLayeredLayout({
           canAct,
           isPending,
           isMyTown,
+          grailBuildable,
           t,
           locale,
         }),
@@ -506,6 +512,7 @@ function getBuildNodeState({
   canAct,
   isPending,
   isMyTown,
+  grailBuildable,
   t,
   locale,
 }: {
@@ -518,11 +525,18 @@ function getBuildNodeState({
   canAct: boolean;
   isPending: boolean;
   isMyTown: boolean;
+  grailBuildable: boolean;
   t: TFn;
   locale: Locale;
 }): BuildNodeState {
   const alreadyBuilt = selectedTown.buildings.includes(rule.type);
   if (alreadyBuilt) return { kind: "built", label: t("buildtree.built"), canBuild: false };
+
+  // The Grail structure ignores the normal tree: it is only buildable while a
+  // hero carrying the dug-up Grail stands in this town (and never twice/map).
+  if (rule.grail && !grailBuildable) {
+    return { kind: "missingRequirement", label: t("buildtree.requiresGrail"), canBuild: false };
+  }
 
   const missingRequirement = rule.requires?.find((requirement) => !hasTownBuilding(selectedTown.buildings, requirement));
   if (missingRequirement) {

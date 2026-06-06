@@ -41,6 +41,7 @@ import {
   type HeroAdventureSpellEffect,
 } from "@/lib/game/engine";
 import { isTownCoastalForBoats } from "@/lib/game/engine/town-coast";
+import { getGrailLocation, getObeliskIds, normalizeObeliskCount, pickGrailLocation } from "@/lib/game/grail";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { createNeutralTownGarrison } from "@/lib/game/neutral-towns";
 import { getUnitRule } from "@/lib/game/units";
@@ -115,6 +116,30 @@ export async function POST(
     if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
     if (game.status !== "ACTIVE") return NextResponse.json({ error: "La partie n'est pas active" }, { status: 400 });
     if (!gamePlayer.isAlive) return NextResponse.json({ error: "Vous avez perdu cette partie" }, { status: 403 });
+
+    // Self-heal games created before the Grail feature (or before its later
+    // tweaks): normalize the Obelisk count (2×–3× players) once, and ensure a
+    // reachable buried tile exists. Guarded by a flag so it runs at most once.
+    {
+      const config = (game.gameConfig as Record<string, unknown> | null) ?? {};
+      const grailDug = Boolean((game.mapState as Record<string, unknown> | null)?.grailFound);
+      const needsObelisks = !config.obelisksNormalized;
+      const needsGrail = !getGrailLocation(game.gameConfig) && !grailDug;
+      if (needsObelisks || needsGrail) {
+        const map = game.mapData as GameMap;
+        const playerCount = Array.isArray(game.players) && game.players.length > 0
+          ? game.players.length
+          : Number(game.maxPlayers ?? 2);
+        if (needsObelisks) normalizeObeliskCount(map, playerCount);
+        // Re-pick the buried tile while healing (only if it has never been dug),
+        // so legacy games also get the reachable-tile guarantee.
+        const grail = grailDug ? getGrailLocation(game.gameConfig) : pickGrailLocation(map);
+        const obelisksTotal = getObeliskIds(map).length;
+        const nextConfig = { ...config, obelisksNormalized: true, obelisksTotal, ...(grail ? { grail } : {}) };
+        await supabase.from("games").update({ game_config: nextConfig, map_data: map }).eq("id", id);
+        (game as { gameConfig?: unknown }).gameConfig = nextConfig;
+      }
+    }
 
     const devResponse = await handleDevAction({
       supabase,

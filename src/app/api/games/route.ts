@@ -8,6 +8,7 @@ import { BuildingType, GameMap, MapObject, MapTile, TerrainType } from "@/lib/ga
 import { normalizeRmgTuning } from "@/lib/game/engine/rmg-tuning";
 import { isPlayableFaction, normalizePlayableFaction } from "@/lib/game/playable-factions";
 import { normalizeVictoryCondition } from "@/lib/game/victory";
+import { getObeliskIds, normalizeObeliskCount, pickGrailLocation } from "@/lib/game/grail";
 import type { VictoryCondition } from "@/lib/game/types";
 import { mapLevels, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { createGamePlayerSetup } from "@/lib/game/server/player-setup";
@@ -186,6 +187,9 @@ export async function POST(request: Request) {
     assignMonsterSubtypes(mapData);
     assignNeutralTownTraits(mapData);
     const victory = buildVictoryForCreation(victoryInput, mapData);
+    normalizeObeliskCount(mapData, maxPlayers);
+    const obelisksTotal = getObeliskIds(mapData).length;
+    const grail = pickGrailLocation(mapData);
     const profileName = await getProfileName(supabase, user.id);
 
     const gameInsert = {
@@ -195,7 +199,7 @@ export async function POST(request: Request) {
       map_height: size,
       status: "PENDING",
       map_data: mapData,
-      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory },
+      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory, grail, obelisksTotal },
       created_by_user_id: user.id,
       seed: mapData.seed,
       map_size: mapSize,

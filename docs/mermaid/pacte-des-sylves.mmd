@@ -1,0 +1,51 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+    Pond[Étang Mystique] --> Fountain[Fontaine de Fortune]
+
+    %% Magie
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+
+    %% Créatures
+    Fort --> Centaur[Écuries de Centaures]
+    Centaur --> U_Centaur[Up: Capitaines Centaures]
+
+    Centaur --> Dwarf[Cottage des Nains]
+    Dwarf --> U_Dwarf[Up: Nains de Combat]
+
+    Centaur --> Elf[Propriété - Elfes]
+    Elf --> U_Elf[Up: Grands Elfes]
+
+    Elf --> Pegasus[Source Enchantée - Pégases]
+    Pegasus --> U_Pegasus[Up: Pégases d'Argent]
+
+    Elf --> Dendroid[Arches des Dendroïdes]
+    Dendroid --> U_Dendroid[Up: Gardes Dendroïdes]
+
+    Pegasus --> Unicorn[Clairière des Licornes]
+    Dendroid --> Unicorn
+    Unicorn --> U_Unicorn[Up: Licornes de Guerre]
+
+    Unicorn --> Dragon[Falaises des Dragons - Dragons Verts]
+    Mage2 --> Dragon
+    Dragon --> U_Dragon[Up: Dragons d'Or]
+
+    %% Spéciaux
+    Dwarf --> Miners[Guilde des Mineurs]
+    Miners --> Treasury[Trésorerie]
+    Dendroid --> Saplings[Jeunes Dendroïdes]

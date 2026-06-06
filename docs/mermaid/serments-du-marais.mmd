@@ -1,0 +1,45 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+    Fort --> Glyphs[Glyphes de Peur]
+    Citadel --> Captain[Quartiers du Capitaine]
+    Town --> Cage[Cage des Seigneurs de Guerre]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+
+    %% Magie
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+
+    %% Créatures
+    Fort --> Gnoll[Hutte - Gnolls]
+    Gnoll --> U_Gnoll[Up: Maraudeurs Gnolls]
+
+    Gnoll --> Lizard[Tanière - Hommes-Lézards]
+    Lizard --> U_Lizard[Up: Guerriers Lézards]
+
+    Gnoll --> Fly[Ruche - Mouches Serpents]
+    Fly --> U_Fly[Up: Mouches Dragons]
+
+    Fly --> Basilisk[Fosse des Basilics]
+    Basilisk --> U_Basilisk[Up: Grands Basilics]
+
+    Fly --> Gorgon[Antre des Gorgones]
+    Gorgon --> U_Gorgon[Up: Puissantes Gorgones]
+
+    Lizard --> Wyvern[Nid de Wyvernes]
+    Wyvern --> U_Wyvern[Up: Wyvernes Monarques]
+
+    Gorgon --> Hydra[Étang des Hydres]
+    Basilisk --> Hydra
+    Hydra --> U_Hydra[Up: Hydres du Chaos]

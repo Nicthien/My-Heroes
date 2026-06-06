@@ -23,12 +23,19 @@ import { getPersonalityProfile, mergeDifficultyProfile } from "./strategy/person
 import { computePosture } from "./strategy/posture";
 
 export const AI_BUILD_PRIORITY: BuildingType[] = [
+  // Tavern gates the Town Hall (canonical HoMM3 hall chain), so it comes first.
+  BuildingType.TAVERN,
   BuildingType.TOWN_HALL,
   BuildingType.MARKET,
-  BuildingType.BARRACKS,
+  // The Fort gates every creature dwelling (canonical HoMM3 tree).
+  BuildingType.FORT,
   BuildingType.DWELLING_1,
   BuildingType.RESOURCE_SILO,
   BuildingType.DWELLING_2,
+  // Mage Guild lvl 1 + Blacksmith are prerequisites of the City Hall (and the
+  // Blacksmith also gates the Barracks for Castle/Stronghold).
+  BuildingType.MAGE_GUILD,
+  BuildingType.BLACKSMITH,
   BuildingType.CITY_HALL,
   BuildingType.DWELLING_3,
   BuildingType.DWELLING_4,

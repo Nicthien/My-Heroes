@@ -1,0 +1,50 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+    Fort --> Lookout[Tour de Guet]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+    Market --> Artifact[Marchands d'Artefacts]
+
+    %% Magie & spéciaux
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+    Mage1 --> Library[Bibliothèque]
+    Mage1 --> Wall[Mur de Connaissance]
+
+    %% Créatures
+    Fort --> Workshop[Atelier - Gremlins]
+    Workshop --> U_Workshop[Up: Maîtres Gremlins]
+
+    Workshop --> Parapet[Parapet - Gargouilles]
+    Parapet --> U_Parapet[Up: Gargouilles d'Obsidienne]
+    Parapet --> Sculptor[Ailes du Sculpteur]
+
+    Workshop --> Golem[Usine de Golems - Golems de Pierre]
+    Golem --> U_Golem[Up: Golems de Fer]
+
+    Golem --> Mage[Tour des Mages - Mages]
+    Library --> Mage
+    Mage --> U_Mage[Up: Archimages]
+
+    Mage --> Genie[Autel des Vœux - Génies]
+    Genie --> U_Genie[Up: Maîtres Génies]
+
+    Mage --> Naga[Pavillon d'Or - Nagas]
+    Naga --> U_Naga[Up: Reines Nagas]
+
+    Genie --> Giant[Temple des Nuages - Géants]
+    Naga --> Giant
+    Giant --> U_Giant[Up: Titans]

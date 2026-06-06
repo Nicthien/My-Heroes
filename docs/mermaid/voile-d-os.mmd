@@ -1,0 +1,49 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+    Citadel --> Cover[Voile des Ténèbres]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+
+    %% Magie & spéciaux
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+    Mage1 --> Amplifier[Amplificateur de Nécromancie]
+
+    %% Créatures
+    Fort --> Skeleton[Temple Maudit - Squelettes]
+    Skeleton --> U_Skeleton[Up: Guerriers Squelettes]
+    Skeleton --> Transformer[Transformateur de Squelettes]
+    Skeleton --> Graves[Tombes Ouvertes]
+
+    Skeleton --> Zombie[Cimetière - Zombis]
+    Zombie --> U_Zombie[Up: Zombis de la Peste]
+
+    Zombie --> Wight[Tombeau des Âmes - Spectres]
+    Wight --> U_Wight[Up: Âmes en Peine]
+
+    Zombie --> Vampire[Domaine - Vampires]
+    Vampire --> U_Vampire[Up: Seigneurs Vampires]
+
+    Vampire --> Lich[Mausolée - Liches]
+    Mage1 --> Lich
+    Lich --> U_Lich[Up: Puissantes Liches]
+
+    Vampire --> Knight[Hall des Ténèbres - Chevaliers Noirs]
+    Knight --> U_Knight[Up: Chevaliers de l'Effroi]
+
+    Lich --> Dragon[Caveau des Dragons - Dragons d'Os]
+    Knight --> Dragon
+    Dragon --> U_Dragon[Up: Dragons Fantômes]

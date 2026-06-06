@@ -31,6 +31,31 @@ const MIGRATIONS_DIR = join(SCRIPT_DIR, "..", "supabase", "migrations");
 const log = (...args) => console.log("[migrate]", ...args);
 const warn = (...args) => console.warn("[migrate]", ...args);
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Wait until the database accepts a trivial query. Lets the app boot alongside
+// Supabase (e.g. after a host reboot): instead of failing the moment the DB
+// isn't ready, retry for a bounded window. Connection/transient errors here are
+// "not ready yet" — they are NOT treated as migration failures. Tunable via
+// MIGRATE_CONNECT_RETRIES / MIGRATE_CONNECT_DELAY_MS.
+async function waitForDatabase(sql) {
+  const retries = Math.max(1, Number(process.env.MIGRATE_CONNECT_RETRIES ?? 60));
+  const delayMs = Math.max(250, Number(process.env.MIGRATE_CONNECT_DELAY_MS ?? 2000));
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await sql`select 1`;
+      if (attempt > 1) log(`database reachable after ${attempt} attempt(s).`);
+      return;
+    } catch (err) {
+      if (attempt === retries) {
+        throw new Error(`database not reachable after ${retries} attempt(s): ${err.message}`);
+      }
+      warn(`database not ready (attempt ${attempt}/${retries}: ${err.message}); retrying in ${delayMs}ms...`);
+      await sleep(delayMs);
+    }
+  }
+}
+
 // Parse "<version>_<name>.sql" → { version, name, file }. The version is the
 // numeric prefix before the first underscore, matching the Supabase CLI.
 function parseMigrationName(file) {
@@ -95,6 +120,7 @@ export async function runMigrations(options = {}) {
   });
 
   try {
+    await waitForDatabase(sql);
     await ensureTrackingTable(sql);
     const applied = await appliedVersions(sql);
     const all = await listMigrationFiles();

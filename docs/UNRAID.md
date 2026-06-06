@@ -197,6 +197,14 @@ For a **brand-new empty database** you can skip Step 3 entirely and just boot
 with `SUPABASE_DB_URL` set — the runner applies every migration in order, which
 builds the full schema.
 
+**Reboot resilience:** if the app and Supabase start together (e.g. after an
+Unraid reboot) and the DB isn't ready yet, the runner waits and retries for a
+bounded window (`MIGRATE_CONNECT_RETRIES`×`MIGRATE_CONNECT_DELAY_MS`, default
+~2 min) instead of failing instantly. Set the app container's **restart policy
+to `unless-stopped`** so that if the window is exhausted it restarts and tries
+again — together they make startup self-healing. A genuine migration SQL error
+still aborts (non-zero exit) on purpose.
+
 To disable the whole thing, set `MIGRATE_ON_BOOT` = `false` (or leave
 `SUPABASE_DB_URL` unset). You can also inspect/apply manually from a dev machine
 with `npm run db:migrate:status` / `npm run db:migrate` (reads `SUPABASE_DB_URL`

@@ -14,6 +14,10 @@ export const COMMON_TOWN_BUILDING_SPRITES: Partial<Record<BuildingType, string>>
   [BuildingType.MAGE_GUILD_4]: "/assets/sprites/town-buildings/mage_guild.webp",
   [BuildingType.MAGE_GUILD_5]: "/assets/sprites/town-buildings/mage_guild.webp",
   [BuildingType.SHIPYARD]: "/assets/sprites/town-buildings/shipyard.webp",
+  [BuildingType.FORT]: "/assets/sprites/town-buildings/fort.webp",
+  [BuildingType.CITADEL]: "/assets/sprites/town-buildings/citadel.webp",
+  [BuildingType.CASTLE_KEEP]: "/assets/sprites/town-buildings/castle_keep.webp",
+  [BuildingType.BLACKSMITH]: "/assets/sprites/town-buildings/blacksmith.webp",
   [BuildingType.RESOURCE_SILO]: "/assets/sprites/town-buildings/resource_silo.webp",
 };
 

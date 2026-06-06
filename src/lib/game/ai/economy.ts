@@ -24,8 +24,8 @@ export async function runAiEconomy(
   // Sans taverne pas de tavern_offer, donc pas de recrutement possible.
   if ((player.heroes ?? []).length === 0) {
     buildPriority = [
-      BuildingType.TOWN_HALL,
       BuildingType.TAVERN,
+      BuildingType.TOWN_HALL,
       ...buildPriority.filter((b) => b !== BuildingType.TOWN_HALL && b !== BuildingType.TAVERN),
     ];
   }

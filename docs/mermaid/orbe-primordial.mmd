@@ -1,0 +1,48 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+
+    %% Ressources & spéciaux
+    Market --> Silo[Silo de Ressources]
+    Market --> Artifact[Marchands d'Artefacts]
+    Mage1 --> University[Université de Magie]
+
+    %% Magie
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+
+    %% Créatures
+    Fort --> Fairy[Lanterne Magique - Fées]
+    Fairy --> U_Fairy[Up: Nymphes]
+    Fairy --> Garden[Jardin de Vie]
+
+    Fairy --> Air[Autel de l'Air - Élémentaires d'Air]
+    Air --> U_Air[Up: Élémentaires de Tempête]
+
+    Fairy --> Water[Autel de l'Eau - Élémentaires d'Eau]
+    Water --> U_Water[Up: Élémentaires de Glace]
+
+    Fairy --> Earth[Autel de la Terre - Élémentaires de Terre]
+    Earth --> U_Earth[Up: Élémentaires de Magma]
+
+    Air --> Fire[Autel du Feu - Élémentaires de Feu]
+    Water --> Fire
+    Fire --> U_Fire[Up: Élémentaires d'Énergie]
+
+    Fire --> Magic[Autel de la Pensée - Élém. de Magie]
+    Earth --> Magic
+    Magic --> U_Magic[Up: Élémentaires Psychiques]
+
+    Magic --> Firebird[Bûcher - Oiseaux de Feu]
+    Firebird --> U_Firebird[Up: Phénix]

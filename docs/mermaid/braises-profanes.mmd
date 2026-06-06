@@ -1,0 +1,50 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+    Citadel --> Gate[Porte des Braises]
+    Fort --> Brimstone[Nuages de Soufre]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+
+    %% Magie & spéciaux
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+    Mage1 --> Order[Ordre du Feu]
+
+    %% Créatures
+    Fort --> Crucible[Creuset - Diablotins]
+    Crucible --> U_Crucible[Up: Familiers]
+    Crucible --> Birthing[Bassin de Naissance]
+
+    Crucible --> Gog[Hall des Péchés - Gogs]
+    Gog --> U_Gog[Up: Magogs]
+
+    Gog --> Hound[Chenil - Chiens de l'Enfer]
+    Hound --> U_Hound[Up: Cerbères]
+
+    Gog --> Demon[Porte des Démons - Démons]
+    Demon --> U_Demon[Up: Démons Cornus]
+    Demon --> Cages[Cages]
+
+    Demon --> PitFiend[Trou de l'Enfer - Démons Abyssaux]
+    PitFiend --> U_PitFiend[Up: Seigneurs des Abîmes]
+
+    Demon --> Efreet[Lac de Feu - Efreets]
+    Mage1 --> Efreet
+    Efreet --> U_Efreet[Up: Sultans Efreets]
+
+    PitFiend --> Devil[Palais Abandonné - Diables]
+    Efreet --> Devil
+    Devil --> U_Devil[Up: Archidiables]

@@ -1,0 +1,46 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+    Fort --> Escape[Tunnel d'Évasion]
+    Fort --> Valhalla[Hall du Valhalla]
+
+    %% Ressources & spéciaux
+    Market --> Silo[Silo de Ressources]
+    Market --> Freelancer[Guilde des Francs-tireurs]
+    Blacksmith --> Ballista[Cour des Balistes]
+
+    %% Magie
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+
+    %% Créatures
+    Fort --> Goblin[Caserne des Gobelins]
+    Goblin --> U_Goblin[Up: Hobgobelins]
+    Goblin --> Mess[Réfectoire]
+
+    Goblin --> Wolf[Enclos des Loups - Chevaucheurs]
+    Wolf --> U_Wolf[Up: Pillards Gobelins]
+
+    Goblin --> Orc[Tour des Orcs - Orcs]
+    Orc --> U_Orc[Up: Chefs Orcs]
+
+    Orc --> Ogre[Fort des Ogres - Ogres]
+    Ogre --> U_Ogre[Up: Ogres Mages]
+
+    Wolf --> Roc[Nid sur la Falaise - Rocs]
+    Roc --> U_Roc[Up: Oiseaux-Tonnerre]
+
+    Ogre --> Cyclops[Caverne des Cyclopes]
+    Cyclops --> U_Cyclops[Up: Rois Cyclopes]
+
+    Roc --> Behemoth[Antre des Béhémoths]
+    Behemoth --> U_Behemoth[Up: Béhémoths Antiques]

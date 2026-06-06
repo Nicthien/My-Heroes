@@ -1,0 +1,50 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+    Shipyard[Chantier Naval] --> Lighthouse[Phare]
+
+    %% Magie
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+
+    %% Créatures
+    Fort --> Guard[Corps de Garde - Lanciers]
+    Guard --> U_Guard[Up: Hallebardiers]
+
+    Guard --> Archers[Tour des Archers - Archers]
+    Archers --> U_Archers[Up: Arbalétriers]
+
+    Guard --> Barracks[Caserne - Épéistes]
+    Blacksmith --> Barracks
+    Barracks --> U_Barracks[Up: Croisés]
+
+    Barracks --> Griffin[Tour des Griffons - Griffons]
+    Griffin --> U_Griffin[Up: Griffons Royaux]
+    Griffin --> GriffinBastion[Bastion des Griffons]
+
+    Barracks --> Stables[Écuries]
+    Stables --> Training[Terrain d'Entraînement - Cavaliers]
+    Training --> U_Training[Up: Champions]
+
+    Barracks --> Monastery[Monastère - Moines]
+    Mage1 --> Monastery
+    Monastery --> U_Monastery[Up: Zélotes]
+
+    Monastery --> Portal[Portail de Gloire - Anges]
+    Portal --> U_Portal[Up: Archanges]
+
+    %% Spéciaux
+    Tavern --> Brotherhood[Confrérie de l'Épée]

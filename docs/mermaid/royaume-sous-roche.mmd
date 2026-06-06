@@ -1,0 +1,49 @@
+graph TD
+    %% Halls (Village Hall gratuit au départ)
+    Tavern[Taverne] --> Town[Mairie]
+    Town --> City[Hôtel de Ville]
+    Market[Marché] --> City
+    Mage1 --> City
+    Blacksmith[Forgeron] --> City
+    City --> Capitol[Capitole]
+
+    %% Fortifications (le Fort débloque les demeures)
+    Fort[Fort] --> Citadel[Citadelle]
+    Citadel --> Castle[Château]
+
+    %% Ressources
+    Market --> Silo[Silo de Ressources]
+    Market --> Artifact[Marchands d'Artefacts]
+
+    %% Magie & spéciaux
+    Mage1[Guilde des Mages Nv 1] --> Mage2[Guilde Nv 2]
+    Mage2 --> Mage3[Guilde Nv 3]
+    Mage3 --> Mage4[Guilde Nv 4]
+    Mage4 --> Mage5[Guilde Nv 5]
+    Mage1 --> Vortex[Vortex de Mana]
+
+    %% Créatures
+    Fort --> Troglodyte[Garenne - Troglodytes]
+    Troglodyte --> U_Troglodyte[Up: Troglodytes Infernaux]
+    Troglodyte --> Mushroom[Anneaux de Champignons]
+
+    Troglodyte --> Harpy[Perchoir - Harpies]
+    Harpy --> U_Harpy[Up: Harpies Sorcières]
+
+    Troglodyte --> Eye[Pilier des Yeux - Yeux Maléfiques]
+    Eye --> U_Eye[Up: Yeux Démoniaques]
+
+    Harpy --> Medusa[Chapelle des Voix - Méduses]
+    Eye --> Medusa
+    Medusa --> U_Medusa[Up: Reines Méduses]
+
+    Medusa --> Minotaur[Labyrinthe - Minotaures]
+    Minotaur --> U_Minotaur[Up: Rois Minotaures]
+
+    Eye --> Manticore[Antre des Manticores]
+    Manticore --> U_Manticore[Up: Scorpicores]
+
+    Minotaur --> Dragon[Caverne des Dragons - Dragons Rouges]
+    Manticore --> Dragon
+    Mage2 --> Dragon
+    Dragon --> U_Dragon[Up: Dragons Noirs]

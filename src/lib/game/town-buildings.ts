@@ -205,74 +205,257 @@ const RESOURCE_SILO_PRODUCTION: Record<Faction, ResourceCost> = {
 
 const UNIQUE_BUILDINGS: Record<Faction, UniqueBuildingTemplate[]> = {
   [Faction.CASTLE]: [
-    { label: "Confrérie de l'épée", description: "+2 au moral des défenseurs de la ville.", cost: { gold: 500, wood: 5 } },
+    { label: "Confrérie de l'épée", description: "+2 au moral des défenseurs de la ville.", cost: { gold: 500, wood: 5 }, requires: [BuildingType.TAVERN] },
     { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
-    { label: "Phare", description: "+500 mouvement naval par phare possédé.", cost: { gold: 2000, wood: 10 }, boatMovementBonus: 500 },
-    { label: "Écuries", description: "+400 mouvement au héros en visite pour la semaine.", cost: { gold: 2000, wood: 10 }, weeklyVisitBonus: { movement: 400 } },
-    { label: "Bastion des griffons", description: "+3 à la croissance hebdomadaire des griffons.", cost: { gold: 1000 }, growthBonus: { [UnitType.GRIFFIN]: 3, [UnitType.ROYAL_GRIFFIN]: 3 } },
+    { label: "Phare", description: "+500 mouvement naval par phare possédé.", cost: { gold: 2000, wood: 10 }, requires: [BuildingType.UNIQUE_2], boatMovementBonus: 500 },
+    { label: "Écuries", description: "+400 mouvement au héros en visite pour la semaine.", cost: { gold: 2000, wood: 10 }, requires: [BuildingType.DWELLING_4], weeklyVisitBonus: { movement: 400 } },
+    { label: "Bastion des griffons", description: "+3 à la croissance hebdomadaire des griffons.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_3], growthBonus: { [UnitType.GRIFFIN]: 3, [UnitType.ROYAL_GRIFFIN]: 3 } },
     { label: "Colosse", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.RAMPART]: [
     { label: "Étang mystique", description: "Produit une petite ressource rare aléatoire chaque semaine.", cost: { gold: 2000, mercury: 2, crystals: 2, gems: 2, sulfur: 2 }, weeklyRandomRareResource: 1 },
-    { label: "Fontaine de fortune", description: "+1 Chance au héros en visite pour la semaine.", cost: { gold: 1500 }, weeklyVisitBonus: { luck: 1 } },
-    { label: "Trésorerie", description: "Ajoute des intérêts à la réserve d'or du royaume.", cost: { gold: 5000, wood: 10, ore: 10 }, goldInterestPercent: 10 },
-    { label: "Guilde des mineurs", description: "+1 à la croissance hebdomadaire des nains.", cost: { gold: 1000 }, growthBonus: { [UnitType.DWARF]: 1, [UnitType.BATTLE_DWARF]: 1 } },
-    { label: "Jeunes dendroïdes", description: "+2 à la croissance hebdomadaire des dendroïdes.", cost: { gold: 2000 }, growthBonus: { [UnitType.DENDROID]: 2, [UnitType.DENDROID_SOLDIER]: 2 } },
+    { label: "Fontaine de fortune", description: "+1 Chance au héros en visite pour la semaine.", cost: { gold: 1500 }, requires: [BuildingType.UNIQUE_1], weeklyVisitBonus: { luck: 1 } },
+    { label: "Trésorerie", description: "Ajoute des intérêts à la réserve d'or du royaume.", cost: { gold: 5000, wood: 10, ore: 10 }, requires: [BuildingType.UNIQUE_4], goldInterestPercent: 10 },
+    { label: "Guilde des mineurs", description: "+1 à la croissance hebdomadaire des nains.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_2], growthBonus: { [UnitType.DWARF]: 1, [UnitType.BATTLE_DWARF]: 1 } },
+    { label: "Jeunes dendroïdes", description: "+2 à la croissance hebdomadaire des dendroïdes.", cost: { gold: 2000 }, requires: [BuildingType.DWELLING_5], growthBonus: { [UnitType.DENDROID]: 2, [UnitType.DENDROID_SOLDIER]: 2 } },
     { label: "Gardien des esprits", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.TOWER]: [
-    { label: "Tour de guet", description: "+4 portée de reconnaissance de la ville.", cost: { gold: 1000, wood: 5 }, townVisionBonus: 4 },
-    { label: "Bibliothèque", description: "Ajoute des sorts à la guilde des mages.", cost: { gold: 1500, wood: 5, ore: 5 } },
-    { label: "Mur de connaissance", description: "+1 Connaissance définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { knowledge: 1 } },
-    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
-    { label: "Ailes du sculpteur", description: "+4 à la croissance hebdomadaire des gargouilles.", cost: { gold: 1000 }, growthBonus: { [UnitType.GARGOYLE]: 4, [UnitType.OBSIDIAN_GARGOYLE]: 4 } },
+    { label: "Tour de guet", description: "+4 portée de reconnaissance de la ville.", cost: { gold: 1000, wood: 5 }, requires: [BuildingType.FORT], townVisionBonus: 4 },
+    { label: "Bibliothèque", description: "Ajoute des sorts à la guilde des mages.", cost: { gold: 1500, wood: 5, ore: 5 }, requires: [BuildingType.MAGE_GUILD] },
+    { label: "Mur de connaissance", description: "+1 Connaissance définitif au héros en visite (une fois).", cost: { gold: 1000 }, requires: [BuildingType.MAGE_GUILD], permanentVisitBonus: { knowledge: 1 } },
+    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 }, requires: [BuildingType.MARKET] },
+    { label: "Ailes du sculpteur", description: "+4 à la croissance hebdomadaire des gargouilles.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_2], growthBonus: { [UnitType.GARGOYLE]: 4, [UnitType.OBSIDIAN_GARGOYLE]: 4 } },
     { label: "Vaisseau céleste", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.INFERNO]: [
-    { label: "Porte des Braises", description: "Relie les villes des Braises Profanes pour transférer des créatures.", cost: { gold: 10000, wood: 5, ore: 5 } },
-    { label: "Ordre du feu", description: "+1 Puissance magique définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { spellPower: 1 } },
-    { label: "Nuages de soufre", description: "Ajoute des dégâts de feu aux défenses de la ville.", cost: { gold: 2000, sulfur: 5 } },
-    { label: "Bassin de naissance", description: "+8 à la croissance hebdomadaire des diablotins.", cost: { gold: 1000 }, growthBonus: { [UnitType.IMP]: 8, [UnitType.FAMILIAR]: 8 } },
-    { label: "Cages", description: "+2 à la croissance hebdomadaire des démons.", cost: { gold: 1000 }, growthBonus: { [UnitType.DEMON]: 2, [UnitType.HORNED_DEMON]: 2 } },
+    { label: "Porte des Braises", description: "Relie les villes des Braises Profanes pour transférer des créatures.", cost: { gold: 10000, wood: 5, ore: 5 }, requires: [BuildingType.CITADEL] },
+    { label: "Ordre du feu", description: "+1 Puissance magique définitif au héros en visite (une fois).", cost: { gold: 1000 }, requires: [BuildingType.MAGE_GUILD], permanentVisitBonus: { spellPower: 1 } },
+    { label: "Nuages de soufre", description: "Ajoute des dégâts de feu aux défenses de la ville.", cost: { gold: 2000, sulfur: 5 }, requires: [BuildingType.FORT] },
+    { label: "Bassin de naissance", description: "+8 à la croissance hebdomadaire des diablotins.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.IMP]: 8, [UnitType.FAMILIAR]: 8 } },
+    { label: "Cages", description: "+2 à la croissance hebdomadaire des démons.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_4], growthBonus: { [UnitType.DEMON]: 2, [UnitType.HORNED_DEMON]: 2 } },
     { label: "Divinité du feu", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.NECROPOLIS]: [
-    { label: "Voile des ténèbres", description: "Réduit la reconnaissance ennemie autour de la ville.", cost: { gold: 1000, wood: 5 } },
-    { label: "Amplificateur de nécromancie", description: "Améliore la nécromancie des héros alliés.", cost: { gold: 1000, ore: 5 } },
-    { label: "Transformateur de squelettes", description: "Transforme les créatures vivantes en squelettes.", cost: { gold: 1000, mercury: 5 } },
-    { label: "Tombes ouvertes", description: "+6 à la croissance hebdomadaire des squelettes.", cost: { gold: 1000 }, growthBonus: { [UnitType.SKELETON]: 6, [UnitType.SKELETON_WARRIOR]: 6 } },
+    { label: "Voile des ténèbres", description: "Réduit la reconnaissance ennemie autour de la ville.", cost: { gold: 1000, wood: 5 }, requires: [BuildingType.CITADEL] },
+    { label: "Amplificateur de nécromancie", description: "Améliore la nécromancie des héros alliés.", cost: { gold: 1000, ore: 5 }, requires: [BuildingType.MAGE_GUILD] },
+    { label: "Transformateur de squelettes", description: "Transforme les créatures vivantes en squelettes.", cost: { gold: 1000, mercury: 5 }, requires: [BuildingType.DWELLING_1] },
+    { label: "Tombes ouvertes", description: "+6 à la croissance hebdomadaire des squelettes.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.SKELETON]: 6, [UnitType.SKELETON_WARRIOR]: 6 } },
     { label: "Prison des âmes", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.DUNGEON]: [
-    { label: "Vortex de mana", description: "Double les points de magie du héros en visite (1×/semaine).", cost: { gold: 1000, ore: 5 }, weeklyVisitBonus: { doubleMana: true } },
+    { label: "Vortex de mana", description: "Double les points de magie du héros en visite (1×/semaine).", cost: { gold: 1000, ore: 5 }, requires: [BuildingType.MAGE_GUILD], weeklyVisitBonus: { doubleMana: true } },
     { label: "Académie des érudits de guerre", description: "+1 Attaque et +1 Défense définitifs au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { attack: 1, defense: 1 } },
-    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
+    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 }, requires: [BuildingType.MARKET] },
     { label: "Portail d'invocation", description: "Invoque des créatures supplémentaires depuis les demeures extérieures.", cost: { gold: 2500, wood: 5, ore: 5 } },
-    { label: "Anneaux de champignons", description: "+7 à la croissance hebdomadaire des troglodytes.", cost: { gold: 1000 }, growthBonus: { [UnitType.TROGLODYTE]: 7, [UnitType.INFERNAL_TROGLODYTE]: 7 } },
+    { label: "Anneaux de champignons", description: "+7 à la croissance hebdomadaire des troglodytes.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.TROGLODYTE]: 7, [UnitType.INFERNAL_TROGLODYTE]: 7 } },
     { label: "Gardien de la terre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.STRONGHOLD]: [
-    { label: "Tunnel d'évasion", description: "Permet aux défenseurs de fuir les combats de ville.", cost: { gold: 500, ore: 5 } },
-    { label: "Guilde des francs-tireurs", description: "Permet de vendre des créatures contre des ressources.", cost: { gold: 1000, wood: 5 } },
-    { label: "Cour des balistes", description: "Permet d'acheter une baliste.", cost: { gold: 1000, wood: 5 } },
-    { label: "Hall du Valhalla", description: "+1 Attaque définitif au héros en visite (une fois).", cost: { gold: 1000 }, permanentVisitBonus: { attack: 1 } },
-    { label: "Réfectoire", description: "+8 à la croissance hebdomadaire des gobelins.", cost: { gold: 1000 }, growthBonus: { [UnitType.GOBLIN]: 8, [UnitType.HOBGOBLIN]: 8 } },
+    { label: "Tunnel d'évasion", description: "Permet aux défenseurs de fuir les combats de ville.", cost: { gold: 500, ore: 5 }, requires: [BuildingType.FORT] },
+    { label: "Guilde des francs-tireurs", description: "Permet de vendre des créatures contre des ressources.", cost: { gold: 1000, wood: 5 }, requires: [BuildingType.MARKET] },
+    { label: "Cour des balistes", description: "Permet d'acheter une baliste.", cost: { gold: 1000, wood: 5 }, requires: [BuildingType.BLACKSMITH] },
+    { label: "Hall du Valhalla", description: "+1 Attaque définitif au héros en visite (une fois).", cost: { gold: 1000 }, requires: [BuildingType.FORT], permanentVisitBonus: { attack: 1 } },
+    { label: "Réfectoire", description: "+8 à la croissance hebdomadaire des gobelins.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.GOBLIN]: 8, [UnitType.HOBGOBLIN]: 8 } },
     { label: "Monument des seigneurs de guerre", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.FORTRESS]: [
-    { label: "Cage des seigneurs de guerre", description: "+1 Défense définitif au héros en visite (une fois).", cost: { gold: 1000, wood: 5 }, permanentVisitBonus: { defense: 1 } },
-    { label: "Quartiers du capitaine", description: "+6 à la croissance hebdomadaire des gnolls.", cost: { gold: 1000 }, growthBonus: { [UnitType.GNOLL]: 6, [UnitType.GNOLL_MARAUDER]: 6 } },
-    { label: "Glyphes de peur", description: "Affaiblit les assaillants pendant un siège.", cost: { gold: 1000, mercury: 5 } },
+    { label: "Cage des seigneurs de guerre", description: "+1 Défense définitif au héros en visite (une fois).", cost: { gold: 1000, wood: 5 }, requires: [BuildingType.TOWN_HALL], permanentVisitBonus: { defense: 1 } },
+    { label: "Quartiers du capitaine", description: "+6 à la croissance hebdomadaire des gnolls.", cost: { gold: 1000 }, requires: [BuildingType.CITADEL], growthBonus: { [UnitType.GNOLL]: 6, [UnitType.GNOLL_MARAUDER]: 6 } },
+    { label: "Glyphes de peur", description: "Affaiblit les assaillants pendant un siège.", cost: { gold: 1000, mercury: 5 }, requires: [BuildingType.FORT] },
     { label: "Obélisque de sang", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
   [Faction.CONFLUX]: [
-    { label: "Université de magie", description: "Permet au héros en visite d'apprendre les écoles de magie élémentaire.", cost: { gold: 5000, wood: 10 } },
+    { label: "Université de magie", description: "Permet au héros en visite d'apprendre les écoles de magie élémentaire.", cost: { gold: 5000, wood: 10 }, requires: [BuildingType.MAGE_GUILD] },
     { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
-    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 } },
-    { label: "Jardin de vie", description: "+10 à la croissance hebdomadaire des pixies.", cost: { gold: 1000 }, growthBonus: { [UnitType.PIXIE]: 10, [UnitType.SPRITE]: 10 } },
+    { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 }, requires: [BuildingType.MARKET] },
+    { label: "Jardin de vie", description: "+10 à la croissance hebdomadaire des pixies.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.PIXIE]: 10, [UnitType.SPRITE]: 10 } },
     { label: "Aurore boréale", description: "Bâtiment du Graal : +5000 or/jour, +50% de croissance et tous les sorts.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
   ],
 };
+
+// Fortification line (Fort → Citadelle → Château) + Blacksmith, present in every
+// town. In HoMM3 the Fort is a prerequisite for ALL creature dwellings (enforced
+// via DWELLING_REQUIRES_OVERRIDE), the Citadel/Castle add defenses and growth, and
+// the Blacksmith forges the faction war machine (and gates a few barracks).
+const FORTIFICATION_BUILDINGS: TownBuildingRule[] = [
+  {
+    type: BuildingType.FORT,
+    label: "Fort",
+    description: "Érige les remparts de la ville et débloque les demeures de créatures.",
+    category: "common",
+    cost: { gold: 5000, wood: 20, ore: 20 },
+  },
+  {
+    type: BuildingType.CITADEL,
+    label: "Citadelle",
+    description: "Renforce les remparts et ajoute une tour de tir défensive.",
+    category: "common",
+    cost: { gold: 2500, ore: 5 },
+    requires: [BuildingType.FORT],
+  },
+  {
+    type: BuildingType.CASTLE_KEEP,
+    label: "Château",
+    description: "Fortification maximale : deux tours de tir supplémentaires.",
+    category: "common",
+    cost: { gold: 5000, wood: 10, ore: 10 },
+    requires: [BuildingType.CITADEL],
+  },
+  {
+    type: BuildingType.BLACKSMITH,
+    label: "Forgeron",
+    description: "Forge les machines de guerre et prépare certaines casernes.",
+    category: "common",
+    cost: { gold: 1000, wood: 5 },
+  },
+];
+
+// Per-faction overrides of base dwelling prerequisites, transcribed from the
+// canonical HoMM3 building trees (docs/mermaid/<faction>.mmd). The Fort gates
+// every faction's creature tree: the tier-1 dwelling requires the Fort, and the
+// higher tiers chain off lower dwellings / the Mage Guild / faction buildings,
+// so the Fort requirement propagates transitively. When a faction is absent
+// here it falls back to the generic linear chain (tier N requires tier N-1).
+const DWELLING_REQUIRES_OVERRIDE: Partial<Record<Faction, Partial<Record<BuildingType, BuildingType[]>>>> = {
+  [Faction.CASTLE]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Corps de garde ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Tour des archers ← Corps de garde
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_4], // Tour des griffons ← Caserne
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_1, BuildingType.BLACKSMITH], // Caserne ← Corps de garde + Forgeron
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_4, BuildingType.MAGE_GUILD], // Monastère ← Caserne + Guilde des mages Nv1
+    [BuildingType.DWELLING_6]: [BuildingType.UNIQUE_4], // Terrain d'entraînement ← Écuries
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5], // Portail de gloire ← Monastère
+  },
+  [Faction.RAMPART]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Centaures ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Nains ← Centaures
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Elfes ← Centaures
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_3], // Pégases ← Elfes
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_3], // Dendroïdes ← Elfes
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4, BuildingType.DWELLING_5], // Licornes ← Pégases + Dendroïdes
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_6, BuildingType.MAGE_GUILD_2], // Dragons ← Licornes + Guilde Nv2
+  },
+  [Faction.TOWER]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Gremlins ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Gargouilles ← Gremlins
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Golems ← Gremlins
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_3, BuildingType.UNIQUE_2], // Mages ← Golems + Bibliothèque
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_4], // Génies ← Mages
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4], // Nagas ← Mages
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5, BuildingType.DWELLING_6], // Titans ← Génies + Nagas
+  },
+  [Faction.INFERNO]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Diablotins ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Gogs ← Diablotins
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_2], // Chiens de l'enfer ← Gogs
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_2], // Démons ← Gogs
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_4], // Démons abyssaux ← Démons
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4, BuildingType.MAGE_GUILD], // Efreets ← Démons + Guilde Nv1
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5, BuildingType.DWELLING_6], // Diables ← Abyssaux + Efreets
+  },
+  [Faction.NECROPOLIS]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Squelettes ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Zombis ← Squelettes
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_2], // Spectres ← Zombis
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_2], // Vampires ← Zombis
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_4, BuildingType.MAGE_GUILD], // Liches ← Vampires + Guilde Nv1
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4], // Chevaliers noirs ← Vampires
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5, BuildingType.DWELLING_6], // Dragons d'os ← Liches + Chevaliers noirs
+  },
+  [Faction.DUNGEON]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Troglodytes ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Harpies ← Troglodytes
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Yeux maléfiques ← Troglodytes
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_2, BuildingType.DWELLING_3], // Méduses ← Harpies + Yeux
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_4], // Minotaures ← Méduses
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_3], // Manticores ← Yeux maléfiques
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5, BuildingType.DWELLING_6, BuildingType.MAGE_GUILD_2], // Dragons rouges ← Minotaures + Manticores + Guilde Nv2
+  },
+  [Faction.STRONGHOLD]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Gobelins ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Chevaucheurs de loups ← Gobelins
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Orcs ← Gobelins
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_3], // Ogres ← Orcs
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_2], // Rocs ← Chevaucheurs
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4], // Cyclopes ← Ogres
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5], // Béhémoths ← Rocs
+  },
+  [Faction.FORTRESS]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Gnolls ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Hommes-lézards ← Gnolls
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Mouches serpents ← Gnolls
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_3], // Basilics ← Mouches serpents
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_3], // Gorgones ← Mouches serpents
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_2], // Wyvernes ← Hommes-lézards
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_5, BuildingType.DWELLING_4], // Hydres ← Gorgones + Basilics
+  },
+  [Faction.CONFLUX]: {
+    [BuildingType.DWELLING_1]: [BuildingType.FORT], // Fées ← Fort
+    [BuildingType.DWELLING_2]: [BuildingType.DWELLING_1], // Élémentaires d'air ← Fées
+    [BuildingType.DWELLING_3]: [BuildingType.DWELLING_1], // Élémentaires d'eau ← Fées
+    [BuildingType.DWELLING_4]: [BuildingType.DWELLING_2, BuildingType.DWELLING_3], // Élémentaires de feu ← Air + Eau
+    [BuildingType.DWELLING_5]: [BuildingType.DWELLING_1], // Élémentaires de terre ← Fées
+    [BuildingType.DWELLING_6]: [BuildingType.DWELLING_4, BuildingType.DWELLING_5], // Élémentaires de magie ← Feu + Terre
+    [BuildingType.DWELLING_7]: [BuildingType.DWELLING_6], // Oiseaux de feu ← Magie
+  },
+};
+
+// Maximum Mage Guild level per faction (canonical HoMM3). Levels above the cap
+// are simply not offered for that town.
+const MAGE_GUILD_MAX: Record<Faction, number> = {
+  [Faction.CASTLE]: 4,
+  [Faction.RAMPART]: 5,
+  [Faction.TOWER]: 5,
+  [Faction.INFERNO]: 5,
+  [Faction.NECROPOLIS]: 5,
+  [Faction.DUNGEON]: 5,
+  [Faction.STRONGHOLD]: 3,
+  [Faction.FORTRESS]: 3,
+  [Faction.CONFLUX]: 5,
+};
+
+const MAGE_GUILD_RULES: TownBuildingRule[] = [
+  {
+    type: BuildingType.MAGE_GUILD,
+    label: "Guilde des mages (niveau 1)",
+    description: "Apprend 5 sorts de niveau 1 aux héros en visite.",
+    category: "mage_guild",
+    cost: { gold: 2000, wood: 5, ore: 5 },
+  },
+  {
+    type: BuildingType.MAGE_GUILD_2,
+    label: "Guilde des mages (niveau 2)",
+    description: "Ajoute 4 sorts de niveau 2.",
+    category: "mage_guild",
+    cost: { gold: 1000, wood: 5, ore: 5, mercury: 4, crystals: 4, gems: 4, sulfur: 4 },
+    requires: [BuildingType.MAGE_GUILD],
+  },
+  {
+    type: BuildingType.MAGE_GUILD_3,
+    label: "Guilde des mages (niveau 3)",
+    description: "Ajoute 3 sorts de niveau 3.",
+    category: "mage_guild",
+    cost: { gold: 1000, wood: 5, ore: 5, mercury: 6, crystals: 6, gems: 6, sulfur: 6 },
+    requires: [BuildingType.MAGE_GUILD_2],
+  },
+  {
+    type: BuildingType.MAGE_GUILD_4,
+    label: "Guilde des mages (niveau 4)",
+    description: "Ajoute 2 sorts de niveau 4.",
+    category: "mage_guild",
+    cost: { gold: 1000, wood: 5, ore: 5, mercury: 8, crystals: 8, gems: 8, sulfur: 8 },
+    requires: [BuildingType.MAGE_GUILD_3],
+  },
+  {
+    type: BuildingType.MAGE_GUILD_5,
+    label: "Guilde des mages (niveau 5)",
+    description: "Ajoute 1 sort de niveau 5 (le plus puissant).",
+    category: "mage_guild",
+    cost: { gold: 1000, wood: 5, ore: 5, mercury: 10, crystals: 10, gems: 10, sulfur: 10 },
+    requires: [BuildingType.MAGE_GUILD_4],
+  },
+];
 
 export function getTownBuildingRules(
   faction: Faction,
@@ -281,6 +464,7 @@ export function getTownBuildingRules(
 ): TownBuildingRule[] {
   const safeFaction = TOWN_DWELLING_NAMES[faction] ? faction : Faction.CASTLE;
   const dwellings = TOWN_DWELLING_NAMES[safeFaction];
+  const dwellingRequiresOverride = DWELLING_REQUIRES_OVERRIDE[safeFaction];
 
   const common: TownBuildingRule[] = [
     {
@@ -289,7 +473,7 @@ export function getTownBuildingRules(
       description: "Améliore le revenu de cette ville à +1000 or par jour.",
       category: "common",
       cost: { gold: 2500 },
-      requires: [BuildingType.VILLAGE_HALL],
+      requires: [BuildingType.TAVERN],
     },
     {
       type: BuildingType.CITY_HALL,
@@ -297,7 +481,7 @@ export function getTownBuildingRules(
       description: "Améliore le revenu de cette ville à +2000 or par jour.",
       category: "common",
       cost: { gold: 5000 },
-      requires: [BuildingType.TOWN_HALL],
+      requires: [BuildingType.TOWN_HALL, BuildingType.MARKET, BuildingType.MAGE_GUILD, BuildingType.BLACKSMITH],
     },
     {
       type: BuildingType.CAPITOL,
@@ -321,45 +505,7 @@ export function getTownBuildingRules(
       category: "common",
       cost: { gold: 750, wood: 5 },
     },
-    {
-      type: BuildingType.MAGE_GUILD,
-      label: "Guilde des mages (niveau 1)",
-      description: "Apprend 5 sorts de niveau 1 aux héros en visite.",
-      category: "mage_guild",
-      cost: { gold: 2000, wood: 5, ore: 5 },
-    },
-    {
-      type: BuildingType.MAGE_GUILD_2,
-      label: "Guilde des mages (niveau 2)",
-      description: "Ajoute 4 sorts de niveau 2.",
-      category: "mage_guild",
-      cost: { gold: 1000, wood: 5, ore: 5, mercury: 4, crystals: 4, gems: 4, sulfur: 4 },
-      requires: [BuildingType.MAGE_GUILD],
-    },
-    {
-      type: BuildingType.MAGE_GUILD_3,
-      label: "Guilde des mages (niveau 3)",
-      description: "Ajoute 3 sorts de niveau 3.",
-      category: "mage_guild",
-      cost: { gold: 1000, wood: 5, ore: 5, mercury: 6, crystals: 6, gems: 6, sulfur: 6 },
-      requires: [BuildingType.MAGE_GUILD_2],
-    },
-    {
-      type: BuildingType.MAGE_GUILD_4,
-      label: "Guilde des mages (niveau 4)",
-      description: "Ajoute 2 sorts de niveau 4.",
-      category: "mage_guild",
-      cost: { gold: 1000, wood: 5, ore: 5, mercury: 8, crystals: 8, gems: 8, sulfur: 8 },
-      requires: [BuildingType.MAGE_GUILD_3],
-    },
-    {
-      type: BuildingType.MAGE_GUILD_5,
-      label: "Guilde des mages (niveau 5)",
-      description: "Ajoute 1 sort de niveau 5 (le plus puissant).",
-      category: "mage_guild",
-      cost: { gold: 1000, wood: 5, ore: 5, mercury: 10, crystals: 10, gems: 10, sulfur: 10 },
-      requires: [BuildingType.MAGE_GUILD_4],
-    },
+    ...MAGE_GUILD_RULES.slice(0, MAGE_GUILD_MAX[safeFaction]),
     {
       type: BuildingType.SHIPYARD,
       label: "Chantier naval",
@@ -378,15 +524,21 @@ export function getTownBuildingRules(
     },
   ];
 
-  const baseDwellingRules = BASE_DWELLING_TYPES.map((type, index): TownBuildingRule => ({
-    type,
-    label: dwellings[index].base,
-    description: `Permet de recruter les créatures de palier ${index + 1}.`,
-    category: "dwelling",
-    cost: dwellingCost(safeFaction, index, false),
-    requires: index === 0 ? undefined : [BASE_DWELLING_TYPES[index - 1]],
-    unlocksUnit: baseUnits[index],
-  }));
+  const baseDwellingRules = BASE_DWELLING_TYPES.map((type, index): TownBuildingRule => {
+    const override = dwellingRequiresOverride?.[type];
+    const requires = override !== undefined
+      ? (override.length > 0 ? override : undefined)
+      : index === 0 ? undefined : [BASE_DWELLING_TYPES[index - 1]];
+    return {
+      type,
+      label: dwellings[index].base,
+      description: `Permet de recruter les créatures de palier ${index + 1}.`,
+      category: "dwelling",
+      cost: dwellingCost(safeFaction, index, false),
+      requires,
+      unlocksUnit: baseUnits[index],
+    };
+  });
 
   const upgradedDwellingRules = UPGRADED_DWELLING_TYPES.map((type, index): TownBuildingRule => ({
     type,
@@ -417,7 +569,7 @@ export function getTownBuildingRules(
     boatMovementBonus: template.boatMovementBonus,
   }));
 
-  return [...common, ...baseDwellingRules, ...upgradedDwellingRules, ...uniqueRules];
+  return [...common, ...FORTIFICATION_BUILDINGS, ...baseDwellingRules, ...upgradedDwellingRules, ...uniqueRules];
 }
 
 export function getTownGoldProduction(buildings: Array<BuildingType | string>) {

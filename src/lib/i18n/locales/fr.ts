@@ -161,6 +161,14 @@ export const fr = {
   "rmg.objects": "Objets",
   "rmg.details": "Détails",
 
+  // --- Changelog ---
+  "changelog.title": "Nouveautés",
+  "changelog.button": "Notes de version",
+  "changelog.added": "Ajouté",
+  "changelog.changed": "Modifié",
+  "changelog.fixed": "Corrigé",
+  "changelog.removed": "Retiré",
+
   // --- Dashboard: header + games list ---
   "dashboard.welcome": "Bienvenue, {name}",
   "dashboard.newGame": "Nouvelle partie",

@@ -42,6 +42,7 @@ import type { Locale } from "@/lib/i18n/types";
 type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
+import { ChangelogModal } from "./ChangelogModal";
 import { Leaderboard } from "./Leaderboard";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 
@@ -210,6 +211,7 @@ export default function DashboardPage() {
   const [joinStep, setJoinStep] = useState<1 | 2>(1);
   const [showOptions, setShowOptions] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [showRmgTuning, setShowRmgTuning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
@@ -834,9 +836,15 @@ export default function DashboardPage() {
             <div>
               <h1 className={`text-3xl font-black tracking-[0.15em] sm:text-4xl ${goldText}`}>
                 MY HEROES
-                <span className="ml-2 align-super text-xs font-semibold tracking-normal text-amber-200/60">
+                <button
+                  type="button"
+                  onClick={() => setShowChangelog(true)}
+                  title={t("changelog.title")}
+                  aria-label={t("changelog.button")}
+                  className="ml-2 inline-block cursor-pointer rounded border border-amber-700/40 bg-stone-950/60 px-1.5 py-0.5 align-super text-xs font-semibold tracking-normal text-amber-200/60 transition hover:border-amber-400/60 hover:text-amber-100"
+                >
                   v{APP_VERSION}
-                </span>
+                </button>
               </h1>
               <p className="text-sm uppercase tracking-wider text-amber-200/70 mt-1">
                 {t("dashboard.welcome", { name: session?.user?.name ?? "" })}
@@ -1079,6 +1087,8 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
 
         {/* Assistant de création de partie */}
         {showCreate && (

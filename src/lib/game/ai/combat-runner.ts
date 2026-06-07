@@ -2,6 +2,7 @@ import { buildTurnQueue, executeManualCombatAction } from "@/lib/game/combat/per
 import { markHeroCombatSpellCast } from "@/lib/game/combat/spells";
 import type { SiegeState } from "@/lib/game/combat/siege";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
+import { clearDestroyedWarMachines } from "@/lib/game/server/war-machines";
 import { recordGameAction, recordTownCaptureFromCombat } from "@/lib/game/server/action-log";
 import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
 import type { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature } from "@/lib/game/types";
@@ -337,6 +338,9 @@ async function persistResolvedCombat(
       await supabase.from("neutral_army_stacks").update({ count, health }).eq("id", unit.id);
     }
   }
+
+  // A bought war machine destroyed in the fight is lost and must be re-bought.
+  await clearDestroyedWarMachines(supabase, before, after);
 
   if (winnerSide === "attacker") {
     if (combat.neutral_army_id) {

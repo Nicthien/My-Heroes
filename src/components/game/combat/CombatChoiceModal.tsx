@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import { fetchWithSupabaseAuth } from "@/lib/auth/client";
 import { playBattleStart } from "@/lib/audio/soundEffects";
 import { calculateArmyPower } from "@/lib/game/combat/autoResolve";
 import { createCreatureBankGuardStacks, isCreatureBankType } from "@/lib/game/creature-banks";
@@ -19,7 +19,6 @@ import type { Locale } from "@/lib/i18n/types";
 type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 export default function CombatChoiceModal() {
-  const { data: session } = useSession();
   const { t, locale } = useI18n();
   const gameState = useGameStore((state) => state.gameState);
   const pendingCombat = useGameStore((state) => state.pendingCombat);
@@ -29,7 +28,10 @@ export default function CombatChoiceModal() {
   const setGameState = useGameStore((state) => state.setGameState);
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
-  const godModeEnabled = Boolean(session?.user?.godModeEnabled);
+  // God mode (combat immortality) is a runtime cheat toggle, independent from the
+  // profile flag that merely grants dev-panel access. Only send the immortal-hero
+  // marker when the player has actually toggled it on in the dev panel.
+  const devGodMode = useGameStore((state) => state.devGodMode);
   const encounterInfo = useMemo(
     () => gameState && pendingCombat ? getEncounterInfo(gameState, pendingCombat, t, locale) : null,
     [gameState, pendingCombat, t, locale]
@@ -81,7 +83,7 @@ export default function CombatChoiceModal() {
         destination: pendingCombat.destination,
         targetPosition: pendingCombat.targetPosition,
         path: pendingCombat.path,
-        ...(godModeEnabled && selectedHeroId === pendingCombat.attackerHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+        ...(devGodMode && selectedHeroId === pendingCombat.attackerHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
       }),
     });
 
@@ -109,7 +111,7 @@ export default function CombatChoiceModal() {
       }
     }
     // No refreshGameState — the heroes table update triggers realtime → loadGame handles full sync
-  }, [godModeEnabled, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat, t, locale]);
+  }, [devGodMode, gameState, pendingCombat, selectedHeroId, setActiveCombat, setCombatMessage, setCombatResult, setGameState, setPendingCombat, t, locale]);
 
   if (!gameState || !pendingCombat || !encounterInfo) return null;
 

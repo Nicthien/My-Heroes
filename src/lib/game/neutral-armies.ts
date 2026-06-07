@@ -47,7 +47,13 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
 // across every guard source — mines, zone guardians, patrols, gates), not the unit
 // tier or the creature band. GUARD_BAND_LOW/HIGH bound which slice of the eligible
 // creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
-const GUARD_STRENGTH_MULTIPLIER = 2.1;
+// Difficulty boost: ~3.6× over the original 2.1 basis (2.1 → 7.5) so neutral guards
+// (mines, wandering monsters, zone guardians, gates) are a real but fair fight against
+// an early hero instead of a free pick-up. Dialed down from 9.45 once combat-immortal
+// dev god mode was decoupled (it had been masking all losses). Starting wood/ore mines
+// land around ~900-1250 combat power; high-tier mines (gold/crystal) scale up
+// proportionally and are meant to be taken later.
+const GUARD_STRENGTH_MULTIPLIER = 7.5;
 const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
 

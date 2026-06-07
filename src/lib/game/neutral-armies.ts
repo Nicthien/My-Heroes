@@ -33,6 +33,8 @@ const TERRAIN_UNIT_POOLS: Record<TerrainType, UnitType[]> = {
   [TerrainType.MOUNTAIN]: [...groupUnits("tower"), ...groupUnits("dungeon"), ...groupUnits("stronghold"), ...groupUnits("bulwark"), ...NEUTRAL_UNITS.slice(8)],
   [TerrainType.LAVA]: [...groupUnits("inferno"), UnitType.FIRE_ELEMENTAL, UnitType.ENERGY_ELEMENTAL, UnitType.FIREBIRD, UnitType.PHOENIX],
   [TerrainType.WATER]: [...groupUnits("cove"), UnitType.NYMPH, UnitType.OCEANID, UnitType.WATER_ELEMENTAL, UnitType.ICE_ELEMENTAL],
+  [TerrainType.ROUGH]: [...groupUnits("stronghold"), ...groupUnits("factory"), ...NEUTRAL_UNITS.slice(8)],
+  [TerrainType.SUBTERRANEAN]: [...groupUnits("dungeon"), ...groupUnits("bulwark"), ...NEUTRAL_UNITS.slice(8)],
 };
 
 export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined): UnitType[] {

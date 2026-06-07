@@ -65,7 +65,10 @@ function getMovementCost(terrain: TerrainType): number {
     case TerrainType.GRASS:
     case TerrainType.DIRT:
     case TerrainType.WATER:
+    case TerrainType.SUBTERRANEAN:
       return 100;
+    case TerrainType.ROUGH:
+      return 125;
     case TerrainType.SAND:
     case TerrainType.FOREST:
     case TerrainType.SNOW:

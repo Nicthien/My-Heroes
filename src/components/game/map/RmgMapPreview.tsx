@@ -13,6 +13,8 @@ export const TERRAIN_COLOR: Record<TerrainType, string> = {
   snow: "#e7edf1",
   swamp: "#53613d",
   lava: "#b63a2a",
+  rough: "#a98c5f",
+  subterranean: "#4a3d31",
 };
 
 export const OBJECT_COLOR: Record<MapObject["type"], string> = {

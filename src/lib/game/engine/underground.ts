@@ -62,7 +62,7 @@ export function normalizeUndergroundTerrain(tiles: MapTile[][], zoneGrid: ZoneGr
     for (const tile of row) {
       const zone = zoneGrid.meta[tile.zoneId ?? 0];
       const lava = zone?.baseTerrain === TerrainType.LAVA;
-      tile.terrain = lava ? terrainWithLavaNoise(tile.x, tile.y) : TerrainType.DIRT;
+      tile.terrain = lava ? terrainWithLavaNoise(tile.x, tile.y) : TerrainType.SUBTERRANEAN;
       tile.elevation = lava && tile.terrain === TerrainType.LAVA ? 1 : 0;
       tile.isPassable = tile.terrain !== TerrainType.LAVA;
       tile.movementCost = tile.isPassable ? 100 : 999;
@@ -638,7 +638,7 @@ function openUndergroundTile(tile: MapTile): void {
   if (tile.decor?.blocking) tile.decor = undefined;
   tile.worldEdge = undefined;
   if (tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.MOUNTAIN || tile.terrain === TerrainType.LAVA) {
-    tile.terrain = TerrainType.DIRT;
+    tile.terrain = TerrainType.SUBTERRANEAN;
     tile.elevation = 0;
   }
   if (tile.object?.type === "town_footprint") {

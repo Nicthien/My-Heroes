@@ -18,6 +18,8 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.SNOW]: "#d7e2e4",
   [TerrainType.SWAMP]: "#496737",
   [TerrainType.LAVA]: "#8d2f1e",
+  [TerrainType.ROUGH]: "#9c8456",
+  [TerrainType.SUBTERRANEAN]: "#4a3d31",
 };
 
 const FULL_ZONE_CONTROL_OPACITY = 0.9;

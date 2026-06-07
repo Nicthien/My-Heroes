@@ -5,6 +5,7 @@ import {
   BASE_DWELLING_TYPES,
   UPGRADED_DWELLING_TYPES,
   getTownBuildingRules,
+  getTownFortLevel,
   type TownBuildingRule,
 } from "./town-buildings";
 
@@ -319,31 +320,37 @@ export function getGrowthForBuiltTownBuilding(faction: Faction, building: Buildi
 export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingType | string>): Partial<Record<UnitType, number>> {
   const rules = getFactionBuildingRules(faction);
   const growth: Partial<Record<UnitType, number>> = {};
-  let hasGrail = false;
   // A built upgrade dwelling replaces its base dwelling's growth pool: in HoMM3 the
   // tier produces a single (upgraded) creature pool, not base + upgraded. Collect the
   // base units whose upgrade is built so we can skip their base growth below.
   const replacedBaseUnits = new Set<UnitType>();
+  let hasGrail = false;
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
     if (rule?.replacesUnit) replacedBaseUnits.add(rule.replacesUnit);
+    if (rule?.grail) hasGrail = true;
   }
+
+  // HoMM3: the fortification ladder and the Grail multiply the BASE dwelling growth
+  // before any flat per-creature bonuses. Citadel ×1.5, Castle ×2 (Fort alone = no
+  // growth bonus), Grail an additional ×1.5.
+  const fortLevel = getTownFortLevel(buildings);
+  const fortMultiplier = fortLevel >= 3 ? 2 : fortLevel === 2 ? 1.5 : 1;
+  const baseMultiplier = fortMultiplier * (hasGrail ? 1.5 : 1);
+
+  // 1) Base dwelling growth, scaled by the fort/Grail multiplier.
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
-    if (!rule) continue;
-    if (rule.grail) hasGrail = true;
-    if (rule.unlocksUnit && !replacedBaseUnits.has(rule.unlocksUnit)) {
-      const unitRule = UNIT_RULES[rule.unlocksUnit];
-      if (unitRule) growth[rule.unlocksUnit] = (growth[rule.unlocksUnit] ?? 0) + unitRule.growth;
-    }
-    for (const [unitType, amount] of Object.entries(rule.growthBonus ?? {})) {
+    if (!rule?.unlocksUnit || replacedBaseUnits.has(rule.unlocksUnit)) continue;
+    const unitRule = UNIT_RULES[rule.unlocksUnit];
+    if (unitRule) growth[rule.unlocksUnit] = (growth[rule.unlocksUnit] ?? 0) + Math.floor(unitRule.growth * baseMultiplier);
+  }
+  // 2) Flat per-creature growth bonuses from special buildings, added after the multipliers.
+  for (const building of buildings) {
+    const rule = rules.find((r) => r.type === building);
+    for (const [unitType, amount] of Object.entries(rule?.growthBonus ?? {})) {
       const key = unitType as UnitType;
       growth[key] = (growth[key] ?? 0) + (amount ?? 0);
-    }
-  }
-  if (hasGrail) {
-    for (const key of Object.keys(growth) as UnitType[]) {
-      growth[key] = Math.floor((growth[key] ?? 0) * 1.5);
     }
   }
   return growth;

@@ -152,6 +152,7 @@ function addUnits(
       ranged: Boolean(rule.ranged),
       shots: rule.shots ?? 0,
       hasRetaliated: false,
+      retaliationsUsed: 0,
       defended: false,
       waited: false,
       luck: clampLuck(luck),
@@ -423,7 +424,17 @@ export function executeManualCombatAction(params: {
         actor.luckTriggered = roll.luckTriggered;
         applyRolledDamage(actor, target, roll, log, false, params.immortalHeroId);
         didAct = true;
-        if (target.count > 0 && distance <= 1 && !target.hasRetaliated) {
+        const attackerAbilities = getUnitRule(actor.unitType).abilities ?? [];
+        const targetAbilities = getUnitRule(target.unitType).abilities ?? [];
+        // Retaliation (melee only). Some attackers strike without provoking it; some
+        // defenders may answer more than once per round (two/unlimited retaliations).
+        const maxRetaliations = targetAbilities.includes("unlimited_retaliations")
+          ? Infinity
+          : targetAbilities.includes("two_retaliations") ? 2 : 1;
+        const canRetaliate = distance <= 1
+          && !attackerAbilities.includes("no_retaliation")
+          && (target.retaliationsUsed ?? 0) < maxRetaliations;
+        if (target.count > 0 && canRetaliate) {
           const retaliationRoll = rollCombatDamage({
             attacker: target,
             defender: actor,
@@ -434,7 +445,24 @@ export function executeManualCombatAction(params: {
           });
           target.luckTriggered = retaliationRoll.luckTriggered;
           applyRolledDamage(target, actor, retaliationRoll, log, true, params.immortalHeroId);
+          target.retaliationsUsed = (target.retaliationsUsed ?? 0) + 1;
           target.hasRetaliated = true;
+        }
+        // Double attack: strike a second time if both stacks survive. The follow-up
+        // blow does not provoke an additional retaliation (HoMM3).
+        if (target.count > 0 && actor.count > 0 && attackerAbilities.includes("double_attack")) {
+          if (actionType === "SHOOT" && !allyAmmoCart) actor.shots = Math.max(0, actor.shots - 1);
+          const secondRoll = rollCombatDamage({
+            attacker: actor,
+            defender: target,
+            attackerStats: getStats(actor.side, params),
+            defenderStats: getStats(target.side, params),
+            actionType,
+            terrain: params.terrain,
+            actorAdjacentToEnemy: hasAdjacentEnemy(actor, units),
+          });
+          actor.luckTriggered = actor.luckTriggered || secondRoll.luckTriggered;
+          applyRolledDamage(actor, target, secondRoll, log, false, params.immortalHeroId);
         }
       }
     }
@@ -559,7 +587,7 @@ function getNextTurn(units: CombatBoardUnit[], turnQueue: string[], round: numbe
   if (remaining.length > 0) return { units, turnQueue: remaining, currentUnitId: remaining[0] ?? null, round };
   const nextRound = round + 1;
   const refreshedUnits = refreshMoraleForRound(
-    units.map((unit) => ({ ...unit, hasRetaliated: false, waited: false })),
+    units.map((unit) => ({ ...unit, hasRetaliated: false, retaliationsUsed: 0, waited: false })),
     moraleContext ?? {}
   );
   const nextQueue = buildTurnQueue(refreshedUnits, nextRound);

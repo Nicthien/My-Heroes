@@ -661,6 +661,7 @@ export interface CombatBoardUnit extends UnitStack {
   ranged: boolean;
   shots: number;
   hasRetaliated: boolean;
+  retaliationsUsed?: number;
   defended: boolean;
   waited: boolean;
   defensePenalty?: number;

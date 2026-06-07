@@ -963,6 +963,8 @@ export const fr = {
   "dev.showMap": "Afficher la carte",
   "dev.manaActive": "Mana infini actif",
   "dev.manaEnable": "Activer mana infini",
+  "dev.godModeActive": "Invincibilité active",
+  "dev.godModeEnable": "Activer invincibilité",
   "dev.giveResources": "Donner +1000 ressources",
   "dev.giveXp": "Donner +500 XP au héros",
   "dev.giveSkills": "Donner tous les skills",

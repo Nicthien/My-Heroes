@@ -38,6 +38,7 @@ interface GameStore {
   devRevealMap: boolean;
   devInfiniteMana: boolean;
   devTeleportArmed: boolean;
+  devGodMode: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
   adminObserverMode: boolean;
@@ -67,6 +68,7 @@ interface GameStore {
   setDevRevealMap: (reveal: boolean) => void;
   setDevInfiniteMana: (enabled: boolean) => void;
   setDevTeleportArmed: (armed: boolean) => void;
+  setDevGodMode: (enabled: boolean) => void;
   setAdminObserverMode: (enabled: boolean) => void;
   setActiveMapLevel: (level: MapLevelId) => void;
   resetGame: () => void;
@@ -99,6 +101,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   devRevealMap: false,
   devInfiniteMana: false,
   devTeleportArmed: false,
+  devGodMode: false,
   cameraTarget: null,
   zoomRequest: null,
   adminObserverMode: false,
@@ -208,6 +211,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setDevRevealMap: (reveal) => set({ devRevealMap: reveal }),
   setDevInfiniteMana: (enabled) => set({ devInfiniteMana: enabled }),
   setDevTeleportArmed: (armed) => set({ devTeleportArmed: armed }),
+  setDevGodMode: (enabled) => set({ devGodMode: enabled }),
   setAdminObserverMode: (enabled) => set({ adminObserverMode: enabled }),
   setActiveMapLevel: (level) => set({ activeMapLevel: level }),
 
@@ -235,6 +239,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       devRevealMap: false,
       devInfiniteMana: false,
       devTeleportArmed: false,
+      devGodMode: false,
       cameraTarget: null,
       zoomRequest: null,
       adminObserverMode: false,

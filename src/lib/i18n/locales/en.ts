@@ -964,6 +964,8 @@ export const en: Record<TranslationKey, string> = {
   "dev.showMap": "Reveal the map",
   "dev.manaActive": "Infinite mana active",
   "dev.manaEnable": "Enable infinite mana",
+  "dev.godModeActive": "Invincibility active",
+  "dev.godModeEnable": "Enable invincibility",
   "dev.giveResources": "Give +1000 resources",
   "dev.giveXp": "Give +500 XP to the hero",
   "dev.giveSkills": "Give all skills",

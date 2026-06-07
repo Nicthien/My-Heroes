@@ -53,6 +53,8 @@ export function useDevPanel(gameId: string | undefined) {
   const setDevInfiniteMana = useGameStore((state) => state.setDevInfiniteMana);
   const devTeleportArmed = useGameStore((state) => state.devTeleportArmed);
   const setDevTeleportArmed = useGameStore((state) => state.setDevTeleportArmed);
+  const devGodMode = useGameStore((state) => state.devGodMode);
+  const setDevGodMode = useGameStore((state) => state.setDevGodMode);
 
   const [devPanelCollapsed, setDevPanelCollapsed] = useState(getDevPanelCollapsed);
   const [devPanelPosition, setDevPanelPosition] = useState(getDevPanelPosition);
@@ -364,6 +366,17 @@ export function useDevPanel(gameId: string | undefined) {
                       onClick={() => setDevInfiniteMana(!devInfiniteMana)}
                     >
                       {devInfiniteMana ? t("dev.manaActive") : t("dev.manaEnable")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`w-full rounded-md border px-3 py-1.5 text-left text-[10px] font-black uppercase leading-snug tracking-wide transition ${
+                        devGodMode
+                          ? "border-rose-300/70 bg-rose-950 text-rose-100 hover:border-rose-100"
+                          : "border-amber-700/50 bg-stone-900 text-amber-100 hover:border-amber-300"
+                      }`}
+                      onClick={() => setDevGodMode(!devGodMode)}
+                    >
+                      {devGodMode ? t("dev.godModeActive") : t("dev.godModeEnable")}
                     </button>
                     <button
                       type="button"

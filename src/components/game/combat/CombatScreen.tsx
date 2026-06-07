@@ -57,7 +57,8 @@ export default function CombatScreen() {
   const setGameState = useGameStore((state) => state.setGameState);
   const gameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
-  const godModeEnabled = Boolean(session?.user?.godModeEnabled);
+  // Combat immortality is a runtime cheat toggle, not the profile dev-access flag.
+  const devGodMode = useGameStore((state) => state.devGodMode);
   const devInfiniteMana = useGameStore((state) => state.devInfiniteMana);
   const minimizeCombat = useGameStore((state) => state.minimizeCombat);
   const focusTile = useGameStore((state) => state.focusTile);
@@ -291,7 +292,7 @@ export default function CombatScreen() {
         const response = await fetchWithSupabaseAuth(`/api/games/${combat.gameId}/combats/${combat.id}/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(godModeEnabled && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+          body: JSON.stringify(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
         });
         if (!response.ok) {
           neutralActionKeyRef.current = null;
@@ -323,7 +324,7 @@ export default function CombatScreen() {
         releaseSubmissionLock(submissionToken);
       }
     };
-  }, [activeCombat, combatAnimationBlocked, godModeEnabled, gameState, releaseSubmissionLock, selectedHeroId, setActiveCombat, settleResolvedCombat]);
+  }, [activeCombat, combatAnimationBlocked, devGodMode, gameState, releaseSubmissionLock, selectedHeroId, setActiveCombat, settleResolvedCombat]);
 
   if (!activeCombat || !gameState) return null;
   const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
@@ -395,7 +396,7 @@ export default function CombatScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...action,
-          ...(godModeEnabled && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
+          ...(devGodMode && selectedHeroId ? { devGodModeHeroId: selectedHeroId } : {}),
           ...(devInfiniteMana && (actionDevInfiniteManaHeroId || selectedHeroId)
             ? { devInfiniteManaHeroId: actionDevInfiniteManaHeroId ?? selectedHeroId }
             : {}),

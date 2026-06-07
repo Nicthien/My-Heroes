@@ -879,6 +879,11 @@ function PendingSkillChoiceBlock({
   return (
     <div className="mt-3 rounded-md border border-amber-400/70 bg-gradient-to-b from-amber-900/60 to-stone-950/80 p-3 shadow-inner shadow-black/40">
       <div className="text-xs font-bold uppercase tracking-wider text-amber-200">{t("hero.levelUpChoice", { level: next.level })}</div>
+      {next.primaryGain && (
+        <div className="mt-1 text-[11px] font-semibold text-emerald-300">
+          {t("hero.primaryGain", { stat: t(`stat.${next.primaryGain}`) })}
+        </div>
+      )}
       <div className="mt-2 space-y-2">
         {next.options.map((id) => {
           const known = currentLevel(id);

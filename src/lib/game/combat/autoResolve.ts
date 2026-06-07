@@ -86,10 +86,10 @@ function buildSimStacks(hero: CombatHeroSnapshot, side: SimStack["side"]): SimSt
 }
 
 // Same attack/defense curve as manual combat (combat/rules.ts getAttackDefenseMultiplier):
-// +5% damage per point of attack over defense (cap ×5), −2.5% per point under (floor ×0.3).
+// +5% damage per point of attack over defense (cap ×4), −2.5% per point under (floor ×0.3).
 function attackDefenseMultiplier(attackValue: number, defenseValue: number): number {
   const diff = attackValue - defenseValue;
-  if (diff > 0) return Math.min(5, 1 + 0.05 * diff);
+  if (diff > 0) return Math.min(4, 1 + 0.05 * diff);
   if (diff < 0) return Math.max(0.3, 1 - 0.025 * Math.abs(diff));
   return 1;
 }

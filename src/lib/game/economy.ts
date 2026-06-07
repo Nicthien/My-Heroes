@@ -320,11 +320,19 @@ export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingT
   const rules = getFactionBuildingRules(faction);
   const growth: Partial<Record<UnitType, number>> = {};
   let hasGrail = false;
+  // A built upgrade dwelling replaces its base dwelling's growth pool: in HoMM3 the
+  // tier produces a single (upgraded) creature pool, not base + upgraded. Collect the
+  // base units whose upgrade is built so we can skip their base growth below.
+  const replacedBaseUnits = new Set<UnitType>();
+  for (const building of buildings) {
+    const rule = rules.find((r) => r.type === building);
+    if (rule?.replacesUnit) replacedBaseUnits.add(rule.replacesUnit);
+  }
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
     if (!rule) continue;
     if (rule.grail) hasGrail = true;
-    if (rule.unlocksUnit) {
+    if (rule.unlocksUnit && !replacedBaseUnits.has(rule.unlocksUnit)) {
       const unitRule = UNIT_RULES[rule.unlocksUnit];
       if (unitRule) growth[rule.unlocksUnit] = (growth[rule.unlocksUnit] ?? 0) + unitRule.growth;
     }

@@ -360,6 +360,7 @@ export const fr = {
   "hero.give": "Don",
   "hero.artifactInactive": "Non actif :",
   "hero.levelUpChoice": "Montée de niveau {level} : choisis une compétence",
+  "hero.primaryGain": "Compétence primaire augmentée : +1 {stat}",
   "stat.defense": "Défense",
   "stat.spellPower": "Pouvoir",
   "stat.knowledge": "Savoir",

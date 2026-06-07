@@ -355,7 +355,7 @@ export interface Hero {
   artifacts: HeroArtifactBag;
   skills?: Partial<Record<string, "basic" | "advanced" | "expert">>;
   warMachines?: { ballista?: boolean; firstAid?: boolean; ammoCart?: boolean };
-  pendingSkillChoices?: Array<{ level: number; options: string[] }>;
+  pendingSkillChoices?: Array<{ level: number; options: string[]; primaryGain?: "attack" | "defense" | "spellPower" | "knowledge" }>;
   position: Position;
   movement: number;
   maxMovement: number;

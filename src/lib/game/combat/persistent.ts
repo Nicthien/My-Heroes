@@ -537,11 +537,16 @@ function applyRolledDamage(
 }
 
 function deferUnitToWaitPhase(turnQueue: string[], currentUnitId: string, units: CombatBoardUnit[]) {
+  const byId = new Map(units.map((unit) => [unit.id, unit]));
   const livingIds = new Set(units.filter((unit) => unit.count > 0).map((unit) => unit.id));
   const remaining = turnQueue.filter((id) => id !== currentUnitId && livingIds.has(id));
-  const nonWaited = remaining.filter((id) => !units.find((unit) => unit.id === id)?.waited);
-  const waited = remaining.filter((id) => units.find((unit) => unit.id === id)?.waited);
-  return [...nonWaited, ...waited, currentUnitId];
+  const nonWaited = remaining.filter((id) => !byId.get(id)?.waited);
+  // HoMM3: units that waited act later in the round, and the wait phase resolves
+  // slowest-first. Re-sort the whole wait group (including the unit that just waited)
+  // by ascending speed; the stable sort keeps the latest waiter last among equal speeds.
+  const waited = [...remaining.filter((id) => byId.get(id)?.waited), currentUnitId]
+    .sort((a, b) => (byId.get(a)?.speed ?? 0) - (byId.get(b)?.speed ?? 0));
+  return [...nonWaited, ...waited];
 }
 
 function advanceTurn(units: CombatBoardUnit[], turnQueue: string[], currentUnitId: string, round: number, moraleContext?: MoraleContext) {

@@ -277,7 +277,7 @@ export async function POST(
         })),
       }).spellPower;
     }
-    const mana = getHeroMana({ mana: caster.hero.mana, knowledge: casterStats.knowledge });
+    const mana = getHeroMana({ mana: caster.hero.mana, knowledge: casterStats.knowledge, skills: caster.hero.skills });
     const cost = getSpellCost(spell);
     if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
     if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });

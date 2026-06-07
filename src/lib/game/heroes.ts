@@ -41,6 +41,52 @@ export const CLASS_STARTING_STATS: Record<HeroClass, HeroStats> = {
   [HeroClass.ELEMENTALIST]: { attack: 0, defense: 0, spellPower: 3, knowledge: 3, morale: 0, luck: 0 },
 };
 
+export type PrimaryStatKey = "attack" | "defense" | "spellPower" | "knowledge";
+
+// HoMM3 per-class primary-skill advancement probabilities for level-ups (levels 2-9),
+// as published (heroes.thelazy.net / HoMM3 manual). Order: [attack, defense, spellPower,
+// knowledge], each row summing to 100. HoMM3 shifts toward a more balanced spread from
+// level 10+, but we deliberately keep the class table at every level: it preserves class
+// identity and avoids encoding the less-cleanly-documented high-level table.
+const PRIMARY_SKILL_GROWTH: Record<HeroClass, [number, number, number, number]> = {
+  [HeroClass.KNIGHT]: [35, 45, 10, 10],
+  [HeroClass.CLERIC]: [20, 15, 30, 35],
+  [HeroClass.RANGER]: [35, 45, 10, 10],
+  [HeroClass.DRUID]: [10, 20, 35, 35],
+  [HeroClass.ALCHEMIST]: [30, 30, 20, 20],
+  [HeroClass.WIZARD]: [10, 10, 40, 40],
+  [HeroClass.DEMONIAC]: [35, 35, 15, 15],
+  [HeroClass.HERETIC]: [15, 15, 35, 35],
+  [HeroClass.DEATH_KNIGHT]: [30, 25, 20, 25],
+  [HeroClass.NECROMANCER]: [15, 15, 35, 35],
+  [HeroClass.OVERLORD]: [35, 35, 15, 15],
+  [HeroClass.WARLOCK]: [10, 10, 50, 30],
+  [HeroClass.BARBARIAN]: [55, 35, 5, 5],
+  [HeroClass.BATTLE_MAGE]: [30, 20, 25, 25],
+  [HeroClass.BEASTMASTER]: [30, 50, 10, 10],
+  [HeroClass.WITCH]: [5, 15, 40, 40],
+  [HeroClass.PLANESWALKER]: [45, 25, 15, 15],
+  [HeroClass.ELEMENTALIST]: [15, 15, 35, 35],
+};
+
+const PRIMARY_STAT_ORDER: PrimaryStatKey[] = ["attack", "defense", "spellPower", "knowledge"];
+
+// Pick which primary skill advances on a level-up, weighted by the hero's class.
+// Deterministic for a given seed so the same level-up resolves identically on retry.
+export function rollPrimarySkillGain(heroClass: HeroClass, seed: string): PrimaryStatKey {
+  const weights = PRIMARY_SKILL_GROWTH[heroClass] ?? PRIMARY_SKILL_GROWTH[HeroClass.KNIGHT];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  const s = (Math.abs(hash | 1) * 1664525 + 1013904223) | 0;
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = ((s >>> 0) / 0xffffffff) * total;
+  for (let i = 0; i < PRIMARY_STAT_ORDER.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return PRIMARY_STAT_ORDER[i];
+  }
+  return PRIMARY_STAT_ORDER[PRIMARY_STAT_ORDER.length - 1];
+}
+
 export const FACTION_STARTING_UNIT: Record<Faction, { unitType: UnitType; min: number; max: number }> = {
   [Faction.CASTLE]: { unitType: UnitType.PIKEMAN, min: 20, max: 30 },
   [Faction.RAMPART]: { unitType: UnitType.CENTAUR, min: 20, max: 30 },

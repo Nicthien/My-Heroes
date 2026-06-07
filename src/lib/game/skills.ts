@@ -186,3 +186,14 @@ export function getEstatesGold(skills: HeroSkills | null | undefined): number {
 export function getScoutingBonus(skills: HeroSkills | null | undefined): number {
   return getSkillLevelValue(skills, "scouting");
 }
+
+// Intelligence raises maximum spell points (HoMM3): Basic +25%, Advanced +50%, Expert +100%.
+export function getIntelligencePercent(skills: HeroSkills | null | undefined): number {
+  const lvl = getSkillLevelValue(skills, "intelligence");
+  return lvl === 1 ? 25 : lvl === 2 ? 50 : lvl === 3 ? 100 : 0;
+}
+
+// Mysticism regenerates spell points each day (HoMM3): +1 / +2 / +3 per day.
+export function getMysticismRegen(skills: HeroSkills | null | undefined): number {
+  return getSkillLevelValue(skills, "mysticism");
+}

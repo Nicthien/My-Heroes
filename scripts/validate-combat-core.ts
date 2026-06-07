@@ -381,6 +381,61 @@ function testRetaliationOnce() {
   assert.equal(second.units.find((item) => item.id === "a2")?.health, 200);
 }
 
+function testNoRetaliationAbility() {
+  // A Devil strikes without provoking retaliation: the defender never retaliates and
+  // the attacker takes no damage back.
+  const devil = unit({ id: "devil", unitType: UnitType.DEVIL, side: "attacker", q: 1, r: 1, count: 5, health: 1000, maxHealth: 200 });
+  const prey = unit({ id: "prey", unitType: UnitType.PIKEMAN, side: "defender", q: 2, r: 1, count: 30, health: 300, maxHealth: 10, minDamage: 5, maxDamage: 5 });
+  const result = executeManualCombatAction({
+    units: [devil, prey],
+    turnQueue: ["devil", "prey"],
+    round: 1,
+    currentUnitId: "devil",
+    action: { type: "ATTACK", targetUnitId: "prey" },
+    attackerStats: stats(),
+    defenderStats: stats(),
+  });
+  assert.equal(result.units.find((item) => item.id === "prey")?.hasRetaliated, false);
+  assert.equal(result.units.find((item) => item.id === "devil")?.health, 1000);
+}
+
+function testDoubleAttackAbility() {
+  // A Crusader strikes twice: the defender loses exactly double a single strike's damage
+  // (retaliation hits the attacker, not the defender, so it does not affect this).
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const makeCrusader = () => unit({ id: "cru", unitType: UnitType.CRUSADER, side: "attacker", q: 1, r: 1, count: 1, health: 1000, maxHealth: 1000, minDamage: 10, maxDamage: 10 });
+    const makePrey = () => unit({ id: "prey", unitType: UnitType.PIKEMAN, side: "defender", q: 2, r: 1, count: 50, health: 500, maxHealth: 10, minDamage: 0, maxDamage: 0 });
+
+    const singleStrike = rollCombatDamage({
+      attacker: makeCrusader(),
+      defender: makePrey(),
+      attackerStats: stats(),
+      defenderStats: stats(),
+      actionType: "ATTACK",
+      random: () => 0,
+    }).damage;
+    assert.ok(singleStrike > 0);
+
+    const prey = makePrey();
+    const before = prey.health;
+    const result = executeManualCombatAction({
+      units: [makeCrusader(), prey],
+      turnQueue: ["cru", "prey"],
+      round: 1,
+      currentUnitId: "cru",
+      action: { type: "ATTACK", targetUnitId: "prey" },
+      attackerStats: stats(),
+      defenderStats: stats(),
+    });
+    const after = result.units.find((item) => item.id === "prey")?.health ?? 0;
+    assert.equal(before - after, singleStrike * 2);
+  } finally {
+    Math.random = originalRandom;
+  }
+}
+
 function testRangedRestrictionsAndPenalties() {
   const shooter = unit({
     id: "shooter",
@@ -963,6 +1018,22 @@ function testUpgradedDwellingReplacesBaseGrowth() {
   assert.ok((upgraded[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
 }
 
+function testFortificationGrowthBonus() {
+  // HoMM3: Fort alone gives no growth bonus; Citadel ×1.5, Castle ×2 of base growth.
+  const base = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1]);
+  const centaurBase = base[UnitType.CENTAUR] ?? 0;
+  assert.ok(centaurBase > 0);
+
+  const withFort = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.FORT]);
+  assert.equal(withFort[UnitType.CENTAUR], centaurBase);
+
+  const withCitadel = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.FORT, BuildingType.CITADEL]);
+  assert.equal(withCitadel[UnitType.CENTAUR], Math.floor(centaurBase * 1.5));
+
+  const withCastle = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.FORT, BuildingType.CITADEL, BuildingType.CASTLE_KEEP]);
+  assert.equal(withCastle[UnitType.CENTAUR], centaurBase * 2);
+}
+
 testInitiativeOrder();
 testCombatEnvironmentUsesBuildingTileTerrain();
 testCombatEnvironmentKeepsSnowOnRoadNearWater();
@@ -974,6 +1045,8 @@ testWaitAndDefendTiming();
 testWaitPhaseResolvesSlowestFirst();
 testDamageFormulaCapsAndPartials();
 testRetaliationOnce();
+testNoRetaliationAbility();
+testDoubleAttackAbility();
 testRangedRestrictionsAndPenalties();
 testMoveAndMeleeAttack();
 testBlockedMoveAndMeleeAttack();
@@ -998,5 +1071,6 @@ testRangedUnitsAreShieldedByMelee();
 testCombatBoardNormalizesStackStats();
 testPositiveLuckDoublesDamageAndMarksAttacker();
 testUpgradedDwellingReplacesBaseGrowth();
+testFortificationGrowthBonus();
 
 console.log("Combat core validation passed.");

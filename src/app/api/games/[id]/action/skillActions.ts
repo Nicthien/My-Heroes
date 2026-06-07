@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { BuildingType, Faction, type Resources } from "@/lib/game/types";
 import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "@/lib/game/skills";
+import { getBlacksmithMachines, WAR_MACHINE_COST, type WarMachineKey } from "@/lib/game/war-machines-shop";
 import type { MinimalPlayer, SupabaseAdminClient } from "./types";
 
 type ActionRecord = Record<string, unknown>;
@@ -101,16 +102,17 @@ export async function handleSkillAction({
       return NextResponse.json({ error: "Le héros doit être au château" }, { status: 400 });
     }
 
-    const machine = String(action.machine ?? "ballista") as "ballista" | "firstAid" | "ammoCart";
-    const spec: Record<typeof machine, { cost: number; key: string; building: BuildingType | null; faction: Faction | null }> = {
-      ballista: { cost: 2500, key: "ballista", building: BuildingType.UNIQUE_3, faction: Faction.STRONGHOLD },
-      firstAid: { cost: 750, key: "firstAid", building: null, faction: null },
-      ammoCart: { cost: 1000, key: "ammoCart", building: null, faction: null },
-    };
-    const { cost, key, building, faction } = spec[machine];
-    if (building && faction && (townFaction !== faction || !(town.buildings ?? []).includes(building))) {
-      return NextResponse.json({ error: "Bâtiment requis manquant" }, { status: 400 });
+    const machine = String(action.machine ?? "ballista") as WarMachineKey;
+    // HoMM3: the Blacksmith forges this faction's war machine. Need the building and a
+    // machine that this faction actually sells.
+    if (!(town.buildings ?? []).includes(BuildingType.BLACKSMITH)) {
+      return NextResponse.json({ error: "Cette ville n'a pas de Forgeron" }, { status: 400 });
     }
+    if (!getBlacksmithMachines(townFaction).includes(machine)) {
+      return NextResponse.json({ error: "Cette machine n'est pas forgée par cette faction" }, { status: 400 });
+    }
+    const cost = WAR_MACHINE_COST[machine];
+    const key = machine;
     if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
 
     const { data: heroRow } = await supabase.from("heroes").select("war_machines").eq("id", hero.id).maybeSingle();

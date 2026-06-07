@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-export type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern" | "market" | "artifacts" | "mercenary" | "gate" | "university" | "ballista";
+export type TownTab = "summary" | "build" | "recruit" | "garrison" | "tavern" | "market" | "artifacts" | "mercenary" | "gate" | "university" | "shop";
 
 export function TownTabButton({
   active,
@@ -125,12 +125,12 @@ export function TownTabIcon({ tab }: { tab: TownTab }) {
           <path d="M6 12v5c3 2 9 2 12 0v-5" />
         </svg>
       );
-    case "ballista":
+    case "shop":
       return (
         <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 21l18-18" />
-          <path d="M14 4h6v6" />
-          <path d="M5 15a4 4 0 1 0 4 4" />
+          <path d="M6 2 3 6v2a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0V6l-3-4Z" />
+          <path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+          <path d="M10 21v-5h4v5" />
         </svg>
       );
   }

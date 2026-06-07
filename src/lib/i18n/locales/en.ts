@@ -468,6 +468,8 @@ export const en: Record<TranslationKey, string> = {
   "town.tabGate": "Ember Gate",
   "town.tabUniversity": "Magic university",
   "town.tabBallista": "Ballista yard",
+  "town.tabShop": "Shop",
+  "shop.empty": "Nothing to buy here right now.",
   "hud.townHeader": "{faction} · Level {level}",
   "hud.enemyTown": "Enemy or uncontrolled town.",
   "hud.alreadyBuiltToday": "A building has already been constructed in this town today.",

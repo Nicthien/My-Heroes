@@ -346,6 +346,14 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
     preferredTerrain: [TerrainType.SAND, TerrainType.SWAMP, TerrainType.GRASS],
     rarity: 0.7,
   },
+  [AdventureBuildingType.WAR_MACHINE_FACTORY]: {
+    type: AdventureBuildingType.WAR_MACHINE_FACTORY,
+    label: "Usine de machines de guerre",
+    description: "Permet au héros d'acheter une Baliste, une Tente de soins et une Charrette de munitions.",
+    visitMode: "repeatable",
+    preferredTerrain: [TerrainType.DIRT, TerrainType.GRASS, TerrainType.SAND, TerrainType.MOUNTAIN],
+    rarity: 0.45,
+  },
 };
 
 export const ADVENTURE_BUILDING_TYPES = Object.values(AdventureBuildingType);

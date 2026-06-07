@@ -467,6 +467,8 @@ export const fr = {
   "town.tabGate": "Porte des Braises",
   "town.tabUniversity": "Université de magie",
   "town.tabBallista": "Cour des balistes",
+  "town.tabShop": "Boutique",
+  "shop.empty": "Rien à acheter ici pour le moment.",
   "hud.townHeader": "{faction} · Niveau {level}",
   "hud.enemyTown": "Ville ennemie ou non contrôlée.",
   "hud.alreadyBuiltToday": "Construction déjà réalisée aujourd'hui dans ce château.",

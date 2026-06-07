@@ -361,6 +361,7 @@ export const en: Record<TranslationKey, string> = {
   "hero.give": "Give",
   "hero.artifactInactive": "Inactive:",
   "hero.levelUpChoice": "Level up {level}: choose a skill",
+  "hero.primaryGain": "Primary skill increased: +1 {stat}",
   "stat.defense": "Defense",
   "stat.spellPower": "Spell power",
   "stat.knowledge": "Knowledge",

@@ -485,7 +485,7 @@ export async function runAdventureBuildingVisit({
       return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Le puits magique est déjà épuisé aujourd'hui.", alreadyVisited: true };
     }
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
-    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge, skills: hero.skills });
     await supabase.from("heroes").update({ mana: maxMana }).eq("id", hero.id);
     await updateWeeklyAdventureVisit(supabase, gameId, mapState, weeklyAdventureVisits, visitKey, currentDay);
     return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Puits magique visite : mana restauree." };
@@ -493,8 +493,8 @@ export async function runAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.MAGIC_SHRINE) {
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
-    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
-    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge, skills: hero.skills });
+    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge, skills: hero.skills });
     await applyHeroAttributeVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, {
       mana: Math.min(maxMana, currentMana + MAGIC_SHRINE_MANA_RESTORE),
     });
@@ -653,8 +653,8 @@ export async function runAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.SEER_HUT) {
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
-    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge });
-    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    const maxMana = getHeroMana({ mana: null, knowledge: effectiveStats.knowledge, skills: hero.skills });
+    const currentMana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge, skills: hero.skills });
     await supabase.from("heroes").update({ mana: Math.min(maxMana, currentMana + 10) }).eq("id", hero.id);
     await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + SEER_HUT_EXPERIENCE);
     await updateHeroAdventureVisits(supabase, gameId, mapState, heroAdventureVisits, hero.id, object.id);

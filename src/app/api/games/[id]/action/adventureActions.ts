@@ -187,7 +187,7 @@ export async function handleAdventureAction({
     if (!hasDevInfiniteMana && !heroKnowsSpell(hero, spell.id)) return NextResponse.json({ error: "Sort inconnu" }, { status: 400 });
 
     const effectiveStats = getEffectiveHeroStatsFromValues(hero);
-    const mana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge });
+    const mana = getHeroMana({ mana: hero.mana, knowledge: effectiveStats.knowledge, skills: hero.skills });
     const cost = getSpellCost(spell);
     if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
     if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });

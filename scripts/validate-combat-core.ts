@@ -288,11 +288,45 @@ function testWaitAndDefendTiming() {
   assert.deepEqual(secondWait.log, ["Action impossible."]);
 }
 
+function testWaitPhaseResolvesSlowestFirst() {
+  // HoMM3: when several units wait, the wait phase resolves slowest-first — so a fast
+  // unit that waits still acts after a slower unit that also waited.
+  const units = [
+    unit({ id: "fast", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, speed: 9 }),
+    unit({ id: "mid", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 2, speed: 6 }),
+    unit({ id: "slow", unitType: UnitType.PIKEMAN, side: "defender", q: 8, r: 1, speed: 3 }),
+  ];
+  const queue = buildTurnQueue(units, 1);
+  assert.deepEqual(queue, ["fast", "mid", "slow"]);
+
+  // The fast unit waits, then the mid unit waits. The non-waiting slow unit keeps its
+  // normal slot; the two waiters queue slowest-first → mid (6) before fast (9).
+  const afterFastWaits = executeManualCombatAction({
+    units, turnQueue: queue, round: 1, currentUnitId: "fast",
+    action: { type: "WAIT" }, attackerStats: stats(), defenderStats: stats(),
+  });
+  const afterMidWaits = executeManualCombatAction({
+    units: afterFastWaits.units, turnQueue: afterFastWaits.turnQueue, round: afterFastWaits.round,
+    currentUnitId: "mid", action: { type: "WAIT" }, attackerStats: stats(), defenderStats: stats(),
+  });
+  assert.deepEqual(afterMidWaits.turnQueue, ["slow", "mid", "fast"]);
+  assert.equal(afterMidWaits.currentUnitId, "slow");
+
+  // After the slow unit acts, the slower waiter (mid) goes before the faster waiter (fast).
+  const afterSlowActs = executeManualCombatAction({
+    units: afterMidWaits.units, turnQueue: afterMidWaits.turnQueue, round: afterMidWaits.round,
+    currentUnitId: "slow", action: { type: "DEFEND" }, attackerStats: stats(), defenderStats: stats(),
+  });
+  assert.deepEqual(afterSlowActs.turnQueue, ["mid", "fast"]);
+  assert.equal(afterSlowActs.currentUnitId, "mid");
+}
+
 function testDamageFormulaCapsAndPartials() {
   const attacker = unit({ id: "attacker", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, minDamage: 10, maxDamage: 10 });
   const defender = unit({ id: "defender", unitType: UnitType.PIKEMAN, side: "defender", q: 2, r: 1, health: 35, maxHealth: 10 });
 
-  assert.equal(getAttackDefenseMultiplier(attacker, defender, stats(100, 0), stats(0, 0)), 5);
+  // HoMM3 caps the attack bonus at +300% (×4) and floors the defense reduction at −70% (×0.3).
+  assert.equal(getAttackDefenseMultiplier(attacker, defender, stats(100, 0), stats(0, 0)), 4);
   assert.equal(getAttackDefenseMultiplier(attacker, defender, stats(0, 0), stats(0, 100)), 0.3);
 
   const roll = rollCombatDamage({
@@ -918,10 +952,15 @@ function testPositiveLuckDoublesDamageAndMarksAttacker() {
   }
 }
 
-function testUpgradedDwellingsKeepBaseGrowth() {
-  const growth = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
-  assert.ok((growth[UnitType.CENTAUR] ?? 0) > 0);
-  assert.ok((growth[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
+function testUpgradedDwellingReplacesBaseGrowth() {
+  // HoMM3: an upgrade dwelling replaces the base pool — the tier yields a single
+  // upgraded pool, not base + upgraded growth.
+  const baseOnly = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1]);
+  assert.ok((baseOnly[UnitType.CENTAUR] ?? 0) > 0);
+
+  const upgraded = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
+  assert.equal(upgraded[UnitType.CENTAUR] ?? 0, 0);
+  assert.ok((upgraded[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
 }
 
 testInitiativeOrder();
@@ -932,6 +971,7 @@ testSnowCombatBoardAddsVisibleBlockingTerrain();
 testPositiveMoraleGrantsOnlyOneBonusAction();
 testCombatTruceLifecycle();
 testWaitAndDefendTiming();
+testWaitPhaseResolvesSlowestFirst();
 testDamageFormulaCapsAndPartials();
 testRetaliationOnce();
 testRangedRestrictionsAndPenalties();
@@ -957,6 +997,6 @@ testLopsidedAutoResolveIsCheapForTheStronger();
 testRangedUnitsAreShieldedByMelee();
 testCombatBoardNormalizesStackStats();
 testPositiveLuckDoublesDamageAndMarksAttacker();
-testUpgradedDwellingsKeepBaseGrowth();
+testUpgradedDwellingReplacesBaseGrowth();
 
 console.log("Combat core validation passed.");

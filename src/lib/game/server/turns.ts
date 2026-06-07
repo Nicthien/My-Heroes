@@ -14,7 +14,8 @@ import {
 } from "@/lib/game/external-dwellings";
 import { BOAT_DAILY_MOVEMENT, getDailyAdventureMovement } from "@/lib/game/engine";
 import { getEffectiveHeroMovementBonus } from "@/lib/game/artifacts";
-import { getEstatesGold, getLogisticsPercent, getNavigationPercent, type HeroSkills } from "@/lib/game/skills";
+import { getEstatesGold, getLogisticsPercent, getMysticismRegen, getNavigationPercent, type HeroSkills } from "@/lib/game/skills";
+import { getHeroMaxMana } from "@/lib/game/spells";
 import {
   TAVERN_OFFER_SIZE,
   getRecruitedHeroTemplateIds,
@@ -239,9 +240,18 @@ export async function completePlayerTurn(
       const visitingMageGuildTown = mageGuildTowns.some(
         (town) => town.x === hero.x && town.y === hero.y
       );
+      const knowledge = Number((hero as unknown as { knowledge?: number }).knowledge ?? 0);
+      const maxMana = getHeroMaxMana({ knowledge, skills: hero.skills });
       if (visitingMageGuildTown) {
-        const knowledge = Number((hero as unknown as { knowledge?: number }).knowledge ?? 0);
-        heroUpdate.mana = Math.max(0, knowledge * 10);
+        // A town with a Mage Guild fully restores spell points (Intelligence-aware ceiling).
+        heroUpdate.mana = maxMana;
+      } else {
+        // Mysticism passively regenerates spell points each day, capped at the maximum.
+        const mysticismRegen = getMysticismRegen(hero.skills);
+        if (mysticismRegen > 0) {
+          const currentMana = Math.max(0, Number((hero as unknown as { mana?: number }).mana ?? maxMana));
+          heroUpdate.mana = Math.min(maxMana, currentMana + mysticismRegen);
+        }
       }
       const { error: heroResetError } = await supabase.from("heroes").update(heroUpdate).eq("id", hero.id);
       if (heroResetError) {

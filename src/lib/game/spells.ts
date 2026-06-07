@@ -1,3 +1,5 @@
+import { getIntelligencePercent, type HeroSkills } from "@/lib/game/skills";
+
 export type SpellSchool = "air" | "earth" | "fire" | "water" | "all";
 export type SpellContext = "combat" | "adventure";
 export type SpellKind = "damage" | "buff" | "debuff" | "utility";
@@ -178,12 +180,21 @@ export function getSpell(id: string): SpellDefinition | null {
   return SPELLS_BY_ID[id as SpellId] ?? null;
 }
 
-export function getHeroMaxMana(hero: { stats?: { knowledge?: number }; knowledge?: number }) {
+type ManaHeroInput = {
+  mana?: number | null;
+  stats?: { knowledge?: number };
+  knowledge?: number;
+  skills?: HeroSkills | null;
+};
+
+export function getHeroMaxMana(hero: ManaHeroInput) {
   const knowledge = Number(hero.stats?.knowledge ?? hero.knowledge ?? 0);
-  return Math.max(0, knowledge * 10);
+  // HoMM3: Intelligence raises the spell-point ceiling above the base knowledge × 10.
+  const intelligencePercent = getIntelligencePercent(hero.skills);
+  return Math.max(0, Math.floor(knowledge * 10 * (1 + intelligencePercent / 100)));
 }
 
-export function getHeroMana(hero: { mana?: number | null; stats?: { knowledge?: number }; knowledge?: number }) {
+export function getHeroMana(hero: ManaHeroInput) {
   const maxMana = getHeroMaxMana(hero);
   const raw = hero.mana;
   if (!Number.isFinite(raw)) return maxMana;

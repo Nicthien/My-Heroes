@@ -81,6 +81,13 @@ export async function handleTownAction({
 
     const buildings = (town.buildings ?? []) as string[];
     if (buildings.includes(building)) return NextResponse.json({ error: "Bâtiment déjà construit" }, { status: 400 });
+    // One building per town per day (HoMM3). The UI hides the build buttons, but the
+    // limit must be enforced server-side or a replayed/crafted request could build
+    // unlimited buildings in a single turn.
+    const currentTurn = Number(game.turnNumber ?? 1);
+    if (town.lastBuiltTurn != null && Number(town.lastBuiltTurn) === currentTurn) {
+      return NextResponse.json({ error: "Un seul bâtiment par ville et par jour" }, { status: 400 });
+    }
     if (isShipyardBuilding(townFaction, building) && !helpers.isTownCoastalForBoats(normalizeMapMovement(game.mapData as GameMap), { x: town.x, y: town.y })) {
       return NextResponse.json({ error: "Le Chantier naval doit être construit dans une ville côtière" }, { status: 400 });
     }
@@ -121,8 +128,28 @@ export async function handleTownAction({
       last_built_turn: game.turnNumber,
     };
     const immediateGrowth = getGrowthForBuiltTownBuilding(townFaction, building);
+    let nextRecruits = town.availableRecruits ?? {};
+    let recruitsChanged = false;
+    // Upgrading a dwelling replaces its base creatures (HoMM3): migrate any
+    // un-recruited base units into the upgraded type so the tier keeps a single
+    // recruit pool instead of stacking a base pool and an upgraded pool.
+    if (rule.replacesUnit && rule.unlocksUnit) {
+      const carriedOver = Math.max(0, Math.floor(Number(nextRecruits[rule.replacesUnit] ?? 0)));
+      if (carriedOver > 0) {
+        nextRecruits = {
+          ...nextRecruits,
+          [rule.unlocksUnit]: Math.max(0, Math.floor(Number(nextRecruits[rule.unlocksUnit] ?? 0))) + carriedOver,
+          [rule.replacesUnit]: 0,
+        };
+        recruitsChanged = true;
+      }
+    }
     if (Object.keys(immediateGrowth).length > 0) {
-      townUpdate.available_recruits = helpers.addRecruitGrowth(town.availableRecruits ?? {}, immediateGrowth);
+      nextRecruits = helpers.addRecruitGrowth(nextRecruits, immediateGrowth);
+      recruitsChanged = true;
+    }
+    if (recruitsChanged) {
+      townUpdate.available_recruits = nextRecruits;
     }
     if (building === BuildingType.TAVERN && (!town.tavernOffer || town.tavernOffer.length === 0)) {
       const tavernFaction = ((town.townType ?? gamePlayer.faction ?? "castle") as Faction);

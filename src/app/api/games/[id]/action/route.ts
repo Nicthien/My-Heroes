@@ -1039,8 +1039,8 @@ async function applyOwnTownVisitBonuses({
         if (bonus.luck) luck += bonus.luck;
         if (bonus.fullMana || bonus.doubleMana) {
           const effective = getEffectiveHeroStatsFromValues(hero);
-          const maxMana = getHeroMana({ mana: null, knowledge: effective.knowledge });
-          const currentMana = getHeroMana({ mana: hero.mana ?? null, knowledge: effective.knowledge });
+          const maxMana = getHeroMana({ mana: null, knowledge: effective.knowledge, skills: hero.skills });
+          const currentMana = getHeroMana({ mana: hero.mana ?? null, knowledge: effective.knowledge, skills: hero.skills });
           mana = bonus.doubleMana ? Math.min(maxMana * 2, currentMana * 2) : maxMana;
           manaTouched = true;
         }

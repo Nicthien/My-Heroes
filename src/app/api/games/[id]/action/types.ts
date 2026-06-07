@@ -1,6 +1,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { GameMap, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
 import type { TavernOffer } from "@/lib/game/heroes";
+import type { HeroSkills } from "@/lib/game/skills";
 
 export type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
@@ -26,6 +27,7 @@ export interface MinimalTown {
   tavernOffer?: TavernOffer[];
   isNeutral?: boolean;
   neutralGarrison?: unknown[];
+  lastBuiltTurn?: number | null;
 }
 
 export interface MinimalResourceBuilding {
@@ -88,6 +90,7 @@ export interface MinimalHero {
   artifacts?: unknown;
   spellPower?: number;
   knowledge?: number;
+  skills?: HeroSkills | null;
   experience: number;
   armies: MinimalArmy[];
 }

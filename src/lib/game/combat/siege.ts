@@ -227,10 +227,17 @@ export function filterSiegeTerrain(terrain: CombatTerrainFeature[] = [], siege: 
   return terrain.filter((feature) => !reserved.has(getCellKey(feature)));
 }
 
-export function damageSiegeWithCatapult(siege: SiegeState | null | undefined, random = Math.random) {
+export function damageSiegeWithCatapult(
+  siege: SiegeState | null | undefined,
+  ballisticsLevel = 0,
+  random = Math.random,
+) {
   const state = normalizeSiegeState(siege);
   if (!state) return { siege: state, hit: null };
-  const critical = random() < 0.2;
+  // Ballistics improves the catapult's odds of a critical (double-damage) hit:
+  // none 20%, basic 30%, advanced 40%, expert 50%.
+  const critChance = 0.2 + 0.1 * Math.max(0, Math.min(3, ballisticsLevel));
+  const critical = random() < critChance;
   const damage = critical ? 2 : 1;
 
   const gateTarget = state.gate.hp > 0 ? { kind: "gate" as const, id: state.gate.id } : null;

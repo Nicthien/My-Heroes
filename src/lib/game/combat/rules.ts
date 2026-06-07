@@ -253,7 +253,15 @@ export function getSkillDamageMultiplier(
   profile: CombatAttackProfile,
 ): number {
   let attackerBoost = 1;
-  if (profile.isShot) {
+  const isBallista = attacker.unitType.toString().includes("ballista");
+  if (isBallista) {
+    // The Ballista is governed by Artillery, not Archery: it boosts the machine's
+    // damage (Expert ~doubles it), standing in for the classic "extra shot".
+    const artillery = skillLevelValue(attackerStats.skills, "artillery");
+    if (artillery === 1) attackerBoost *= 1.25;
+    else if (artillery === 2) attackerBoost *= 1.50;
+    else if (artillery === 3) attackerBoost *= 2.0;
+  } else if (profile.isShot) {
     const archery = skillLevelValue(attackerStats.skills, "archery");
     if (archery === 1) attackerBoost *= 1.10;
     else if (archery === 2) attackerBoost *= 1.25;

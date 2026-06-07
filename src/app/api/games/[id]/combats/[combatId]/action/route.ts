@@ -27,6 +27,7 @@ import {
   PendingCreatureBankReward,
 } from "@/lib/game/creature-banks";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
+import { clearDestroyedWarMachines } from "@/lib/game/server/war-machines";
 import { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, GameMap, Resources, UnitType } from "@/lib/game/types";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
 import { GRAIL_ARTIFACT_ID, getEffectiveHeroStatsFromValues, normalizeArtifactBag } from "@/lib/game/artifacts";
@@ -1424,6 +1425,9 @@ async function persistResolvedCombat(
       await supabase.from("gate_stacks").update({ count, health }).eq("id", unit.id);
     }
   }
+
+  // A bought war machine destroyed in the fight is lost and must be re-bought.
+  await clearDestroyedWarMachines(supabase, before, after);
 
   if (winnerSide === "attacker") {
     if (combat.neutral_army_id) {

@@ -259,15 +259,22 @@ export function executeManualCombatAction(params: {
 
   // Machines de guerre : comportement automatique
   if (actor.unitType === "catapult") {
-    const catapult = damageSiegeWithCatapult(siege);
-    siege = catapult.siege;
-    if (catapult.hit) {
-      const targetLabel = catapult.hit.kind === "gate" ? "la porte" : catapult.hit.kind === "tower" ? "une tour" : "un mur";
-      const critical = catapult.hit.critical ? " critique" : "";
-      const destroyed = catapult.hit.destroyed ? " et le detruit" : "";
-      log.push(`Catapulte frappe ${targetLabel}${critical}${destroyed}.`);
-    } else {
-      log.push(`Catapulte n'a plus de cible.`);
+    // Ballistics sharpens the catapult: better critical odds, and Expert fires twice.
+    const catapultSkills = getStats(actor.side, params).skills ?? {};
+    const ballisticsLevel = catapultSkills.ballistics === "expert" ? 3 : catapultSkills.ballistics === "advanced" ? 2 : catapultSkills.ballistics === "basic" ? 1 : 0;
+    const catapultShots = ballisticsLevel >= 3 ? 2 : 1;
+    for (let shot = 0; shot < catapultShots; shot++) {
+      const catapult = damageSiegeWithCatapult(siege, ballisticsLevel);
+      siege = catapult.siege;
+      if (catapult.hit) {
+        const targetLabel = catapult.hit.kind === "gate" ? "la porte" : catapult.hit.kind === "tower" ? "une tour" : "un mur";
+        const critical = catapult.hit.critical ? " critique" : "";
+        const destroyed = catapult.hit.destroyed ? " et le detruit" : "";
+        log.push(`Catapulte frappe ${targetLabel}${critical}${destroyed}.`);
+      } else {
+        log.push(`Catapulte n'a plus de cible.`);
+        break;
+      }
     }
     const livingUnits = units.filter((unit) => unit.count > 0);
     const next = advanceTurn(livingUnits, params.turnQueue, actor.id, params.round, params.moraleContext);
@@ -668,12 +675,21 @@ export function resolveAutomaticCombat(
   const winnerLossRatio = attackerIsImmortal || defenderIsImmortal ? 0 : result.winnerLossRatio;
   const attackerLossRatio = attackerWins ? winnerLossRatio : 1;
   const defenderLossRatio = attackerWins ? 1 : winnerLossRatio;
-  const attackerNext = applyLossesToArmies(attacker.armies, attackerLossRatio, !attackerWins);
-  const defenderNext = applyLossesToArmies(defender.armies, defenderLossRatio, attackerWins);
   // The King keeps its exact remaining HP from the simulation (it never heals). Carry
   // those overrides to the winner only, and never for an immortal (god-mode) hero.
   const winnerIsImmortal = attackerWins ? attackerIsImmortal : defenderIsImmortal;
   const survivorOverrides = winnerIsImmortal ? undefined : result.survivorOverrides;
+  // Apply the overrides BEFORE tallying casualties so a shielded King that survived is
+  // never reported as a loss (the count-based loss model would otherwise drop it).
+  const applyOverrides = (armies: UnitStack[]) =>
+    !survivorOverrides || survivorOverrides.length === 0
+      ? armies
+      : armies.map((army) => {
+          const override = survivorOverrides.find((entry) => entry.id === army.id);
+          return override ? { ...army, count: override.count, health: override.health } : army;
+        });
+  const attackerNext = applyOverrides(applyLossesToArmies(attacker.armies, attackerLossRatio, !attackerWins));
+  const defenderNext = applyOverrides(applyLossesToArmies(defender.armies, defenderLossRatio, attackerWins));
   return {
     winnerId: attackerWins ? attacker.id : defender.id,
     loserId: attackerWins ? defender.id : attacker.id,

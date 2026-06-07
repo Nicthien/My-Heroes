@@ -609,11 +609,11 @@ function testSiegeTerrainFiltering() {
 
 function testSiegeCatapultAndTowerShots() {
   const siege = createCastleSiegeState({ towerCount: 3, towerDamage: 30 });
-  const firstHit = damageSiegeWithCatapult(siege, () => 0.5);
+  const firstHit = damageSiegeWithCatapult(siege, 0, () => 0.5);
   assert.equal(firstHit.hit?.kind, "gate");
   assert.equal(firstHit.siege?.gate.hp, 1);
 
-  const criticalHit = damageSiegeWithCatapult(firstHit.siege, () => 0.1);
+  const criticalHit = damageSiegeWithCatapult(firstHit.siege, 0, () => 0.1);
   assert.equal(criticalHit.siege?.gate.hp, 0);
   assert.equal(criticalHit.hit?.damage, 2);
 

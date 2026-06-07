@@ -444,10 +444,24 @@ export const TERRAIN_TOP_TEXTURES = {
     { path: "/assets/textures/terrain/lava/lava-dry-flow.webp", tags: ["flow"] },
     { path: "/assets/textures/terrain/lava/lava-burnt-edge.webp", tags: ["edge"] },
   ],
-  // Rough (Stronghold-native badland) and Subterranean (Dungeon-native cave floor)
-  // render as flat colours until their .webp variants are generated (see Phase 3).
-  [TerrainType.ROUGH]: [],
-  [TerrainType.SUBTERRANEAN]: [],
+  [TerrainType.ROUGH]: [
+    { path: "/assets/textures/terrain/rough/rough-clean.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/rough/rough-cracked.webp", tags: ["dry"] },
+    { path: "/assets/textures/terrain/rough/rough-rocks.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/rough/rough-gravel.webp", tags: ["gravel"] },
+    { path: "/assets/textures/terrain/rough/rough-dark.webp", tags: ["dark"] },
+    { path: "/assets/textures/terrain/rough/rough-dusty.webp", tags: ["dust"] },
+    { path: "/assets/textures/terrain/rough/rough-lichen.webp", tags: ["moss", "grass"] },
+  ],
+  [TerrainType.SUBTERRANEAN]: [
+    { path: "/assets/textures/terrain/subterranean/subterranean-clean.webp", tags: ["clean"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-cobbled.webp", tags: ["dry"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-rubble.webp", tags: ["rock"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-gravel.webp", tags: ["gravel"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-dark.webp", tags: ["dark"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-mossy.webp", tags: ["moss", "grass"] },
+    { path: "/assets/textures/terrain/subterranean/subterranean-mineral.webp", tags: ["crystal"] },
+  ],
 } as const satisfies Partial<Record<TerrainType, readonly TerrainTopTexture[]>>;
 
 export const TERRAIN_TEXTURE_PATHS = Object.values(TERRAIN_TOP_TEXTURES)

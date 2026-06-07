@@ -32,10 +32,15 @@ const DEV_TABS: Array<{ id: DevPanelTab; label: string }> = [
 const DEV_ROUTES = [
   { href: "/dev/dashboard", label: "Dashboard dev" },
   { href: "/dev/hud", label: "HUD de test" },
+  { href: "/dev/hud-build", label: "HUD construction" },
   { href: "/dev/combat", label: "Combats de test" },
   { href: "/dev/map-showcase", label: "Carte des tests" },
   { href: "/dev/sprites", label: "Galerie de sprites" },
   { href: "/dev/rmg", label: "RMG" },
+  { href: "/dev/ai", label: "IA" },
+  { href: "/dev/sound", label: "Banc d'essai audio" },
+  { href: "/dev/leaderboard", label: "Classement" },
+  { href: "/dev/admin-observer", label: "Observateur admin" },
 ];
 
 export function useDevPanel(gameId: string | undefined) {

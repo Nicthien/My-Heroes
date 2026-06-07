@@ -53,6 +53,8 @@ const TERRAIN_GALLERY = [
   TerrainType.SWAMP,
   TerrainType.MOUNTAIN,
   TerrainType.LAVA,
+  TerrainType.ROUGH,
+  TerrainType.SUBTERRANEAN,
 ] as const;
 
 const DECOR_VARIANTS: Array<DecorKind | null> = [
@@ -591,10 +593,10 @@ function buildShowcaseMap(): GameMap {
   placeObject(map, 1, 11, { type: "wall", id: "rampart-wall-1", subtype: "brick" }, false);
   placeObject(map, 2, 11, { type: "wall", id: "rampart-wall-2", subtype: "brick" }, false);
   placeObject(map, 3, 11, { type: "wall", id: "rampart-wall-3", subtype: "brick" }, false);
-  placeDecor(map, 4, 10, "forest-pine-grove", true);
-  placeDecor(map, 5, 10, "grass-oak-copse", true);
-  placeDecor(map, 6, 10, "deadwood-thicket", true);
-  placeDecor(map, 7, 10, "boulder-cluster", true);
+  placeDecor(map, 4, 11, "forest-pine-grove", true);
+  placeDecor(map, 5, 11, "grass-oak-copse", true);
+  placeDecor(map, 6, 11, "deadwood-thicket", true);
+  placeDecor(map, 7, 11, "boulder-cluster", true);
   placeDecor(map, 24, 18, "tree-oak", false);
   placeDecor(map, 25, 18, "flower", false);
   placeDecor(map, 26, 18, "bush", false);

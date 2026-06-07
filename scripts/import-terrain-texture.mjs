@@ -42,8 +42,18 @@ function maskSvg(width, height, d) {
   );
 }
 
+// Drop the outer INSET of the source on every side before clipping. ComfyUI often
+// composes a centered "slab" with a border (edge rocks, vignette, or white
+// background); the actual tileable material is in the center, so we keep only that.
+const INSET = 0.14;
+
 async function writeClippedFace({ src, canvas, output, clipPath, brightness }) {
-  const base = sharp(src).resize(canvas.w, canvas.h, { fit: "fill" });
+  const meta = await sharp(src).metadata();
+  const left = Math.round(meta.width * INSET);
+  const top = Math.round(meta.height * INSET);
+  const width = meta.width - left * 2;
+  const height = meta.height - top * 2;
+  const base = sharp(src).extract({ left, top, width, height }).resize(canvas.w, canvas.h, { fit: "fill" });
   const filled = brightness === 1 ? base : base.modulate({ brightness });
   const masked = await filled
     .composite([{ input: maskSvg(canvas.w, canvas.h, clipPath), blend: "dest-in" }])

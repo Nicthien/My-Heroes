@@ -1,17 +1,13 @@
 "use client";
 
-import type { Hero, Player, Town } from "@/lib/game/types";
+import type { Faction, Hero, Player, Town } from "@/lib/game/types";
+import { getBlacksmithMachines, WAR_MACHINE_COST, WAR_MACHINE_LABEL_KEY } from "@/lib/game/war-machines-shop";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
-const MACHINES: Array<{ key: "ballista" | "firstAid" | "ammoCart"; labelKey: TranslationKey; descKey: TranslationKey; cost: number; requiresBallistaYard: boolean }> = [
-  { key: "ballista", labelKey: "ballista.ballistaLabel", descKey: "ballista.ballistaDesc", cost: 2500, requiresBallistaYard: true },
-  { key: "firstAid", labelKey: "ballista.tentLabel", descKey: "ballista.tentDesc", cost: 750, requiresBallistaYard: false },
-  { key: "ammoCart", labelKey: "ballista.ammoLabel", descKey: "ballista.ammoDesc", cost: 1000, requiresBallistaYard: false },
-];
-
 export function TownBallistaTab({
   selectedTown,
+  selectedTownFaction,
   myPlayer,
   canAct,
   isPending,
@@ -20,6 +16,7 @@ export function TownBallistaTab({
   onBuyMachine,
 }: {
   selectedTown: Town;
+  selectedTownFaction: Faction;
   myPlayer: Player | undefined;
   canAct: boolean;
   isPending: boolean;
@@ -28,6 +25,13 @@ export function TownBallistaTab({
   onBuyMachine: (townId: string, heroId: string, machine: "ballista" | "firstAid" | "ammoCart") => Promise<void>;
 }) {
   const { t } = useI18n();
+  // HoMM3: the Blacksmith forges only this faction's war machine(s).
+  const machines = getBlacksmithMachines(selectedTownFaction).map((key) => ({
+    key,
+    labelKey: WAR_MACHINE_LABEL_KEY[key].label as TranslationKey,
+    descKey: WAR_MACHINE_LABEL_KEY[key].desc as TranslationKey,
+    cost: WAR_MACHINE_COST[key],
+  }));
   const hero = heroesAtSelectedTown[0];
   if (!hero) {
     return (
@@ -43,7 +47,7 @@ export function TownBallistaTab({
       <div className="rounded-md border border-amber-700/30 bg-black/40 px-3 py-2 text-xs text-amber-200/70">
         {t("ballista.hero", { name: hero.name })}
       </div>
-      {MACHINES.map((m) => {
+      {machines.map((m) => {
         const alreadyOwned = Boolean(wm[m.key]);
         const tooPoor = !myPlayer || myPlayer.resources.gold < m.cost;
         const disabled = alreadyOwned || tooPoor || !canAct || !isMyTown || isPending;

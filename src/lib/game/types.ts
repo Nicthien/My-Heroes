@@ -594,6 +594,7 @@ export enum AdventureBuildingType {
   BUOY = "buoy",
   FLOTSAM = "flotsam",
   SEA_CHEST = "sea_chest",
+  WAR_MACHINE_FACTORY = "war_machine_factory",
 }
 
 export type AdventureBuildingVisitMode = "once" | "once_per_player" | "repeatable";

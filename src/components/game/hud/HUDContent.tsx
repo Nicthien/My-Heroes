@@ -22,7 +22,7 @@ import { TownArtifactsTab } from "./TownArtifactsTab";
 import { TownMercenaryTab } from "./TownMercenaryTab";
 import { TownCastleGateTab } from "./TownCastleGateTab";
 import { TownMageUniversityTab } from "./TownMageUniversityTab";
-import { TownBallistaTab } from "./TownBallistaTab";
+import { TownShopTab } from "./TownShopTab";
 import {
   TownTabButton,
   TownTabIcon,
@@ -62,7 +62,7 @@ import {
   getRecruitableUnitsForFaction,
   subtractCost,
 } from "@/lib/game/economy";
-import { getTownCenterLevel, hasTownBuilding } from "@/lib/game/town-buildings";
+import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding } from "@/lib/game/town-buildings";
 import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
@@ -875,9 +875,10 @@ export function HUDContent() {
   const hasMageUniversity =
     selectedTownFactionForTabs === Faction.CONFLUX &&
     Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_1));
-  const hasBallistaYard =
-    selectedTownFactionForTabs === Faction.STRONGHOLD &&
-    Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_3));
+  // HoMM3: every faction's Blacksmith forges its own war machine, so any town with a
+  // Blacksmith can equip a hero (not just Stronghold).
+  const hasBlacksmith = Boolean(selectedTown?.buildings.includes(BuildingType.BLACKSMITH));
+  const hasShipyard = Boolean(selectedTown && hasShipyardBuilding(selectedTownFaction, selectedTown.buildings));
 
   const townTabs: { id: TownTab; label: string; badge?: number }[] = [
     { id: "summary", label: t("town.tabSummary") },
@@ -902,8 +903,8 @@ export function HUDContent() {
     ...(hasMageUniversity
       ? [{ id: "university" as const, label: t("town.tabUniversity") }]
       : []),
-    ...(hasBallistaYard
-      ? [{ id: "ballista" as const, label: t("town.tabBallista") }]
+    ...(hasBlacksmith || hasShipyard
+      ? [{ id: "shop" as const, label: t("town.tabShop") }]
       : []),
   ];
   const activeTownTab = townTabState.townId === selectedTownId ? townTabState.tab : "summary";
@@ -1326,7 +1327,6 @@ export function HUDContent() {
                 isPending={isPending}
                 isMyTown={isMyTown}
                 onBuild={handleBuild}
-                onBuildBoat={handleBuildBoat}
               />
             )}
 
@@ -1413,15 +1413,19 @@ export function HUDContent() {
               />
             )}
 
-            {displayedTownTab === "ballista" && (
-              <TownBallistaTab
+            {displayedTownTab === "shop" && (
+              <TownShopTab
                 selectedTown={selectedTown}
+                selectedTownFaction={selectedTownFaction}
                 myPlayer={myPlayer}
                 canAct={canAct}
                 isPending={isPending}
                 isMyTown={isMyTown}
                 heroesAtSelectedTown={heroesAtSelectedTown}
+                hasBlacksmith={hasBlacksmith}
+                gameState={gameState}
                 onBuyMachine={handleBuyMachine}
+                onBuildBoat={handleBuildBoat}
               />
             )}
           </div>

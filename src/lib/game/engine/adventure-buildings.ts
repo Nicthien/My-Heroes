@@ -121,6 +121,7 @@ function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count:
     AdventureBuildingType.BUOY,
     AdventureBuildingType.FLOTSAM,
     AdventureBuildingType.SEA_CHEST,
+    AdventureBuildingType.WAR_MACHINE_FACTORY,
   ];
   const treasureOnly = [
     AdventureBuildingType.LIGHTHOUSE,

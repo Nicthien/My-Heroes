@@ -913,6 +913,11 @@ export function HUDContent() {
   const displayedBuildRules = selectedTown
     ? selectedTownBuildingRules.filter((rule) => {
         const alreadyBuilt = selectedTown.buildings.includes(rule.type);
+        // The Grail structure is erected only through the dedicated Grail flow — a
+        // hero carrying the dug-up Grail must stand in this town. Keep it out of the
+        // normal build list until then (but still show it once built), so it never
+        // appears as a buildable option without the Grail.
+        if (rule.grail && !grailBuildable && !alreadyBuilt) return false;
         const missingRequirement = rule.requires?.some(
           (requirement) => !hasTownBuilding(selectedTown.buildings, requirement)
         );

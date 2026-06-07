@@ -670,6 +670,10 @@ export function resolveAutomaticCombat(
   const defenderLossRatio = attackerWins ? 1 : winnerLossRatio;
   const attackerNext = applyLossesToArmies(attacker.armies, attackerLossRatio, !attackerWins);
   const defenderNext = applyLossesToArmies(defender.armies, defenderLossRatio, attackerWins);
+  // The King keeps its exact remaining HP from the simulation (it never heals). Carry
+  // those overrides to the winner only, and never for an immortal (god-mode) hero.
+  const winnerIsImmortal = attackerWins ? attackerIsImmortal : defenderIsImmortal;
+  const survivorOverrides = winnerIsImmortal ? undefined : result.survivorOverrides;
   return {
     winnerId: attackerWins ? attacker.id : defender.id,
     loserId: attackerWins ? defender.id : attacker.id,
@@ -677,6 +681,7 @@ export function resolveAutomaticCombat(
     defenderLosses: getLosses(defender.armies, defenderNext),
     experienceGained: 500,
     log: [`Puissance attaquant ${result.attackerPower}`, `Puissance défenseur ${result.defenderPower}`],
+    survivorOverrides,
   };
 }
 

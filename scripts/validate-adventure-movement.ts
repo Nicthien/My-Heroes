@@ -13,6 +13,7 @@ import {
   getUsableAdventureMovement,
 } from "../src/lib/game/engine";
 import { GameMap, MapTile, TerrainType, UnitType } from "../src/lib/game/types";
+import { getArmyNativeTerrain } from "../src/lib/game/native-terrain";
 
 function tile(x: number, y: number, terrain = TerrainType.GRASS): MapTile {
   return {
@@ -97,5 +98,20 @@ assert(twoDiagPath.length === 0, "two diagonals should not fit in 200 PM even wi
 assert(getDailyAdventureMovement([{ unitType: UnitType.DWARF }]) === 1500, "slow army should get 1500 PM");
 assert(getDailyAdventureMovement([{ unitType: UnitType.ARCHANGEL }]) === 2000, "fast army should get 2000 PM");
 assert(getDailyAdventureMovement([]) === 2000, "empty army should get 2000 PM");
+
+// Native terrain bonus (#10): an all-native army crosses its home terrain at no penalty.
+const roughMap = map(3, 1);
+roughMap.tiles[0][1] = tile(1, 0, TerrainType.ROUGH);
+assert(getAdventureStepCost(roughMap, { x: 0, y: 0 }, { x: 1, y: 0 }) === 125, "rough should cost 125 PM without native bonus");
+assert(getAdventureStepCost(roughMap, { x: 0, y: 0 }, { x: 1, y: 0 }, TerrainType.ROUGH) === 100, "native army should cross rough at 100 PM");
+assert(getAdventureStepCost(roughMap, { x: 0, y: 0 }, { x: 1, y: 0 }, TerrainType.SNOW) === 125, "a different native terrain must not reduce rough cost");
+
+const grassMap = map(3, 1);
+assert(getAdventureStepCost(grassMap, { x: 0, y: 0 }, { x: 1, y: 0 }, TerrainType.GRASS) === 100, "native bonus never raises a 100 PM tile");
+
+assert(getArmyNativeTerrain([{ unitType: UnitType.GOBLIN }]) === TerrainType.ROUGH, "all-Stronghold army is native to Rough");
+assert(getArmyNativeTerrain([{ unitType: UnitType.TROGLODYTE }]) === TerrainType.SUBTERRANEAN, "all-Dungeon army is native to Subterranean");
+assert(getArmyNativeTerrain([{ unitType: UnitType.GOBLIN }, { unitType: UnitType.PIKEMAN }]) === null, "mixed-faction army has no single native terrain");
+assert(getArmyNativeTerrain([]) === null, "empty army has no native terrain");
 
 console.log("Adventure movement rules validated.");

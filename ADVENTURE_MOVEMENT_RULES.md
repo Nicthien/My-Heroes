@@ -46,8 +46,22 @@ Terrain costs when no road is present:
 - Lava, walls, and blocking decor: impassable
 
 Subterranean is the underground cave floor (Dungeon-native). Rough is a surface
-badland (Stronghold-native). A future native-terrain bonus may waive the penalty
-above 100 PM when the whole army is native to the tile's terrain.
+badland (Stronghold-native).
+
+## Native Terrain (H3)
+
+When every creature in a hero's army is native to a terrain, that terrain's penalty
+is waived (cost clamped to the 100 PM base). The army's single native terrain is
+resolved by `getArmyNativeTerrain(army)` (`src/lib/game/native-terrain.ts`) and
+threaded as an optional `nativeTerrain` argument through the movement-cost and
+pathfinding helpers (`effectiveMovementCost`, `getAdventureStepCost*`,
+`getAdventurePathCost*`, `getRequiredAdventureMovement*`, `findPath*`,
+`computeReachableTiles`).
+
+- The server (authoritative move + combat-approach validation) and the main client
+  move preview (`computeReachableTiles`, path highlight) apply the bonus.
+- Not yet applied: AI pathfinding and the client combat-approach cursor preview —
+  these only over-estimate cost slightly and never let an illegal move through.
 
 ## Diagonal Blocking
 

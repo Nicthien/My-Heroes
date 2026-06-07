@@ -17,7 +17,8 @@ import { ARTIFACT_GUARDIAN_POWER, getArtifact, getEffectiveHeroStatsFromValues, 
 import { getAllyGrailAura, getEnemyGrailMoraleMalus } from "@/lib/game/grail";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
-import { BuildingType, Faction, GameMap, UnitStack, UnitType } from "@/lib/game/types";
+import { BuildingType, Faction, GameMap, TerrainType, UnitStack, UnitType } from "@/lib/game/types";
+import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
 import {
   areAdventurePositionsAdjacent,
   computeVisibleTiles,
@@ -186,7 +187,7 @@ export async function POST(
   const defenderPosition = { x: targetDefender.x, y: targetDefender.y };
   const path = Array.isArray(body.path) ? body.path : null;
   if (path) {
-    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, path, attacker.movement ?? 0, defenderPosition);
+    const validation = validateCombatPath(mapData, { x: attacker.x, y: attacker.y }, path, attacker.movement ?? 0, defenderPosition, getArmyNativeTerrain(attacker.armies ?? []));
     if (!validation.ok) return NextResponse.json({ error: "Chemin de combat invalide" }, { status: 400 });
 
     const lastPos = validation.destination;
@@ -1279,16 +1280,17 @@ function validateCombatPath(
   start: { x: number; y: number },
   path: Array<{ x: number; y: number }>,
   movement: number,
-  target: { x: number; y: number }
+  target: { x: number; y: number },
+  nativeTerrain?: TerrainType | null
 ): { ok: true; usedMovement: number; destination: { x: number; y: number } } | { ok: false } {
   if (!Array.isArray(path) || path.length < 1) return { ok: false };
   if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false };
 
   const destination = path[path.length - 1];
   if (!destination || !areAdventurePositionsAdjacent(destination, target)) return { ok: false };
-  const usedMovement = getAdventurePathCostAvoiding(map, path, [target]);
+  const usedMovement = getAdventurePathCostAvoiding(map, path, [target], nativeTerrain);
   if (!Number.isFinite(usedMovement)) return { ok: false };
-  const requiredMovement = getRequiredAdventureMovementAvoiding(map, path, [target]);
+  const requiredMovement = getRequiredAdventureMovementAvoiding(map, path, [target], nativeTerrain);
   if (requiredMovement > movement) return { ok: false };
   return { ok: true, usedMovement, destination };
 }

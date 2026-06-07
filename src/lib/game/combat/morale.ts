@@ -1,6 +1,7 @@
 import type { CombatBoardUnit, CombatSide } from "../types";
 import { TerrainType } from "../types";
 import { getCreature, type CreatureGroupKey } from "../creature-catalog";
+import { getNativeTerrainForGroup } from "../native-terrain";
 
 export const MORALE_MIN = -3;
 export const MORALE_MAX = 3;
@@ -8,21 +9,6 @@ export const MORALE_GOOD_CHANCE_PER_POINT = 1 / 24;
 export const MORALE_BAD_CHANCE_PER_POINT = 1 / 12;
 
 const UNDEAD_GROUP: CreatureGroupKey = "necropolis";
-
-const FACTION_NATIVE_TERRAIN: Partial<Record<CreatureGroupKey, TerrainType>> = {
-  castle: TerrainType.GRASS,
-  rampart: TerrainType.GRASS,
-  tower: TerrainType.SNOW,
-  inferno: TerrainType.LAVA,
-  necropolis: TerrainType.DIRT,
-  dungeon: TerrainType.MOUNTAIN,
-  stronghold: TerrainType.DIRT,
-  fortress: TerrainType.SWAMP,
-  conflux: TerrainType.GRASS,
-  cove: TerrainType.SAND,
-  factory: TerrainType.SAND,
-  bulwark: TerrainType.SNOW,
-};
 
 export interface MoraleContext {
   attackerHeroMorale?: number;
@@ -37,7 +23,7 @@ export function isUndeadUnit(unit: CombatBoardUnit) {
 }
 
 export function getNativeTerrain(group: CreatureGroupKey): TerrainType | undefined {
-  return FACTION_NATIVE_TERRAIN[group];
+  return getNativeTerrainForGroup(group);
 }
 
 export function computeUnitMorale(

@@ -15,7 +15,8 @@ import {
 } from "@/lib/game/engine";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
-import { AdventureBuildingType, Faction, GameMap, MapObject, Position, UnitType } from "@/lib/game/types";
+import { AdventureBuildingType, Faction, GameMap, MapObject, Position, TerrainType, UnitType } from "@/lib/game/types";
+import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
 import type {
   HeroStatKey,
   MinimalBuilding,
@@ -45,6 +46,7 @@ export type MoveHeroHelpers = {
     path: Array<{ x: number; y: number }>,
     movement: number,
     mode?: AdventureMovementMode,
+    nativeTerrain?: TerrainType | null,
   ) => { ok: true; usedMovement: number } | { ok: false; error: string };
   getDefeatedCreatureBanks: (mapState: Record<string, unknown>) => Set<string>;
   findFirstMoveStop: (params: {
@@ -59,7 +61,7 @@ export type MoveHeroHelpers = {
     visitedAdventureBuildings: Set<string>;
     defeatedCreatureBanks: Set<string>;
   }) => { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position } | null;
-  getPathMovementCost: (map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode) => number;
+  getPathMovementCost: (map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode, nativeTerrain?: TerrainType | null) => number;
   getResourcePileAmount: (object: MapObject) => number;
   incrementPlayerResource: (supabase: SupabaseAdminClient, playerId: string, resource: string, amount: number) => Promise<void>;
   resolveDiplomacyOnMonster: (params: {
@@ -164,6 +166,8 @@ export async function handleMoveHeroAction({
 
   const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
   if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+  // Native-terrain bonus: an all-native army crosses its home terrain at no penalty.
+  const heroNativeTerrain = getArmyNativeTerrain(hero.armies ?? []);
 
   const fullMapData = normalizeMapMovement(game.mapData as GameMap);
   const heroMapLevel = normalizeMapLevel(hero.mapLevel);
@@ -177,7 +181,7 @@ export async function handleMoveHeroAction({
     heroSpellEffects?.some((effect) => effect.spellId === "fly" || effect.spellId === "water_walk")
       ? resolveAdventureMovementMode(mapData, { x: hero.x, y: hero.y }, heroSpellEffects)
       : undefined;
-  const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement, movementMode);
+  const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, action.path, hero.movement, movementMode, heroNativeTerrain);
   if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
   const mapState = (game.mapState as Record<string, unknown>) ?? {};
@@ -205,7 +209,7 @@ export async function handleMoveHeroAction({
   }
   const stopPathIndex = firstStop?.stopBefore ? Math.max(0, firstStop.pathIndex - 1) : firstStop?.pathIndex;
   const movePath = typeof stopPathIndex === "number" ? action.path.slice(0, stopPathIndex + 1) : action.path;
-  const usedMovement = getPathMovementCost(mapData, movePath, (hero as unknown as { skills?: Record<string, string> }).skills, movementMode);
+  const usedMovement = getPathMovementCost(mapData, movePath, (hero as unknown as { skills?: Record<string, string> }).skills, movementMode, heroNativeTerrain);
   const lastPos = movePath[movePath.length - 1];
   const { error: heroUpdateError } = await supabase.from("heroes").update({
     x: lastPos.x,

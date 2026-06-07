@@ -110,12 +110,16 @@ export function resolveAdventureMovementMode(
   return inferMovementMode(map, from);
 }
 
-export function effectiveMovementCost(tile: MapTile): number {
+export function effectiveMovementCost(tile: MapTile, nativeTerrain?: TerrainType | null): number {
   if (!isTileTraversable(tile)) return 999;
   if (tile.road === "paved") return 50;
   if (tile.road === "gravel") return 65;
   if (tile.road === "dirt") return 75;
-  return getMovementCost(tile.terrain);
+  const base = getMovementCost(tile.terrain);
+  // HoMM3 native-terrain rule: an all-native army crosses its home terrain at no
+  // penalty (cost clamped to the 100 PM base).
+  if (nativeTerrain && tile.terrain === nativeTerrain && base > 100) return 100;
+  return base;
 }
 
 export function isTileTraversable(tile: MapTile | undefined): boolean {
@@ -327,11 +331,11 @@ export function areAdventurePositionsAdjacent(a: Position, b: Position): boolean
   return dx <= 1 && dy <= 1 && (dx !== 0 || dy !== 0);
 }
 
-export function getAdventureStepCost(map: GameMap, from: Position, to: Position): number {
-  return getAdventureStepCostForMode(map, from, to, inferMovementMode(map, from));
+export function getAdventureStepCost(map: GameMap, from: Position, to: Position, nativeTerrain?: TerrainType | null): number {
+  return getAdventureStepCostForMode(map, from, to, inferMovementMode(map, from), nativeTerrain);
 }
 
-export function getAdventureStepCostForMode(map: GameMap, from: Position, to: Position, mode: AdventureMovementMode): number {
+export function getAdventureStepCostForMode(map: GameMap, from: Position, to: Position, mode: AdventureMovementMode, nativeTerrain?: TerrainType | null): number {
   if (!canMoveAdventureStepForMode(map, from, to, mode)) return Number.POSITIVE_INFINITY;
 
   const targetTile = map.tiles[to.y]?.[to.x];
@@ -339,20 +343,20 @@ export function getAdventureStepCostForMode(map: GameMap, from: Position, to: Po
 
   // Water-walking on foot is slower across water tiles than sailing.
   const waterWalkSurcharge = mode === "water_walk" && isWaterTile(targetTile) ? 1.5 : 1;
-  const surfaceCost = Math.round(effectiveMovementCost(targetTile) * waterWalkSurcharge);
+  const surfaceCost = Math.round(effectiveMovementCost(targetTile, nativeTerrain) * waterWalkSurcharge);
   const isDiagonal = from.x !== to.x && from.y !== to.y;
   return isDiagonal ? Math.floor(surfaceCost * DIAGONAL_BASE / ORTHOGONAL_BASE) : surfaceCost;
 }
 
-export function getAdventurePathCost(map: GameMap, path: Position[]): number {
+export function getAdventurePathCost(map: GameMap, path: Position[], nativeTerrain?: TerrainType | null): number {
   if (path.length < 2) return 0;
-  return getAdventurePathCostForMode(map, path, inferMovementMode(map, path[0]));
+  return getAdventurePathCostForMode(map, path, inferMovementMode(map, path[0]), nativeTerrain);
 }
 
-export function getAdventurePathCostForMode(map: GameMap, path: Position[], mode: AdventureMovementMode): number {
+export function getAdventurePathCostForMode(map: GameMap, path: Position[], mode: AdventureMovementMode, nativeTerrain?: TerrainType | null): number {
   let total = 0;
   for (let i = 1; i < path.length; i++) {
-    const stepCost = getAdventureStepCostForMode(map, path[i - 1], path[i], mode);
+    const stepCost = getAdventureStepCostForMode(map, path[i - 1], path[i], mode, nativeTerrain);
     if (!Number.isFinite(stepCost)) return Number.POSITIVE_INFINITY;
     total += stepCost;
   }
@@ -365,14 +369,14 @@ export function getAdventurePathCostForMode(map: GameMap, path: Position[], mode
  * only needs to pay the destination's orthogonal cost (the full diagonal cost
  * is still consumed afterwards, clamped to 0).
  */
-export function getRequiredAdventureMovement(map: GameMap, path: Position[]): number {
+export function getRequiredAdventureMovement(map: GameMap, path: Position[], nativeTerrain?: TerrainType | null): number {
   if (path.length < 2) return 0;
-  return getRequiredAdventureMovementForMode(map, path, inferMovementMode(map, path[0]));
+  return getRequiredAdventureMovementForMode(map, path, inferMovementMode(map, path[0]), nativeTerrain);
 }
 
-export function getRequiredAdventureMovementForMode(map: GameMap, path: Position[], mode: AdventureMovementMode): number {
+export function getRequiredAdventureMovementForMode(map: GameMap, path: Position[], mode: AdventureMovementMode, nativeTerrain?: TerrainType | null): number {
   if (path.length < 2) return 0;
-  const fullCost = getAdventurePathCostForMode(map, path, mode);
+  const fullCost = getAdventurePathCostForMode(map, path, mode, nativeTerrain);
   if (!Number.isFinite(fullCost)) return Number.POSITIVE_INFINITY;
 
   const from = path[path.length - 2];
@@ -382,14 +386,14 @@ export function getRequiredAdventureMovementForMode(map: GameMap, path: Position
 
   const tile = map.tiles[to.y]?.[to.x];
   if (!tile) return fullCost;
-  const orthoCost = effectiveMovementCost(tile);
+  const orthoCost = effectiveMovementCost(tile, nativeTerrain);
   const diagCost = Math.floor(orthoCost * DIAGONAL_BASE / ORTHOGONAL_BASE);
   return fullCost - diagCost + orthoCost;
 }
 
-export function getRequiredAdventureMovementAvoiding(map: GameMap, path: Position[], blockedPositions: Position[]): number {
+export function getRequiredAdventureMovementAvoiding(map: GameMap, path: Position[], blockedPositions: Position[], nativeTerrain?: TerrainType | null): number {
   if (path.length < 2) return 0;
-  const fullCost = getAdventurePathCostAvoiding(map, path, blockedPositions);
+  const fullCost = getAdventurePathCostAvoiding(map, path, blockedPositions, nativeTerrain);
   if (!Number.isFinite(fullCost)) return Number.POSITIVE_INFINITY;
 
   const from = path[path.length - 2];
@@ -399,12 +403,12 @@ export function getRequiredAdventureMovementAvoiding(map: GameMap, path: Positio
 
   const tile = map.tiles[to.y]?.[to.x];
   if (!tile) return fullCost;
-  const orthoCost = effectiveMovementCost(tile);
+  const orthoCost = effectiveMovementCost(tile, nativeTerrain);
   const diagCost = Math.floor(orthoCost * DIAGONAL_BASE / ORTHOGONAL_BASE);
   return fullCost - diagCost + orthoCost;
 }
 
-export function getAdventurePathCostAvoiding(map: GameMap, path: Position[], blockedPositions: Position[]): number {
+export function getAdventurePathCostAvoiding(map: GameMap, path: Position[], blockedPositions: Position[], nativeTerrain?: TerrainType | null): number {
   const blocked = toPositionKeySet(blockedPositions);
   let total = 0;
   for (let i = 1; i < path.length; i++) {
@@ -415,7 +419,7 @@ export function getAdventurePathCostAvoiding(map: GameMap, path: Position[], blo
     const targetTile = map.tiles[to.y]?.[to.x];
     if (!targetTile) return Number.POSITIVE_INFINITY;
 
-    const surfaceCost = effectiveMovementCost(targetTile);
+    const surfaceCost = effectiveMovementCost(targetTile, nativeTerrain);
     const isDiagonal = from.x !== to.x && from.y !== to.y;
     total += isDiagonal ? Math.floor(surfaceCost * DIAGONAL_BASE / ORTHOGONAL_BASE) : surfaceCost;
   }
@@ -842,16 +846,18 @@ export function findPath(
   map: GameMap,
   start: Position,
   end: Position,
-  maxMovement: number
+  maxMovement: number,
+  nativeTerrain?: TerrainType | null
 ): Position[] {
-  return measureDevPerformance("findPath", () => findPathInternal(map, start, end, maxMovement));
+  return measureDevPerformance("findPath", () => findPathInternal(map, start, end, maxMovement, nativeTerrain));
 }
 
 function findPathInternal(
   map: GameMap,
   start: Position,
   end: Position,
-  maxMovement: number
+  maxMovement: number,
+  nativeTerrain?: TerrainType | null
 ): Position[] {
   const openSet = new MinPriorityQueue<{ pos: Position; g: number }>();
   const closedSet = new Set<string>();
@@ -890,12 +896,12 @@ function findPathInternal(
       const nKey = `${neighbor.x},${neighbor.y}`;
       if (closedSet.has(nKey)) continue;
 
-      const stepCost = getAdventureStepCost(map, current.pos, neighbor);
+      const stepCost = getAdventureStepCost(map, current.pos, neighbor, nativeTerrain);
       const g = current.g + stepCost;
       const isGoal = neighbor.x === end.x && neighbor.y === end.y;
       const isDiagonal = current.pos.x !== neighbor.x && current.pos.y !== neighbor.y;
       const tile = map.tiles[neighbor.y]?.[neighbor.x];
-      const orthoCost = tile ? effectiveMovementCost(tile) : Number.POSITIVE_INFINITY;
+      const orthoCost = tile ? effectiveMovementCost(tile, nativeTerrain) : Number.POSITIVE_INFINITY;
       const requiredG = isGoal && isDiagonal ? current.g + orthoCost : g;
       if (requiredG > maxMovement) continue;
       if (g >= (bestCost.get(nKey) ?? Number.POSITIVE_INFINITY)) continue;
@@ -932,10 +938,11 @@ export function findPathToAdjacent(
   start: Position,
   target: Position,
   maxMovement: number,
-  blockedPositions: Position[] = [target]
+  blockedPositions: Position[] = [target],
+  nativeTerrain?: TerrainType | null
 ): Position[] {
   return measureDevPerformance("findPathToAdjacent", () =>
-    findPathToAdjacentInternal(map, start, target, maxMovement, blockedPositions)
+    findPathToAdjacentInternal(map, start, target, maxMovement, blockedPositions, nativeTerrain)
   );
 }
 
@@ -944,7 +951,8 @@ function findPathToAdjacentInternal(
   start: Position,
   target: Position,
   maxMovement: number,
-  blockedPositions: Position[]
+  blockedPositions: Position[],
+  nativeTerrain?: TerrainType | null
 ): Position[] {
   if (!isInsideMap(map, start) || !isInsideMap(map, target)) return [];
   if (areAdventurePositionsAdjacent(start, target)) return [start];
@@ -992,7 +1000,7 @@ function findPathToAdjacentInternal(
       const neighborKey = positionKey(neighbor);
       if (closedSet.has(neighborKey)) continue;
 
-      const g = current.g + getAdventurePathCostAvoiding(map, [current.pos, neighbor], blockedPositions);
+      const g = current.g + getAdventurePathCostAvoiding(map, [current.pos, neighbor], blockedPositions, nativeTerrain);
       if (g > maxMovement) continue;
       if (g >= (bestCost.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
 
@@ -1008,17 +1016,19 @@ function findPathToAdjacentInternal(
 export function computeReachableTiles(
   map: GameMap,
   start: Position,
-  maxMovement: number
+  maxMovement: number,
+  nativeTerrain?: TerrainType | null
 ): Set<string> {
   return measureDevPerformance("computeReachableTiles", () =>
-    computeReachableTilesInternal(map, start, maxMovement)
+    computeReachableTilesInternal(map, start, maxMovement, nativeTerrain)
   );
 }
 
 function computeReachableTilesInternal(
   map: GameMap,
   start: Position,
-  maxMovement: number
+  maxMovement: number,
+  nativeTerrain?: TerrainType | null
 ): Set<string> {
   const reachable = new Set<string>([`${start.x},${start.y}`]);
   const bestCost = new Map<string, number>([[`${start.x},${start.y}`, 0]]);
@@ -1036,7 +1046,7 @@ function computeReachableTilesInternal(
       if (!isInsideMap(map, neighbor)) continue;
       if (!canMoveAdventureStep(map, current.pos, neighbor)) continue;
 
-      const nextCost = current.cost + getAdventureStepCost(map, current.pos, neighbor);
+      const nextCost = current.cost + getAdventureStepCost(map, current.pos, neighbor, nativeTerrain);
       if (nextCost > maxMovement) continue;
 
       const neighborKey = `${neighbor.x},${neighbor.y}`;
@@ -1060,7 +1070,7 @@ function computeReachableTilesInternal(
       if (!canMoveAdventureStep(map, from, neighbor)) continue;
       const tile = map.tiles[neighbor.y]?.[neighbor.x];
       if (!tile) continue;
-      const orthoCost = effectiveMovementCost(tile);
+      const orthoCost = effectiveMovementCost(tile, nativeTerrain);
       if (cost + orthoCost > maxMovement) continue;
       reachable.add(`${neighbor.x},${neighbor.y}`);
     }

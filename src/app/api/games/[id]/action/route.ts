@@ -22,7 +22,8 @@ import {
   pickArtifactId,
   type ArtifactSlot,
 } from "@/lib/game/artifacts";
-import { AdventureBuildingType, BuildingType, Faction, GameMap, MapObject, Position, Resources, UnitType } from "@/lib/game/types";
+import { AdventureBuildingType, BuildingType, Faction, GameMap, MapObject, Position, Resources, TerrainType, UnitType } from "@/lib/game/types";
+import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
 import { normalizeMapLevel, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import {
   canMoveAdventureStep,
@@ -1724,7 +1725,7 @@ async function validateAndApplyActionPath({
     return { ok: false, error: "Le chemin ne termine pas sur la cible" };
   }
 
-  const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, typedPath, hero.movement);
+  const validation = validateMovePath(mapData, { x: hero.x, y: hero.y }, typedPath, hero.movement, undefined, getArmyNativeTerrain(hero.armies ?? []));
   if (!validation.ok) return validation;
 
   const { error: heroUpdateError } = await supabase.from("heroes").update({
@@ -1752,8 +1753,8 @@ async function validateAndApplyActionPath({
   return { ok: true };
 }
 
-function getPathMovementCost(map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode) {
-  const base = mode ? getAdventurePathCostForMode(map, path, mode) : getAdventurePathCost(map, path);
+function getPathMovementCost(map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode, nativeTerrain?: TerrainType | null) {
+  const base = mode ? getAdventurePathCostForMode(map, path, mode, nativeTerrain) : getAdventurePathCost(map, path, nativeTerrain);
   if (!skills) return base;
   const lvl = skills.pathfinding === "expert" ? 3 : skills.pathfinding === "advanced" ? 2 : skills.pathfinding === "basic" ? 1 : 0;
   if (lvl <= 0) return base;
@@ -1779,7 +1780,8 @@ function validateMovePath(
   start: { x: number; y: number },
   path: Array<{ x: number; y: number }>,
   movement: number,
-  mode?: AdventureMovementMode
+  mode?: AdventureMovementMode,
+  nativeTerrain?: TerrainType | null
 ): { ok: true; usedMovement: number } | { ok: false; error: string } {
   if (!Array.isArray(path) || path.length < 2) return { ok: false, error: "Chemin invalide" };
   if (path[0]?.x !== start.x || path[0]?.y !== start.y) return { ok: false, error: "Le chemin ne commence pas sur le héros" };
@@ -1792,13 +1794,13 @@ function validateMovePath(
     if (!stepOk) {
       return { ok: false, error: "Chemin invalide" };
     }
-    const stepCost = mode ? getAdventureStepCostForMode(map, previous, current, mode) : getAdventureStepCost(map, previous, current);
+    const stepCost = mode ? getAdventureStepCostForMode(map, previous, current, mode, nativeTerrain) : getAdventureStepCost(map, previous, current, nativeTerrain);
     if (!Number.isFinite(stepCost)) return { ok: false, error: "Terrain infranchissable" };
     usedMovement += stepCost;
   }
   const requiredMovement = mode
-    ? getRequiredAdventureMovementForMode(map, path as Position[], mode)
-    : getRequiredAdventureMovement(map, path as Position[]);
+    ? getRequiredAdventureMovementForMode(map, path as Position[], mode, nativeTerrain)
+    : getRequiredAdventureMovement(map, path as Position[], nativeTerrain);
   if (requiredMovement > movement) return { ok: false, error: "Deplacement insuffisant" };
   return { ok: true, usedMovement };
 }

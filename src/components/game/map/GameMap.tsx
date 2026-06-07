@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapRenderer } from "@/lib/rendering/mapRenderer";
-import { GameState, Position, UnitStack, UnitType } from "@/lib/game/types";
+import { GameState, Position, TerrainType, UnitStack, UnitType } from "@/lib/game/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL, normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
@@ -22,6 +22,7 @@ import {
   getPlayerVisionCenters,
   isTileTraversable,
 } from "@/lib/game/engine";
+import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   ADVENTURE_CURSORS,
@@ -206,7 +207,7 @@ export default function GameMapComponent() {
     const hero = gameState.players.flatMap((p) => p.heroes).find((h) => h.id === selectedHeroId);
     if (!hero || activeCombatHeroIds.has(hero.id)) return null;
     if (normalizeMapLevel(hero.position.level) !== activeMapLevel) return null;
-    return computeReachableTiles(activeMap, hero.position, hero.movement);
+    return computeReachableTiles(activeMap, hero.position, hero.movement, getArmyNativeTerrain(hero.armies));
   }, [activeCombatHeroIds, activeMap, activeMapLevel, revealMap, gameState, selectedHeroId]);
   const selectedHeroReachableTiles = useMemo(() => {
     if (!selectedHeroReachableTileKeys) return [];
@@ -1112,7 +1113,7 @@ export default function GameMapComponent() {
       return;
     }
 
-    const handleOutOfRange = (heroSrc: { id: string; position: Position; movement: number; maxMovement: number }, destination: Position): "handled" | "inaccessible" => {
+    const handleOutOfRange = (heroSrc: { id: string; position: Position; movement: number; maxMovement: number; armies: UnitStack[] }, destination: Position): "handled" | "inaccessible" => {
       const renderer = rendererRef.current;
       if (!renderer || !gameState) return "inaccessible";
       if (activeCombatHeroIds.has(heroSrc.id)) {
@@ -1126,7 +1127,8 @@ export default function GameMapComponent() {
         return "inaccessible";
       }
 
-      let fullPath = findPath(mapForAction, heroSrc.position, destination, Number.POSITIVE_INFINITY);
+      const srcNative = getArmyNativeTerrain(heroSrc.armies);
+      let fullPath = findPath(mapForAction, heroSrc.position, destination, Number.POSITIVE_INFINITY, srcNative);
       if (fullPath.length <= 1) {
         // Destination impassable / disconnected: try adjacent tiles
         const candidates = getAdjacentPositions(destination);
@@ -1134,8 +1136,8 @@ export default function GameMapComponent() {
         for (const c of candidates) {
           if (c.x < 0 || c.x >= mapForAction.width || c.y < 0 || c.y >= mapForAction.height) continue;
           if (!isTileTraversable(mapForAction.tiles[c.y][c.x])) continue;
-          const p = findPath(mapForAction, heroSrc.position, c, Number.POSITIVE_INFINITY);
-          if (p.length > 1 && (best.length === 0 || getPathMovementCost(mapForAction, p) < getPathMovementCost(mapForAction, best))) {
+          const p = findPath(mapForAction, heroSrc.position, c, Number.POSITIVE_INFINITY, srcNative);
+          if (p.length > 1 && (best.length === 0 || getPathMovementCost(mapForAction, p, srcNative) < getPathMovementCost(mapForAction, best, srcNative))) {
             best = p;
           }
         }
@@ -1146,7 +1148,7 @@ export default function GameMapComponent() {
       let usedCost = 0;
       let splitIndex = 0;
       for (let i = 1; i < fullPath.length; i++) {
-        const c = getAdventureStepCost(mapForAction, fullPath[i - 1], fullPath[i]);
+        const c = getAdventureStepCost(mapForAction, fullPath[i - 1], fullPath[i], srcNative);
         if (usedCost + c > heroSrc.movement) break;
         usedCost += c;
         splitIndex = i;
@@ -1423,7 +1425,7 @@ export default function GameMapComponent() {
             return;
           }
           const destination = { x: obj.x, y: obj.y };
-          const path = findPath(mapForAction, hero.position, destination, hero.movement);
+          const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
           if (path.length <= 1) {
             if (handleOutOfRange(hero, destination) === "inaccessible") {
               rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1567,7 +1569,7 @@ export default function GameMapComponent() {
         if (blockIfHeroInCombat(hero.id)) return;
 
         const destination = { x: obj.x, y: obj.y };
-        const path = findPath(mapForAction, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1675,7 +1677,7 @@ export default function GameMapComponent() {
           return;
         }
 
-        const path = findPath(mapForAction, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1796,7 +1798,7 @@ export default function GameMapComponent() {
           return;
         }
 
-        const path = findPath(mapForAction, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1858,7 +1860,7 @@ export default function GameMapComponent() {
         if (!hero) return;
         if (blockIfHeroInCombat(hero.id)) return;
         const destination = { x: obj.x, y: obj.y };
-        const path = findPath(mapForAction, hero.position, destination, hero.movement);
+        const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
         if (path.length <= 1) {
           if (handleOutOfRange(hero, destination) === "inaccessible") {
             rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
@@ -1981,7 +1983,7 @@ export default function GameMapComponent() {
 
             if (hero.position.x !== gate.position.x || hero.position.y !== gate.position.y) {
               const destination = gate.position;
-              const path = findPath(mapForAction, hero.position, destination, hero.movement);
+              const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
               if (path.length <= 1) {
                 if (handleOutOfRange(hero, destination) === "inaccessible") {
                   rendererRef.current?.highlightTile(destination.x, destination.y, 0xff0000);
@@ -2270,7 +2272,7 @@ export default function GameMapComponent() {
         return;
       }
 
-      const path = findPath(mapForAction, hero.position, tile, hero.movement);
+      const path = findPath(mapForAction, hero.position, tile, hero.movement, getArmyNativeTerrain(hero.armies));
       if (path.length > 1) {
         if (targetTile?.object?.type === "building") {
           const isMyBuilding = myPlayer?.resourceBuildings.some((b) => b.id === targetTile.object!.id);
@@ -2854,7 +2856,8 @@ function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending:
     return null;
   }
 
-  const fullPath = findPath(gameState.map, hero.position, target, Number.POSITIVE_INFINITY);
+  const heroNative = getArmyNativeTerrain(hero.armies);
+  const fullPath = findPath(gameState.map, hero.position, target, Number.POSITIVE_INFINITY, heroNative);
   if (fullPath.length <= 1) {
     renderer.clearHighlights();
     return null;
@@ -2863,7 +2866,7 @@ function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending:
   let usedCost = 0;
   let splitIndex = 0;
   for (let i = 1; i < fullPath.length; i++) {
-    const cost = getAdventureStepCost(gameState.map, fullPath[i - 1], fullPath[i]);
+    const cost = getAdventureStepCost(gameState.map, fullPath[i - 1], fullPath[i], heroNative);
     if (usedCost + cost > hero.movement) break;
     usedCost += cost;
     splitIndex = i;
@@ -2880,7 +2883,7 @@ function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending:
 
   const reachable = fullPath.slice(0, splitIndex + 1);
   const unreachable = fullPath.slice(splitIndex + 1);
-  const totalCost = getPathMovementCost(gameState.map, fullPath);
+  const totalCost = getPathMovementCost(gameState.map, fullPath, heroNative);
   const remaining = totalCost - usedCost;
   const maxMove = hero.maxMovement > 0 ? hero.maxMovement : 1;
   const additionalTurns = Math.max(1, Math.ceil(remaining / maxMove));
@@ -2896,8 +2899,8 @@ function redrawPendingMove(renderer: MapRenderer, gameState: GameState, pending:
   };
 }
 
-function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[]) {
-  return getAdventurePathCost(map, path);
+function getPathMovementCost(map: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["map"], path: Position[], nativeTerrain?: TerrainType | null) {
+  return getAdventurePathCost(map, path, nativeTerrain);
 }
 
 function getAdjacentPositions(position: Position): Position[] {

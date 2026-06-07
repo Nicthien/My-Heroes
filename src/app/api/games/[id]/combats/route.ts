@@ -427,9 +427,18 @@ export async function POST(
 
   if (autoResult && result) {
     const attackerWon = autoResult.winnerId === attacker.id;
-    const winnerArmies = attackerWon
+    const winnerArmiesBase = attackerWon
       ? applyAutoLosses(attacker.armies, result.attackerLosses)
       : applyAutoLosses(targetDefender.armies, result.defenderLosses);
+    // Apply exact-HP overrides for non-regenerating winner units (the King): it keeps
+    // its real remaining HP instead of being topped up to full by the count-based loss.
+    const survivorOverrides = result.survivorOverrides ?? [];
+    const winnerArmies = survivorOverrides.length === 0
+      ? winnerArmiesBase
+      : winnerArmiesBase.map((army) => {
+        const override = survivorOverrides.find((entry) => entry.id === army.id);
+        return override ? { ...army, count: override.count, health: override.health } : army;
+      });
     await persistAutoWinnerArmies(supabase, attackerWon ? "armies" : getDefenderArmyTable(body.targetType, targetDefender), winnerArmies);
     await grantAutoCombatExperience(supabase, id, attackerWon ? attacker.id : targetDefender.heroId, result.experienceGained);
 

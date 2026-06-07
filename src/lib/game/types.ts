@@ -830,6 +830,9 @@ export interface CombatSummary {
   log: string[];
   attackerDied?: boolean;
   creatureBankReward?: import("./creature-banks").PendingCreatureBankReward;
+  // Exact post-combat state for non-regenerating winner units (the King): persisted
+  // verbatim so they keep their auto-combat wounds instead of healing to full.
+  survivorOverrides?: Array<{ id: string; count: number; health: number }>;
 }
 
 export interface GameMap {

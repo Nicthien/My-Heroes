@@ -1,0 +1,73 @@
+// In-app changelog shown from the dashboard. Mirrors the human-readable
+// CHANGELOG.md at the repo root — keep both in sync when cutting a release.
+// Item strings may use **bold** markers for the leading term; the modal renders
+// them with <strong> (see ChangelogModal).
+
+export type ChangelogCategory = "added" | "changed" | "fixed" | "removed";
+
+export interface ChangelogSection {
+  category: ChangelogCategory;
+  items: string[];
+}
+
+export interface ChangelogRelease {
+  version: string;
+  /** ISO date (YYYY-MM-DD) of the release. */
+  date: string;
+  /** Optional one-line summary shown under the version heading. */
+  summary?: string;
+  sections: ChangelogSection[];
+}
+
+// Newest first.
+export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: "1.0.1",
+    date: "2026-06-06",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Sort Visions** — révèle désormais le détail du score (par catégorie) de chaque adversaire dont un héros ou une ville est à portée, pour le tour en cours ; le brouillard de guerre le re-masque au tour suivant.",
+          "**Triche Mana infini** — donne aussi tous les sorts au héros sélectionné (grimoire complet, en aventure comme en combat).",
+          "**Aperçu /dev/combat** — affiche désormais les machines de guerre (baliste, tente de premiers secours, charrette de munitions, et catapulte en siège), placées derrière les créatures.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "Reformulation du libellé « Détail masqué » du panneau de score (suppression de la mention trompeuse au brouillard de guerre).",
+          "Boutons du Graal (creuser / carte au trésor) déplacés dans l'onglet compétences et la barre d'onglets du héros.",
+          "**Fortifications de siège** — déterminées par les bâtiments de la ville (Fort = remparts, Citadelle = +1 tour de tir, Château = 3 tours) au lieu du niveau du centre-ville.",
+          "**Tente de premiers secours (combat)** — soins conformes aux règles de référence : montant aléatoire selon Premiers Secours (1-25 / 40-50 / 60-75 / 80-100), soin de n'importe quelle pile alliée sans contrainte d'adjacence, créatures uniquement, ciblage manuel à partir de la compétence.",
+          "Badges d'état (chance/moral) recentrés au-dessus de la tête de l'unité.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "1.0.0",
+    date: "2026-06-02",
+    summary:
+      "Première version stable. Le jeu est jouable de bout en bout : création de partie, exploration, économie, combats et fin de partie.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Carte d'aventure** — génération procédurale (bruit Simplex) avec 8 terrains, niveaux d'élévation, ressources, et bâtiments économiques/d'aventure.",
+          "**Déplacement & exploration** — pathfinding A* sur grille carrée (8 directions, coûts conscients des routes, blocage diagonal strict), fog of war persistant.",
+          "**Économie** — villes, mines/scieries/etc., revenu par tour, recrutement d'unités, construction de bâtiments.",
+          "**Héros** — niveaux, statistiques, compétences, artefacts, transfert d'armée.",
+          "**Combat** — résolution automatique et combat tactique manuel sur grille hexagonale (file d'initiative par vitesse, déplacement, tir, défense, sorts).",
+          "**Adversaires IA** — stratégie complète : personnalités, mémoire, postures, rôles, économie, recrutement, et tactique de combat avec sorts.",
+          "**Multijoueur** — lobby, parties à plusieurs via Supabase Realtime, rejoindre un combat en renfort.",
+          "**Fin de partie** — conditions de victoire sélectionnables à la création (Domination, Accumulation d'or, Limite de tours, Capture d'une ville cible), toujours doublées de la domination en filet de sécurité ; gestion du match nul, bandeau de fin de partie, score et leaderboard inter-parties.",
+          "**Abandon** — un joueur peut déclarer forfait en cours de partie, libérant ses mines et déclenchant la résolution de victoire.",
+          "**Authentification** — comptes email/mot de passe gérés par Supabase.",
+          "**Rendu** — moteur isométrique Phaser 4 (terrain, héros animés, brouillard, routes, décor) et interface (HUD, écran de ville, écran de combat) en français.",
+          "**Déploiement** — image Docker mono-conteneur pour héberger le frontend.",
+        ],
+      },
+    ],
+  },
+];

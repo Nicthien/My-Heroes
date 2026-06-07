@@ -162,6 +162,14 @@ export const en: Record<TranslationKey, string> = {
   "rmg.objects": "Objects",
   "rmg.details": "Details",
 
+  // --- Changelog ---
+  "changelog.title": "What's new",
+  "changelog.button": "Release notes",
+  "changelog.added": "Added",
+  "changelog.changed": "Changed",
+  "changelog.fixed": "Fixed",
+  "changelog.removed": "Removed",
+
   // --- Dashboard: header + games list ---
   "dashboard.welcome": "Welcome, {name}",
   "dashboard.newGame": "New game",

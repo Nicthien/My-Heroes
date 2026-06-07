@@ -39,6 +39,7 @@ export async function GET(
     return NextResponse.json({
       id: game.id,
       status: game.status,
+      winnerId: game.winnerId,
       turnNumber: game.turnNumber,
       currentTurnPlayerId: game.currentTurnPlayerId,
       updatedAt: game.updatedAt,
@@ -68,6 +69,7 @@ export async function GET(
   return NextResponse.json({
     id: game.id,
     status: game.status,
+    winnerId: game.winnerId,
     turnNumber: game.turnNumber,
     currentTurnPlayerId: game.currentTurnPlayerId,
     updatedAt: game.updatedAt,

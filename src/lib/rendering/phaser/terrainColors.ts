@@ -10,6 +10,8 @@ export const TERRAIN_TOP: Record<TerrainType, number> = {
   snow: 0xffffff,
   swamp: 0x6d7d4e,
   lava: 0xd04030,
+  rough: 0xa98c5f,
+  subterranean: 0x5a4a3c,
 };
 
 export const TERRAIN_SIDE_LIT: Record<TerrainType, number> = {
@@ -22,6 +24,8 @@ export const TERRAIN_SIDE_LIT: Record<TerrainType, number> = {
   snow: 0xffffff,
   swamp: 0x7d8d5e,
   lava: 0xe05040,
+  rough: 0xbb9d6e,
+  subterranean: 0x6e5a48,
 };
 
 export const TERRAIN_SIDE_DARK: Record<TerrainType, number> = {
@@ -34,4 +38,6 @@ export const TERRAIN_SIDE_DARK: Record<TerrainType, number> = {
   snow: 0xc0c0c0,
   swamp: 0x4d5d2e,
   lava: 0xa03020,
+  rough: 0x6f5436,
+  subterranean: 0x3a2f26,
 };

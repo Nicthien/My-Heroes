@@ -16,6 +16,10 @@ export enum TerrainType {
   SNOW = "snow",
   SWAMP = "swamp",
   LAVA = "lava",
+  // Rough: surface badland (125 PM, Stronghold-native). Subterranean: underground
+  // cave floor (100 PM, Dungeon-native). See ADVENTURE_MOVEMENT_RULES.md.
+  ROUGH = "rough",
+  SUBTERRANEAN = "subterranean",
 }
 
 export enum BuildingType {

@@ -444,6 +444,10 @@ export const TERRAIN_TOP_TEXTURES = {
     { path: "/assets/textures/terrain/lava/lava-dry-flow.webp", tags: ["flow"] },
     { path: "/assets/textures/terrain/lava/lava-burnt-edge.webp", tags: ["edge"] },
   ],
+  // Rough (Stronghold-native badland) and Subterranean (Dungeon-native cave floor)
+  // render as flat colours until their .webp variants are generated (see Phase 3).
+  [TerrainType.ROUGH]: [],
+  [TerrainType.SUBTERRANEAN]: [],
 } as const satisfies Partial<Record<TerrainType, readonly TerrainTopTexture[]>>;
 
 export const TERRAIN_TEXTURE_PATHS = Object.values(TERRAIN_TOP_TEXTURES)

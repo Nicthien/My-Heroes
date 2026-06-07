@@ -145,6 +145,16 @@ export function generateZoneTerrain(
         } else if (n < 0.1) {
           terrain = TerrainType.MOUNTAIN;
           elevation = 2;
+        } else if (n > 0.6 && n < 0.72) {
+          // Scattered rough badland patches within dirt zones (Stronghold-native, 125 PM).
+          terrain = TerrainType.ROUGH;
+        }
+      } else if (base === TerrainType.ROUGH) {
+        if (n > 0.85) {
+          terrain = TerrainType.MOUNTAIN;
+          elevation = 3;
+        } else if (n < 0.15) {
+          terrain = TerrainType.DIRT;
         }
       } else if (base === TerrainType.SWAMP) {
         if (n > 0.84) {
@@ -275,7 +285,10 @@ function movementCostFor(t: TerrainType): number {
   switch (t) {
     case TerrainType.GRASS:
     case TerrainType.DIRT:
+    case TerrainType.SUBTERRANEAN:
       return 100;
+    case TerrainType.ROUGH:
+      return 125;
     case TerrainType.SAND:
     case TerrainType.FOREST:
       return 150;

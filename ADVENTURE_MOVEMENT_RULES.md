@@ -38,11 +38,16 @@ Roads replace terrain cost:
 
 Terrain costs when no road is present:
 
-- Grass / dirt / water: 100 PM
+- Grass / dirt / water / subterranean: 100 PM
+- Rough: 125 PM
 - Sand / snow / forest: 150 PM
 - Swamp: 175 PM
 - Mountain: 250 PM
 - Lava, walls, and blocking decor: impassable
+
+Subterranean is the underground cave floor (Dungeon-native). Rough is a surface
+badland (Stronghold-native). A future native-terrain bonus may waive the penalty
+above 100 PM when the whole army is native to the tile's terrain.
 
 ## Diagonal Blocking
 

@@ -14,7 +14,10 @@ export const TERRAIN_ANIMATION_FRAME_COUNT = 6;
 export const TERRAIN_TEXTURE_WIDTH = 80;
 export const TERRAIN_TEXTURE_HEIGHT = 56;
 export const LAVA_TEXTURE_PREFIX = "my-heroes-lava";
-export const DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT = 96 * 96;
+// L maps (108×108) are now the largest size (XL is hidden), so detailed .webp
+// terrain textures cover every selectable size. This also disables the procedural
+// `drawTileTexture` grass fallback, which only runs when a top texture is absent.
+export const DETAILED_TERRAIN_TEXTURE_MAX_TILE_COUNT = 108 * 108;
 export const TERRAIN_MICRO_DETAIL_MAX_TILE_COUNT = Number.POSITIVE_INFINITY;
 export const DETAILED_ROAD_TEXTURE_MAX_TILE_COUNT = Number.POSITIVE_INFINITY;
 export const STATIC_DECOR_VIRTUALIZATION_MIN_TILE_COUNT = 64 * 64 + 1;

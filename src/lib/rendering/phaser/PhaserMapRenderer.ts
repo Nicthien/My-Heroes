@@ -102,7 +102,6 @@ import {
 } from "@/lib/rendering/phaser/terrainAnimation";
 import {
   applyTerrainTopTextureCrop,
-  drawTileTexture,
   getTerrainTopTextureTransform,
   isAllowedDecor,
 } from "@/lib/rendering/phaser/decorTextures";
@@ -132,18 +131,6 @@ import {
   getHeroDirection,
   type HeroSpriteAnimation,
 } from "@/lib/rendering/phaser/heroSprite";
-import {
-  drawBoulderCluster,
-  drawBush,
-  drawDeadTree,
-  drawDecorShadow,
-  drawFlowers,
-  drawGrassTuft,
-  drawOakTree,
-  drawPineTree,
-  drawRockCluster,
-  drawSmallRock,
-} from "@/lib/rendering/phaser/decorDrawing";
 import {
   drawRoadSegment,
 } from "@/lib/rendering/phaser/boardAndWallDrawing";
@@ -544,12 +531,9 @@ class PhaserMapScene extends Phaser.Scene {
     this.renderFlatWorldEdge(map);
     const terrainBase = this.add.graphics();
     const terrainCover = this.add.graphics();
-    const decorGraphics = this.add.graphics();
     terrainBase.setDepth(MAP_LAYER_BASE_DEPTH);
     terrainCover.setDepth(MAP_LAYER_COVER_DEPTH);
     this.mapLayer.add(terrainBase);
-    decorGraphics.setDepth(Number.NEGATIVE_INFINITY);
-    this.decorLayer.add(decorGraphics);
     // Group elevated-tile Graphics into one shared Graphics per iso anti-diagonal
     // (x+y band). Each elevated tile was its own Graphics → on XL that's 5-15k
     // unique draw calls per frame. Bands collapse this to ~287 max while keeping
@@ -566,7 +550,7 @@ class PhaserMapScene extends Phaser.Scene {
           if (tile.object?.type === "wall" && tile.object.subtype === "natural" && this.map?.activeLevel !== UNDERGROUND_LEVEL) {
             this.renderNaturalWall(tile, iso.x, iso.y - depth);
           }
-          if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth, decorGraphics);
+          if (tile.decor) this.renderDecor(tile.decor, iso.x, iso.y - depth);
         }
       }
     });
@@ -1027,76 +1011,38 @@ class PhaserMapScene extends Phaser.Scene {
     return `${bucketX}:${bucketY}`;
   }
 
-  private renderDecor(
-    decor: DecorItem,
-    isoX: number,
-    isoY: number,
-    batchGraphics: Phaser.GameObjects.Graphics
-  ) {
+  private renderDecor(decor: DecorItem, isoX: number, isoY: number) {
     const { type: kind } = decor;
     if (!isAllowedDecor(kind)) return;
 
+    // Only blocking decor is visualized, and always as a .webp sprite. Scenic
+    // (non-blocking) decor and any sprite-less kind render nothing — procedural
+    // primitive decor was removed for performance (see AGENTS.md "Visual Assets").
     if (!decor.blocking) {
       return;
     }
 
-    const variant = decor.variant ?? 0;
     const spritePath = DECOR_SPRITES[kind];
-    if (spritePath) {
-      const metrics = BLOCKING_DECOR_SPRITE_METRICS[kind] ?? {
-        size: BLOCKING_DECOR_SPRITE_SIZE,
-        groundOffset: BLOCKING_DECOR_GROUND_OFFSET,
-      };
-      const groundY = isoY + metrics.groundOffset;
-      const origin = BLOCKING_DECOR_ORIGINS[kind] ?? DEFAULT_SPRITE_ORIGIN;
-      this.queueStaticDecorSprite({
-        id: `decor:${isoX}:${isoY}:${kind}:${variant}`,
-        spritePath,
-        x: isoX,
-        y: groundY,
-        displayWidth: metrics.size,
-        displayHeight: metrics.size,
-        originX: origin.originX,
-        originY: origin.originY,
-        depth: groundY,
-      });
-      return;
-    }
+    if (!spritePath) return;
 
-    const baseY = isoY + 2;
-    const scale = 0.92 + variant * 0.08;
-
-    drawDecorShadow(batchGraphics, isoX, baseY, kind);
-
-    switch (kind) {
-      case "tree-pine":
-        drawPineTree(batchGraphics, isoX, baseY, scale);
-        break;
-      case "tree-oak":
-        drawOakTree(batchGraphics, isoX, baseY, scale);
-        break;
-      case "tree-dead":
-        drawDeadTree(batchGraphics, isoX, baseY, scale);
-        break;
-      case "rock-large":
-        drawRockCluster(batchGraphics, isoX, baseY, scale);
-        break;
-      case "rock-small":
-        drawSmallRock(batchGraphics, isoX, baseY, scale);
-        break;
-      case "boulder-cluster":
-        drawBoulderCluster(batchGraphics, isoX, baseY, scale);
-        break;
-      case "bush":
-        drawBush(batchGraphics, isoX, baseY, scale);
-        break;
-      case "flower":
-        drawFlowers(batchGraphics, isoX, baseY, scale, variant);
-        break;
-      case "grass-tuft":
-        drawGrassTuft(batchGraphics, isoX, baseY, scale, variant);
-        break;
-    }
+    const variant = decor.variant ?? 0;
+    const metrics = BLOCKING_DECOR_SPRITE_METRICS[kind] ?? {
+      size: BLOCKING_DECOR_SPRITE_SIZE,
+      groundOffset: BLOCKING_DECOR_GROUND_OFFSET,
+    };
+    const groundY = isoY + metrics.groundOffset;
+    const origin = BLOCKING_DECOR_ORIGINS[kind] ?? DEFAULT_SPRITE_ORIGIN;
+    this.queueStaticDecorSprite({
+      id: `decor:${isoX}:${isoY}:${kind}:${variant}`,
+      spritePath,
+      x: isoX,
+      y: groundY,
+      displayWidth: metrics.size,
+      displayHeight: metrics.size,
+      originX: origin.originX,
+      originY: origin.originY,
+      depth: groundY,
+    });
   }
 
   private renderNaturalWall(tile: MapTile, isoX: number, isoY: number) {
@@ -1776,13 +1722,9 @@ class PhaserMapScene extends Phaser.Scene {
     drawDiamondPath(baseGraphics, isoX, isoY - depth);
     baseGraphics.fillPath();
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, isoY - depth);
-    if (tile.terrain === TerrainType.WATER) {
-      if (renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
-    } else if (tile.terrain === TerrainType.LAVA) {
-      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
+    if (tile.terrain === TerrainType.LAVA) {
       this.addLavaAnimation(tile, isoX, isoY - depth);
-    } else {
-      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(baseGraphics, tile, isoX, isoY - depth);
+    } else if (tile.terrain !== TerrainType.WATER) {
       if (!renderedTopTexture) {
         baseGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
         drawDiamondPath(baseGraphics, isoX, isoY - depth);
@@ -1973,13 +1915,9 @@ class PhaserMapScene extends Phaser.Scene {
     tileGraphics.fillPath();
 
     const renderedTopTexture = this.renderTerrainTopTexture(terrainTexture, tile, isoX, topY, tileDepth + 0.01);
-    if (tile.terrain === TerrainType.WATER) {
-      if (renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
-    } else if (tile.terrain === TerrainType.LAVA) {
-      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
+    if (tile.terrain === TerrainType.LAVA) {
       this.addLavaAnimation(tile, isoX, topY, tileDepth + 0.01);
-    } else {
-      if (!renderedTopTexture && renderMicroDetails) drawTileTexture(tileGraphics, tile, isoX, topY);
+    } else if (tile.terrain !== TerrainType.WATER) {
       if (!renderedTopTexture) {
         tileGraphics.lineStyle(topStroke.width, topStroke.color, topStroke.alpha);
         drawDiamondPath(tileGraphics, isoX, topY);

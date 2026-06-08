@@ -159,6 +159,9 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
       yearNumber: 1,
     },
     currentTurnPlayerId: "p1",
+    // Mocked turn timer so the combat-header countdown badge renders in previews.
+    turnTimeLimit: 600,
+    currentTurnStartedAt: new Date(Date.now() - 200_000).toISOString(),
     map: { width: 12, height: 12, tiles },
     players: [
       {

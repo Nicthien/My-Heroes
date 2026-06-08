@@ -104,12 +104,23 @@ export async function completePlayerTurn(
   turnNumber: number,
   gamePlayerId: string
 ) {
+  // Record the absolute start of this player's turn, so a later CANCEL_END_TURN
+  // resumes the timer from the original deadline — the clock keeps running during
+  // the waiting window, it does not pause.
+  const { data: gameTimerRow } = await supabase
+    .from("games")
+    .select("current_turn_started_at")
+    .eq("id", gameId)
+    .maybeSingle();
+  const turnStartedAt = gameTimerRow?.current_turn_started_at ?? null;
+
   await supabase.from("turns").upsert({
     game_id: gameId,
     game_player_id: gamePlayerId,
     turn_number: turnNumber,
     actions: [],
     is_completed: true,
+    started_at: turnStartedAt,
   }, { onConflict: "game_id,game_player_id,turn_number" });
 
   const lifecycle = await evaluateGameLifecycle(supabase, gameId);
@@ -135,6 +146,7 @@ export async function completePlayerTurn(
 
     await supabase.from("games").update({
       current_turn_player_id: nextPlayer?.id ?? null,
+      current_turn_started_at: new Date().toISOString(),
     }).eq("id", gameId);
     return;
   }
@@ -355,6 +367,7 @@ export async function completePlayerTurn(
   const gameUpdate: Record<string, unknown> = {
     turn_number: nextTurnNumber,
     current_turn_player_id: firstPlayer?.id ?? null,
+    current_turn_started_at: new Date().toISOString(),
   };
   if (nextExternalDwellings) {
     gameUpdate.map_state = { ...mapState, externalDwellings: nextExternalDwellings };
@@ -370,7 +383,7 @@ export async function cancelPlayerTurnCompletion(
 ) {
   const { data: turn, error: turnError } = await supabase
     .from("turns")
-    .select("id,is_completed")
+    .select("id,is_completed,started_at")
     .eq("game_id", gameId)
     .eq("game_player_id", gamePlayerId)
     .eq("turn_number", turnNumber)
@@ -387,9 +400,12 @@ export async function cancelPlayerTurnCompletion(
     .eq("id", turn.id);
   if (updateError) throw updateError;
 
+  // Resume the timer from the turn's ORIGINAL start, so the time spent while the
+  // turn was ended still counts down — cancelling does not pause or refill it.
+  const resumedStartedAt = (turn.started_at as string | null) ?? new Date().toISOString();
   const { error: gameError } = await supabase
     .from("games")
-    .update({ current_turn_player_id: gamePlayerId })
+    .update({ current_turn_player_id: gamePlayerId, current_turn_started_at: resumedStartedAt })
     .eq("id", gameId)
     .eq("turn_number", turnNumber);
   if (gameError) throw gameError;

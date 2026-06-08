@@ -87,7 +87,7 @@ export async function POST(
 
   const { error } = await supabase
     .from("games")
-    .update({ status: "ACTIVE", current_turn_player_id: firstPlayer.id, map_data: finalizedMapData })
+    .update({ status: "ACTIVE", current_turn_player_id: firstPlayer.id, current_turn_started_at: new Date().toISOString(), map_data: finalizedMapData })
     .eq("id", id)
     .select("id")
     .single();

@@ -118,6 +118,12 @@ export const fr = {
   "create.dominationFallback": " La domination reste une victoire de secours.",
   "create.goldTarget": "Or à atteindre",
   "create.turnCount": "Nombre de tours",
+  "create.turnTimerEnable": "Limiter la durée d'un tour",
+  "create.turnTimerHint": "Au-delà de ce délai, le tour du joueur se termine automatiquement.",
+  "create.turnTimerUnlimited": "Aucune limite de temps par tour.",
+  "create.turnTimerUnit.minutes": "minutes",
+  "create.turnTimerUnit.hours": "heures",
+  "create.turnTimerUnit.days": "jours",
   "create.captureNote": "Une ville neutre proche du centre sera désignée comme cible à la création.",
   "create.generationSettings": "Réglages de génération",
   "create.generationSummary": "Ressources {res}% - Bâtiments {bld}% - Monstres {mon}%",
@@ -189,6 +195,13 @@ export const fr = {
   "status.active": "En cours",
   "status.completed": "Terminée",
 
+  // --- Dashboard: soutien / Ko-fi ---
+  "support.button": "Soutenir le jeu",
+  "support.promptTitle": "Un petit coup de pouce ?",
+  "support.promptBody": "Si le jeu te plaît et que tu as envie de me soutenir, offre-moi un petit Ko-fi :-) Merci beaucoup !",
+  "support.promptConfirm": "Offrir un Ko-fi",
+  "support.promptDismiss": "Plus tard",
+
   // --- Dashboard: forced password ---
   "dashboard.changePassword": "Changer le mot de passe",
   "dashboard.changePasswordIntro": "Ce compte utilise un mot de passe temporaire. Choisissez un nouveau mot de passe pour continuer.",
@@ -233,6 +246,7 @@ export const fr = {
   "hud.turnProgressCombat": "Avancement du tour : {percent}% restant, {count} combat(s) actif(s)",
   "hud.turnProgressOf": "Avancement de {name}",
   "hud.turnEnded": "Tour terminé",
+  "hud.turnTimeRemaining": "Temps restant : {time}",
   "hud.turnInProgress": "Tour en cours",
   "hud.dayProgress": "Journée en cours : {percent}% restant",
   "hud.nightAllEnded": "Nuit — tous les joueurs ont terminé",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
+import { useTurnTimer, formatTurnRemaining } from "./useTurnTimer";
 import { HeroPanel } from "./HeroPanel";
 import { GameOverScreen } from "./GameOverScreen";
 import { GameRulesPopup } from "./GameRulesPopup";
@@ -833,6 +834,21 @@ export function HUDContent() {
   };
 
   const turnNotifications = useTurnNotifications({ canAct, isPending, turnNotificationKey });
+  // While it's my active turn, the live clock is the game's current-turn start.
+  // Once I've ended my turn (waiting), anchor to my own turn's recorded start so
+  // the countdown keeps running during the wait instead of disappearing.
+  const myTurnStartedAt = canAct ? gameState.currentTurnStartedAt : (myPlayer?.turnStartedAt ?? null);
+  const { remainingMs: turnTimerRemainingMs, fraction: turnTimerFraction, hasTimer: hasTurnTimer } = useTurnTimer({
+    startedAt: myTurnStartedAt,
+    limitSeconds: gameState.turnTimeLimit ?? null,
+    active: gameState.status === "ACTIVE" && (canAct || isWaitingForPlayers),
+    // Don't auto-end while a combat is active — ending the turn is blocked then.
+    canAct: canAct && !hasActiveCombats,
+    turnKey: `${gameState.id}:${gameState.turnNumber}:${gameState.currentTurnPlayerId}`,
+    onExpire: handleEndTurn,
+  });
+  const turnTimerUrgent = turnTimerRemainingMs !== null && turnTimerRemainingMs <= 30000;
+  const showTurnTimerRing = hasTurnTimer && turnTimerFraction !== null;
 
   const selectedTownFaction = selectedTown
     ? (((selectedTown as { townType?: string }).townType ?? selectedTown.faction ?? "castle") as Faction)
@@ -1621,15 +1637,64 @@ export function HUDContent() {
                 : canAct && !hasActiveCombats
                   ? "border-amber-300 bg-gradient-to-b from-red-600 via-red-800 to-red-950 text-amber-50 shadow-[0_0_30px_rgba(220,38,38,0.5),inset_0_0_0_2px_rgba(252,211,77,0.4)] hover:-translate-y-0.5 hover:from-red-500"
                 : "cursor-not-allowed border-stone-700 bg-stone-900 text-stone-500"
-            }`}
+            } ${showTurnTimerRing ? "!border-2 !border-black/45 shadow-[0_0_28px_rgba(0,0,0,0.45)]" : ""}`}
             disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn"
             data-tutorial="end-turn"
             title={isWaitingForPlayers ? t("hud.cancelEndTurn") : t("hud.endTurn")}
           >
-            <HourglassIcon className="mx-auto h-9 w-9 drop-shadow" />
-            <span className="mt-1 block text-[10px] font-black uppercase tracking-widest">
+            {/* Glossy top-light sheen for a polished, three-dimensional bead. */}
+            <span className="pointer-events-none absolute inset-[3px] rounded-full bg-[radial-gradient(circle_at_50%_22%,rgba(255,255,255,0.32),rgba(255,255,255,0.05)_42%,transparent_62%)]" />
+            {showTurnTimerRing && (
+              <svg
+                aria-hidden
+                viewBox="0 0 100 100"
+                className="pointer-events-none absolute -inset-[5px] h-[calc(100%+10px)] w-[calc(100%+10px)] -rotate-90"
+              >
+                <defs>
+                  <linearGradient id="turnRingGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor={turnTimerUrgent ? "#fee2e2" : "#fef3c7"} />
+                    <stop offset="48%" stopColor={turnTimerUrgent ? "#f87171" : "#fbbf24"} />
+                    <stop offset="100%" stopColor={turnTimerUrgent ? "#dc2626" : "#d97706"} />
+                  </linearGradient>
+                  <filter id="turnRingGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2.4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                {/* Depleted track. */}
+                <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="5.5" />
+                {/* Remaining-time arc. */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="44"
+                  fill="none"
+                  stroke="url(#turnRingGrad)"
+                  strokeWidth="5.5"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 44}
+                  strokeDashoffset={2 * Math.PI * 44 * (1 - (turnTimerFraction ?? 0))}
+                  filter="url(#turnRingGlow)"
+                  className={`transition-[stroke-dashoffset] duration-1000 ease-linear ${turnTimerUrgent ? "animate-pulse" : ""}`}
+                />
+              </svg>
+            )}
+            {hasTurnTimer && turnTimerRemainingMs !== null ? (
+              <span
+                title={t("hud.turnTimeRemaining", { time: formatTurnRemaining(turnTimerRemainingMs) })}
+                className={`relative block font-mono text-lg font-black tabular-nums leading-none tracking-tight [text-shadow:_0_1px_4px_rgba(0,0,0,0.65)] ${turnTimerUrgent ? "animate-pulse text-red-100" : "text-amber-50"}`}
+              >
+                {formatTurnRemaining(turnTimerRemainingMs)}
+              </span>
+            ) : (
+              <HourglassIcon className="relative mx-auto h-9 w-9 drop-shadow" />
+            )}
+            <span className="relative mt-1 block text-[10px] font-black uppercase tracking-[0.18em] [text-shadow:_0_1px_2px_rgba(0,0,0,0.6)]">
               {isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
             </span>
           </button>

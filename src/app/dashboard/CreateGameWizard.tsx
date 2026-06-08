@@ -15,7 +15,7 @@ import {
   VICTORY_CONDITION_META,
 } from "@/lib/game/victory";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
-import { MAP_SIZES, type MapSizeKey, type PreviewStats, randomSeedValue } from "./dashboardConstants";
+import { MAP_SIZES, TURN_TIMER_UNITS, type MapSizeKey, type PreviewStats, type TurnTimerUnit, randomSeedValue } from "./dashboardConstants";
 import { FactionSelect } from "./FactionSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { victoryConditionLabel, victoryConditionDescription } from "@/lib/game/victory";
@@ -62,6 +62,12 @@ export interface CreateGameWizardProps {
   setGoldTarget: (value: number) => void;
   turnLimit: number;
   setTurnLimit: (value: number) => void;
+  turnTimerEnabled: boolean;
+  setTurnTimerEnabled: (value: boolean) => void;
+  turnTimerValue: number;
+  setTurnTimerValue: (value: number) => void;
+  turnTimerUnit: TurnTimerUnit;
+  setTurnTimerUnit: (value: TurnTimerUnit) => void;
   showRmgTuning: boolean;
   setShowRmgTuning: (updater: (value: boolean) => boolean) => void;
   showRmgPreview: boolean;
@@ -118,6 +124,12 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
     setGoldTarget,
     turnLimit,
     setTurnLimit,
+    turnTimerEnabled,
+    setTurnTimerEnabled,
+    turnTimerValue,
+    setTurnTimerValue,
+    turnTimerUnit,
+    setTurnTimerUnit,
     showRmgTuning,
     setShowRmgTuning,
     showRmgPreview,
@@ -287,6 +299,47 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                   />
                   <span>{t("create.generateUnderground")}</span>
                 </label>
+
+                <div className="rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
+                  <label className="flex items-center gap-3 text-sm font-bold text-amber-100">
+                    <input
+                      type="checkbox"
+                      checked={turnTimerEnabled}
+                      onChange={(event) => setTurnTimerEnabled(event.target.checked)}
+                      className="h-4 w-4 accent-amber-500"
+                    />
+                    <span>{t("create.turnTimerEnable")}</span>
+                  </label>
+                  {turnTimerEnabled && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        id="turn-timer-value"
+                        type="number"
+                        min={1}
+                        max={turnTimerUnit === "days" ? 7 : turnTimerUnit === "hours" ? 168 : 10080}
+                        step={1}
+                        value={turnTimerValue}
+                        onChange={(event) => setTurnTimerValue(Math.max(1, Number(event.target.value) || 1))}
+                        className="w-24 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                      />
+                      <select
+                        id="turn-timer-unit"
+                        value={turnTimerUnit}
+                        onChange={(event) => setTurnTimerUnit(event.target.value as TurnTimerUnit)}
+                        className="flex-1 rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-amber-100 focus:border-amber-400 focus:outline-none"
+                      >
+                        {TURN_TIMER_UNITS.map((unit) => (
+                          <option key={unit} value={unit}>
+                            {t(`create.turnTimerUnit.${unit}` as TranslationKey)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <p className="mt-1.5 text-[11px] leading-snug text-amber-200/55">
+                    {turnTimerEnabled ? t("create.turnTimerHint") : t("create.turnTimerUnlimited")}
+                  </p>
+                </div>
 
                 <div className="rounded-lg border border-amber-700/40 bg-stone-950/60 p-3">
                   <label htmlFor="victory-type" className="mb-1 block text-xs font-bold uppercase tracking-wider text-amber-200/80">

@@ -899,6 +899,8 @@ export interface Player {
   turnOrder: number;
   exploredTiles: string[];
   hasEndedTurn: boolean;
+  /** ISO start of this player's current-round turn (for the turn timer); null if not started/recorded. */
+  turnStartedAt?: string | null;
   turnProgressRatio?: number;
   scoreStats?: import("./score").ScoreStats;
   /** Authoritative total score computed server-side from full (un-sanitized) data. */
@@ -975,6 +977,10 @@ export interface GameState {
   turnNumber: number;
   calendar: GameCalendar;
   currentTurnPlayerId: string;
+  /** Per-turn time budget in seconds (from game_config); null/absent = no timer. */
+  turnTimeLimit?: number | null;
+  /** ISO timestamp of when the current player's turn started (for the turn timer). */
+  currentTurnStartedAt?: string | null;
   winnerId?: string;
   victoryCondition?: VictoryCondition;
   activeCombats?: PersistentCombat[];

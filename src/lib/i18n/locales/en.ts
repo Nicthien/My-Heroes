@@ -119,6 +119,12 @@ export const en: Record<TranslationKey, string> = {
   "create.dominationFallback": " Domination remains a fallback victory.",
   "create.goldTarget": "Gold to reach",
   "create.turnCount": "Number of turns",
+  "create.turnTimerEnable": "Limit each turn's duration",
+  "create.turnTimerHint": "Past this delay, the player's turn ends automatically.",
+  "create.turnTimerUnlimited": "No time limit per turn.",
+  "create.turnTimerUnit.minutes": "minutes",
+  "create.turnTimerUnit.hours": "hours",
+  "create.turnTimerUnit.days": "days",
   "create.captureNote": "A neutral town near the center will be designated as the target at creation.",
   "create.generationSettings": "Generation settings",
   "create.generationSummary": "Resources {res}% - Buildings {bld}% - Monsters {mon}%",
@@ -190,6 +196,13 @@ export const en: Record<TranslationKey, string> = {
   "status.active": "In progress",
   "status.completed": "Completed",
 
+  // --- Dashboard: support / Ko-fi ---
+  "support.button": "Support the game",
+  "support.promptTitle": "Fancy chipping in?",
+  "support.promptBody": "If you're enjoying the game and feel like supporting me, buy me a little Ko-fi :-) Thank you so much!",
+  "support.promptConfirm": "Buy a Ko-fi",
+  "support.promptDismiss": "Later",
+
   // --- Dashboard: forced password ---
   "dashboard.changePassword": "Change password",
   "dashboard.changePasswordIntro": "This account uses a temporary password. Choose a new password to continue.",
@@ -234,6 +247,7 @@ export const en: Record<TranslationKey, string> = {
   "hud.turnProgressCombat": "Turn progress: {percent}% remaining, {count} active combat(s)",
   "hud.turnProgressOf": "Progress of {name}",
   "hud.turnEnded": "Turn ended",
+  "hud.turnTimeRemaining": "Time remaining: {time}",
   "hud.turnInProgress": "Turn in progress",
   "hud.dayProgress": "Day in progress: {percent}% remaining",
   "hud.nightAllEnded": "Night — all players have finished",

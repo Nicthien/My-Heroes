@@ -24,6 +24,7 @@ export function toGame(row: DbRow) {
     mapHeight: row.map_height,
     turnNumber: row.turn_number,
     currentTurnPlayerId: row.current_turn_player_id,
+    currentTurnStartedAt: row.current_turn_started_at ?? null,
     winnerId: row.winner_id,
     mapData: row.map_data,
     gameConfig: row.game_config,
@@ -209,6 +210,7 @@ export function toTurn(row: DbRow) {
     turnNumber: row.turn_number,
     actions: row.actions ?? [],
     isCompleted: row.is_completed,
+    startedAt: row.started_at ?? null,
   };
 }
 
@@ -501,6 +503,7 @@ function gameSyncRelationsSelect(includeGates: boolean, includeReinforcementRequ
     map_height,
     turn_number,
     current_turn_player_id,
+    current_turn_started_at,
     winner_id,
     map_state,
     game_config,

@@ -281,7 +281,7 @@ function buildSpellHero(
   };
 }
 
-function buildManualCombatResult(
+export function buildManualCombatResult(
   winnerSide: "attacker" | "defender",
   before: CombatBoardUnit[],
   after: CombatBoardUnit[],
@@ -307,7 +307,7 @@ function getSideLosses(side: "attacker" | "defender", before: CombatBoardUnit[],
     .filter((loss) => loss.lost > 0);
 }
 
-async function persistResolvedCombat(
+export async function persistResolvedCombat(
   supabase: SupabaseAdmin,
   combat: {
     game_id: string;

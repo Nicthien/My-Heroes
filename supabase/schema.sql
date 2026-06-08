@@ -38,6 +38,9 @@ create table public.games (
   map_height integer not null default 36,
   turn_number integer not null default 1,
   current_turn_player_id uuid,
+  -- When the current player's turn began; used with game_config.turnTimeLimit
+  -- (seconds) to auto-end a turn once its time budget is exhausted.
+  current_turn_started_at timestamptz,
   winner_id uuid,
   map_data jsonb not null,
   game_config jsonb not null default '{}',
@@ -214,6 +217,9 @@ create table public.turns (
   turn_number integer not null,
   actions jsonb not null default '[]',
   is_completed boolean not null default false,
+  -- Absolute start of this player's turn; lets CANCEL_END_TURN resume the timer
+  -- from the original deadline so the clock keeps running (it does not pause).
+  started_at timestamptz,
   unique (game_id, game_player_id, turn_number)
 );
 

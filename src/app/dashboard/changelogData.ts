@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.1",
+    date: "2026-06-08",
+    summary: "Tableau de bord d'administration enrichi de statistiques globales.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Panneau Statistiques (admin)** — un bouton « Stats » à droite du bouton « Admin » ouvre un tableau de bord réservé aux administrateurs : totaux (utilisateurs, parties par statut, joueurs humains vs IA, combats, héros), moyennes (tours par partie, joueurs par partie), courbe des parties créées sur 30 jours, répartition des factions et classement des meilleurs joueurs.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-06-08",
     summary:

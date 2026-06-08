@@ -5,6 +5,20 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.1] - 2026-06-08
+
+Tableau de bord d'administration enrichi de statistiques globales.
+
+### Ajouté
+
+- **Panneau Statistiques (admin)** — un bouton « Stats » à droite du bouton
+  « Admin » ouvre un tableau de bord réservé aux administrateurs : totaux
+  (utilisateurs, parties par statut, joueurs humains vs IA, combats, héros),
+  moyennes (tours par partie, tours par partie terminée, joueurs par partie),
+  courbe des parties créées sur 30 jours, répartition des factions, parties par
+  statut et classement des meilleurs joueurs. Graphiques en SVG/CSS, sans
+  dépendance supplémentaire.
+
 ## [1.1.0] - 2026-06-08
 
 Grand alignement sur les règles de Heroes III : nouveaux terrains, terrain natif,
@@ -108,5 +122,7 @@ partie, exploration, économie, combats et fin de partie.
   routes, décor) et interface (HUD, écran de ville, écran de combat) en français.
 - **Déploiement** — image Docker mono-conteneur pour héberger le frontend.
 
+[1.1.1]: https://github.com/Nicthien/My-Heroes/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/Nicthien/My-Heroes/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Nicthien/My-Heroes/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/

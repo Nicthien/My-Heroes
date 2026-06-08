@@ -93,7 +93,7 @@ export enum HeroClass {
   BATTLE_MAGE = "battle_mage",
   BEASTMASTER = "beastmaster",
   WITCH = "witch",
-  PLANESWALKER = "planeswalker",
+  CHANNELER = "channeler",
   ELEMENTALIST = "elementalist",
 }
 

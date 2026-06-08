@@ -124,7 +124,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 1600, [[UnitType.DRAGON_FLY, 35]], { experience: 1600, resources: { sulfur: 5 }, creatures: [{ unitType: UnitType.DRAGON_FLY, count: 5 }] }),
     variant(10, 2400, [[UnitType.DRAGON_FLY, 55], [UnitType.WYVERN, 6]], { experience: 2400, resources: { sulfur: 8 }, creatures: [{ unitType: UnitType.DRAGON_FLY, count: 8 }] }),
   ]),
-  dragon_utopia: bank("dragon_utopia", "Utopie des dragons", "Tresor mythique protégé par plusieurs dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.SNOW], 0.18, [
+  dragon_utopia: bank("dragon_utopia", "Sanctuaire des dragons", "Tresor mythique protégé par plusieurs dragons.", [TerrainType.MOUNTAIN, TerrainType.LAVA, TerrainType.SNOW], 0.18, [
     variant(30, 9000, [[UnitType.GREEN_DRAGON, 8], [UnitType.RED_DRAGON, 4]], { gold: 12000, resources: spreadRare(4), artifactTokens: ["major", "major"] }),
     variant(30, 12500, [[UnitType.RED_DRAGON, 8], [UnitType.GOLD_DRAGON, 4]], { gold: 20000, resources: spreadRare(6), artifactTokens: ["major", "relic"] }),
     variant(30, 16500, [[UnitType.BLACK_DRAGON, 6], [UnitType.GOLD_DRAGON, 6]], { gold: 30000, resources: spreadRare(8), artifactTokens: ["relic", "relic"] }),
@@ -142,7 +142,7 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 2600, [[UnitType.SENTINEL_AUTOMATON, 18], [UnitType.GUNSLINGER, 15]], { experience: 2600, gold: 2500, resources: { ore: 14, crystals: 4 }, creatures: [{ unitType: UnitType.AUTOMATON, count: 3 }] }),
     variant(10, 4200, [[UnitType.JUGGERNAUT, 4], [UnitType.BOUNTY_HUNTER, 28]], { experience: 4200, gold: 4500, resources: { ore: 20, crystals: 6 }, artifactTokens: ["major"] }),
   ]),
-  griffin_conservatory: bank("griffin_conservatory", "Conservatoire de griffons", "Rocher-nid de griffons royaux.", [TerrainType.GRASS, TerrainType.MOUNTAIN, TerrainType.SNOW], 0.8, [
+  griffin_conservatory: bank("griffin_conservatory", "Aire des griffons", "Rocher-nid de griffons royaux.", [TerrainType.GRASS, TerrainType.MOUNTAIN, TerrainType.SNOW], 0.8, [
     variant(30, 1000, [[UnitType.GRIFFIN, 28]], { creatures: [{ unitType: UnitType.ANGEL, count: 1 }] }),
     variant(30, 1600, [[UnitType.GRIFFIN, 42], [UnitType.ROYAL_GRIFFIN, 10]], { creatures: [{ unitType: UnitType.ANGEL, count: 2 }] }),
     variant(30, 2500, [[UnitType.ROYAL_GRIFFIN, 45]], { creatures: [{ unitType: UnitType.ANGEL, count: 3 }] }),

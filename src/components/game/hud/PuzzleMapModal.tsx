@@ -20,7 +20,7 @@ const TERRAIN_COLORS: Record<string, string> = {
 };
 
 /**
- * The Grail puzzle map (HOMM3-style). It shows a FIXED fragment of the adventure
+ * The Grail puzzle map. It shows a FIXED fragment of the adventure
  * map; each visited Obelisk uncovers one piece of that fragment, and the last
  * Obelisk uncovers the last piece. The exact buried tile is only pinpointed once
  * the reveal threshold is reached. Read-only: digging happens on the adventure

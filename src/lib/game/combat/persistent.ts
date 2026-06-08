@@ -39,7 +39,7 @@ export { COMBAT_BASE_ROWS, COMBAT_COLS, COMBAT_ROWS, getHexDistance, getHexNeigh
 // First Aid Tent heal ranges by First Aid skill level (Shadow of Death rules):
 // index 0 = no skill, 1 = basic, 2 = advanced, 3 = expert. The tent rolls a
 // random amount within the range and restores only the top creature of the
-// targeted stack (no resurrection). See https://heroes.thelazy.net/index.php/First_Aid
+// targeted stack (no resurrection).
 const FIRST_AID_HEAL_RANGES: ReadonlyArray<readonly [number, number]> = [
   [1, 25],
   [40, 50],
@@ -449,7 +449,7 @@ export function executeManualCombatAction(params: {
           target.hasRetaliated = true;
         }
         // Double attack: strike a second time if both stacks survive. The follow-up
-        // blow does not provoke an additional retaliation (HoMM3).
+        // blow does not provoke an additional retaliation.
         if (target.count > 0 && actor.count > 0 && attackerAbilities.includes("double_attack")) {
           if (actionType === "SHOOT" && !allyAmmoCart) actor.shots = Math.max(0, actor.shots - 1);
           const secondRoll = rollCombatDamage({
@@ -569,7 +569,7 @@ function deferUnitToWaitPhase(turnQueue: string[], currentUnitId: string, units:
   const livingIds = new Set(units.filter((unit) => unit.count > 0).map((unit) => unit.id));
   const remaining = turnQueue.filter((id) => id !== currentUnitId && livingIds.has(id));
   const nonWaited = remaining.filter((id) => !byId.get(id)?.waited);
-  // HoMM3: units that waited act later in the round, and the wait phase resolves
+  // Units that waited act later in the round, and the wait phase resolves
   // slowest-first. Re-sort the whole wait group (including the unit that just waited)
   // by ascending speed; the stable sort keeps the latest waiter last among equal speeds.
   const waited = [...remaining.filter((id) => byId.get(id)?.waited), currentUnitId]

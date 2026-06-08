@@ -25,7 +25,7 @@ export function TownBallistaTab({
   onBuyMachine: (townId: string, heroId: string, machine: "ballista" | "firstAid" | "ammoCart") => Promise<void>;
 }) {
   const { t } = useI18n();
-  // HoMM3: the Blacksmith forges only this faction's war machine(s).
+  // The Blacksmith forges only this faction's war machine(s).
   const machines = getBlacksmithMachines(selectedTownFaction).map((key) => ({
     key,
     labelKey: WAR_MACHINE_LABEL_KEY[key].label as TranslationKey,

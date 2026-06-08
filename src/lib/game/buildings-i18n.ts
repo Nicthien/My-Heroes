@@ -100,7 +100,7 @@ const BUILDING_DESC_EN: Record<string, string> = {
   "Révèle une tres grande zone autour du bâtiment.": "Reveals a very large area around the building.",
   "Signale la côte et prépare un bonus de navigation.": "Marks the coast and prepares a navigation bonus.",
   "Transforme les créatures vivantes en squelettes.": "Turns living creatures into skeletons.",
-  "Téléporte le héros vers la Stargate liée.": "Teleports the hero to the linked Stargate.",
+  "Téléporte le héros vers le Portail stellaire lié.": "Teleports the hero to the linked Stellar Portal.",
 
   // Creature bank descriptions (FR source in creature-banks.ts)
   "Autel elementaire defendu par des gardiens magiques.": "Elemental altar defended by magical guardians.",

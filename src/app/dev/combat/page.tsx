@@ -139,7 +139,7 @@ function buildMockState(scenario: CombatPreviewScenario, phase: CombatPreviewPha
       type: "adventure_building",
       id: "dragon-utopia-preview",
       subtype: "dragon_utopia",
-      name: "Utopie des dragons",
+      name: "Sanctuaire des dragons",
       guardianPower: 280,
     };
   }

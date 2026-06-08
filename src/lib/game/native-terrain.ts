@@ -1,7 +1,7 @@
 import { TerrainType, type UnitType } from "./types";
 import { getCreature, type CreatureGroupKey } from "./creature-catalog";
 
-// HoMM3 native terrain per faction. An army whose creatures are all native to a
+// Native terrain per faction. An army whose creatures are all native to a
 // terrain moves across it without penalty (adventure map) and gains +1 morale on it
 // (combat). Stronghold is native to Rough, Dungeon to Subterranean.
 export const FACTION_NATIVE_TERRAIN: Partial<Record<CreatureGroupKey, TerrainType>> = {
@@ -30,7 +30,7 @@ export function getNativeTerrainForUnit(unitType: UnitType): TerrainType | undef
 /**
  * The terrain a hero army moves across without penalty, or null when the army is
  * empty or its creatures do not all share a single native terrain. Used to waive the
- * adventure-map movement penalty (HoMM3 native-terrain rule).
+ * adventure-map movement penalty (native-terrain rule).
  */
 export function getArmyNativeTerrain(army: ReadonlyArray<{ unitType: UnitType }>): TerrainType | null {
   if (army.length === 0) return null;

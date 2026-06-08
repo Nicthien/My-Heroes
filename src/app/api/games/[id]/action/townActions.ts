@@ -81,7 +81,7 @@ export async function handleTownAction({
 
     const buildings = (town.buildings ?? []) as string[];
     if (buildings.includes(building)) return NextResponse.json({ error: "Bâtiment déjà construit" }, { status: 400 });
-    // One building per town per day (HoMM3). The UI hides the build buttons, but the
+    // One building per town per day. The UI hides the build buttons, but the
     // limit must be enforced server-side or a replayed/crafted request could build
     // unlimited buildings in a single turn.
     const currentTurn = Number(game.turnNumber ?? 1);
@@ -130,7 +130,7 @@ export async function handleTownAction({
     const immediateGrowth = getGrowthForBuiltTownBuilding(townFaction, building);
     let nextRecruits = town.availableRecruits ?? {};
     let recruitsChanged = false;
-    // Upgrading a dwelling replaces its base creatures (HoMM3): migrate any
+    // Upgrading a dwelling replaces its base creatures: migrate any
     // un-recruited base units into the upgraded type so the tier keeps a single
     // recruit pool instead of stacking a base pool and an upgraded pool.
     if (rule.replacesUnit && rule.unlocksUnit) {

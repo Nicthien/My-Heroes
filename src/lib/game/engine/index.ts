@@ -116,7 +116,7 @@ export function effectiveMovementCost(tile: MapTile, nativeTerrain?: TerrainType
   if (tile.road === "gravel") return 65;
   if (tile.road === "dirt") return 75;
   const base = getMovementCost(tile.terrain);
-  // HoMM3 native-terrain rule: an all-native army crosses its home terrain at no
+  // Native-terrain rule: an all-native army crosses its home terrain at no
   // penalty (cost clamped to the 100 PM base).
   if (nativeTerrain && tile.terrain === nativeTerrain && base > 100) return 100;
   return base;

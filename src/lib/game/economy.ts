@@ -320,7 +320,7 @@ export function getGrowthForBuiltTownBuilding(faction: Faction, building: Buildi
 export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingType | string>): Partial<Record<UnitType, number>> {
   const rules = getFactionBuildingRules(faction);
   const growth: Partial<Record<UnitType, number>> = {};
-  // A built upgrade dwelling replaces its base dwelling's growth pool: in HoMM3 the
+  // A built upgrade dwelling replaces its base dwelling's growth pool: the
   // tier produces a single (upgraded) creature pool, not base + upgraded. Collect the
   // base units whose upgrade is built so we can skip their base growth below.
   const replacedBaseUnits = new Set<UnitType>();
@@ -331,7 +331,7 @@ export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingT
     if (rule?.grail) hasGrail = true;
   }
 
-  // HoMM3: the fortification ladder and the Grail multiply the BASE dwelling growth
+  // The fortification ladder and the Grail multiply the BASE dwelling growth
   // before any flat per-creature bonuses. Citadel ×1.5, Castle ×2 (Fort alone = no
   // growth bonus), Grail an additional ×1.5.
   const fortLevel = getTownFortLevel(buildings);

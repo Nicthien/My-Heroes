@@ -516,6 +516,8 @@ function buildShowcaseMap(): GameMap {
     [AdventureBuildingType.WATER_MILL, 29, 23],
     [AdventureBuildingType.WATER_WHEEL, 31, 23],
     [AdventureBuildingType.ABANDONED_WAGON, 33, 23],
+    [AdventureBuildingType.TREASURE_CHEST, 31, 17],
+    [AdventureBuildingType.PANDORA_BOX, 33, 17],
     [AdventureBuildingType.CRATE, 17, 25],
     [AdventureBuildingType.SKELETON, 19, 25],
     [AdventureBuildingType.OBELISK, 21, 25],

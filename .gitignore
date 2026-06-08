@@ -43,6 +43,10 @@ next-env.d.ts
 
 # temporary work files (e.g. source images during sprite creation)
 tmp-*
+/tmp/
+
+# local debug/preview screenshots (not used by the app)
+/screenshots/
 
 # Supabase Studio scratch snippets — not part of the source of truth (schema.sql / migrations)
 /supabase/snippets/

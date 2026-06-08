@@ -43,7 +43,7 @@ type AdventureActionHelpers = {
     object: MapBuildingLocation["object"];
     position: Position;
     explored: Set<string>;
-    choice?: HeroStatKey;
+    choice?: HeroStatKey | "gold" | "experience";
   }) => Promise<unknown>;
   logPlayerAction: (
     supabase: SupabaseAdminClient,
@@ -52,7 +52,7 @@ type AdventureActionHelpers = {
     gamePlayer: MinimalPlayer,
     action: ActionRecord,
   ) => Promise<void>;
-  normalizeHeroStatChoice: (value: unknown) => HeroStatKey | undefined;
+  normalizeHeroStatChoice: (value: unknown) => HeroStatKey | "gold" | "experience" | undefined;
 };
 
 type HandleAdventureActionParams = {

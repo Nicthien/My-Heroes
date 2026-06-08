@@ -238,6 +238,8 @@ export const MAP_SPRITES = {
     buoy: "/assets/sprites/map/adventure-buoy.webp",
     flotsam: "/assets/sprites/map/adventure-flotsam.webp",
     sea_chest: "/assets/sprites/map/adventure-sea-chest.webp",
+    treasure_chest: "/assets/sprites/map/adventure-treasure-chest.webp",
+    pandora_box: "/assets/sprites/map/adventure-pandora-box.webp",
     war_machine_factory: "/assets/sprites/town-buildings/blacksmith.webp",
     external_dwelling: "/assets/sprites/map/external-dwelling.webp",
     ancient_altar: "/assets/sprites/map/creature-bank-ancient-altar.webp",

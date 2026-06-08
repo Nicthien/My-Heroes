@@ -69,7 +69,7 @@ type PendingMove = {
   finalDestination?: Position;
 };
 
-type AdventureChoiceValue = "attack" | "defense" | "spellPower" | "knowledge";
+type AdventureChoiceValue = "attack" | "defense" | "spellPower" | "knowledge" | "gold" | "experience";
 
 type AdventureChoice = {
   value: AdventureChoiceValue;

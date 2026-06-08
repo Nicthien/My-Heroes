@@ -35,7 +35,7 @@ import { placeDecor } from "./decor";
 import { NEUTRAL_CASTLE_VALUE } from "./value";
 import { generateLandmass } from "./landmass";
 import { carveHydrology } from "./hydrology";
-import { placeAdventureBuildings, repairUnreachableAdventureBuildings } from "./adventure-buildings";
+import { placeAdventureBuildings, placeSinglePandoraBox, repairUnreachableAdventureBuildings } from "./adventure-buildings";
 import { RmgTuning, normalizeRmgTuning } from "./rmg-tuning";
 import { placeLargeMountainMassifs } from "./large-obstacles";
 import { applyWorldEdge } from "./world-edge";
@@ -506,6 +506,8 @@ interface GenerateMapLayerOptions extends GenerateMapOptions {
   template: MapTemplate;
   mapLevel: MapLevelId;
   forcedCenters?: Map<string, Position>;
+  /** Place the single map-wide Pandora's Box on this layer (underground when present). */
+  placePandoraBox?: boolean;
 }
 
 export function generateMap(opts: GenerateMapOptions): GameMap;
@@ -533,6 +535,8 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
       fullTemplate,
       template: surfaceTemplate,
       mapLevel: SURFACE_LEVEL,
+      // No underground: the unique Pandora's Box goes on the surface.
+      placePandoraBox: true,
     });
   }
 
@@ -554,6 +558,8 @@ export function generateMap(arg1: GenerateMapOptions | number, arg2?: number): G
     template: undergroundTemplate,
     mapLevel: UNDERGROUND_LEVEL,
     forcedCenters: buildUndergroundForcedCenters(resolvedTemplate, surface.zones, opts.width, opts.height),
+    // Underground exists: the unique Pandora's Box is hidden down here.
+    placePandoraBox: true,
   });
   finalizeUndergroundCavernNetwork(underground, resolvedTemplate, surface);
   applySurfaceContourToUnderground(surface, underground);
@@ -746,6 +752,10 @@ function generateMapLayer(opts: GenerateMapLayerOptions): GameMap {
     finalReachable,
   );
   repairUnreachableAdventureBuildings(map, finalReachable);
+
+  // Place the unique Pandora's Box last, after reachability repair, so it is never
+  // pruned. It only lands on the flagged layer (underground when one exists).
+  if (opts.placePandoraBox) placeSinglePandoraBox({ tiles, zoneGrid, width, height, rng });
 
   return map;
 }

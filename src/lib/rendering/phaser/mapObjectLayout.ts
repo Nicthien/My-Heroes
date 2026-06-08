@@ -107,6 +107,8 @@ export const ADVENTURE_BUILDING_ORIGINS: Record<string, SpriteOrigin> = {
   water_wheel: { originX: 0.5, originY: 0.9 },
   abandoned_wagon: { originX: 0.5, originY: 0.86 },
   crate: { originX: 0.5, originY: 0.82 },
+  treasure_chest: { originX: 0.5, originY: 0.82 },
+  pandora_box: { originX: 0.5, originY: 0.82 },
   skeleton: { originX: 0.5, originY: 0.8 },
   obelisk: { originX: 0.5, originY: 0.92 },
   warrior_tomb: { originX: 0.5, originY: 0.86 },

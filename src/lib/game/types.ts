@@ -598,6 +598,8 @@ export enum AdventureBuildingType {
   BUOY = "buoy",
   FLOTSAM = "flotsam",
   SEA_CHEST = "sea_chest",
+  TREASURE_CHEST = "treasure_chest",
+  PANDORA_BOX = "pandora_box",
   WAR_MACHINE_FACTORY = "war_machine_factory",
 }
 

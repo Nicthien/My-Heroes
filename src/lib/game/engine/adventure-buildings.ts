@@ -45,10 +45,19 @@ export function placeAdventureBuildings(ctx: PlacementContext, tuning: RmgTuning
     const choices = pickAdventureTypesForZone(ctx, zoneId, targetCount);
     const reachable = zoneReachableTiles(ctx, zoneId);
 
+    let placedTreasureChest = false;
     for (const type of choices) {
       const tile = findAdventureTile(ctx, zoneId, type, reachable);
       if (!tile) continue;
       placeAdventureBuilding(tile, type);
+      if (type === AdventureBuildingType.TREASURE_CHEST) placedTreasureChest = true;
+    }
+
+    // Guarantee at least one Treasure Chest in every populated zone, so each biome
+    // always has a treasure to find regardless of the random pool draw.
+    if (targetCount > 0 && !placedTreasureChest) {
+      const chestTile = findAdventureTile(ctx, zoneId, AdventureBuildingType.TREASURE_CHEST, reachable);
+      if (chestTile) placeAdventureBuilding(chestTile, AdventureBuildingType.TREASURE_CHEST);
     }
 
     const stargateTile = findAdventureTile(ctx, zoneId, AdventureBuildingType.STARGATE, reachable);
@@ -109,6 +118,7 @@ function pickAdventureTypesForZone(ctx: PlacementContext, zoneId: number, count:
     AdventureBuildingType.WATER_WHEEL,
     AdventureBuildingType.ABANDONED_WAGON,
     AdventureBuildingType.CRATE,
+    AdventureBuildingType.TREASURE_CHEST,
     AdventureBuildingType.SKELETON,
     AdventureBuildingType.OBELISK,
     AdventureBuildingType.WARRIOR_TOMB,
@@ -251,6 +261,47 @@ function placeCreatureBanks(ctx: PlacementContext, tuningMultiplier: number): vo
   }
 }
 
+/**
+ * Places exactly one heavily-guarded Pandora's Box in a neutral zone (treasure/junction,
+ * never a player start), preferring treasure zones. Called on the underground layer when
+ * one exists, otherwise the surface — so it lands underground whenever possible. Returns
+ * true once placed.
+ */
+export function placeSinglePandoraBox(ctx: PlacementContext): boolean {
+  const neutralZones = ctx.zoneGrid.meta
+    .map((meta, zoneId) => ({ meta, zoneId }))
+    .filter((entry) => entry.meta.type !== "player");
+  const ordered = shuffle(ctx.rng, neutralZones).sort((a, b) => {
+    const treasureA = a.meta.type === "treasure" ? 1 : 0;
+    const treasureB = b.meta.type === "treasure" ? 1 : 0;
+    if (treasureA !== treasureB) return treasureB - treasureA;
+    return (b.meta.value ?? 0) - (a.meta.value ?? 0);
+  });
+  const place = (tile: MapTile): boolean => {
+    const id = `pandora-box-${tile.x}-${tile.y}`;
+    placeAdventureBuilding(tile, AdventureBuildingType.PANDORA_BOX, id, undefined, getCreatureBankGuardPower("pandora_box", id));
+    return true;
+  };
+
+  // First pass: a well-spaced creature-bank-grade tile.
+  for (const { zoneId } of ordered) {
+    const tile = findCreatureBankTile(ctx, zoneId, "pandora_box", zoneReachableTiles(ctx, zoneId));
+    if (tile) return place(tile);
+  }
+  // Fallback (guarantees placement): any reachable, empty, passable land tile off-road.
+  for (const { zoneId } of ordered) {
+    const reachable = zoneReachableTiles(ctx, zoneId);
+    for (const pos of shuffle(ctx.rng, tilesInZone(ctx.zoneGrid, ctx.width, ctx.height, zoneId))) {
+      const tile = ctx.tiles[pos.y][pos.x];
+      if (tile.object || tile.decor?.blocking || tile.road || tile.worldEdge) continue;
+      if (!tile.isPassable || tile.terrain === TerrainType.WATER || tile.terrain === TerrainType.LAVA) continue;
+      if (!isReachableAdventureCandidate(tile, reachable)) continue;
+      return place(tile);
+    }
+  }
+  return false;
+}
+
 function placeExternalDwellings(ctx: PlacementContext, tuningMultiplier: number): void {
   const seed = `${ctx.width}x${ctx.height}`;
   for (let zoneId = 0; zoneId < ctx.zoneGrid.meta.length; zoneId++) {
@@ -318,6 +369,7 @@ function creatureBankTargetForZone(type: string, value: number, tuningMultiplier
 function pickCreatureBanksForZone(ctx: PlacementContext, zoneId: number, count: number): CreatureBankType[] {
   const meta = ctx.zoneGrid.meta[zoneId];
   return shuffle(ctx.rng, CREATURE_BANK_TYPES)
+    .filter((type) => CREATURE_BANK_DEFINITIONS[type].rarity > 0) // rarity 0 = special (e.g. Pandora), never random
     .map((type) => {
       const definition = CREATURE_BANK_DEFINITIONS[type];
       const terrainMatch = definition.preferredTerrain.includes(meta.baseTerrain);

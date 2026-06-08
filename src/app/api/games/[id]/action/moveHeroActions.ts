@@ -111,7 +111,7 @@ export type MoveHeroHelpers = {
     object: MapObject;
     position: Position;
     explored: Set<string>;
-    choice?: HeroStatKey;
+    choice?: HeroStatKey | "gold" | "experience";
   }) => Promise<MoveInteraction>;
 };
 

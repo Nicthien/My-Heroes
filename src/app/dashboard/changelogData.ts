@@ -22,6 +22,44 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.0",
+    date: "2026-06-08",
+    summary:
+      "Grand alignement sur les règles de Heroes III : nouveaux terrains, terrain natif, objets de trésor, capacités d'unités et progression des héros.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Terrains Rude & Souterrain** — deux nouveaux biomes (badland rocheux et sol de caverne) avec leurs textures peintes à la main ; le souterrain remplace la terre sur les niveaux souterrains.",
+          "**Terrain natif** — une armée entièrement native à un terrain le traverse sans pénalité de mouvement (Stronghold/Rude, Donjon/Souterrain, etc.).",
+          "**Coffre au trésor** — au choix, de l'or (1000/1500/2000) ou de l'expérience (1500/2250/3000) ; au moins un par zone.",
+          "**Boîte de Pandore** — une seule par carte, cachée dans une zone neutre (de préférence en souterrain) et gardée par des dragons ; livre or, ressources rares, expérience et un artefact majeur.",
+          "**Capacités d'unités en combat** — pas de riposte, double attaque, et ripostes multiples (griffons) sont désormais appliquées.",
+          "**Montée de niveau des héros** — chaque niveau accorde un point de compétence primaire, pondéré par la classe (mécanique centrale de HoMM3).",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Croissance de créatures** — la Citadelle (×1.5) et le Château (×2) augmentent la croissance de base ; les tanières améliorées remplacent le flux de base au lieu de le cumuler.",
+          "**Intelligence** augmente le mana maximum (+25/50/100 %) et **Mysticisme** régénère du mana chaque jour.",
+          "Croissance hebdomadaire et recrues migrées correctement lors de l'amélioration d'une tanière.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Plafond du bonus d'attaque** ramené à ×4 (+300 %) conforme à HoMM3, au lieu de ×5.",
+          "**Pénalité de tir** — la longue portée s'applique au-delà de 10 hexes et se cumule désormais avec l'obstacle (×0.25).",
+          "**Phase « Attendre »** résolue du plus lent au plus rapide.",
+          "Limite « un bâtiment par ville et par jour » désormais appliquée côté serveur.",
+          "Coût du **Silo de ressources** corrigé (5000 or).",
+          "La puissance des unités (auto-résolution, IA) utilise leur valeur de combat plutôt que leur prix en or.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.0.1",
     date: "2026-06-06",
     sections: [

@@ -518,7 +518,7 @@ export function getTownBuildingRules(
       label: "Silo de ressources",
       description: `Produit ${formatProduction(RESOURCE_SILO_PRODUCTION[safeFaction])} chaque jour.`,
       category: "common",
-      cost: { gold: 1500, wood: 5, ore: 5 },
+      cost: { gold: 5000, wood: 5, ore: 5 },
       requires: [BuildingType.MARKET],
       dailyProduction: RESOURCE_SILO_PRODUCTION[safeFaction],
     },

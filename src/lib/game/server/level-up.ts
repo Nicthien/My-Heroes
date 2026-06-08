@@ -88,7 +88,7 @@ export async function applyHeroExperienceGain(
   );
 
   for (let level = oldLevel + 1; level <= newLevel; level++) {
-    const options = generateSkillChoices(skills, `${gameId}:${heroId}:level:${level}`, bannedNewSkills);
+    const options = generateSkillChoices(skills, `${gameId}:${heroId}:level:${level}`, bannedNewSkills, heroClass);
     if (options.length === 0) continue;
     heroPending.push({ level, options, primaryGain: primaryGainByLevel.get(level) });
     for (const id of options) {

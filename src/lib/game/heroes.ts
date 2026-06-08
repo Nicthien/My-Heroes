@@ -37,17 +37,16 @@ export const CLASS_STARTING_STATS: Record<HeroClass, HeroStats> = {
   [HeroClass.BATTLE_MAGE]: { attack: 2, defense: 1, spellPower: 1, knowledge: 1, morale: 0, luck: 0 },
   [HeroClass.BEASTMASTER]: { attack: 1, defense: 2, spellPower: 1, knowledge: 1, morale: 0, luck: 0 },
   [HeroClass.WITCH]: { attack: 0, defense: 1, spellPower: 2, knowledge: 2, morale: 0, luck: 0 },
-  [HeroClass.PLANESWALKER]: { attack: 2, defense: 2, spellPower: 1, knowledge: 1, morale: 0, luck: 0 },
+  [HeroClass.CHANNELER]: { attack: 2, defense: 2, spellPower: 1, knowledge: 1, morale: 0, luck: 0 },
   [HeroClass.ELEMENTALIST]: { attack: 0, defense: 0, spellPower: 3, knowledge: 3, morale: 0, luck: 0 },
 };
 
 export type PrimaryStatKey = "attack" | "defense" | "spellPower" | "knowledge";
 
-// HoMM3 per-class primary-skill advancement probabilities for level-ups (levels 2-9),
-// as published (heroes.thelazy.net / HoMM3 manual). Order: [attack, defense, spellPower,
-// knowledge], each row summing to 100. HoMM3 shifts toward a more balanced spread from
-// level 10+, but we deliberately keep the class table at every level: it preserves class
-// identity and avoids encoding the less-cleanly-documented high-level table.
+// Per-class primary-skill advancement probabilities for level-ups (levels 2-9).
+// Order: [attack, defense, spellPower, knowledge], each row summing to 100. We keep
+// the same class table at every level: it preserves class identity and avoids a
+// separate high-level table.
 const PRIMARY_SKILL_GROWTH: Record<HeroClass, [number, number, number, number]> = {
   [HeroClass.KNIGHT]: [35, 45, 10, 10],
   [HeroClass.CLERIC]: [20, 15, 30, 35],
@@ -65,7 +64,7 @@ const PRIMARY_SKILL_GROWTH: Record<HeroClass, [number, number, number, number]> 
   [HeroClass.BATTLE_MAGE]: [30, 20, 25, 25],
   [HeroClass.BEASTMASTER]: [30, 50, 10, 10],
   [HeroClass.WITCH]: [5, 15, 40, 40],
-  [HeroClass.PLANESWALKER]: [45, 25, 15, 15],
+  [HeroClass.CHANNELER]: [45, 25, 15, 15],
   [HeroClass.ELEMENTALIST]: [15, 15, 35, 35],
 };
 
@@ -258,15 +257,15 @@ export const HERO_ROSTER: HeroTemplate[] = [
   { id: "andrel", name: "Andrel", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Intelligence" },
   { id: "tivan", name: "Tivan", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Œil d'aigle" },
   { id: "adrisa", name: "Adrisa", class: HeroClass.WITCH, faction: Faction.FORTRESS, specialty: "Magie du feu" },
-  // Primordial Orb - Planeswalkers
-  { id: "pasrel", name: "Pasrel", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
-  { id: "thuran", name: "Thuran", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
-  { id: "ignelle", name: "Ignelle", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
-  { id: "laciel", name: "Laciel", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
-  { id: "monar", name: "Monar", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
-  { id: "erdavon", name: "Erdavon", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
-  { id: "fioren", name: "Fioren", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
-  { id: "kalthis", name: "Kalthis", class: HeroClass.PLANESWALKER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
+  // Primordial Orb - Channelers
+  { id: "pasrel", name: "Pasrel", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
+  { id: "thuran", name: "Thuran", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
+  { id: "ignelle", name: "Ignelle", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
+  { id: "laciel", name: "Laciel", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
+  { id: "monar", name: "Monar", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires psychiques" },
+  { id: "erdavon", name: "Erdavon", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires de terre" },
+  { id: "fioren", name: "Fioren", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires de feu" },
+  { id: "kalthis", name: "Kalthis", class: HeroClass.CHANNELER, faction: Faction.CONFLUX, specialty: "Élémentaires d'eau" },
   // Primordial Orb - Elementalists
   { id: "lunara", name: "Lunara", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Mur de feu" },
   { id: "brisar", name: "Brisar", class: HeroClass.ELEMENTALIST, faction: Faction.CONFLUX, specialty: "Hâte" },

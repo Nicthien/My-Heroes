@@ -48,7 +48,7 @@ export const CHANGELOG: ChangelogRelease[] = [
           "**Coffre au trésor** — au choix, de l'or (1000/1500/2000) ou de l'expérience (1500/2250/3000) ; au moins un par zone.",
           "**Boîte de Pandore** — une seule par carte, cachée dans une zone neutre (de préférence en souterrain) et gardée par des dragons ; livre or, ressources rares, expérience et un artefact majeur.",
           "**Capacités d'unités en combat** — pas de riposte, double attaque, et ripostes multiples (griffons) sont désormais appliquées.",
-          "**Montée de niveau des héros** — chaque niveau accorde un point de compétence primaire, pondéré par la classe (mécanique centrale de HoMM3).",
+          "**Montée de niveau des héros** — chaque niveau accorde un point de compétence primaire, pondéré par la classe.",
         ],
       },
       {
@@ -62,7 +62,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       {
         category: "fixed",
         items: [
-          "**Plafond du bonus d'attaque** ramené à ×4 (+300 %) conforme à HoMM3, au lieu de ×5.",
+          "**Plafond du bonus d'attaque** ramené à ×4 (+300 %), au lieu de ×5.",
           "**Pénalité de tir** — la longue portée s'applique au-delà de 10 hexes et se cumule désormais avec l'obstacle (×0.25).",
           "**Phase « Attendre »** résolue du plus lent au plus rapide.",
           "Limite « un bâtiment par ville et par jour » désormais appliquée côté serveur.",

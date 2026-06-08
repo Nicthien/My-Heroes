@@ -57,7 +57,7 @@ export async function applyHeroExperienceGain(
     return;
   }
 
-  // HoMM3: every level-up raises one primary skill, weighted by hero class. Roll the
+  // Every level-up raises one primary skill, weighted by hero class. Roll the
   // gains for each level reached, accumulate the stat increments, and remember which
   // stat advanced at each level so the level-up panel can show it.
   const heroClass = (hero.hero_class ?? HeroClass.KNIGHT) as HeroClass;

@@ -44,8 +44,8 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   },
   [AdventureBuildingType.STARGATE]: {
     type: AdventureBuildingType.STARGATE,
-    label: "Stargate",
-    description: "Téléporte le héros vers la Stargate liée.",
+    label: "Portail stellaire",
+    description: "Téléporte le héros vers le Portail stellaire lié.",
     visitMode: "repeatable",
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.MOUNTAIN],
     rarity: 0.35,
@@ -84,7 +84,7 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
   },
   [AdventureBuildingType.MARLETTO_TOWER]: {
     type: AdventureBuildingType.MARLETTO_TOWER,
-    label: "Tour de Marletto",
+    label: "Tour des Sentinelles",
     description: "Accorde +1 Défense au héros.",
     visitMode: "once",
     preferredTerrain: [TerrainType.GRASS, TerrainType.SNOW, TerrainType.MOUNTAIN],

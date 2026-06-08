@@ -2163,7 +2163,7 @@
     },
     {
       "type": "scorpicore",
-      "label": "Scorpicore",
+      "label": "Manticore royale",
       "group": "dungeon",
       "tier": 6,
       "upgradeLevel": 2,
@@ -3410,7 +3410,7 @@
     },
     {
       "type": "ayssid",
-      "label": "Ayssid",
+      "label": "Rapace des tempêtes",
       "group": "cove",
       "tier": 4,
       "upgradeLevel": 2,
@@ -3482,7 +3482,7 @@
     },
     {
       "type": "nix",
-      "label": "Nix",
+      "label": "Crabe cuirassé",
       "group": "cove",
       "tier": 6,
       "upgradeLevel": 0,
@@ -3504,7 +3504,7 @@
     },
     {
       "type": "nix_warrior",
-      "label": "Guerrier nix",
+      "label": "Crabe-guerrier",
       "group": "cove",
       "tier": 6,
       "upgradeLevel": 2,
@@ -3549,7 +3549,7 @@
     },
     {
       "type": "haspid",
-      "label": "Haspide",
+      "label": "Serpent des abysses",
       "group": "cove",
       "tier": 7,
       "upgradeLevel": 2,

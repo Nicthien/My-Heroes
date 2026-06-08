@@ -112,7 +112,7 @@ export async function handleSkillAction({
     }
 
     const machine = String(action.machine ?? "ballista") as WarMachineKey;
-    // HoMM3: the Blacksmith forges this faction's war machine. Need the building and a
+    // The Blacksmith forges this faction's war machine. Need the building and a
     // machine that this faction actually sells.
     if (!(town.buildings ?? []).includes(BuildingType.BLACKSMITH)) {
       return NextResponse.json({ error: "Cette ville n'a pas de Forgeron" }, { status: 400 });

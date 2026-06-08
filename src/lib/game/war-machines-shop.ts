@@ -2,7 +2,7 @@ import { Faction } from "./types";
 
 export type WarMachineKey = "ballista" | "firstAid" | "ammoCart";
 
-/** Gold cost of each war machine, aligned with Heroes of Might & Magic III. */
+/** Gold cost of each war machine. */
 export const WAR_MACHINE_COST: Record<WarMachineKey, number> = {
   ballista: 1500,
   firstAid: 750,
@@ -10,7 +10,7 @@ export const WAR_MACHINE_COST: Record<WarMachineKey, number> = {
 };
 
 /**
- * Which war machine each faction's Blacksmith forges (HoMM3). Every faction can buy
+ * Which war machine each faction's Blacksmith forges. Every faction can buy
  * its own machine once the town has a Blacksmith; the War Machine Factory on the
  * adventure map sells all three to anyone.
  */

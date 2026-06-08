@@ -76,14 +76,13 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { id: "diplomacy", label: "Diplomatie", description: flat("Permet aux armées neutres de se joindre ou s'enfuir.") },
 ];
 
-// HoMM3 secondary-skill availability. Each hero class has a set of skills it can
-// NEVER be offered on level-up (probability 0 in the original game). Necromancy is the
-// headline one — only the two Necropolis classes (Death Knight, Necromancer) can learn
-// it. The rest are the canonical class-specific zeros: Fire/Water Magic, Navigation,
-// and the asymmetric Necropolis bans (First Aid / Leadership / Estates). A banned skill
+// Secondary-skill availability. Each hero class has a set of skills it can
+// NEVER be offered on level-up (probability 0). Necromancy is the headline one —
+// only the two Necropolis classes (Death Knight, Necromancer) can learn it. The
+// rest are the class-specific zeros: Fire/Water Magic, Navigation, and the
+// asymmetric Necropolis bans (First Aid / Leadership / Estates). A banned skill
 // only blocks being offered it as a NEW skill — an already-known skill (gained from a
-// witch hut, university, scholar, event, etc.) can still be upgraded, matching HoMM3.
-// Source: heroes.thelazy.net secondary-skill probability tables (RoE/Complete/HD).
+// witch hut, university, scholar, event, etc.) can still be upgraded.
 export const CLASS_FORBIDDEN_SKILLS: Record<HeroClass, SkillId[]> = {
   [HeroClass.KNIGHT]: ["necromancy"],
   [HeroClass.CLERIC]: ["necromancy"],
@@ -101,7 +100,7 @@ export const CLASS_FORBIDDEN_SKILLS: Record<HeroClass, SkillId[]> = {
   [HeroClass.BATTLE_MAGE]: ["necromancy", "navigation"],
   [HeroClass.BEASTMASTER]: ["necromancy", "fire_magic"],
   [HeroClass.WITCH]: ["necromancy"],
-  [HeroClass.PLANESWALKER]: ["necromancy"],
+  [HeroClass.CHANNELER]: ["necromancy"],
   [HeroClass.ELEMENTALIST]: ["necromancy"],
 };
 
@@ -196,7 +195,7 @@ export function generateSkillChoices(
   const known = new Set(Object.keys(currentSkills) as SkillId[]);
   const slotsLeft = Object.keys(currentSkills).length < MAX_HERO_SKILLS;
   // Merge caller-supplied bans (e.g. dedup across pending level-ups) with the class's
-  // HoMM3 forbidden skills, so a banned skill can never be offered as a new candidate.
+  // forbidden skills, so a banned skill can never be offered as a new candidate.
   const banned = new Set<SkillId>(bannedFromNew ?? []);
   for (const id of getForbiddenNewSkills(heroClass)) banned.add(id);
   const newCandidates = SKILL_DEFINITIONS
@@ -248,13 +247,13 @@ export function getScoutingBonus(skills: HeroSkills | null | undefined): number 
   return getSkillLevelValue(skills, "scouting");
 }
 
-// Intelligence raises maximum spell points (HoMM3): Basic +25%, Advanced +50%, Expert +100%.
+// Intelligence raises maximum spell points: Basic +25%, Advanced +50%, Expert +100%.
 export function getIntelligencePercent(skills: HeroSkills | null | undefined): number {
   const lvl = getSkillLevelValue(skills, "intelligence");
   return lvl === 1 ? 25 : lvl === 2 ? 50 : lvl === 3 ? 100 : 0;
 }
 
-// Mysticism regenerates spell points each day (HoMM3): +1 / +2 / +3 per day.
+// Mysticism regenerates spell points each day: +1 / +2 / +3 per day.
 export function getMysticismRegen(skills: HeroSkills | null | undefined): number {
   return getSkillLevelValue(skills, "mysticism");
 }

@@ -177,7 +177,7 @@ export async function handleAdventureAction({
     const mapState = (game.mapState as Record<string, unknown>) ?? {};
     const grailFound = Boolean(mapState.grailFound);
 
-    // Digging always burns the rest of the day's movement (HOMM3 rule).
+    // Digging always burns the rest of the day's movement.
     await supabase.from("heroes").update({ movement: 0 }).eq("id", hero.id);
 
     const onSpot = Boolean(

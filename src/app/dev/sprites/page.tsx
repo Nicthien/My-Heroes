@@ -161,10 +161,10 @@ const ARTIFACT_BONUS_LABELS: Record<keyof ArtifactStatsBonus, string> = {
 };
 
 const ARTIFACT_COMBO_LABELS: Record<string, string> = {
-  armor_of_the_damned: "Armure des damnés",
-  power_of_the_dragon_father: "Pouvoir du père-dragon",
-  titans_thunder: "Tonnerre des titans",
-  angelic_alliance: "Alliance angélique",
+  armor_of_the_damned: "Parure du Damné",
+  power_of_the_dragon_father: "Héritage du Drake",
+  titans_thunder: "Furie du Colosse",
+  angelic_alliance: "Concorde Céleste",
 };
 
 const ADVENTURE_BUILDING_DETAILS: Record<string, { label: string; description: string }> = {
@@ -181,8 +181,8 @@ const ADVENTURE_BUILDING_DETAILS: Record<string, { label: string; description: s
     description: "Une fois capturé, augmente le mouvement maritime de tous les héros du joueur.",
   },
   "adventure-stargate": {
-    label: "Stargate",
-    description: "Téléporte le héros vers une autre stargate appartenant au même joueur.",
+    label: "Portail stellaire",
+    description: "Téléporte le héros vers un autre portail stellaire appartenant au même joueur.",
   },
   "adventure-arena": {
     label: "Arène",
@@ -193,7 +193,7 @@ const ADVENTURE_BUILDING_DETAILS: Record<string, { label: string; description: s
     description: "Accorde +1 Attaque au héros qui le visite.",
   },
   "adventure-marletto-tower": {
-    label: "Tour de Marletto",
+    label: "Tour des Sentinelles",
     description: "Accorde +1 Défense au héros qui la visite.",
   },
   "adventure-star-axis": {
@@ -453,14 +453,14 @@ const SPRITES_EN: Record<string, string> = {
   Pieds: "Feet", Anneau: "Ring", Divers: "Misc",
   Attaque: "Attack", "Défense": "Defense", Puissance: "Spell Power", Connaissance: "Knowledge",
   Moral: "Morale", Chance: "Luck", "Déplacement": "Movement", "Déplacement mer": "Sea movement",
-  "Armure des damnés": "Armor of the Damned",
-  "Pouvoir du père-dragon": "Power of the Dragon Father",
-  "Tonnerre des titans": "Titan's Thunder",
-  "Alliance angélique": "Angelic Alliance",
+  "Parure du Damné": "Regalia of the Damned",
+  "Héritage du Drake": "Legacy of the Drake",
+  "Furie du Colosse": "Wrath of the Colossus",
+  "Concorde Céleste": "Celestial Concord",
 
   // Adventure building labels
-  Observatoire: "Observatory", "Feu de camp": "Campfire", Phare: "Lighthouse", Stargate: "Stargate",
-  "Arène": "Arena", "Camp de mercenaires": "Mercenary Camp", "Tour de Marletto": "Marletto Tower",
+  Observatoire: "Observatory", "Feu de camp": "Campfire", Phare: "Lighthouse", "Portail stellaire": "Stellar Portal",
+  "Arène": "Arena", "Camp de mercenaires": "Mercenary Camp", "Tour des Sentinelles": "Sentinel Tower",
   "Axe étoilé": "Star Axis", "Jardin de révélation": "Garden of Revelation", "Pierre de savoir": "Learning Stone",
   "École de guerre": "School of War", "École de magie": "School of Magic",
   "Bibliothèque d'illumination": "Library of Enlightenment", Cartographe: "Cartographer",
@@ -481,8 +481,8 @@ const SPRITES_EN: Record<string, string> = {
     "Grants a small amount of gold and a random resource. Vanishes once visited.",
   "Une fois capturé, augmente le mouvement maritime de tous les héros du joueur.":
     "Once captured, increases the sea movement of all the player's heroes.",
-  "Téléporte le héros vers une autre stargate appartenant au même joueur.":
-    "Teleports the hero to another stargate owned by the same player.",
+  "Téléporte le héros vers un autre portail stellaire appartenant au même joueur.":
+    "Teleports the hero to another stellar portal owned by the same player.",
   "Permet de choisir un entraînement : +2 Attaque ou +2 Défense pour le héros.":
     "Lets you pick a training: +2 Attack or +2 Defense for the hero.",
   "Accorde +1 Attaque au héros qui le visite.": "Grants +1 Attack to the visiting hero.",

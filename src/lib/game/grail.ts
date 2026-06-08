@@ -5,7 +5,7 @@ import { getFactionBuildingRules } from "./economy";
 /**
  * The Grail mechanic — fully outside the normal town build tree.
  *
- * Flow (HOMM3-style):
+ * Flow:
  *  1. A single buried Grail tile is chosen at game creation and stored in
  *     `games.game_config.grail` (see {@link normalizeGrailLocation}).
  *  2. Visiting Obelisks reveals the puzzle map; once a player has visited

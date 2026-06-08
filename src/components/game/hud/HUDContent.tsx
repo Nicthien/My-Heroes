@@ -889,7 +889,7 @@ export function HUDContent() {
   const hasMageUniversity =
     selectedTownFactionForTabs === Faction.CONFLUX &&
     Boolean(selectedTown?.buildings.includes(BuildingType.UNIQUE_1));
-  // HoMM3: every faction's Blacksmith forges its own war machine, so any town with a
+  // Every faction's Blacksmith forges its own war machine, so any town with a
   // Blacksmith can equip a hero (not just Stronghold).
   const hasBlacksmith = Boolean(selectedTown?.buildings.includes(BuildingType.BLACKSMITH));
   const hasShipyard = Boolean(selectedTown && hasShipyardBuilding(selectedTownFaction, selectedTown.buildings));

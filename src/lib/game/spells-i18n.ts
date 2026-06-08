@@ -8,7 +8,7 @@ const SPELL_EFFECT_EN: Record<SpellId, string> = {
   lightning_bolt: "Deals air damage to a target.",
   destroy_undead: "Deals damage to all undead.",
   chain_lightning: "Strikes up to five troops, with reduced damage on each jump.",
-  titans_lightning_bolt: "Requires the Titan's Thunder artifact. Deals 600 damage to a target.",
+  titans_lightning_bolt: "Requires the Wrath of the Colossus artifact. Deals 600 damage to a target.",
   death_ripple: "Deals damage to all living creatures.",
   meteor_shower: "Deals earth damage in an area.",
   implosion: "Deals heavy damage to a target.",

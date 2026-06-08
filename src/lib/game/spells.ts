@@ -101,7 +101,7 @@ export const SPELLS: SpellDefinition[] = [
   { id: "lightning_bolt", label: "Éclair", school: "air", context: "combat", level: 2, cost: { standard: 10, expert: 8 }, kind: "damage", implemented: true, effect: "Inflige des dégâts d'air à une cible.", damage: damage([10, 20, 50], 25) },
   { id: "destroy_undead", label: "Détruire les morts-vivants", school: "air", context: "combat", level: 3, cost: { standard: 15, expert: 12 }, kind: "damage", implemented: true, effect: "Inflige des dégâts à tous les morts-vivants.", damage: damage([10, 20, 50], 10) },
   { id: "chain_lightning", label: "Chaîne d'éclairs", school: "air", context: "combat", level: 4, cost: { standard: 24, expert: 20 }, kind: "damage", implemented: true, effect: "Frappe jusqu'à cinq troupes, dégâts reduits à chaque saut.", damage: damage([25, 50, 100], 40) },
-  { id: "titans_lightning_bolt", label: "Éclair de Titan", school: "air", context: "combat", level: 5, cost: { standard: 0, expert: 0 }, kind: "damage", implemented: true, effect: "Necessite l'artefact Tonnerre des Titans. Inflige 600 dégâts à une cible.", damage: damage([600, 600, 600], 0) },
+  { id: "titans_lightning_bolt", label: "Éclair de Titan", school: "air", context: "combat", level: 5, cost: { standard: 0, expert: 0 }, kind: "damage", implemented: true, effect: "Necessite l'artefact Furie du Colosse. Inflige 600 dégâts à une cible.", damage: damage([600, 600, 600], 0) },
   { id: "death_ripple", label: "Onde de mort", school: "earth", context: "combat", level: 2, cost: { standard: 10, expert: 8 }, kind: "damage", implemented: true, effect: "Inflige des dégâts à toutes les créatures vivantes.", damage: damage([10, 20, 30], 5) },
   { id: "meteor_shower", label: "Pluie de météores", school: "earth", context: "combat", level: 4, cost: { standard: 16, expert: 12 }, kind: "damage", implemented: true, effect: "Inflige des dégâts de terre dans une zone.", damage: damage([25, 50, 100], 25) },
   { id: "implosion", label: "Implosion", school: "earth", context: "combat", level: 5, cost: { standard: 30, expert: 25 }, kind: "damage", implemented: true, effect: "Inflige de lourds dégâts à une cible.", damage: damage([100, 200, 300], 75) },
@@ -189,7 +189,7 @@ type ManaHeroInput = {
 
 export function getHeroMaxMana(hero: ManaHeroInput) {
   const knowledge = Number(hero.stats?.knowledge ?? hero.knowledge ?? 0);
-  // HoMM3: Intelligence raises the spell-point ceiling above the base knowledge × 10.
+  // Intelligence raises the spell-point ceiling above the base knowledge × 10.
   const intelligencePercent = getIntelligencePercent(hero.skills);
   return Math.max(0, Math.floor(knowledge * 10 * (1 + intelligencePercent / 100)));
 }

@@ -251,12 +251,12 @@ export async function runAdventureBuildingVisit({
   if (buildingType === AdventureBuildingType.STARGATE) {
     const target = findStargateDestination(mapData, object.targetId);
     if (!target) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Cette Stargate ne repond pas." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Ce Portail stellaire ne répond pas." };
     }
 
     const landing = findTeleportLanding(mapData, target);
     if (!landing) {
-      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La sortie de la Stargate est bloquée." };
+      return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "La sortie du Portail stellaire est bloquée." };
     }
 
     await supabase.from("heroes").update({ x: landing.x, y: landing.y }).eq("id", hero.id);
@@ -270,7 +270,7 @@ export async function runAdventureBuildingVisit({
       from: position,
       to: landing,
       destination: landing,
-      message: "Stargate activee : teleportation effectuee.",
+      message: "Portail stellaire activé : téléportation effectuée.",
     };
   }
 
@@ -358,7 +358,7 @@ export async function runAdventureBuildingVisit({
 
   if (buildingType === AdventureBuildingType.MARLETTO_TOWER) {
     await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, "defense", 1);
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Tour de Marletto visitée : +1 Défense." };
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Tour des Sentinelles visitée : +1 Défense." };
   }
 
   if (buildingType === AdventureBuildingType.STAR_AXIS) {
@@ -560,7 +560,7 @@ export async function runAdventureBuildingVisit({
   }
 
   if (buildingType === AdventureBuildingType.TREASURE_CHEST) {
-    // HoMM3: random tier — gold 1000/1500/2000 OR experience 1500/2250/3000.
+    // Random tier — gold 1000/1500/2000 OR experience 1500/2250/3000.
     const tier = Math.floor(makeRng(`${gameId}:${object.id}:chest`)() * 3);
     const goldReward = [1000, 1500, 2000][tier] ?? 1000;
     const xpReward = [1500, 2250, 3000][tier] ?? 1500;

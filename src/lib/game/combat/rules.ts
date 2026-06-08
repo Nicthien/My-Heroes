@@ -117,7 +117,7 @@ export function getAttackProfile(params: {
 
   if (isMelee && actor.ranged) penaltyReasons.push("corps-à-corps");
 
-  // HoMM3: each shooting penalty halves damage and they stack — long range (>10 hexes)
+  // Each shooting penalty halves damage and they stack — long range (>10 hexes)
   // and an obstacle/wall on the line together give ×0.25, not a single ×0.5.
   const damagePenalty = Math.pow(0.5, penaltyReasons.length);
   return {
@@ -238,7 +238,7 @@ export function getAttackDefenseMultiplier(
   );
   const defenseValue = defender.defended ? Math.ceil(baseDefenseValue * 1.2) : baseDefenseValue;
   const diff = attackValue - defenseValue;
-  // HoMM3: +5% damage per attack point over defense, capped at +300% (×4, reached at +60),
+  // +5% damage per attack point over defense, capped at +300% (×4, reached at +60),
   // and −2.5% per defense point over attack, floored at −70% (×0.3, reached at −28).
   if (diff > 0) return Math.min(4, 1 + 0.05 * diff);
   if (diff < 0) return Math.max(0.3, 1 - 0.025 * Math.abs(diff));

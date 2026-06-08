@@ -23,11 +23,11 @@ import { getPersonalityProfile, mergeDifficultyProfile } from "./strategy/person
 import { computePosture } from "./strategy/posture";
 
 export const AI_BUILD_PRIORITY: BuildingType[] = [
-  // Tavern gates the Town Hall (canonical HoMM3 hall chain), so it comes first.
+  // Tavern gates the Town Hall (canonical hall chain), so it comes first.
   BuildingType.TAVERN,
   BuildingType.TOWN_HALL,
   BuildingType.MARKET,
-  // The Fort gates every creature dwelling (canonical HoMM3 tree).
+  // The Fort gates every creature dwelling (canonical dwelling tree).
   BuildingType.FORT,
   BuildingType.DWELLING_1,
   BuildingType.RESOURCE_SILO,

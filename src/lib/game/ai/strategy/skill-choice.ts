@@ -1,5 +1,5 @@
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
-import type { HeroSkills, SkillId } from "@/lib/game/skills";
+import { sanitizePendingSkillEntry, type HeroSkills, type SkillId } from "@/lib/game/skills";
 import type { AiContext, AiHero } from "../types";
 import type { AiPersonality } from "./personality";
 import { getPersonalityProfile } from "./personality";
@@ -32,11 +32,15 @@ export async function consumePendingSkillChoices(
   for (const hero of heroes) {
     const pending = nextMap[hero.id];
     if (!pending || pending.length === 0) continue;
-    const heroSkillsRow = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
+    const heroSkillsRow = await supabase.from("heroes").select("skills,hero_class").eq("id", hero.id).maybeSingle();
     let currentSkills = ((heroSkillsRow.data?.skills ?? {}) as HeroSkills);
+    const heroClass = (heroSkillsRow.data?.hero_class ?? undefined) as string | undefined;
     let remainingForHero = pending;
     for (const entry of pending) {
-      const choice = pickSkill(entry.options, currentSkills, personality, hero);
+      // Drop options forbidden for this class before the AI commits to one (handles
+      // pending choices generated before class-based bans existed).
+      const sanitized = sanitizePendingSkillEntry(entry, currentSkills, heroClass, `${context.game.id}:${hero.id}:level:${entry.level}`);
+      const choice = pickSkill(sanitized.options, currentSkills, personality, hero);
       if (!choice) continue;
       const current = currentSkills[choice];
       const nextLevel: "basic" | "advanced" | "expert" =

@@ -12,7 +12,7 @@ import { isSingleMapRewardBuilding } from "./adventure-buildings";
 import { computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "./engine";
 import { normalizeMapLevel, positionLevel, SURFACE_LEVEL, UNDERGROUND_LEVEL } from "./map-levels";
 import { createNeutralArmyStacksForTile, getDominantUnitType } from "./neutral-armies";
-import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "./skills";
+import { countSkillLevels, generateSkillChoices, sanitizePendingSkillEntry, type HeroSkills, type SkillId } from "./skills";
 import { normalizeTownBuildings } from "./town-buildings";
 import { normalizeScoreStats } from "./score";
 import { normalizeVictoryCondition } from "./victory";
@@ -214,17 +214,21 @@ function getVisiblePendingSkillChoices(params: {
   gameId: string;
   heroId: string;
   heroLevel: number;
+  heroClass: HeroClass;
   skills: HeroSkills;
   mapState: Record<string, unknown>;
 }) {
   const pendingMap = (params.mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: SkillId[] }>> | undefined) ?? {};
-  const pending = pendingMap[params.heroId] ?? [];
+  const pendingRaw = pendingMap[params.heroId] ?? [];
+  const pending = pendingRaw.map((entry) =>
+    sanitizePendingSkillEntry(entry, params.skills, params.heroClass, `${params.gameId}:${params.heroId}:level:${entry.level}`),
+  );
   const learnedFromLevels = countSkillLevels(params.skills);
   const expectedFromLevels = Math.max(0, Math.floor(Number(params.heroLevel ?? 1)) - 1);
   if (pending.length > 0 || learnedFromLevels >= expectedFromLevels) return pending;
 
   const level = learnedFromLevels + 2;
-  const options = generateSkillChoices(params.skills, `${params.gameId}:${params.heroId}:level:${level}`);
+  const options = generateSkillChoices(params.skills, `${params.gameId}:${params.heroId}:level:${level}`, undefined, params.heroClass);
   return options.length > 0 ? [{ level, options }] : pending;
 }
 
@@ -256,6 +260,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
         gameId: String(data.id ?? ""),
         heroId: hero.id,
         heroLevel: hero.level,
+        heroClass: (hero.class ?? "knight") as HeroClass,
         skills,
         mapState,
       });

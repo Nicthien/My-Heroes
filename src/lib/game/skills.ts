@@ -1,3 +1,5 @@
+import { HeroClass } from "./types";
+
 export type SkillLevel = "basic" | "advanced" | "expert";
 export const SKILL_LEVEL_VALUES: Record<SkillLevel, number> = { basic: 1, advanced: 2, expert: 3 };
 
@@ -74,6 +76,61 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { id: "diplomacy", label: "Diplomatie", description: flat("Permet aux armées neutres de se joindre ou s'enfuir.") },
 ];
 
+// HoMM3 secondary-skill availability. Each hero class has a set of skills it can
+// NEVER be offered on level-up (probability 0 in the original game). Necromancy is the
+// headline one — only the two Necropolis classes (Death Knight, Necromancer) can learn
+// it. The rest are the canonical class-specific zeros: Fire/Water Magic, Navigation,
+// and the asymmetric Necropolis bans (First Aid / Leadership / Estates). A banned skill
+// only blocks being offered it as a NEW skill — an already-known skill (gained from a
+// witch hut, university, scholar, event, etc.) can still be upgraded, matching HoMM3.
+// Source: heroes.thelazy.net secondary-skill probability tables (RoE/Complete/HD).
+export const CLASS_FORBIDDEN_SKILLS: Record<HeroClass, SkillId[]> = {
+  [HeroClass.KNIGHT]: ["necromancy"],
+  [HeroClass.CLERIC]: ["necromancy"],
+  [HeroClass.RANGER]: ["necromancy", "fire_magic"],
+  [HeroClass.DRUID]: ["necromancy"],
+  [HeroClass.ALCHEMIST]: ["necromancy"],
+  [HeroClass.WIZARD]: ["necromancy"],
+  [HeroClass.DEMONIAC]: ["necromancy"],
+  [HeroClass.HERETIC]: ["necromancy"],
+  [HeroClass.DEATH_KNIGHT]: ["first_aid", "estates"],
+  [HeroClass.NECROMANCER]: ["first_aid", "leadership"],
+  [HeroClass.OVERLORD]: ["necromancy", "water_magic"],
+  [HeroClass.WARLOCK]: ["necromancy"],
+  [HeroClass.BARBARIAN]: ["necromancy", "water_magic"],
+  [HeroClass.BATTLE_MAGE]: ["necromancy", "navigation"],
+  [HeroClass.BEASTMASTER]: ["necromancy", "fire_magic"],
+  [HeroClass.WITCH]: ["necromancy"],
+  [HeroClass.PLANESWALKER]: ["necromancy"],
+  [HeroClass.ELEMENTALIST]: ["necromancy"],
+};
+
+// Skills this hero class can never be offered as NEW skills on level-up.
+export function getForbiddenNewSkills(heroClass: HeroClass | string | null | undefined): Set<SkillId> {
+  if (!heroClass) return new Set();
+  return new Set(CLASS_FORBIDDEN_SKILLS[heroClass as HeroClass] ?? []);
+}
+
+// Repair a pending skill-choice entry generated before class-based bans existed: if any
+// stored option is now forbidden for this class, deterministically regenerate the entry
+// from the same seed so an already-running game stops offering e.g. Necromancy to a
+// non-Necropolis hero. Both the display path and the LEARN_SKILL validation call this
+// with identical inputs, so the offered and accepted option sets always match.
+export function sanitizePendingSkillEntry(
+  entry: { level: number; options: SkillId[] },
+  currentSkills: HeroSkills,
+  heroClass: HeroClass | string | null | undefined,
+  seed: string,
+): { level: number; options: SkillId[] } {
+  const forbidden = getForbiddenNewSkills(heroClass);
+  if (forbidden.size === 0 || !entry.options.some((id) => forbidden.has(id))) return entry;
+  const options = generateSkillChoices(currentSkills, seed, undefined, heroClass);
+  return {
+    ...entry,
+    options: options.length > 0 ? options : entry.options.filter((id) => !forbidden.has(id)),
+  };
+}
+
 export type HeroSkills = Partial<Record<SkillId, SkillLevel>>;
 
 export function getSkillLevel(skills: HeroSkills | null | undefined, id: SkillId): SkillLevel | null {
@@ -133,11 +190,15 @@ export function generateSkillChoices(
   currentSkills: HeroSkills,
   seed: string,
   bannedFromNew?: Set<SkillId>,
+  heroClass?: HeroClass | string | null,
 ): SkillId[] {
   const upgradable = (Object.keys(currentSkills) as SkillId[]).filter((s) => currentSkills[s] !== "expert");
   const known = new Set(Object.keys(currentSkills) as SkillId[]);
   const slotsLeft = Object.keys(currentSkills).length < MAX_HERO_SKILLS;
-  const banned = bannedFromNew ?? new Set<SkillId>();
+  // Merge caller-supplied bans (e.g. dedup across pending level-ups) with the class's
+  // HoMM3 forbidden skills, so a banned skill can never be offered as a new candidate.
+  const banned = new Set<SkillId>(bannedFromNew ?? []);
+  for (const id of getForbiddenNewSkills(heroClass)) banned.add(id);
   const newCandidates = SKILL_DEFINITIONS
     .map((s) => s.id)
     .filter((id) => !known.has(id) && !banned.has(id));

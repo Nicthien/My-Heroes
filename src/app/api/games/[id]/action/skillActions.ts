@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { BuildingType, Faction, type Resources } from "@/lib/game/types";
-import { countSkillLevels, generateSkillChoices, type HeroSkills, type SkillId } from "@/lib/game/skills";
+import { BuildingType, Faction, HeroClass, type Resources } from "@/lib/game/types";
+import { countSkillLevels, generateSkillChoices, sanitizePendingSkillEntry, type HeroSkills, type SkillId } from "@/lib/game/skills";
 import { getBlacksmithMachines, WAR_MACHINE_COST, type WarMachineKey } from "@/lib/game/war-machines-shop";
 import type { MinimalPlayer, SupabaseAdminClient } from "./types";
 
@@ -47,8 +47,9 @@ export async function handleSkillAction({
     const mapState = (game.mapState as Record<string, unknown>) ?? {};
     const pendingMap = (mapState.pendingSkillChoices as Record<string, Array<{ level: number; options: string[] }>> | undefined) ?? {};
     const pending = pendingMap[hero.id] ?? [];
-    const { data: heroRow } = await supabase.from("heroes").select("skills").eq("id", hero.id).maybeSingle();
+    const { data: heroRow } = await supabase.from("heroes").select("skills,hero_class").eq("id", hero.id).maybeSingle();
     const currentSkills = ((heroRow?.skills ?? {}) as HeroSkills);
+    const heroClass = (heroRow?.hero_class ?? undefined) as HeroClass | undefined;
 
     let idx = pending.findIndex((entry) => entry.level === level);
     let entry = idx >= 0 ? pending[idx] : null;
@@ -57,7 +58,7 @@ export async function handleSkillAction({
       const learnedFromLevels = countSkillLevels(currentSkills);
       const repairLevel = learnedFromLevels + 2;
       const repairedOptions = learnedFromLevels < expectedFromLevels && level === repairLevel
-        ? generateSkillChoices(currentSkills, `${gameId}:${hero.id}:level:${level}`)
+        ? generateSkillChoices(currentSkills, `${gameId}:${hero.id}:level:${level}`, undefined, heroClass)
         : [];
       if (repairedOptions.length > 0) {
         entry = { level, options: repairedOptions };
@@ -67,6 +68,14 @@ export async function handleSkillAction({
     if (!entry) {
       return NextResponse.json({ error: "Aucun choix de compétence en attente pour ce niveau" }, { status: 400 });
     }
+    // Repair stale options stored before class-based bans: keep accepted options in sync
+    // with what the display path (getVisiblePendingSkillChoices) now offers.
+    entry = sanitizePendingSkillEntry(
+      { level: entry.level, options: entry.options as SkillId[] },
+      currentSkills,
+      heroClass,
+      `${gameId}:${hero.id}:level:${level}`,
+    );
     if (!entry.options.includes(choice as SkillId)) {
       return NextResponse.json({ error: "Choix invalide" }, { status: 400 });
     }

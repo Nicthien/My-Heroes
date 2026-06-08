@@ -100,6 +100,7 @@ import {
   updateTerrainEffectFrame,
   type LavaTileEffect,
 } from "@/lib/rendering/phaser/terrainAnimation";
+import { areAnimationsEnabled } from "@/lib/settings/displayPreferences";
 import {
   applyTerrainTopTextureCrop,
   getTerrainTopTextureTransform,
@@ -327,6 +328,9 @@ class PhaserMapScene extends Phaser.Scene {
   private lastHoverLabelAt = 0;
   private hoverLabelExpiresAt = 0;
   private fogDriftTweens: Phaser.Tweens.Tween[] = [];
+  // Tracks the last animations-enabled state seen by the render loop so we can
+  // rebuild the fog drift tweens when the player toggles the preference.
+  private lastAnimationsEnabled = areAnimationsEnabled();
   private objectLayerSortDirty = false;
   private mapTileObjectSprites: Phaser.GameObjects.GameObject[] = [];
   private objectsByTile = new Map<string, MapObjectData[]>();
@@ -611,7 +615,16 @@ class PhaserMapScene extends Phaser.Scene {
 
     this.updateStaticDecorViewport();
 
-    if (this.waterShimmerFrames.length > 1 && time - this.lastWaterAnimationAt >= WATER_ANIMATION_INTERVAL_MS) {
+    // Ambient map animations (water shimmer, lava ripple, fog drift) honor the
+    // player's "animations" display preference. Functional motion such as hero
+    // movement along a path is never gated.
+    const animationsEnabled = areAnimationsEnabled();
+    if (animationsEnabled !== this.lastAnimationsEnabled) {
+      this.lastAnimationsEnabled = animationsEnabled;
+      if (this.map) this.updateFogDriftTweens(this.map);
+    }
+
+    if (animationsEnabled && this.waterShimmerFrames.length > 1 && time - this.lastWaterAnimationAt >= WATER_ANIMATION_INTERVAL_MS) {
       const nextFrameIndex = Math.floor(time / WATER_ANIMATION_INTERVAL_MS) % this.waterShimmerFrames.length;
       if (nextFrameIndex !== this.waterShimmerFrameIndex) {
         this.waterShimmerFrames[this.waterShimmerFrameIndex]?.setVisible(false);
@@ -621,7 +634,7 @@ class PhaserMapScene extends Phaser.Scene {
       this.lastWaterAnimationAt = time;
     }
 
-    if (time - this.lastTerrainAnimationAt >= TERRAIN_ANIMATION_INTERVAL_MS) {
+    if (animationsEnabled && time - this.lastTerrainAnimationAt >= TERRAIN_ANIMATION_INTERVAL_MS) {
       const frameIndex = Math.floor(time / TERRAIN_ANIMATION_INTERVAL_MS) % TERRAIN_ANIMATION_FRAME_COUNT;
 
       for (const lava of this.lavaTiles) {
@@ -704,7 +717,7 @@ class PhaserMapScene extends Phaser.Scene {
   // only when the mobile HUD/layout is active; touch-capable desktop browsers
   // must keep the drift.
   private updateFogDriftTweens(map: GameMap) {
-    const wantsDrift = map.width * map.height <= FOG_DRIFT_MAX_TILE_COUNT && !this.shouldDisableFogDriftForDevice();
+    const wantsDrift = areAnimationsEnabled() && map.width * map.height <= FOG_DRIFT_MAX_TILE_COUNT && !this.shouldDisableFogDriftForDevice();
     const hasDrift = this.fogDriftTweens.length > 0;
     if (wantsDrift === hasDrift) return;
 

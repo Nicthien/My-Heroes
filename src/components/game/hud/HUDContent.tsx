@@ -72,6 +72,9 @@ import DesktopHudWindows from "./DesktopHudWindows";
 import { ActiveCombatsList } from "../combat/ActiveCombatsPanel";
 import { useDraggableWindow } from "./useDraggableWindow";
 import AdventureMusicControl from "./AdventureMusicControl";
+import GameMenuButton, { type GameMenuItem } from "../menu/GameMenuButton";
+import OptionsDialog from "../menu/OptionsDialog";
+import ConfirmDialog from "../menu/ConfirmDialog";
 import {
   CornerOrnaments,
   FleurDeLis,
@@ -110,6 +113,8 @@ export function HUDContent() {
   // reopened on demand via the top-bar help button.
   const [tutorialClosed, setTutorialClosed] = useState(false);
   const [tutorialManuallyOpen, setTutorialManuallyOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
@@ -277,7 +282,6 @@ export function HUDContent() {
       return;
     }
 
-    if (!window.confirm("Voulez-vous vraiment quitter cette partie ?")) return;
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/leave`, { method: "POST" });
     if (response.ok) goToDashboard();
   };
@@ -1051,9 +1055,13 @@ export function HUDContent() {
                 <span>{t("hud.calWeek", { n: gameState.calendar.weekOfMonth })} · {t("hud.calDay", { n: gameState.calendar.dayOfWeek })}</span>
               </div>
             </div>
-            <div className="desktop-only">
-              <AdventureMusicControl faction={(myPlayer?.faction ?? null) as Faction | null} night={isWaitingForPlayers} />
-            </div>
+            {/* Headless: keeps the adventure music engine running; the audio
+                controls now live in the Options dialog. */}
+            <AdventureMusicControl
+              faction={(myPlayer?.faction ?? null) as Faction | null}
+              night={isWaitingForPlayers}
+              showControl={false}
+            />
           </div>
 
           <div data-tutorial="turn-status" className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0 text-center md:flex">
@@ -1118,29 +1126,34 @@ export function HUDContent() {
             ) : myPlayer ? (
               <ResourceBar player={myPlayer} />
             ) : null}
-            {!isPending && !adminObserverMode && myPlayer && (
-              <button
-                type="button"
-                className="touch-target hidden shrink-0 items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-3 text-lg font-black text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-amber-400/70 hover:bg-amber-950/40 hover:text-amber-100 md:flex"
-                onClick={() => setTutorialManuallyOpen(true)}
-                title={t("tutorial.help")}
-                aria-label={t("tutorial.help")}
-                data-testid="hud-help-button"
-              >
-                ?
-              </button>
-            )}
-            <button
-              className="touch-target flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 px-2 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-red-400/60 hover:bg-red-950/40 hover:text-red-200 md:px-3"
-              onClick={handleLeaveGame}
-              title={myPlayer?.turnOrder !== 0 && isPending ? t("hud.leaveGame") : t("hud.backToDashboard")}
-              data-tutorial="menu"
-            >
-              <span className="text-sm font-black uppercase tracking-wider leading-none">
-                {myPlayer?.turnOrder !== 0 && isPending ? t("hud.quit") : t("hud.back")}
-              </span>
-              <span className="mt-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] leading-none text-amber-600/80">{t("hud.menu")}</span>
-            </button>
+            <GameMenuButton
+              dataTutorial="menu"
+              items={[
+                {
+                  key: "options",
+                  label: t("menu.options"),
+                  onClick: () => setOptionsOpen(true),
+                  dataTestId: "menu-options",
+                },
+                ...(!isPending && !adminObserverMode && myPlayer
+                  ? [
+                      {
+                        key: "help",
+                        label: t("menu.help"),
+                        onClick: () => setTutorialManuallyOpen(true),
+                        dataTestId: "hud-help-button",
+                      } satisfies GameMenuItem,
+                    ]
+                  : []),
+                {
+                  key: "quit",
+                  label: t("menu.quit"),
+                  tone: "danger",
+                  onClick: () => setConfirmQuitOpen(true),
+                  dataTestId: "menu-quit",
+                },
+              ]}
+            />
           </div>
         </div>
       </div>
@@ -1166,6 +1179,21 @@ export function HUDContent() {
       {showRules && myPlayer && (
         <GameRulesPopup gameState={gameState} myPlayer={myPlayer} onDismiss={() => setRulesDismissed(true)} />
       )}
+
+      <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
+
+      <ConfirmDialog
+        open={confirmQuitOpen}
+        eyebrow={t("hud.menu")}
+        title={t("menu.quitTitle")}
+        description={t("menu.confirmQuit")}
+        confirmLabel={t("menu.quit")}
+        onConfirm={() => {
+          setConfirmQuitOpen(false);
+          void handleLeaveGame();
+        }}
+        onCancel={() => setConfirmQuitOpen(false)}
+      />
 
       {showTutorial && (
         <HudTutorial

@@ -80,14 +80,18 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     });
 
     await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("adventure-music-control").getByRole("button", { name: "Réglages audio" }).click();
+    await page.getByTestId("game-menu-button").click();
+    await page.getByTestId("menu-options").click();
+    await expect(page.getByTestId("options-dialog")).toBeVisible();
     await expect(page.getByLabel("Muet")).toBeVisible();
     await expect(page.getByLabel("Musique aventure")).toBeVisible();
     await expect(page.getByLabel("Musique combat")).toBeVisible();
     await expect(page.getByLabel("Effets")).toBeVisible();
 
     await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("combat-audio-control").getByRole("button", { name: "Réglages audio" }).click();
+    await page.getByTestId("game-menu-button").click();
+    await page.getByTestId("menu-options").click();
+    await expect(page.getByTestId("options-dialog")).toBeVisible();
     await expect(page.getByLabel("Muet")).toBeVisible();
     await expect(page.getByLabel("Musique aventure")).toBeVisible();
     await expect(page.getByLabel("Musique combat")).toBeVisible();
@@ -250,8 +254,9 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
 
-    // Default preview suppresses the auto-tour; the help button forces it open.
+    // Default preview suppresses the auto-tour; the help entry in the menu forces it open.
     await expect(page.getByTestId("hud-tutorial")).toHaveCount(0);
+    await page.getByTestId("game-menu-button").click();
     await page.getByTestId("hud-help-button").click();
     await expect(page.getByTestId("hud-tutorial")).toBeVisible();
   });

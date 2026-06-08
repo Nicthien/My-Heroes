@@ -11,6 +11,10 @@ import { useGameStore } from "@/lib/stores/gameStore";
 import { refreshGameState } from "@/lib/game/refresh";
 import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
 import CombatAudioControl from "./CombatAudioControl";
+import GameMenuButton from "../menu/GameMenuButton";
+import OptionsDialog from "../menu/OptionsDialog";
+import ConfirmDialog from "../menu/ConfirmDialog";
+import { useRouter } from "next/navigation";
 import { goldText, ornateFrame, ornateFramePolished } from "@/components/game/hud/theme";
 import { InitiativeQueue, UnitDetails } from "./combatPanels";
 import { CombatFloatingPanel } from "./CombatFloatingPanel";
@@ -47,6 +51,7 @@ const RES_LABEL_KEY: Record<keyof Resources, TranslationKey> = {
 
 export default function CombatScreen() {
   const { data: session } = useSession();
+  const router = useRouter();
   const { t, locale } = useI18n();
   const resLabel = (key: keyof Resources) => t(RES_LABEL_KEY[key]);
   const activeCombat = useGameStore((state) => state.activeCombat);
@@ -73,6 +78,8 @@ export default function CombatScreen() {
   const [retreatConfirmOpen, setRetreatConfirmOpen] = useState(false);
   const [pendingTargetSpell, setPendingTargetSpell] = useState<SpellDefinition | null>(null);
   const [tacticsSelectedUnitId, setTacticsSelectedUnitId] = useState<string | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
   const neutralActionKeyRef = useRef<string | null>(null);
@@ -538,6 +545,13 @@ export default function CombatScreen() {
     await castCombatSpell(pendingTargetSpell, targetUnitId);
   };
 
+  // Leave the whole game from the combat menu (distinct from in-combat retreat
+  // or surrender, which stay in the action panel).
+  const performQuitFromCombat = () => {
+    useGameStore.getState().resetGame();
+    router.push("/dashboard");
+  };
+
   return (
     <div className="absolute inset-0 z-30 flex flex-col overflow-hidden bg-[#151712] text-white">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,#51616b_0%,#8a8973_17%,#4d4b3e_31%,#2e3029_46%,#161712_100%)]" />
@@ -561,16 +575,54 @@ export default function CombatScreen() {
             </button>
           )}
           {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label={t("combat.spellBookLabel")} disabled={isTacticsPhaseActive} />}
-          <CombatAudioControl />
+          {/* Headless: keeps the combat music engine running; the audio controls
+              now live in the Options dialog. */}
+          <CombatAudioControl showControl={false} />
           <button
             type="button"
-            className="rounded-md border border-amber-600/60 bg-gradient-to-b from-stone-900 to-stone-950 px-3 py-1 text-sm font-bold text-amber-100 shadow-[0_0_0_1px_rgba(252,211,77,0.15)_inset] transition hover:from-stone-800 hover:to-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-amber-700/50 bg-stone-950/80 text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-amber-400/70 hover:bg-amber-950/40 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70"
             onClick={() => minimizeCombat(activeCombat.id)}
+            title={t("menu.reduce")}
+            aria-label={t("menu.reduce")}
+            data-testid="combat-minimize"
           >
-            Reduire
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+              <path d="M5 18h14" />
+            </svg>
           </button>
+          <GameMenuButton
+            compact
+            items={[
+              {
+                key: "options",
+                label: t("menu.options"),
+                onClick: () => setOptionsOpen(true),
+                dataTestId: "menu-options",
+              },
+              {
+                key: "quit",
+                label: t("menu.quit"),
+                tone: "danger",
+                onClick: () => setConfirmQuitOpen(true),
+                dataTestId: "menu-quit",
+              },
+            ]}
+          />
         </div>
       </header>
+      <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
+      <ConfirmDialog
+        open={confirmQuitOpen}
+        eyebrow={t("hud.menu")}
+        title={t("menu.quitTitle")}
+        description={t("menu.confirmQuit")}
+        confirmLabel={t("menu.quit")}
+        onConfirm={() => {
+          setConfirmQuitOpen(false);
+          performQuitFromCombat();
+        }}
+        onCancel={() => setConfirmQuitOpen(false)}
+      />
       <div className="relative z-10 flex min-h-0 flex-1">
         {combatMessage && (
           <div className="pointer-events-auto absolute left-1/2 top-4 z-40 flex max-w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-amber-500/50 bg-stone-950/92 px-4 py-2 text-sm font-bold text-amber-100 shadow-xl">

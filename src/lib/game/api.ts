@@ -49,6 +49,7 @@ interface ApiTurn {
   gamePlayerId: string;
   turnNumber: number;
   isCompleted: boolean;
+  startedAt?: string | null;
 }
 
 interface ApiActionLog {
@@ -210,6 +211,14 @@ function getCompletedTurnPlayerIds(data: Record<string, unknown>, turnNumber: nu
   );
 }
 
+function getTurnStartedAtByPlayer(data: Record<string, unknown>, turnNumber: number) {
+  const map = new Map<string, string>();
+  for (const turn of (data.turns as ApiTurn[] | undefined) ?? []) {
+    if (turn.turnNumber === turnNumber && turn.startedAt) map.set(turn.gamePlayerId, turn.startedAt);
+  }
+  return map;
+}
+
 function getVisiblePendingSkillChoices(params: {
   gameId: string;
   heroId: string;
@@ -234,6 +243,7 @@ function getVisiblePendingSkillChoices(params: {
 
 function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
   const completedTurnPlayerIds = getCompletedTurnPlayerIds(data, turnNumber);
+  const turnStartedAtByPlayer = getTurnStartedAtByPlayer(data, turnNumber);
   const mapState = (data.mapState as Record<string, unknown> | undefined) ?? {};
   const townSpellLibraries = (mapState.townSpellLibraries as Record<string, string[]> | undefined) ?? {};
   const townArtifactOffers = (mapState.townArtifactOffers as Record<string, string[]> | undefined) ?? {};
@@ -335,6 +345,7 @@ function mapPlayers(data: Record<string, unknown>, turnNumber: number) {
     turnOrder: player.turnOrder,
     exploredTiles: player.exploredTiles ?? [],
     hasEndedTurn: completedTurnPlayerIds.has(player.id),
+    turnStartedAt: turnStartedAtByPlayer.get(player.id) ?? null,
     turnProgressRatio: player.turnProgressRatio,
     scoreStats: normalizeScoreStats(player.scoreStats),
     score: player.score,
@@ -702,6 +713,11 @@ function applyDynamicMapState(
   }
 }
 
+function readTurnTimeLimit(gameConfig: unknown): number | null {
+  const raw = Number((gameConfig as Record<string, unknown> | null | undefined)?.turnTimeLimit);
+  return Number.isFinite(raw) && raw > 0 ? raw : null;
+}
+
 export function mapApiToGameState(
   data: Record<string, unknown>,
   currentUserId?: string,
@@ -749,6 +765,8 @@ export function mapApiToGameState(
     turnNumber,
     calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || "",
+    turnTimeLimit: readTurnTimeLimit(data.gameConfig),
+    currentTurnStartedAt: (data.currentTurnStartedAt as string | null | undefined) ?? null,
     winnerId: data.winnerId as string | undefined,
     victoryCondition: normalizeVictoryCondition((data.gameConfig as Record<string, unknown> | null)?.victory),
     neutralArmies,
@@ -802,6 +820,7 @@ export function mergeGameDynamicState(
     turnNumber,
     calendar: getGameCalendar(turnNumber),
     currentTurnPlayerId: (data.currentTurnPlayerId as string) || baseGameState.currentTurnPlayerId,
+    currentTurnStartedAt: (data.currentTurnStartedAt as string | null | undefined) ?? baseGameState.currentTurnStartedAt ?? null,
     winnerId: (data.winnerId as string | undefined) ?? baseGameState.winnerId,
     neutralArmies,
     gates,

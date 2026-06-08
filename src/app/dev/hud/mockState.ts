@@ -54,6 +54,10 @@ export function buildMockState(): GameState {
       yearNumber: 1,
     },
     currentTurnPlayerId: "p1",
+    // Partial budget (≈2/3 left) so the HUD turn-timer ring renders visibly,
+    // while staying far from zero so it never auto-expires mid-test.
+    turnTimeLimit: 600,
+    currentTurnStartedAt: new Date(Date.now() - 200_000).toISOString(),
     activeCombats: [],
     actionLog: [
       {

@@ -121,6 +121,14 @@ export async function GET(request: Request) {
   }
 }
 
+// Per-turn timer (seconds). Returns null for "no limit" (absent / non-positive),
+// otherwise clamps to a sane [1 minute, 7 days] range.
+function normalizeTurnTimeLimit(value: unknown): number | null {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.min(Math.max(60, Math.round(seconds)), 7 * 86400);
+}
+
 export async function POST(request: Request) {
   try {
     const { user, response } = await requireCurrentUser(request);
@@ -145,7 +153,9 @@ export async function POST(request: Request) {
       undergroundEnabled = false,
       faction = "castle",
       victory: victoryInput,
+      turnTimeLimit: turnTimeLimitInput,
     } = body;
+    const turnTimeLimit = normalizeTurnTimeLimit(turnTimeLimitInput);
     const requestedFaction = String(faction);
     const playableFaction = normalizePlayableFaction(requestedFaction);
     if (user.role !== "admin" && !isPlayableFaction(requestedFaction)) {
@@ -199,7 +209,7 @@ export async function POST(request: Request) {
       map_height: size,
       status: "PENDING",
       map_data: mapData,
-      game_config: { turnTimeLimit: 86400, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory, grail, obelisksTotal },
+      game_config: { turnTimeLimit, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory, grail, obelisksTotal },
       created_by_user_id: user.id,
       seed: mapData.seed,
       map_size: mapSize,

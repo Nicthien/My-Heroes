@@ -9,6 +9,25 @@ export const MAP_SIZES = {
 
 export type MapSizeKey = keyof typeof MAP_SIZES;
 
+// Ko-fi donation page. Replace the placeholder slug with the real page once the
+// Ko-fi account is created (e.g. "https://ko-fi.com/myheroes").
+export const KOFI_URL = "https://ko-fi.com/myheroes";
+
+export const TURN_TIMER_UNITS = ["minutes", "hours", "days"] as const;
+export type TurnTimerUnit = (typeof TURN_TIMER_UNITS)[number];
+
+const TURN_TIMER_UNIT_SECONDS: Record<TurnTimerUnit, number> = {
+  minutes: 60,
+  hours: 3600,
+  days: 86400,
+};
+
+// Convert a creation-form turn-timer value to seconds, clamped to [1 min, 7 days].
+export function turnTimerToSeconds(value: number, unit: TurnTimerUnit): number {
+  const seconds = Math.round(Math.max(1, value) * TURN_TIMER_UNIT_SECONDS[unit]);
+  return Math.min(Math.max(60, seconds), 7 * 86400);
+}
+
 export function randomSeedValue() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let value = "";

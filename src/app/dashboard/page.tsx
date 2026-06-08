@@ -31,7 +31,7 @@ import {
   ornateFramePolished,
 } from "@/components/game/hud/theme";
 import { GearIcon, SignOutIcon } from "./dashboardRmgControls";
-import { MAP_SIZES, randomSeedValue, summarizeMap } from "./dashboardConstants";
+import { MAP_SIZES, randomSeedValue, summarizeMap, turnTimerToSeconds, type TurnTimerUnit } from "./dashboardConstants";
 import { factionLabel } from "./factionMeta";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import LanguageSelect from "@/components/i18n/LanguageSelect";
@@ -43,6 +43,7 @@ type TFn = (key: TranslationKey, params?: Record<string, string | number>) => st
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
+import { SupportButton, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
 import { StatsPanel } from "./StatsPanel";
 import { Leaderboard } from "./Leaderboard";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
@@ -202,6 +203,7 @@ function playerStatusClass(status?: string | null) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const { locale, setLocale, t } = useI18n();
+  const { shouldShow: showSupportPrompt, dismiss: dismissSupportPrompt } = useSupportPrompt(session?.user?.id);
   const [games, setGames] = useState<GameInfo[]>([]);
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -255,6 +257,9 @@ export default function DashboardPage() {
   const [victoryType, setVictoryType] = useState<VictoryConditionType>("KING");
   const [goldTarget, setGoldTarget] = useState(DEFAULT_GOLD_TARGET);
   const [turnLimit, setTurnLimit] = useState(DEFAULT_TURN_LIMIT);
+  const [turnTimerEnabled, setTurnTimerEnabled] = useState(false);
+  const [turnTimerValue, setTurnTimerValue] = useState(5);
+  const [turnTimerUnit, setTurnTimerUnit] = useState<TurnTimerUnit>("minutes");
   const [previewLevel, setPreviewLevel] = useState<MapLevelId>(SURFACE_LEVEL);
   const [previewMap, setPreviewMap] = useState<GameMap | null>(null);
   const [previewGenerationProgress, setPreviewGenerationProgress] = useState(0);
@@ -704,6 +709,7 @@ export default function DashboardPage() {
         rmgTuning: normalizedRmgTuning,
         undergroundEnabled,
         victory: buildVictoryPayload(victoryType, goldTarget, turnLimit),
+        turnTimeLimit: turnTimerEnabled ? turnTimerToSeconds(turnTimerValue, turnTimerUnit) : null,
         ...(isAdmin ? {} : { faction: selectedFaction }),
       }),
     });
@@ -1148,6 +1154,12 @@ export default function DashboardPage() {
             setGoldTarget={setGoldTarget}
             turnLimit={turnLimit}
             setTurnLimit={setTurnLimit}
+            turnTimerEnabled={turnTimerEnabled}
+            setTurnTimerEnabled={setTurnTimerEnabled}
+            turnTimerValue={turnTimerValue}
+            setTurnTimerValue={setTurnTimerValue}
+            turnTimerUnit={turnTimerUnit}
+            setTurnTimerUnit={setTurnTimerUnit}
             showRmgTuning={showRmgTuning}
             setShowRmgTuning={setShowRmgTuning}
             showRmgPreview={showRmgPreview}
@@ -1708,7 +1720,15 @@ export default function DashboardPage() {
         <div className="mt-6">
           <Leaderboard entries={leaderboard} />
         </div>
+
+        <div className="mt-8 flex justify-center pb-2">
+          <SupportButton t={t} />
+        </div>
       </div>
+
+      {showSupportPrompt && (
+        <SupportPromptModal t={t} onClose={dismissSupportPrompt} />
+      )}
     </div>
   );
 }

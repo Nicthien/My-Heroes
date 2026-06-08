@@ -4,6 +4,7 @@ import { resumeAiActivityUntilHuman } from "@/lib/game/ai/simple-ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGameSyncWithRelations } from "@/lib/supabase/game-db";
 import { buildViewerGrailHint, computeTurnProgressRatio, getAllTileKeys, sanitizeCombatForViewer, sanitizePlayerForViewer, stripGrailFromGameConfig } from "../shared";
+import { enforceTurnTimeout } from "@/lib/game/server/turnTimeout";
 import { computeDbPlayerScore, type DbScorablePlayer } from "@/lib/game/score";
 
 export async function GET(
@@ -18,9 +19,15 @@ export async function GET(
   const isAdminObserver = user.role === "admin" && searchParams.get("admin") === "1";
   const shouldResumeAi = isAdminObserver && searchParams.get("resumeAi") === "1";
   const supabase = createAdminClient();
-  const game = await getGameSyncWithRelations(supabase, id);
+  let game = await getGameSyncWithRelations(supabase, id);
 
   if (!game) return NextResponse.json({ error: "Partie introuvable" }, { status: 404 });
+
+  // Auto-end the active player's turn if its time budget has run out, then read
+  // the advanced state so this response reflects the new turn.
+  if (await enforceTurnTimeout(supabase, game)) {
+    game = (await getGameSyncWithRelations(supabase, id)) ?? game;
+  }
 
   const players = game.players as unknown as Array<{
     id: string;
@@ -42,6 +49,7 @@ export async function GET(
       winnerId: game.winnerId,
       turnNumber: game.turnNumber,
       currentTurnPlayerId: game.currentTurnPlayerId,
+      currentTurnStartedAt: game.currentTurnStartedAt,
       updatedAt: game.updatedAt,
       mapState: game.mapState,
       gameConfig: stripGrailFromGameConfig(game.gameConfig),
@@ -72,6 +80,7 @@ export async function GET(
     winnerId: game.winnerId,
     turnNumber: game.turnNumber,
     currentTurnPlayerId: game.currentTurnPlayerId,
+    currentTurnStartedAt: game.currentTurnStartedAt,
     updatedAt: game.updatedAt,
     mapState: game.mapState,
     gameConfig: stripGrailFromGameConfig(game.gameConfig),

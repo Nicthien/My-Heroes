@@ -16,6 +16,7 @@ import OptionsDialog from "../menu/OptionsDialog";
 import ConfirmDialog from "../menu/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { goldText, ornateFrame, ornateFramePolished } from "@/components/game/hud/theme";
+import { TurnTimerBadge } from "@/components/game/hud/TurnTimerBadge";
 import { InitiativeQueue, UnitDetails } from "./combatPanels";
 import { CombatFloatingPanel } from "./CombatFloatingPanel";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
@@ -565,6 +566,7 @@ export default function CombatScreen() {
           {combatStatusLabel}
         </div>
         <div className="flex items-center gap-3">
+          <TurnTimerBadge gameState={gameState} myPlayer={myPlayer} />
           {pendingTargetSpell && (
             <button
               type="button"

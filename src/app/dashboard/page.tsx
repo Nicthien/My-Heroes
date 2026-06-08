@@ -43,6 +43,7 @@ type TFn = (key: TranslationKey, params?: Record<string, string | number>) => st
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
+import { StatsPanel } from "./StatsPanel";
 import { Leaderboard } from "./Leaderboard";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 
@@ -211,6 +212,7 @@ export default function DashboardPage() {
   const [joinStep, setJoinStep] = useState<1 | 2>(1);
   const [showOptions, setShowOptions] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [showRmgTuning, setShowRmgTuning] = useState(false);
@@ -480,6 +482,7 @@ export default function DashboardPage() {
     setProfileMessage(null);
     setShowOptions(true);
     setShowAdmin(false);
+    setShowStats(false);
     setShowCreate(false);
     setShowJoin(false);
     setShowRmgPreview(false);
@@ -853,13 +856,13 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
-              onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); }}
+              onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowStats(false); setShowRmgPreview(false); }}
               className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
               {t("dashboard.newGame")}
             </button>
             <button
-              onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
+              onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowStats(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
               className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
             >
               {t("common.join")}
@@ -869,6 +872,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => {
                   setShowAdmin((value) => !value);
+                  setShowStats(false);
                   setShowCreate(false);
                   setShowJoin(false);
                   setShowOptions(false);
@@ -877,6 +881,22 @@ export default function DashboardPage() {
                 className="touch-target rounded-lg border border-cyan-400/60 bg-gradient-to-b from-cyan-700 to-cyan-900 px-4 py-3 font-black uppercase tracking-wider text-cyan-50 shadow-[inset_0_0_0_1px_rgba(165,243,252,0.2)] transition hover:from-cyan-600 hover:to-cyan-800 sm:px-5"
               >
                 {t("dashboard.admin")}
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStats((value) => !value);
+                  setShowAdmin(false);
+                  setShowCreate(false);
+                  setShowJoin(false);
+                  setShowOptions(false);
+                  setShowRmgPreview(false);
+                }}
+                className="touch-target rounded-lg border border-violet-400/60 bg-gradient-to-b from-violet-700 to-violet-900 px-4 py-3 font-black uppercase tracking-wider text-violet-50 shadow-[inset_0_0_0_1px_rgba(196,181,253,0.2)] transition hover:from-violet-600 hover:to-violet-800 sm:px-5"
+              >
+                {t("dashboard.stats")}
               </button>
             )}
             <button
@@ -1089,6 +1109,16 @@ export default function DashboardPage() {
         )}
 
         {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+
+        {showStats && isAdmin && (
+          <StatsPanel
+            fetchWithAuth={fetchWithAuth}
+            parseJsonResponse={parseJsonResponse}
+            t={t}
+            locale={locale}
+            onClose={() => setShowStats(false)}
+          />
+        )}
 
         {/* Assistant de création de partie */}
         {showCreate && (

@@ -15,7 +15,6 @@ import { AdventureBuildingType, GameMap, MapObject, Position, Resources } from "
 import { computeVisibleTiles, isTileTraversable } from "@/lib/game/engine";
 import { getObeliskIds, OBELISK_REVEAL_THRESHOLD } from "@/lib/game/grail";
 import { SPELLS, getHeroMana, type SpellId } from "@/lib/game/spells";
-import { WAR_MACHINE_COST } from "@/lib/game/war-machines-shop";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { getAdventureWeekKey, getLatestMapState } from "./actionHelpers";
 import type { HeroStatKey, MinimalHero, MinimalPlayer, MoveInteraction, SupabaseAdminClient } from "./types";
@@ -731,36 +730,10 @@ export async function runAdventureBuildingVisit({
   }
 
   if (buildingType === AdventureBuildingType.WAR_MACHINE_FACTORY) {
-    // Like an external dwelling, the factory equips the visiting hero with the war
-    // machines they still lack, buying as many as the player can afford (cheapest
-    // first). It is repeatable, so a hero can return to replace destroyed machines.
-    const machineOffers: Array<{ key: "ballista" | "firstAid" | "ammoCart"; label: string; cost: number }> = [
-      { key: "firstAid", label: "Tente de premiers secours", cost: WAR_MACHINE_COST.firstAid },
-      { key: "ammoCart", label: "Charrette de munitions", cost: WAR_MACHINE_COST.ammoCart },
-      { key: "ballista", label: "Baliste", cost: WAR_MACHINE_COST.ballista },
-    ];
-    const { data: heroRow } = await supabase.from("heroes").select("war_machines").eq("id", hero.id).maybeSingle();
-    const owned = (heroRow?.war_machines ?? {}) as Record<string, boolean>;
-    let remainingGold = playerResources(gamePlayer).gold;
-    const nextMachines = { ...owned };
-    const bought: string[] = [];
-    for (const offer of machineOffers) {
-      if (owned[offer.key] || remainingGold < offer.cost) continue;
-      remainingGold -= offer.cost;
-      nextMachines[offer.key] = true;
-      bought.push(offer.label);
-    }
-    if (bought.length > 0) {
-      await updatePlayerResources(supabase, gamePlayer.id, { gold: remainingGold });
-      await supabase.from("heroes").update({ war_machines: nextMachines }).eq("id", hero.id);
-    }
-    const alreadyHasAll = machineOffers.every((offer) => owned[offer.key]);
-    const message = bought.length > 0
-      ? `Usine de machines de guerre : ${bought.join(", ")} équipée(s).`
-      : alreadyHasAll
-        ? "Usine de machines de guerre : ce héros possède déjà toutes les machines."
-        : "Usine de machines de guerre : or insuffisant pour acheter une machine.";
-    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message };
+    // Repeatable shop: visiting the factory opens a purchase screen on the client
+    // where the visiting hero buys each war machine it still lacks (BUY_FACTORY_MACHINE).
+    // A hero can return to replace machines destroyed in combat.
+    return { type: "ADVENTURE_BUILDING", buildingType, destination: position, buildingId: object.id, shop: "war_machine_factory" };
   }
 
   return {

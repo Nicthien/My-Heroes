@@ -6,7 +6,8 @@ import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import { getGrailLocation } from "@/lib/game/grail";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
-import type { GameMap, Position } from "@/lib/game/types";
+import { AdventureBuildingType, type GameMap, type Position, type Resources } from "@/lib/game/types";
+import { WAR_MACHINE_COST, type WarMachineKey } from "@/lib/game/war-machines-shop";
 import type { HeroStatKey, MapBuildingLocation, MinimalBoat, MinimalBuilding, MinimalHero, MinimalPlayer, MinimalTown, SupabaseAdminClient } from "./types";
 
 type ActionRecord = Record<string, unknown>;
@@ -53,6 +54,11 @@ type AdventureActionHelpers = {
     action: ActionRecord,
   ) => Promise<void>;
   normalizeHeroStatChoice: (value: unknown) => HeroStatKey | "gold" | "experience" | undefined;
+  updatePlayerResources: (
+    supabase: SupabaseAdminClient,
+    playerId: string,
+    resources: Partial<Resources>,
+  ) => Promise<void>;
 };
 
 type HandleAdventureActionParams = {
@@ -111,6 +117,46 @@ export async function handleAdventureAction({
     await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
 
     return NextResponse.json({ success: true, interaction });
+  }
+
+  if (action.type === "BUY_FACTORY_MACHINE") {
+    const hero = gamePlayer.heroes.find((item) => item.id === action.heroId);
+    if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
+    if (isHeroInActiveCombat(game.combats, hero.id)) {
+      return NextResponse.json({ error: heroInCombatError }, { status: 400 });
+    }
+
+    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const found = helpers.findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
+    if (!found || found.object.subtype !== AdventureBuildingType.WAR_MACHINE_FACTORY) {
+      return NextResponse.json({ error: "Usine de machines de guerre introuvable" }, { status: 404 });
+    }
+    if (!helpers.areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
+      return NextResponse.json({ error: "Le héros doit être sur place pour acheter une machine" }, { status: 400 });
+    }
+
+    const machine = String(action.machine ?? "") as WarMachineKey;
+    if (!(machine in WAR_MACHINE_COST)) {
+      return NextResponse.json({ error: "Machine de guerre invalide" }, { status: 400 });
+    }
+    const cost = WAR_MACHINE_COST[machine];
+    if (gamePlayer.gold < cost) return NextResponse.json({ error: "Or insuffisant" }, { status: 400 });
+
+    const { data: heroRow } = await supabase.from("heroes").select("war_machines").eq("id", hero.id).maybeSingle();
+    const warMachines = ((heroRow?.war_machines ?? {}) as Record<string, boolean>);
+    if (warMachines[machine]) {
+      return NextResponse.json({ error: "Ce héros possède déjà cette machine" }, { status: 400 });
+    }
+
+    await helpers.updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - cost });
+    const update = await supabase.from("heroes").update({ war_machines: { ...warMachines, [machine]: true } }).eq("id", hero.id);
+    if (update.error) {
+      console.error("BUY_FACTORY_MACHINE: failed to persist war machines", update.error);
+      return NextResponse.json({ error: "Impossible d'enregistrer la machine de guerre (DB)" }, { status: 500 });
+    }
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+
+    return NextResponse.json({ success: true });
   }
 
   if (action.type === "DIG_GRAIL") {

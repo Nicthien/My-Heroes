@@ -349,6 +349,9 @@ export const en: Record<TranslationKey, string> = {
   "hero.machineBallista": "Ballista",
   "hero.machineTent": "Tent",
   "hero.machineAmmo": "Ammo",
+  "hero.sectionWarMachines": "War machines",
+  "hero.machineOwned": "Equipped",
+  "hero.machineAbsent": "Not equipped",
   "hero.levelXp": "Level {level} - XP {xp}",
   "hero.target": "Target: {label}",
   "hero.atTown": "At the town:",
@@ -755,6 +758,10 @@ export const en: Record<TranslationKey, string> = {
   "ballista.ammoLabel": "Ammo cart",
   "ballista.ammoDesc": "Provides unlimited ammunition to allied shooters.",
   "ballista.buy": "Buy",
+
+  // --- War machine factory (adventure shop) ---
+  "factory.title": "War Machine Factory",
+  "factory.intro": "Equip {name} with war machines.",
 
   // --- Town: artifacts tab ---
   "artifactsTab.depleted": "Artifact merchant stock depleted. Will return on the next rebuild.",

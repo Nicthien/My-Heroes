@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(docker push *)",
       "Bash(Get-ChildItem \"c:\\\\AI\\\\My Heroes\\\\src\\\\app\\\\api\\\\games\" -Recurse -Name)",
       "Bash(npx tsc *)",
       "Bash(Get-ChildItem -Path \"c:\\\\AI\\\\My Heroes\\\\src\\\\lib\\\\game\\\\combat\" -File -Recurse)",

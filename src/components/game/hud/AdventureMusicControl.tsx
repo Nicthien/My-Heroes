@@ -24,9 +24,12 @@ type AdventureMusicControlProps = {
   /** True while the player waits for others after ending their turn — plays the
    *  darker night variant of the faction theme. */
   night?: boolean;
+  /** When false, the component runs the music engine headlessly without
+   *  rendering the speaker button — audio controls live in the Options dialog. */
+  showControl?: boolean;
 };
 
-export default function AdventureMusicControl({ faction, night = false }: AdventureMusicControlProps) {
+export default function AdventureMusicControl({ faction, night = false, showControl = true }: AdventureMusicControlProps) {
   const activeCombat = useGameStore((state) => state.activeCombat);
   const [muted, setMuted] = useState(getSavedAudioMuted);
   const [volume, setVolume] = useState(getSavedAdventureMusicVolume);
@@ -147,6 +150,8 @@ export default function AdventureMusicControl({ faction, night = false }: Advent
       window.removeEventListener("storage", syncPreferences);
     };
   }, [activeCombat, startMusic, stopMusic]);
+
+  if (!showControl) return null;
 
   return (
     <AudioSettingsButton

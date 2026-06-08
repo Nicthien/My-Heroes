@@ -17,7 +17,13 @@ import AudioSettingsButton from "@/components/game/audio/AudioSettingsButton";
 
 type MusicStatus = "idle" | "waiting" | "playing" | "error";
 
-export default function CombatAudioControl() {
+type CombatAudioControlProps = {
+  /** When false, runs the combat music engine headlessly without rendering the
+   *  speaker button — audio controls live in the combat Options dialog. */
+  showControl?: boolean;
+};
+
+export default function CombatAudioControl({ showControl = true }: CombatAudioControlProps) {
   // Battlefield theme of the active combat selects the musical profile.
   const theme = useGameStore(
     (state) => state.activeCombat?.boardState?.environment?.theme
@@ -130,6 +136,8 @@ export default function CombatAudioControl() {
       window.removeEventListener("storage", syncPreferences);
     };
   }, [startMusic, stopMusic]);
+
+  if (!showControl) return null;
 
   return (
     <AudioSettingsButton

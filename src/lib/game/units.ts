@@ -44,7 +44,9 @@ export const UNIT_RULES = Object.fromEntries([
       defense: creature.defense,
       minDamage: creature.minDamage,
       maxDamage: creature.maxDamage,
-      power: creature.cost.gold ?? creature.aiValue,
+      // Power is the unit's combat strength (army comparison, auto-resolve, AI threat),
+      // so it must be the catalog aiValue — not the gold recruitment price.
+      power: creature.aiValue ?? creature.cost.gold,
       ranged: creature.ranged || undefined,
       shots: creature.ranged ? creature.shots : undefined,
       abilities: creature.abilities.length > 0 ? creature.abilities : undefined,

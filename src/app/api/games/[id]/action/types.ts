@@ -130,7 +130,7 @@ export type MoveInteraction =
 export type HeroStatKey = "attack" | "defense" | "spellPower" | "knowledge";
 
 export type AdventureBuildingChoice = {
-  value: HeroStatKey;
+  value: HeroStatKey | "gold" | "experience";
   label: string;
 };
 

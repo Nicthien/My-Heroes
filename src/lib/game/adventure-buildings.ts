@@ -242,6 +242,22 @@ export const ADVENTURE_BUILDING_RULES: Record<AdventureBuildingType, AdventureBu
     preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP],
     rarity: 1.1,
   },
+  [AdventureBuildingType.TREASURE_CHEST]: {
+    type: AdventureBuildingType.TREASURE_CHEST,
+    label: "Coffre au trésor",
+    description: "Au choix : de l'or, ou de l'expérience pour le héros.",
+    visitMode: "once",
+    preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP, TerrainType.FOREST, TerrainType.ROUGH],
+    rarity: 1.1,
+  },
+  [AdventureBuildingType.PANDORA_BOX]: {
+    type: AdventureBuildingType.PANDORA_BOX,
+    label: "Boîte de Pandore",
+    description: "Renferme une récompense conséquente, puis disparaît.",
+    visitMode: "once",
+    preferredTerrain: [TerrainType.GRASS, TerrainType.DIRT, TerrainType.SAND, TerrainType.SNOW, TerrainType.SWAMP, TerrainType.FOREST, TerrainType.ROUGH, TerrainType.SUBTERRANEAN],
+    rarity: 0.5,
+  },
   [AdventureBuildingType.SKELETON]: {
     type: AdventureBuildingType.SKELETON,
     label: "Squelette",
@@ -398,6 +414,8 @@ export function hasPlayerVisited(visits: Record<string, string[]> | undefined, p
 export function isSingleMapRewardBuilding(subtype: string | undefined) {
   return subtype === AdventureBuildingType.ABANDONED_WAGON ||
     subtype === AdventureBuildingType.CRATE ||
+    subtype === AdventureBuildingType.TREASURE_CHEST ||
+    subtype === AdventureBuildingType.PANDORA_BOX ||
     subtype === AdventureBuildingType.SKELETON ||
     subtype === AdventureBuildingType.WARRIOR_TOMB ||
     subtype === AdventureBuildingType.FLOTSAM ||

@@ -28,6 +28,7 @@ export const CREATURE_BANK_TYPES = [
   "spit",
   "temple_of_the_sea",
   "wolf_raider_picket",
+  "pandora_box",
 ] as const;
 
 export type CreatureBankType = (typeof CREATURE_BANK_TYPES)[number];
@@ -213,6 +214,11 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(30, 7000, [[UnitType.HASPID, 5], [UnitType.NIX_WARRIOR, 12]], { gold: 8000, artifactTokens: ["major"], creatures: [{ unitType: UnitType.SEA_SERPENT, count: 1 }] }),
     variant(10, 9800, [[UnitType.HASPID, 9], [UnitType.SEA_SERPENT, 8]], { gold: 13000, artifactTokens: ["relic"], creatures: [{ unitType: UnitType.HASPID, count: 1 }] }),
   ], true),
+  // Unique, heavily-guarded prize — placed exactly once per map (see placeSinglePandoraBox).
+  // Single variant so its difficulty/reward are deterministic rather than rolled.
+  pandora_box: bank("pandora_box", "Boîte de Pandore", "Coffre arcanique scellé, gardé par de puissantes créatures.", [TerrainType.SUBTERRANEAN, TerrainType.ROUGH, TerrainType.DIRT, TerrainType.GRASS, TerrainType.SNOW, TerrainType.SWAMP, TerrainType.SAND, TerrainType.FOREST, TerrainType.MOUNTAIN], 0, [
+    variant(100, 7000, [[UnitType.BLACK_DRAGON, 3], [UnitType.RED_DRAGON, 6]], { gold: 4000, experience: 10000, resources: spreadRare(4), artifactTokens: ["major"] }),
+  ]),
   wolf_raider_picket: bank("wolf_raider_picket", "Poste de pillards loups", "Poste de pillards rapides.", [TerrainType.DIRT, TerrainType.GRASS, TerrainType.SAND], 1.15, [
     variant(30, 650, [[UnitType.WOLF_RIDER, 45]], { gold: 800, resources: { wood: 3 } }),
     variant(30, 1000, [[UnitType.WOLF_RIDER, 65], [UnitType.WOLF_RAIDER, 12]], { gold: 1300, resources: { wood: 4 } }),

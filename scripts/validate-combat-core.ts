@@ -449,7 +449,7 @@ function testRangedRestrictionsAndPenalties() {
     maxDamage: 10,
   });
   const adjacentEnemy = unit({ id: "adjacent", unitType: UnitType.PIKEMAN, side: "defender", q: 2, r: 1 });
-  const farEnemy = unit({ id: "far", unitType: UnitType.PIKEMAN, side: "defender", q: 10, r: 1 });
+  const farEnemy = unit({ id: "far", unitType: UnitType.PIKEMAN, side: "defender", q: 12, r: 1 });
 
   const blockedShot = executeManualCombatAction({
     units: [shooter, adjacentEnemy, farEnemy],
@@ -471,6 +471,7 @@ function testRangedRestrictionsAndPenalties() {
   });
   assert.equal(meleeRange.profile.damagePenalty, 0.5);
 
+  // Long range alone (>10 hexes): half damage.
   const longRange = calculateCombatDamageRange({
     attacker: shooter,
     defender: farEnemy,
@@ -478,8 +479,10 @@ function testRangedRestrictionsAndPenalties() {
     defenderStats: stats(),
     actionType: "SHOOT",
   });
+  assert.equal(longRange.profile.distance > 10, true);
   assert.equal(longRange.profile.damagePenalty, 0.5);
 
+  // Obstacle alone (close range, rock on the line): half damage.
   const obstacle = calculateCombatDamageRange({
     attacker: shooter,
     defender: unit({ id: "mid", unitType: UnitType.PIKEMAN, side: "defender", q: 5, r: 1 }),
@@ -489,6 +492,18 @@ function testRangedRestrictionsAndPenalties() {
     terrain: [{ type: "rock", q: 3, r: 1 }],
   });
   assert.equal(obstacle.profile.damagePenalty, 0.5);
+
+  // HoMM3: long range AND obstacle stack to a quarter.
+  const longAndBlocked = calculateCombatDamageRange({
+    attacker: shooter,
+    defender: farEnemy,
+    attackerStats: stats(),
+    defenderStats: stats(),
+    actionType: "SHOOT",
+    terrain: [{ type: "rock", q: 6, r: 1 }],
+  });
+  assert.deepEqual(longAndBlocked.profile.penaltyReasons.sort(), ["longue portée", "obstacle"]);
+  assert.equal(longAndBlocked.profile.damagePenalty, 0.25);
 }
 
 function testMoveAndMeleeAttack() {

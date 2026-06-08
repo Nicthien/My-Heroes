@@ -75,7 +75,7 @@ export async function runAdventureBuildingVisit({
   object: MapObject;
   position: Position;
   explored: Set<string>;
-  choice?: HeroStatKey;
+  choice?: HeroStatKey | "gold" | "experience";
   helpers: AdventureVisitHelpers;
 }): Promise<MoveInteraction> {
   const { playerResources, updatePlayerResources, addUnitsToHeroArmy } = helpers;
@@ -289,7 +289,7 @@ export async function runAdventureBuildingVisit({
         ],
       };
     }
-    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 2);
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice as HeroStatKey, 2);
     return {
       type: "ADVENTURE_BUILDING",
       buildingType,
@@ -316,7 +316,7 @@ export async function runAdventureBuildingVisit({
       return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cet entraînement." };
     }
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
-    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice as HeroStatKey, 1);
     return {
       type: "ADVENTURE_BUILDING",
       buildingType,
@@ -343,7 +343,7 @@ export async function runAdventureBuildingVisit({
       return { type: "ADVENTURE_BUILDING", buildingType, destination: position, message: "Il faut 1000 Or pour suivre cette étude." };
     }
     await updatePlayerResources(supabase, gamePlayer.id, { gold: gamePlayer.gold - ADVENTURE_SCHOOL_COST_GOLD });
-    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice, 1);
+    await applyHeroStatVisit(supabase, gameId, mapState, hero, heroAdventureVisits, object.id, choice as HeroStatKey, 1);
     return {
       type: "ADVENTURE_BUILDING",
       buildingType,
@@ -557,6 +557,40 @@ export async function runAdventureBuildingVisit({
       destination: position,
       reward: rewardGold ? { gold: 300 } : { resources: resourceReward },
       message: rewardGold ? "Caisse ouverte : +300 Or." : "Caisse ouverte : ressources trouvees.",
+    };
+  }
+
+  if (buildingType === AdventureBuildingType.TREASURE_CHEST) {
+    // HoMM3: random tier — gold 1000/1500/2000 OR experience 1500/2250/3000.
+    const tier = Math.floor(makeRng(`${gameId}:${object.id}:chest`)() * 3);
+    const goldReward = [1000, 1500, 2000][tier] ?? 1000;
+    const xpReward = [1500, 2250, 3000][tier] ?? 1500;
+    if (choice !== "gold" && choice !== "experience") {
+      return {
+        type: "ADVENTURE_BUILDING",
+        buildingType,
+        destination: position,
+        buildingId: object.id,
+        message: "Coffre au trésor : choisissez votre récompense.",
+        choices: [
+          { value: "gold", label: `${goldReward} Or` },
+          { value: "experience", label: `${xpReward} Expérience` },
+        ],
+      };
+    }
+    visitedAdventureBuildings.add(object.id);
+    if (choice === "gold") {
+      await updatePlayerResources(supabase, gamePlayer.id, { gold: playerResources(gamePlayer).gold + goldReward });
+    } else {
+      await applyHeroExperienceGain(supabase, gameId, hero.id, hero.experience + xpReward);
+    }
+    await updateVisitedAdventureBuildings(supabase, gameId, mapState, visitedAdventureBuildings);
+    return {
+      type: "ADVENTURE_BUILDING",
+      buildingType,
+      destination: position,
+      reward: choice === "gold" ? { gold: goldReward } : undefined,
+      message: choice === "gold" ? `Coffre au trésor : +${goldReward} Or.` : `Coffre au trésor : +${xpReward} Expérience.`,
     };
   }
 

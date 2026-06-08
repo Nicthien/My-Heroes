@@ -757,8 +757,9 @@ async function getResourceBuilding(
     : null;
 }
 
-function normalizeHeroStatChoice(value: unknown): HeroStatKey | undefined {
+function normalizeHeroStatChoice(value: unknown): HeroStatKey | "gold" | "experience" | undefined {
   return value === "attack" || value === "defense" || value === "spellPower" || value === "knowledge"
+    || value === "gold" || value === "experience"
     ? value
     : undefined;
 }

@@ -13,7 +13,7 @@ import {
   hasSlayer,
 } from "./effects";
 
-export const COMBAT_LONG_RANGE_HEXES = 6;
+export const COMBAT_LONG_RANGE_HEXES = 10;
 
 export type ManualCombatActionType = "ATTACK" | "SHOOT";
 
@@ -117,7 +117,9 @@ export function getAttackProfile(params: {
 
   if (isMelee && actor.ranged) penaltyReasons.push("corps-à-corps");
 
-  const damagePenalty = penaltyReasons.length > 0 ? 0.5 : 1;
+  // HoMM3: each shooting penalty halves damage and they stack — long range (>10 hexes)
+  // and an obstacle/wall on the line together give ×0.25, not a single ×0.5.
+  const damagePenalty = Math.pow(0.5, penaltyReasons.length);
   return {
     actionLabel: getActionLabel(isMelee, isShot, penaltyReasons.length > 0),
     canStrike: true,

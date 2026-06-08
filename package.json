@@ -20,7 +20,6 @@
     "generate:boat-sprites": "node scripts/generate-boat-spritesheet.mjs",
     "generate:town-sprites": "node scripts/generate-town-sprites.mjs",
     "generate:obstacle-sprites": "node scripts/generate-obstacle-sprites.mjs",
-    "generate:terrain-textures": "node scripts/generate-terrain-textures.mjs",
     "import:terrain": "node scripts/import-terrain-texture.mjs",
     "generate:cursors": "node scripts/generate-cursors.mjs",
     "generate:sprites:webp": "npm run generate:hero-sprites && npm run generate:boat-sprites && npm run generate:town-sprites",

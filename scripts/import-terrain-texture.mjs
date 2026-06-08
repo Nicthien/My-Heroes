@@ -1,6 +1,6 @@
 // Import a ComfyUI-generated (or any) square source image into the game's isometric
-// terrain-tile format: a diamond top plus two shaded side faces, as .webp, matching
-// the geometry produced by scripts/generate-terrain-textures.mjs.
+// terrain-tile format: a diamond top plus two shaded side faces, as .webp. This is the
+// sanctioned terrain-texture pipeline (real raster art, never SVG/procedural).
 //
 // Usage:
 //   node scripts/import-terrain-texture.mjs --terrain rough --variant clean \
@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 
-// Geometry mirrors generate-terrain-textures.mjs.
+// Iso tile geometry (top diamond + SW/SE side faces).
 const SOURCE_TOP = { w: 256, h: 128 };
 const OUTPUT_TOP = { w: 128, h: 64 };
 const SOURCE_SIDE = { w: 256, h: 192 };

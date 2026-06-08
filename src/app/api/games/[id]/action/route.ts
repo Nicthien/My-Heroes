@@ -257,6 +257,7 @@ export async function POST(
         handleAdventureBuildingVisit,
         logPlayerAction,
         normalizeHeroStatChoice,
+        updatePlayerResources,
       },
     });
     if (adventureResponse) return adventureResponse;

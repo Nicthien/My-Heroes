@@ -348,6 +348,9 @@ export const fr = {
   "hero.machineBallista": "Baliste",
   "hero.machineTent": "Tente",
   "hero.machineAmmo": "Munitions",
+  "hero.sectionWarMachines": "Machines de guerre",
+  "hero.machineOwned": "Équipée",
+  "hero.machineAbsent": "Non équipée",
   "hero.levelXp": "Niveau {level} - XP {xp}",
   "hero.target": "Cible : {label}",
   "hero.atTown": "Au château :",
@@ -754,6 +757,10 @@ export const fr = {
   "ballista.ammoLabel": "Chariot de munitions",
   "ballista.ammoDesc": "Fournit des munitions illimitées aux tireurs alliés.",
   "ballista.buy": "Acheter",
+
+  // --- War machine factory (adventure shop) ---
+  "factory.title": "Usine de machines de guerre",
+  "factory.intro": "Équipez {name} de machines de guerre.",
 
   // --- Town: artifacts tab ---
   "artifactsTab.depleted": "Stock de marchands d'artefacts épuisé. Reviendra à la prochaine reconstruction.",

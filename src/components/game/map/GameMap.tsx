@@ -23,6 +23,7 @@ import {
   isTileTraversable,
 } from "@/lib/game/engine";
 import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
+import { WAR_MACHINE_COST, WAR_MACHINE_LABEL_KEY, type WarMachineKey } from "@/lib/game/war-machines-shop";
 import { refreshGameState } from "@/lib/game/refresh";
 import {
   ADVENTURE_CURSORS,
@@ -84,9 +85,14 @@ type PendingAdventureChoice = {
   choices: AdventureChoice[];
 };
 
+type PendingWarMachineFactory = {
+  heroId: string;
+  buildingId: string;
+};
+
 type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount?: number; gold?: number; destination?: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string; alreadyVisited?: boolean }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination?: Position; choices?: AdventureChoice[]; buildingId?: string; alreadyVisited?: boolean; shop?: "war_machine_factory" }
   | { type: "TELEPORT"; buildingType: "stargate" | "subterranean_gate"; from: Position; to: Position; message?: string; destination?: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination?: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination?: Position }
@@ -123,6 +129,7 @@ export default function GameMapComponent() {
   const [rendererReadyVersion, setRendererReadyVersion] = useState(0);
   const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
   const [pendingAdventureChoice, setPendingAdventureChoice] = useState<PendingAdventureChoice | null>(null);
+  const [pendingWarMachineFactory, setPendingWarMachineFactory] = useState<PendingWarMachineFactory | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
@@ -831,6 +838,11 @@ export default function GameMapComponent() {
       }
       // Distinct sound per building nature (knowledge, magic, vision, reward…).
       playAdventureBuildingVisit(interaction.buildingType);
+      if (interaction.shop === "war_machine_factory" && interaction.buildingId) {
+        setPendingWarMachineFactory({ heroId, buildingId: interaction.buildingId });
+        setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ?? getAdventureBuildingLabel(interaction.buildingType));
+        return true;
+      }
       if (interaction.choices?.length && interaction.buildingId) {
         setPendingAdventureChoice({
           heroId,
@@ -901,6 +913,28 @@ export default function GameMapComponent() {
       useGameStore.getState().setMovePending(false);
     }
   }, [devRevealMap, gameState, handleMoveInteraction, pendingAdventureChoice, session?.user?.id, setCombatMessage]);
+
+  const buyFactoryMachine = useCallback(async (machine: WarMachineKey) => {
+    if (!gameState || !pendingWarMachineFactory) return;
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "BUY_FACTORY_MACHINE",
+        heroId: pendingWarMachineFactory.heroId,
+        buildingId: pendingWarMachineFactory.buildingId,
+        machine,
+      }),
+    });
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, localeRef.current));
+      return;
+    }
+    // Keep the shop open so the hero can buy the other machines; refresh the
+    // store so owned status and remaining gold update live in the modal.
+    const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshed) useGameStore.getState().setGameState(refreshed);
+  }, [devRevealMap, gameState, pendingWarMachineFactory, session?.user?.id, setCombatMessage]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -2486,6 +2520,85 @@ export default function GameMapComponent() {
           onClose={() => setPendingAdventureChoice(null)}
         />
       )}
+      {pendingWarMachineFactory && (
+        <WarMachineFactoryModal
+          heroId={pendingWarMachineFactory.heroId}
+          onBuy={(machine) => void buyFactoryMachine(machine)}
+          onClose={() => setPendingWarMachineFactory(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function WarMachineFactoryModal({
+  heroId,
+  onBuy,
+  onClose,
+}: {
+  heroId: string;
+  onBuy: (machine: WarMachineKey) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const gameState = useGameStore((state) => state.gameState);
+  const owner = gameState?.players.find((player) => player.heroes.some((item) => item.id === heroId));
+  const hero = owner?.heroes.find((item) => item.id === heroId);
+  if (!hero || !owner) return null;
+  const wm = hero.warMachines ?? {};
+  const gold = owner.resources.gold;
+  const machines: WarMachineKey[] = ["ballista", "firstAid", "ammoCart"];
+
+  return (
+    <div className="absolute inset-0 z-40 grid place-items-center bg-black/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded border border-amber-500/50 bg-stone-950/95 p-4 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black text-amber-100">{t("factory.title")}</h2>
+            <p className="mt-1 text-sm leading-snug text-stone-300">{t("factory.intro", { name: hero.name })}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-400"
+            aria-label={t("common.close")}
+          >
+            x
+          </button>
+        </div>
+        <div className="mt-4 space-y-2">
+          {machines.map((key) => {
+            const cost = WAR_MACHINE_COST[key];
+            const alreadyOwned = Boolean(wm[key]);
+            const tooPoor = gold < cost;
+            const disabled = alreadyOwned || tooPoor;
+            return (
+              <div key={key} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-amber-100">{t(WAR_MACHINE_LABEL_KEY[key].label as TranslationKey)}</div>
+                    <div className="text-xs text-amber-200/60">{t(WAR_MACHINE_LABEL_KEY[key].desc as TranslationKey)}</div>
+                    <div className="mt-1 text-xs text-amber-300">{t("tavern.goldCost", { n: cost })}</div>
+                    {alreadyOwned && <div className="mt-1 text-xs text-emerald-300">{t("ballista.alreadyEquipped")}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onBuy(key)}
+                    className={`shrink-0 rounded-md border px-3 py-1 text-sm font-black uppercase tracking-wider transition ${
+                      disabled
+                        ? "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+                        : "border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 hover:from-amber-500 hover:to-amber-700"
+                    }`}
+                  >
+                    {t("ballista.buy")}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

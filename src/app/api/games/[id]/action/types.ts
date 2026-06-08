@@ -118,7 +118,7 @@ export interface MinimalPlayer {
 
 export type MoveInteraction =
   | { type: "COLLECT"; resource: string; amount: number; gold?: number; destination: Position }
-  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string; alreadyVisited?: boolean }
+  | { type: "ADVENTURE_BUILDING"; buildingType: string; reward?: { gold?: number; resources?: Record<string, number> }; recruited?: { unitType: UnitType; count: number }; message?: string; destination: Position; choices?: AdventureBuildingChoice[]; buildingId?: string; alreadyVisited?: boolean; shop?: "war_machine_factory" }
   | { type: "TELEPORT"; buildingType: "stargate" | "subterranean_gate"; from: Position; to: Position; message?: string; destination: Position }
   | { type: "COMBAT"; targetId: string; targetType: "hero" | "monster" | "building" | "town" | "gate" | "creature_bank" | "artifact"; destination: Position; targetPosition?: Position }
   | { type: "ARTIFACT"; artifactId: string; label: string; destination: Position }

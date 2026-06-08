@@ -585,11 +585,11 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
   }
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">{t("hero.tabArmy")}</div>
-        <div className="text-[10px] font-black text-amber-200/60">{sortedArmies.length}/{HERO_ARMY_STACK_LIMIT}</div>
-      </div>
+    <div className="space-y-2">
+      <CollapsibleSection
+        title={t("hero.tabArmy")}
+        badge={`${sortedArmies.length}/${HERO_ARMY_STACK_LIMIT}`}
+      >
       {selected && (
         <div className="mb-3 rounded-md border border-amber-700/35 bg-black/40 p-2">
           <div className="flex items-center gap-2 text-xs text-amber-100">
@@ -663,7 +663,91 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
           {t("hero.armyEmpty")}
         </div>
       )}
+      </CollapsibleSection>
+      <WarMachinesSection hero={hero} t={t} />
     </div>
+  );
+}
+
+function CollapsibleSection({
+  title,
+  badge,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  badge?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-md border border-amber-800/35 bg-black/20">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">{title}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          {badge != null && <span className="text-[10px] font-black text-amber-200/60">{badge}</span>}
+          <svg
+            viewBox="0 0 24 24"
+            className={`h-4 w-4 text-amber-300/70 transition ${open ? "" : "-rotate-90"}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      {open && <div className="px-2.5 pb-2.5">{children}</div>}
+    </div>
+  );
+}
+
+const WAR_MACHINE_ROWS: { key: "ballista" | "firstAid" | "ammoCart"; unitType: UnitType; labelKey: TranslationKey }[] = [
+  { key: "ballista", unitType: UnitType.BALLISTA, labelKey: "ballista.ballistaLabel" },
+  { key: "firstAid", unitType: UnitType.FIRST_AID_TENT, labelKey: "ballista.tentLabel" },
+  { key: "ammoCart", unitType: UnitType.AMMO_CART, labelKey: "ballista.ammoLabel" },
+];
+
+function WarMachinesSection({ hero, t }: { hero: Hero; t: TFn }) {
+  const wm = hero.warMachines ?? {};
+  const ownedCount = WAR_MACHINE_ROWS.filter((row) => wm[row.key]).length;
+  return (
+    <CollapsibleSection title={t("hero.sectionWarMachines")} badge={`${ownedCount}/${WAR_MACHINE_ROWS.length}`}>
+      <div className="space-y-1.5">
+        {WAR_MACHINE_ROWS.map((row) => {
+          const owned = Boolean(wm[row.key]);
+          return (
+            <div
+              key={row.key}
+              className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                owned ? "border-amber-700/40 bg-black/45" : "border-amber-900/40 bg-black/25 opacity-60"
+              }`}
+            >
+              <UnitSprite unitType={row.unitType} size="xs" describe />
+              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-amber-100">{t(row.labelKey)}</span>
+              <span
+                className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-black uppercase ${
+                  owned
+                    ? "border-emerald-600/50 bg-emerald-950/50 text-emerald-200"
+                    : "border-amber-800/45 bg-stone-950/50 text-amber-200/55"
+                }`}
+              >
+                {owned ? t("hero.machineOwned") : t("hero.machineAbsent")}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </CollapsibleSection>
   );
 }
 

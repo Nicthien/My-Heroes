@@ -44,7 +44,7 @@ Copy `.env.example` to `.env` and configure the Supabase URL, publishable key, a
   - `economy.ts` - Building/unit rules and resource calculations
   - `units.ts` - Unit stat tables
   - `combat/` - Combat system (auto-resolve and persistent hex grid)
-- `src/lib/rendering/phaser/` - Phaser isometric renderer. `PhaserMapRenderer.ts` holds the `PhaserMapScene` class; pure helpers are split into siblings: `mapObjectLayout`, `terrainColors`, `terrainAnimation`, `terrainFaceRender`, `fogConstants`, `fogRender`, `roadConstants`, `roadGeometry`, `decorConstants`, `decorTextures`, `decorDrawing`, `boardAndWallDrawing`, `objectMetrics`, `heroSprite`, `pointMath`, `mapRenderSettings`, `mapRenderHelpers`, `directions` (compass alphabet `Direction8` / `Diagonal4` / `Cardinal4` — see "Directional Naming" in AGENTS.md before introducing any direction-flavored type or string).
+- `src/lib/rendering/phaser/` - Phaser isometric renderer. `PhaserMapRenderer.ts` holds the `PhaserMapScene` class; pure helpers are split into siblings: `mapObjectLayout`, `terrainColors`, `terrainAnimation`, `terrainFaceRender`, `fogConstants`, `fogRender`, `roadConstants`, `roadGeometry`, `decorConstants`, `decorTextures`, `boardAndWallDrawing`, `objectMetrics`, `heroSprite`, `pointMath`, `mapRenderSettings`, `mapRenderHelpers`, `directions` (compass alphabet `Direction8` / `Diagonal4` / `Cardinal4` — see "Directional Naming" in AGENTS.md before introducing any direction-flavored type or string).
 - `src/lib/stores/gameStore.ts` - Zustand client state (game state, UI selections, combat UI)
 - `src/lib/auth/index.ts` - Supabase auth helpers for Route Handlers
 - `src/components/` - React components. The big screens are decomposed:

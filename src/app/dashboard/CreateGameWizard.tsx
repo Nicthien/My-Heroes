@@ -213,8 +213,8 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
 
                 <div>
                   <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-amber-200/80">{t("create.mapSize")}</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(["S", "M", "L", "XL"] as const).map((s) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["S", "M", "L"] as const).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -533,7 +533,7 @@ export function CreateGameWizard(props: CreateGameWizardProps) {
                   onChange={(event) => setMapSize(event.target.value as MapSizeKey)}
                   className="h-9 rounded border border-stone-700 bg-stone-900 px-3 text-sm outline-none focus:border-amber-400"
                 >
-                  {Object.entries(MAP_SIZES).map(([key, value]) => (
+                  {Object.entries(MAP_SIZES).filter(([key]) => key !== "XL").map(([key, value]) => (
                     <option key={key} value={key}>
                       {key} - {value}x{value}
                     </option>

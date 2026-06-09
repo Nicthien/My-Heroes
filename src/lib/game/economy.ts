@@ -325,28 +325,26 @@ export function getGrowthForBuiltTownBuilding(faction: Faction, building: Buildi
 export function getTownWeeklyGrowth(faction: Faction, buildings: Array<BuildingType | string>): Partial<Record<UnitType, number>> {
   const rules = getFactionBuildingRules(faction);
   const growth: Partial<Record<UnitType, number>> = {};
-  // A built upgrade dwelling replaces its base dwelling's growth pool: the
-  // tier produces a single (upgraded) creature pool, not base + upgraded. Collect the
-  // base units whose upgrade is built so we can skip their base growth below.
-  const replacedBaseUnits = new Set<UnitType>();
+  // Base and upgraded dwellings of a tier each keep their OWN recruit pool and grow
+  // independently: a town with both built produces base growth + upgraded growth
+  // every week (separate counters), not a single shared pool.
   let hasGrail = false;
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
-    if (rule?.replacesUnit) replacedBaseUnits.add(rule.replacesUnit);
     if (rule?.grail) hasGrail = true;
   }
 
-  // The fortification ladder and the Grail multiply the BASE dwelling growth
-  // before any flat per-creature bonuses. Citadel ×1.5, Castle ×2 (Fort alone = no
-  // growth bonus), Grail an additional ×1.5.
+  // The fortification ladder and the Grail multiply each dwelling's growth before
+  // any flat per-creature bonuses. Citadel ×1.5, Castle ×2 (Fort alone = no growth
+  // bonus), Grail an additional ×1.5.
   const fortLevel = getTownFortLevel(buildings);
   const fortMultiplier = fortLevel >= 3 ? 2 : fortLevel === 2 ? 1.5 : 1;
   const baseMultiplier = fortMultiplier * (hasGrail ? 1.5 : 1);
 
-  // 1) Base dwelling growth, scaled by the fort/Grail multiplier.
+  // 1) Per-dwelling growth (base AND upgraded each count), scaled by the fort/Grail multiplier.
   for (const building of buildings) {
     const rule = rules.find((r) => r.type === building);
-    if (!rule?.unlocksUnit || replacedBaseUnits.has(rule.unlocksUnit)) continue;
+    if (!rule?.unlocksUnit) continue;
     const unitRule = UNIT_RULES[rule.unlocksUnit];
     if (unitRule) growth[rule.unlocksUnit] = (growth[rule.unlocksUnit] ?? 0) + Math.floor(unitRule.growth * baseMultiplier);
   }

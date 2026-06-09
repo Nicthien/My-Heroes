@@ -890,11 +890,15 @@ function opportunityMultiplier(
 
   const maxMove = Math.max(1, hero.movement);
   const movementRatio = objective.pathCost / maxMove;
-  if (movementRatio > 0.85) return 1;
 
   // FREE PICKUP : aucun combat (targetPower === 0) ET atteignable ce tour.
   // Inclut piles de ressources, mines non gardées, bâtiments d'aventure, gates ouverts.
   // Priorité absolue : un héros à côté d'une pile d'or doit toujours la ramasser.
+  // On teste le free-pickup AVANT le garde des 0.85 : ramasser du butin gratuit
+  // atteignable ce tour vaut toujours le détour, même s'il consomme presque tout
+  // le mouvement restant. Sinon un héros qui vient de capturer une mine (mouvement
+  // quasi épuisé) laisse les piles d'or voisines au sol pour partir explorer —
+  // exactement le comportement non-organique qu'on veut éviter.
   const isFreePickup = objective.targetPower <= 0 && (
     objective.type === "resource" ||
     objective.type === "resource_building" ||
@@ -905,7 +909,7 @@ function opportunityMultiplier(
   );
   if (isFreePickup) {
     // Multiplicateur d'au moins 15 si adjacent (movementRatio ~0), jusqu'à ~25 pour les ressources.
-    const proximityFactor = 1 - movementRatio; // 1.0 si adjacent
+    const proximityFactor = Math.max(0, 1 - movementRatio); // 1.0 si adjacent, jamais négatif
     const freeBonus = 15 + proximityFactor * 10;
     const valueWeight = objective.type === "resource" ? 1.2
       : objective.type === "resource_building" ? 1.3
@@ -913,6 +917,10 @@ function opportunityMultiplier(
       : 1;
     return freeBonus * valueWeight;
   }
+
+  // Cibles gardées (combat) : on évite de cramer tout le mouvement pour un assaut
+  // sans suite possible ce tour-ci.
+  if (movementRatio > 0.85) return 1;
 
   // Cible gardée : on n'attaque que si on a la puissance requise.
   const requiredRatio = getRequiredPowerRatio(context, objective);

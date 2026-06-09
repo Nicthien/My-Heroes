@@ -343,20 +343,17 @@ create table public.combat_truces (
   unique (combat_id, requested_by_player_id)
 );
 
-alter publication supabase_realtime add table public.games;
-alter publication supabase_realtime add table public.game_players;
-alter publication supabase_realtime add table public.heroes;
-alter publication supabase_realtime add table public.armies;
-alter publication supabase_realtime add table public.towns;
-alter publication supabase_realtime add table public.resource_buildings;
-alter publication supabase_realtime add table public.gates;
-alter publication supabase_realtime add table public.gate_stacks;
-alter publication supabase_realtime add table public.boats;
-alter publication supabase_realtime add table public.combats;
-alter publication supabase_realtime add table public.combat_participants;
-alter publication supabase_realtime add table public.combat_reinforcement_requests;
-alter publication supabase_realtime add table public.combat_surrender_negotiations;
-alter publication supabase_realtime add table public.combat_truces;
+-- Realtime is notification-only: clients subscribe to `game_events` (game_id +
+-- updated_at) and re-fetch the sanitized service-role /sync endpoint. Raw game
+-- tables are intentionally NOT published — streaming them would leak every
+-- enemy position, garrison, combat board and the Grail to any member. The
+-- publication add, membership SELECT policy and the bump trigger live in the RLS
+-- section below (they need is_game_member). See migration
+-- 20260609000200_realtime_notify_only.sql.
+create table public.game_events (
+  game_id uuid primary key references public.games(id) on delete cascade,
+  updated_at timestamptz not null default now()
+);
 
 alter table public.profiles enable row level security;
 create policy "profiles readable by authenticated users" on public.profiles for select to authenticated using (true);
@@ -454,47 +451,106 @@ alter table public.combat_reinforcement_requests enable row level security;
 alter table public.combat_surrender_negotiations enable row level security;
 alter table public.combat_truces enable row level security;
 
-create policy "games visible to members" on public.games for select to authenticated using (public.is_game_member(id));
-create policy "game_players visible to members" on public.game_players for select to authenticated using (public.is_game_member(game_id));
-create policy "heroes visible to members" on public.heroes for select to authenticated using (
-  exists (select 1 from public.game_players gp where gp.id = heroes.game_player_id and public.is_game_member(gp.game_id))
-);
-create policy "armies visible to members" on public.armies for select to authenticated using (
-  exists (
-    select 1
+-- Game data tables keep RLS ENABLED (above) with NO member SELECT policy, so
+-- authenticated clients get zero rows via PostgREST/Realtime. The browser never
+-- reads them directly — every read goes through service-role /sync routes that
+-- bypass RLS. This closes the "wallhack" pull path (a member SELECTing all enemy
+-- data). See migration 20260609000200_realtime_notify_only.sql.
+
+-- Notification table is the ONLY game table members may read + the only one
+-- published to realtime. It carries no sensitive data (game_id + updated_at).
+alter table public.game_events enable row level security;
+create policy "game_events visible to members" on public.game_events
+  for select to authenticated
+  using (public.is_game_member(game_id));
+
+-- Bump game_events for the owning game whenever any data table changes, so the
+-- realtime subscriber knows to re-fetch the sanitized /sync endpoint.
+create or replace function public.bump_game_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_game_id uuid;
+  v_row record;
+begin
+  if tg_op = 'DELETE' then
+    v_row := old;
+  else
+    v_row := new;
+  end if;
+
+  if tg_table_name = 'games' then
+    v_game_id := v_row.id;
+  elsif tg_table_name in (
+    'game_players', 'resource_buildings', 'gates', 'boats',
+    'neutral_armies', 'combats', 'turns', 'game_action_logs'
+  ) then
+    v_game_id := v_row.game_id;
+  elsif tg_table_name = 'heroes' then
+    select gp.game_id into v_game_id
+    from public.game_players gp
+    where gp.id = v_row.game_player_id;
+  elsif tg_table_name = 'towns' then
+    if v_row.game_id is not null then
+      v_game_id := v_row.game_id;
+    else
+      select gp.game_id into v_game_id
+      from public.game_players gp
+      where gp.id = v_row.game_player_id;
+    end if;
+  elsif tg_table_name = 'armies' then
+    select gp.game_id into v_game_id
     from public.heroes h
     join public.game_players gp on gp.id = h.game_player_id
-    where h.id = armies.hero_id
-      and public.is_game_member(gp.game_id)
-  )
-);
-create policy "towns visible to members" on public.towns for select to authenticated using (
-  (game_id is not null and public.is_game_member(game_id))
-  or exists (select 1 from public.game_players gp where gp.id = towns.game_player_id and public.is_game_member(gp.game_id))
-);
-create policy "resource_buildings visible to members" on public.resource_buildings for select to authenticated using (public.is_game_member(game_id));
-create policy "gates visible to members" on public.gates for select to authenticated using (public.is_game_member(game_id));
-create policy "gate_stacks visible to members" on public.gate_stacks for select to authenticated using (
-  exists (select 1 from public.gates g where g.id = gate_stacks.gate_id and public.is_game_member(g.game_id))
-);
-create policy "boats visible to members" on public.boats for select to authenticated using (public.is_game_member(game_id));
-create policy "neutral_armies visible to members" on public.neutral_armies for select to authenticated using (public.is_game_member(game_id));
-create policy "neutral_army_stacks visible to members" on public.neutral_army_stacks for select to authenticated using (
-  exists (select 1 from public.neutral_armies na where na.id = neutral_army_stacks.neutral_army_id and public.is_game_member(na.game_id))
-);
-create policy "turns visible to members" on public.turns for select to authenticated using (public.is_game_member(game_id));
-create policy "score_snapshots visible to members" on public.score_snapshots for select to authenticated using (public.is_game_member(game_id));
-create policy "game_action_logs visible to members" on public.game_action_logs for select to authenticated using (public.is_game_member(game_id));
-create policy "combats visible to members" on public.combats for select to authenticated using (public.is_game_member(game_id));
-create policy "combat_participants visible to members" on public.combat_participants for select to authenticated using (
-  exists (select 1 from public.combats c where c.id = combat_participants.combat_id and public.is_game_member(c.game_id))
-);
-create policy "combat_reinforcement_requests visible to members" on public.combat_reinforcement_requests for select to authenticated using (
-  exists (select 1 from public.combats c where c.id = combat_reinforcement_requests.combat_id and public.is_game_member(c.game_id))
-);
-create policy "combat_surrender_negotiations visible to members" on public.combat_surrender_negotiations for select to authenticated using (
-  exists (select 1 from public.combats c where c.id = combat_surrender_negotiations.combat_id and public.is_game_member(c.game_id))
-);
-create policy "combat_truces visible to members" on public.combat_truces for select to authenticated using (
-  exists (select 1 from public.combats c where c.id = combat_truces.combat_id and public.is_game_member(c.game_id))
-);
+    where h.id = v_row.hero_id;
+  elsif tg_table_name = 'gate_stacks' then
+    select g.game_id into v_game_id
+    from public.gates g
+    where g.id = v_row.gate_id;
+  elsif tg_table_name = 'neutral_army_stacks' then
+    select na.game_id into v_game_id
+    from public.neutral_armies na
+    where na.id = v_row.neutral_army_id;
+  elsif tg_table_name in (
+    'combat_participants', 'combat_reinforcement_requests',
+    'combat_surrender_negotiations', 'combat_truces'
+  ) then
+    select c.game_id into v_game_id
+    from public.combats c
+    where c.id = v_row.combat_id;
+  end if;
+
+  if v_game_id is not null then
+    insert into public.game_events (game_id, updated_at)
+    values (v_game_id, now())
+    on conflict (game_id) do update set updated_at = excluded.updated_at;
+  end if;
+
+  return null;
+end;
+$$;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'games', 'game_players', 'heroes', 'armies', 'towns', 'resource_buildings',
+    'gates', 'gate_stacks', 'boats', 'neutral_armies', 'neutral_army_stacks',
+    'combats', 'combat_participants', 'combat_reinforcement_requests',
+    'combat_surrender_negotiations', 'combat_truces', 'turns', 'game_action_logs'
+  ]
+  loop
+    execute format('drop trigger if exists bump_game_event on public.%I', t);
+    execute format(
+      'create trigger bump_game_event after insert or update or delete on public.%I '
+      || 'for each row execute function public.bump_game_event()',
+      t
+    );
+  end loop;
+end $$;
+
+alter publication supabase_realtime add table public.game_events;

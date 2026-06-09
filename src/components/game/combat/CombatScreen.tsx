@@ -232,13 +232,18 @@ export default function CombatScreen() {
     };
 
     void fetchLatestCombat();
-    const channel = isUsingSupabaseProxy()
+    // Realtime is notification-only: the `combats` table is no longer streamed
+    // (it would leak enemy board state). We listen to the game's `game_events`
+    // bump instead and re-fetch the sanitized combat endpoint. See migration
+    // 20260609000200_realtime_notify_only.sql.
+    const gameId = useGameStore.getState().activeCombat?.gameId;
+    const channel = isUsingSupabaseProxy() || !gameId
       ? null
       : supabase
           .channel(`combat:${activeCombatId}`)
           .on(
             "postgres_changes",
-            { event: "*", schema: "public", table: "combats", filter: `id=eq.${activeCombatId}` },
+            { event: "*", schema: "public", table: "game_events", filter: `game_id=eq.${gameId}` },
             () => void fetchLatestCombat()
           )
           .subscribe();

@@ -23,7 +23,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Source of truth for a fresh install: `supabase/schema.sql`. Source of truth for incremental changes: `supabase/migrations/`.
 - After any schema change, update **both** so that fresh installs and existing databases stay aligned.
 - Never write authoritative SQL in `supabase/snippets/` — that path is gitignored (Supabase Studio scratchpad) and not part of the source tree.
-- Game tables have membership-based SELECT RLS applied via `supabase/migrations/20260530000100_enable_game_rls.sql` (mirrored in `supabase/schema.sql`); writes still go through service-role API routes. Any new game table must get its SELECT policy in both the migration and `schema.sql`, or realtime subscriptions silently break.
+- Game data tables keep RLS **enabled with NO member SELECT policy** (see `supabase/migrations/20260609000200_realtime_notify_only.sql`, mirrored in `supabase/schema.sql`). Clients cannot read them directly — that would leak every enemy position / garrison / combat board / the Grail (a "wallhack"). All reads go through service-role `/sync` & `/[id]` routes that bypass RLS and sanitize output. Writes go through service-role API routes.
+- Realtime is **notification-only**: clients subscribe to the single `game_events` table (`game_id` + `updated_at`) and re-fetch `/sync`. Only `game_events` is in the `supabase_realtime` publication and only it has a membership SELECT policy.
+- **When adding a new game table**: (1) do NOT add it to the realtime publication, (2) do NOT give it a member SELECT policy, (3) add it to the `bump_game_event` trigger list (and the trigger's `game_id` resolution) so its changes still notify subscribers. Read the new table via a service-role route, never via the browser Supabase client.
 
 # Localization
 

@@ -169,24 +169,15 @@ export default function GamePage() {
     } else {
       void bootstrapGame();
     }
+    // Realtime is notification-only: we subscribe to the lightweight `game_events`
+    // row for this game (game_id + updated_at) and re-fetch the sanitized /sync
+    // endpoint on any bump. Raw game tables are no longer streamed — see
+    // migration 20260609000200_realtime_notify_only.sql.
     const channel = isUsingSupabaseProxy()
       ? null
       : supabase
           .channel(`game:${gameId}`)
-          .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "heroes" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "armies" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "towns" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "resource_buildings", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "gates", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "gate_stacks" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "combats", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_participants" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_reinforcement_requests" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_surrender_negotiations" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "combat_truces" }, () => void syncGame(shouldResumeAdminAi()))
-          .on("postgres_changes", { event: "*", schema: "public", table: "game_action_logs", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
+          .on("postgres_changes", { event: "*", schema: "public", table: "game_events", filter: `game_id=eq.${gameId}` }, () => void syncGame(shouldResumeAdminAi()))
           .subscribe();
 
     const interval = setInterval(() => void syncGame(shouldResumeAdminAi()), adminObserverMode ? 3000 : isUsingSupabaseProxy() ? 5000 : 10000);

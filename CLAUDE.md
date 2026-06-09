@@ -100,7 +100,7 @@ Key fields:
 
 ### API Routes (src/app/api/games/)
 
-All routes use `createAdminClient()` (Supabase service role, bypassing RLS) and gate access via `requireCurrentUser()`. There is no client direct-write path — the browser only subscribes to Supabase realtime for reads. SELECT-side RLS (membership-based) is applied via `supabase/migrations/20260530000100_enable_game_rls.sql` and mirrored in `supabase/schema.sql`.
+All routes use `createAdminClient()` (Supabase service role, bypassing RLS) and gate access via `requireCurrentUser()`. There is no client direct-write path. The browser never reads game data tables directly either — they have RLS enabled with **no member SELECT policy** (`supabase/migrations/20260609000200_realtime_notify_only.sql`, mirrored in `schema.sql`), so a member can't SELECT raw enemy/garrison/combat/Grail data ("wallhack" prevention). Reads go through the sanitized service-role `/sync` & `/[id]` routes. Realtime is **notification-only**: clients subscribe to the lone `game_events` table (`game_id` + `updated_at`, the only published table) and re-fetch `/sync` on each bump, which a `bump_game_event` trigger emits on any game-data change.
 
 - POST /api/games - Create new game (map generation, player setup, neutral armies, resource buildings)
 - GET  /api/games - List authenticated user's games

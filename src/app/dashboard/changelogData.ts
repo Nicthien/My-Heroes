@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.8",
+    date: "2026-06-09",
+    summary: "Correction de l'engagement d'un héros ennemi posté devant un château.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Combat** — lorsqu'un héros adverse est posté sur ou devant l'un de vos châteaux, cliquer dessus ouvre désormais correctement la fenêtre « Engager le combat ? » : elle ne se referme plus instantanément et votre héros n'est plus désélectionné, ce qui vous permet enfin d'attaquer ou de fuir.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.7",
     date: "2026-06-09",
     summary: "Descriptifs des objets de la carte au survol.",

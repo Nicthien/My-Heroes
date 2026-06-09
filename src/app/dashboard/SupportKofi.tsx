@@ -7,6 +7,7 @@ import {
   goldText,
   ornateFramePolished,
 } from "@/components/game/hud/theme";
+import { useSupabaseUser } from "@/lib/auth/client";
 import { KOFI_URL } from "./dashboardConstants";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
@@ -20,21 +21,31 @@ function HeartIcon({ className }: { className?: string }) {
   );
 }
 
+interface SupportPromptState {
+  logins: number;
+  shown: boolean;
+  lastSignIn: string | null;
+}
+
 /**
  * Persisted, per-user nudge that opens the Ko-fi prompt the second time a player
- * connects, then never again. A login is counted once per browser tab session
- * (sessionStorage guard) so navigating around the dashboard does not re-count.
+ * signs in, then never again. A "login" is detected by a change of the Supabase
+ * `last_sign_in_at` timestamp, which updates on each real sign-in but stays stable
+ * across token refreshes and dashboard re-mounts — so logging out and back in
+ * (even in the same tab) correctly counts as a new connection.
  */
-export function useSupportPrompt(userId: string | undefined) {
+export function useSupportPrompt() {
+  const user = useSupabaseUser();
+  const userId = user?.id;
+  const lastSignIn = user?.last_sign_in_at ?? null;
   const [shouldShow, setShouldShow] = useState(false);
 
   useEffect(() => {
     if (!userId || typeof window === "undefined") return;
 
     const persistKey = `myheroes:support-prompt:${userId}`;
-    const sessionKey = `myheroes:support-prompt-counted:${userId}`;
 
-    let state: { logins: number; shown: boolean } = { logins: 0, shown: false };
+    let state: SupportPromptState = { logins: 0, shown: false, lastSignIn: null };
     try {
       const raw = window.localStorage.getItem(persistKey);
       if (raw) state = { ...state, ...JSON.parse(raw) };
@@ -42,9 +53,9 @@ export function useSupportPrompt(userId: string | undefined) {
       // Corrupt/inaccessible storage — fall back to defaults.
     }
 
-    if (!window.sessionStorage.getItem(sessionKey)) {
-      state = { ...state, logins: state.logins + 1 };
-      window.sessionStorage.setItem(sessionKey, "1");
+    // Count a connection only when the sign-in timestamp changes (new session).
+    if (lastSignIn && lastSignIn !== state.lastSignIn) {
+      state = { ...state, logins: state.logins + 1, lastSignIn };
       try {
         window.localStorage.setItem(persistKey, JSON.stringify(state));
       } catch {
@@ -56,7 +67,7 @@ export function useSupportPrompt(userId: string | undefined) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShouldShow(true);
     }
-  }, [userId]);
+  }, [userId, lastSignIn]);
 
   const dismiss = useCallback(() => {
     setShouldShow(false);

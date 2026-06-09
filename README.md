@@ -4,6 +4,10 @@
 
 Jeu video de strategie fantastique au tour par tour.
 
+[![Soutenir sur Ko-fi](https://img.shields.io/badge/Soutenir-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/nthstudio)
+
+Ce jeu est un projet personnel developpe sur mon temps libre. Si il vous plait et que vous souhaitez le soutenir, vous pouvez m'offrir un Ko-fi : [ko-fi.com/nthstudio](https://ko-fi.com/nthstudio). Merci !
+
 ## Description
 
 My Heroes est un jeu de strategie au tour par tour ou les joueurs explorent une carte, collectent des ressources, recrutent des heros et des armees, et affrontent leurs adversaires dans des batailles tactiques. Le projet est construit avec Next.js, Supabase et Phaser.

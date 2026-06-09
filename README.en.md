@@ -4,6 +4,10 @@
 
 Turn-based fantasy strategy game.
 
+[![Support on Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/nthstudio)
+
+This game is a personal project built in my spare time. If you enjoy it and want to support it, you can buy me a Ko-fi: [ko-fi.com/nthstudio](https://ko-fi.com/nthstudio). Thank you!
+
 ## Description
 
 My Heroes is a turn-based strategy game where players explore a map, gather resources, recruit heroes and armies, and face their opponents in tactical battles. Built with Next.js, Supabase and Phaser.

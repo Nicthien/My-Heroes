@@ -357,7 +357,7 @@ export const fr = {
   "tutorial.menuTitle": "Menu",
   "tutorial.menuBody": "Revenez au tableau de bord ou quittez la partie. Vous pouvez rouvrir ce tutoriel à tout moment avec le bouton « ? ».",
   "tutorial.doneTitle": "À vous de jouer !",
-  "tutorial.doneBody": "Vous connaissez l'essentiel. Explorez la carte, développez vos villes et menez vos armées à la victoire. Bonne partie !",
+  "tutorial.doneBody": "Vous connaissez l'essentiel. Développez vos villes et menez vos armées à la victoire. Sélectionnez votre héros et partez explorer le monde !",
 
   // --- Town: build tab ---
   "town.buildTree": "Arbre des constructions",

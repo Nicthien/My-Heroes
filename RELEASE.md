@@ -63,6 +63,9 @@ walkthrough (dedicated LAN IPs, schema, and the Unraid template) is in
 [`docs/UNRAID.md`](docs/UNRAID.md). To run the app on the same docker network as
 Supabase, see [`docker-compose.unraid.yml`](docker-compose.unraid.yml).
 
+**On a cloud VPS** (hardening, Docker, Supabase, app, Caddy/HTTPS, SMTP, backups)
+there is a complete end-to-end walkthrough in [`docs/VPS.md`](docs/VPS.md).
+
 ### Option C — Unraid (self-hosted Supabase + native template)
 
 **Full GUI walkthrough: [`docs/UNRAID.md`](docs/UNRAID.md).** Summary:

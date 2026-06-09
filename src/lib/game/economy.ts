@@ -113,6 +113,11 @@ export function getResourceBuildingLabel(type: string | undefined) {
   return RESOURCE_BUILDING_RULES.find((rule) => rule.type === type)?.label;
 }
 
+export function getResourceBuildingProduction(type: string | undefined): Partial<Resources> | undefined {
+  if (!type) return undefined;
+  return RESOURCE_BUILDING_RULES.find((rule) => rule.type === type)?.production;
+}
+
 export interface UnitRule {
   type: UnitType;
   label: string;

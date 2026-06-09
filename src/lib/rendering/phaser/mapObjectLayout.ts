@@ -1,13 +1,13 @@
 import { getAdventureBuildingLabel, getAdventureBuildingRule } from "@/lib/game/adventure-buildings";
-import { getArtifactMapLabel } from "@/lib/game/artifacts";
+import { getArtifact, getArtifactMapLabel } from "@/lib/game/artifacts";
 import { getCreatureBankDefinition, isCreatureBankType } from "@/lib/game/creature-banks";
-import { getResourceBuildingLabel, UNIT_RULES as ECONOMY_UNIT_RULES } from "@/lib/game/economy";
+import { getResourceBuildingLabel, getResourceBuildingProduction, resourceLabel, UNIT_RULES as ECONOMY_UNIT_RULES } from "@/lib/game/economy";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
 import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
 import { localizedLabelFromId, localizedUnitLabel } from "@/lib/i18n/gameLabels";
-import { translate } from "@/lib/i18n/translate";
+import { translate, type TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 import { TILE_HEIGHT } from "@/lib/rendering/phaser/iso";
 import type { MapObjectData } from "@/lib/rendering/mapRenderer";
@@ -20,6 +20,17 @@ export const RESOURCE_LABELS: Record<string, string> = {
   crystals: "Cristaux",
   gems: "Gemmes",
   sulfur: "Soufre",
+};
+
+const ARTIFACT_BONUS_KEYS: Record<string, TranslationKey> = {
+  attack: "bonus.attack",
+  defense: "bonus.defense",
+  spellPower: "bonus.spellPower",
+  knowledge: "bonus.knowledge",
+  morale: "bonus.morale",
+  luck: "bonus.luck",
+  movement: "bonus.movement",
+  seaMovement: "bonus.seaMovement",
 };
 
 export type SpriteOrigin = {
@@ -194,6 +205,25 @@ export function getMapObjectHoverTitle(object: MapObject, locale: Locale = "fr")
 }
 
 export function getMapObjectHoverDescription(object: MapObject, locale: Locale = "fr"): string | null {
+  if (object.type === "building" && object.subtype) {
+    const production = getResourceBuildingProduction(object.subtype);
+    if (!production) return null;
+    const parts = Object.entries(production)
+      .filter(([, amount]) => Boolean(amount))
+      .map(([resource, amount]) => `+${amount} ${resourceLabel(resource, locale)}`);
+    if (parts.length === 0) return null;
+    return translate(locale, "map.resourceBuildingProduction", { production: parts.join(", ") });
+  }
+
+  if (object.type === "artifact") {
+    const artifact = getArtifact(object.subtype);
+    if (!artifact) return null;
+    const parts = Object.entries(artifact.bonus)
+      .filter(([, value]) => Boolean(value))
+      .map(([key, value]) => `${translate(locale, ARTIFACT_BONUS_KEYS[key] ?? (`bonus.${key}` as TranslationKey))} ${Number(value) > 0 ? "+" : ""}${value}`);
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+
   if (object.type !== "adventure_building") return null;
 
   if (isExternalDwellingType(object.subtype)) {

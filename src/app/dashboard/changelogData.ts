@@ -22,6 +22,20 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.7",
+    date: "2026-06-09",
+    summary: "Descriptifs des objets de la carte au survol.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Carte** — les bâtiments de ressources (mines, dunes, scieries…) affichent désormais leur production au survol, par ex. « Produit +1 soufre par jour ».",
+          "**Carte** — les artefacts posés sur la carte indiquent désormais leur bonus au survol, par ex. « Pouvoir +5 ».",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.6",
     date: "2026-06-09",
     summary: "Rassemblement de héros en ville et renforcement anti-triche.",

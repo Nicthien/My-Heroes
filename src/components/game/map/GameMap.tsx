@@ -1774,10 +1774,14 @@ export default function GameMapComponent() {
             const interaction = data.interaction as MoveInteraction | null | undefined;
             const handledInteraction = handleMoveInteraction(selectedHeroId, interaction);
             if (!handledInteraction) {
+              // The hero actually entered the town (no blocking interaction).
               pendingMoveRef.current = null;
               rendererRef.current?.clearHighlights();
+              setCombatMessage(tRef.current("map.heroEnteredTown"));
             }
-            setCombatMessage(tRef.current("map.heroEnteredTown"));
+            // Otherwise handleMoveInteraction already showed the relevant message
+            // (e.g. "Ce château est complet : 5 héros maximum." when full) — don't
+            // overwrite it with the generic "entered town" text.
 
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {

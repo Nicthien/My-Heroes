@@ -12,6 +12,9 @@ interface GameStore {
   selectedHeroId: string | null;
   selectedTownId: string | null;
   combatMessage: string | null;
+  // Drives the Grail puzzle ("La quête du Graal") window. Opened automatically
+  // when a hero visits an Obelisk, or manually from the hero panel button.
+  grailPuzzleOpen: boolean;
   pendingCombat: {
     attackerHeroId: string;
     targetId: string;
@@ -49,6 +52,7 @@ interface GameStore {
   focusTile: (x: number, y: number) => void;
   zoomMap: (direction: number) => void;
   setCombatMessage: (message: string | null) => void;
+  setGrailPuzzleOpen: (open: boolean) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
   setPendingAdventureSpell: (spell: GameStore["pendingAdventureSpell"]) => void;
@@ -84,6 +88,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedHeroId: null,
   selectedTownId: null,
   combatMessage: null,
+  grailPuzzleOpen: false,
   pendingCombat: null,
   pendingJoinCombat: null,
   pendingAdventureSpell: null,
@@ -131,6 +136,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })),
 
   setCombatMessage: (message) => set({ combatMessage: message }),
+  setGrailPuzzleOpen: (open) => set({ grailPuzzleOpen: open }),
   setPendingCombat: (combat) => set({ pendingCombat: combat }),
   setPendingJoinCombat: (combat) => set({ pendingJoinCombat: combat }),
   setPendingAdventureSpell: (spell) => set({ pendingAdventureSpell: spell }),
@@ -222,6 +228,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedHeroId: null,
       selectedTownId: null,
       combatMessage: null,
+      grailPuzzleOpen: false,
       pendingCombat: null,
       pendingJoinCombat: null,
       pendingAdventureSpell: null,

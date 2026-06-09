@@ -28,6 +28,9 @@ import type {
   SupabaseAdminClient,
 } from "./types";
 
+/** Max number of a player's heroes that may gather in one of their own towns. */
+export const MAX_TOWN_HEROES = 5;
+
 type MoveHeroPlayer = {
   id: string;
   isAlive: boolean;
@@ -60,7 +63,7 @@ export type MoveHeroHelpers = {
     killed: Set<string>;
     visitedAdventureBuildings: Set<string>;
     defeatedCreatureBanks: Set<string>;
-  }) => { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position } | null;
+  }) => { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position; townFull?: boolean } | null;
   getPathMovementCost: (map: GameMap, path: Position[], skills?: Record<string, string>, mode?: AdventureMovementMode, nativeTerrain?: TerrainType | null) => number;
   getResourcePileAmount: (object: MapObject) => number;
   incrementPlayerResource: (supabase: SupabaseAdminClient, playerId: string, resource: string, amount: number) => Promise<void>;
@@ -312,7 +315,9 @@ export async function handleMoveHeroAction({
   }
 
   if (firstStop?.hero) {
-    if (firstStop.hero.playerId === gamePlayer.id) {
+    if (firstStop.townFull) {
+      interaction = { type: "STOP", message: `Ce château est complet : ${MAX_TOWN_HEROES} héros maximum.`, destination: lastPos };
+    } else if (firstStop.hero.playerId === gamePlayer.id) {
       interaction = { type: "STOP", message: "Un de vos héros bloque le chemin.", destination: lastPos };
     } else {
       interaction = { type: "COMBAT", targetId: firstStop.hero.id, targetType: "hero", destination: lastPos, targetPosition: stopTargetPosition };

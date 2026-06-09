@@ -66,7 +66,7 @@ import { handleSkillAction } from "./skillActions";
 import { handleTownAction } from "./townActions";
 import { handleTurnAction } from "./turnActions";
 import { runAdventureBuildingVisit } from "./adventureBuildingVisit";
-import { handleMoveHeroAction } from "./moveHeroActions";
+import { handleMoveHeroAction, MAX_TOWN_HEROES } from "./moveHeroActions";
 import { getAdventureWeekKey, getLatestMapState } from "./actionHelpers";
 import type {
   CaptureTownRow,
@@ -1532,13 +1532,32 @@ function findFirstMoveStop({
   killed: Set<string>;
   visitedAdventureBuildings: Set<string>;
   defeatedCreatureBanks: Set<string>;
-}): { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position } | null {
+}): { pathIndex: number; stopBefore?: boolean; object?: MapObject; hero?: MinimalHero & { playerId: string }; targetPosition?: Position; townFull?: boolean } | null {
+  const movingPlayerTowns = players.find((player) => player.id === movingPlayerId)?.towns ?? [];
   for (let i = 1; i < path.length; i++) {
     const position = path[i];
     const hero = players
       .flatMap((player) => (player.heroes ?? []).map((item) => ({ ...item, playerId: player.id })))
       .find((item) => item.id !== movingHeroId && item.x === position.x && item.y === position.y);
-    if (hero) return { pathIndex: i, stopBefore: true, hero, targetPosition: position };
+    if (hero) {
+      // A friendly hero in our OWN town does not block — the newcomer joins,
+      // until the town is full (MAX_TOWN_HEROES). Anywhere else (open terrain or
+      // an enemy hero) stop one tile short: combat or a blocked path.
+      const isOwnTownTile =
+        hero.playerId === movingPlayerId &&
+        movingPlayerTowns.some((town) => town.x === position.x && town.y === position.y);
+      if (isOwnTownTile) {
+        const heroesInTown = players
+          .flatMap((player) => player.heroes ?? [])
+          .filter((item) => item.id !== movingHeroId && item.x === position.x && item.y === position.y).length;
+        if (heroesInTown >= MAX_TOWN_HEROES) {
+          return { pathIndex: i, stopBefore: true, hero, targetPosition: position, townFull: true };
+        }
+        // Below the cap: let the newcomer in (fall through to town handling).
+      } else {
+        return { pathIndex: i, stopBefore: true, hero, targetPosition: position };
+      }
+    }
 
     const object = map.tiles[position.y]?.[position.x]?.object;
     if (!object) continue;

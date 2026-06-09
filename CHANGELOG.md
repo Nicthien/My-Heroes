@@ -5,6 +5,16 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.4] - 2026-06-09
+
+Ajustement de la fin du tutoriel.
+
+### Modifié
+
+- **Tutoriel** — la dernière étape resélectionne désormais votre héros (au lieu de
+  laisser la ville ouverte, ce qui prêtait à confusion) et se termine par une
+  invitation à partir explorer le monde.
+
 ## [1.1.3] - 2026-06-09
 
 Correctif de connexion du compte admin et ajustement de l'invitation au soutien.

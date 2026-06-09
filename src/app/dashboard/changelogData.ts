@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.4",
+    date: "2026-06-09",
+    summary: "Ajustement de la fin du tutoriel.",
+    sections: [
+      {
+        category: "changed",
+        items: [
+          "**Tutoriel** — la dernière étape resélectionne désormais votre héros (au lieu de laisser la ville ouverte, ce qui prêtait à confusion) et se termine par une invitation à partir explorer le monde.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.2",
     date: "2026-06-09",
     summary: "Emails de confirmation d'inscription, de bienvenue et signalement de bug.",

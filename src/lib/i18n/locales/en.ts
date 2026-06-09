@@ -358,7 +358,7 @@ export const en: Record<TranslationKey, string> = {
   "tutorial.menuTitle": "Menu",
   "tutorial.menuBody": "Return to the dashboard or leave the game. You can reopen this tutorial anytime with the \"?\" button.",
   "tutorial.doneTitle": "You're ready!",
-  "tutorial.doneBody": "You know the essentials. Explore the map, grow your towns and lead your armies to victory. Have fun!",
+  "tutorial.doneBody": "You know the essentials. Grow your towns and lead your armies to victory. Select your hero and go explore the world!",
 
   // --- Town: build tab ---
   "town.buildTree": "Building tree",

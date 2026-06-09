@@ -37,7 +37,7 @@ const STEPS: TutorialStep[] = [
   { icon: "🏯", target: '[data-testid="hud-town-panel"]', select: "town", titleKey: "tutorial.townTitle", bodyKey: "tutorial.townBody" },
   { icon: "⚔️", target: '[data-tutorial="end-turn"]', titleKey: "tutorial.endTurnTitle", bodyKey: "tutorial.endTurnBody" },
   { icon: "🏰", target: '[data-tutorial="menu"]', titleKey: "tutorial.menuTitle", bodyKey: "tutorial.menuBody" },
-  { icon: "✨", titleKey: "tutorial.doneTitle", bodyKey: "tutorial.doneBody" },
+  { icon: "✨", select: "hero", titleKey: "tutorial.doneTitle", bodyKey: "tutorial.doneBody" },
 ];
 
 interface Rect {
@@ -145,8 +145,15 @@ export function HudTutorial({
 
   const close = () => {
     if (dontShowAgain) setTutorialSeen(true);
-    useGameStore.getState().selectHero(initialSelection.hero);
-    useGameStore.getState().selectTown(initialSelection.town);
+    // Leave the player on their hero, ready to explore, rather than restoring a
+    // possibly-empty initial selection or the town panel from the previous step.
+    if (heroId) {
+      useGameStore.getState().selectTown(null);
+      useGameStore.getState().selectHero(heroId);
+    } else {
+      useGameStore.getState().selectHero(initialSelection.hero);
+      useGameStore.getState().selectTown(initialSelection.town);
+    }
     onClose();
   };
   const next = () => (isLast ? close() : setIndex((i) => i + 1));

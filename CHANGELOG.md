@@ -5,6 +5,17 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.7] - 2026-06-09
+
+Descriptifs des objets de la carte au survol.
+
+### Ajouté
+
+- **Carte** — les bâtiments de ressources (mines, dunes, scieries…) affichent
+  désormais leur production au survol, par ex. « Produit +1 soufre par jour ».
+- **Carte** — les artefacts posés sur la carte indiquent désormais leur bonus au
+  survol, par ex. « Pouvoir +5 ».
+
 ## [1.1.6] - 2026-06-09
 
 Rassemblement de héros en ville et renforcement anti-triche.

@@ -28,7 +28,7 @@ interface SupportPromptState {
 }
 
 /**
- * Persisted, per-user nudge that opens the Ko-fi prompt the second time a player
+ * Persisted, per-user nudge that opens the Ko-fi prompt the third time a player
  * signs in, then never again. A "login" is detected by a change of the Supabase
  * `last_sign_in_at` timestamp, which updates on each real sign-in but stays stable
  * across token refreshes and dashboard re-mounts — so logging out and back in
@@ -63,7 +63,7 @@ export function useSupportPrompt() {
       }
     }
 
-    if (!state.shown && state.logins >= 2) {
+    if (!state.shown && state.logins >= 3) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShouldShow(true);
     }

@@ -56,7 +56,7 @@ export async function seedAdminIfMissing(): Promise<"created" | "exists" | "skip
   if (error) throw error;
 
   const { error: profileError } = await supabase.from("profiles").upsert(
-    { id: data.user.id, email, name, role: "admin", must_change_password: true },
+    { id: data.user.id, email, name, role: "admin", must_change_password: true, email_confirmed: true },
     { onConflict: "id" },
   );
   if (profileError) throw profileError;

@@ -5,6 +5,23 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.3] - 2026-06-09
+
+Correctif de connexion du compte admin et ajustement de l'invitation au soutien.
+
+### Corrigé
+
+- **Compte admin par défaut** — sur une base vierge, le compte admin créé
+  automatiquement n'était pas marqué comme email confirmé et restait bloqué à la
+  connexion (« Confirmez votre adresse email ») même lorsque l'envoi SMTP est
+  désactivé. Il est désormais créé directement confirmé.
+
+### Modifié
+
+- **Invitation au soutien (Ko-fi)** — la fenêtre de soutien s'affiche désormais à
+  la troisième connexion (au lieu de la deuxième), puis plus jamais.
+- **Icône de l'application** — nouvelle icône aux couleurs du blason My Heroes.
+
 ## [1.1.2] - 2026-06-09
 
 Emails de confirmation d'inscription, de bienvenue et signalement de bug.

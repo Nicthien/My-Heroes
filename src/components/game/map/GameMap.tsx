@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { MapRenderer } from "@/lib/rendering/mapRenderer";
-import { GameState, Position, TerrainType, UnitStack, UnitType } from "@/lib/game/types";
+import { AdventureBuildingType, GameState, Position, TerrainType, UnitStack, UnitType } from "@/lib/game/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL, normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
 import { getActiveCombatHeroIds, getCombatHeroIds } from "@/lib/game/combat/active-heroes";
@@ -838,6 +838,11 @@ export default function GameMapComponent() {
       }
       // Distinct sound per building nature (knowledge, magic, vision, reward…).
       playAdventureBuildingVisit(interaction.buildingType);
+      // Visiting an Obelisk uncovers a piece of the Grail puzzle map — pop the
+      // "La quête du Graal" window so the player sees the freshly revealed clue.
+      if (interaction.buildingType === AdventureBuildingType.OBELISK) {
+        useGameStore.getState().setGrailPuzzleOpen(true);
+      }
       if (interaction.shop === "war_machine_factory" && interaction.buildingId) {
         setPendingWarMachineFactory({ heroId, buildingId: interaction.buildingId });
         setCombatMessage(localizedServerMessage(interaction.message, localeRef.current) ?? getAdventureBuildingLabel(interaction.buildingType));

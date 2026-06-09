@@ -12,6 +12,7 @@ import { GameOverScreen } from "./GameOverScreen";
 import { GameRulesPopup } from "./GameRulesPopup";
 import { HudTutorial } from "./HudTutorial";
 import { PlayersListPanel } from "./PlayersListPanel";
+import { PuzzleMapModal } from "./PuzzleMapModal";
 import { PlayerJournalPanel } from "./PlayerJournalPanel";
 import { CountDialog } from "./townDialogs";
 import { TownSummaryTab } from "./TownSummaryTab";
@@ -124,6 +125,8 @@ export function HUDContent() {
   const selectedTownId = useGameStore((state) => state.selectedTownId);
   const combatMessage = useGameStore((state) => state.combatMessage);
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
+  const grailPuzzleOpen = useGameStore((state) => state.grailPuzzleOpen);
+  const setGrailPuzzleOpen = useGameStore((state) => state.setGrailPuzzleOpen);
   const setGameState = useGameStore((state) => state.setGameState);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
@@ -1203,6 +1206,14 @@ export function HUDContent() {
 
       {showRules && myPlayer && (
         <GameRulesPopup gameState={gameState} myPlayer={myPlayer} onDismiss={() => setRulesDismissed(true)} />
+      )}
+
+      {grailPuzzleOpen && gameState.grailHint && !gameState.grailHint.dug && (
+        <PuzzleMapModal
+          hint={gameState.grailHint}
+          map={gameState.map}
+          onClose={() => setGrailPuzzleOpen(false)}
+        />
       )}
 
       <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />

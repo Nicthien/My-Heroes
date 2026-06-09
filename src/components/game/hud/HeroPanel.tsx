@@ -23,7 +23,6 @@ import type { ScoreBreakdown } from "@/lib/game/score";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
-import { PuzzleMapModal } from "./PuzzleMapModal";
 import CollapsiblePanel from "./CollapsiblePanel";
 import { KingHealthGauge, MovementGauge, Stat } from "./gauges";
 import { UnitSprite } from "./UnitSprite";
@@ -54,7 +53,7 @@ export function HeroPanel({
   const { data: session } = useSession();
   const { t, locale } = useI18n();
   const [spellBookOpen, setSpellBookOpen] = useState(false);
-  const [puzzleOpen, setPuzzleOpen] = useState(false);
+  const setGrailPuzzleOpen = useGameStore((state) => state.setGrailPuzzleOpen);
   const [activeTab, setActiveTab] = useState<HeroTab>("profile");
   const gameState = useGameStore((state) => state.gameState);
   const setGameState = useGameStore((state) => state.setGameState);
@@ -295,7 +294,7 @@ export function HeroPanel({
           {(showPuzzleButton || !readOnly) && (
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {showPuzzleButton && (
-                <PuzzleMapButton label={t("grail.puzzleOpen")} onClick={() => setPuzzleOpen(true)} />
+                <PuzzleMapButton label={t("grail.puzzleOpen")} onClick={() => setGrailPuzzleOpen(true)} />
               )}
               {!readOnly && <SpellBookButton onClick={() => setSpellBookOpen(true)} tooltipAlign="right" />}
             </div>
@@ -353,13 +352,6 @@ export function HeroPanel({
           grantAllSpells={devInfiniteMana}
           onClose={() => setSpellBookOpen(false)}
           onCast={castAdventureSpell}
-        />
-      )}
-      {puzzleOpen && showPuzzleButton && grailHint && gameState && (
-        <PuzzleMapModal
-          hint={grailHint}
-          map={gameState.map}
-          onClose={() => setPuzzleOpen(false)}
         />
       )}
     </>

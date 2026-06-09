@@ -486,17 +486,43 @@ crontab -l
 
 ## Updating the app — **(VPS)**
 
-The published image is generic; just pull the new `:latest` and restart:
+The published image is generic; updating just means pulling the new `:latest`
+and restarting. Install this once as a script so you never have to remember the
+commands:
 
 ```bash
+cat > ~/update.sh <<'EOF'
+#!/usr/bin/env bash
+# Pull the latest My Heroes image, restart the container, and clean up old layers.
+set -euo pipefail
 cd /opt/my-heroes/app
+
+echo "==> Pulling latest image…"
 docker compose pull
+
+echo "==> Restarting…"
 docker compose up -d
-docker image prune -f      # optional cleanup of old layers
+
+echo "==> Pruning old image layers…"
+docker image prune -f
+
+echo "==> Done. Running image:"
+docker compose images app
+echo "Tail the logs with:  docker compose logs -f app"
+EOF
+chmod +x ~/update.sh
 ```
 
-New schema migrations apply automatically at boot. Watch with
-`docker compose logs -f app`.
+It lands in your home directory (`~`, e.g. `/home/debian`), so it's right there
+when you log in. From then on, updating is a single command (run from anywhere —
+the script `cd`s into the app dir itself):
+
+```bash
+~/update.sh
+```
+
+New schema migrations apply automatically at boot. Watch them with
+`docker compose logs -f app` (Ctrl+C to stop following).
 
 ---
 

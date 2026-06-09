@@ -130,20 +130,9 @@ export async function handleTownAction({
     const immediateGrowth = getGrowthForBuiltTownBuilding(townFaction, building);
     let nextRecruits = town.availableRecruits ?? {};
     let recruitsChanged = false;
-    // Upgrading a dwelling replaces its base creatures: migrate any
-    // un-recruited base units into the upgraded type so the tier keeps a single
-    // recruit pool instead of stacking a base pool and an upgraded pool.
-    if (rule.replacesUnit && rule.unlocksUnit) {
-      const carriedOver = Math.max(0, Math.floor(Number(nextRecruits[rule.replacesUnit] ?? 0)));
-      if (carriedOver > 0) {
-        nextRecruits = {
-          ...nextRecruits,
-          [rule.unlocksUnit]: Math.max(0, Math.floor(Number(nextRecruits[rule.unlocksUnit] ?? 0))) + carriedOver,
-          [rule.replacesUnit]: 0,
-        };
-        recruitsChanged = true;
-      }
-    }
+    // Base and upgraded dwellings keep separate recruit pools that grow
+    // independently: building the upgrade does NOT migrate or replace the base
+    // pool — it just starts its own (upgraded) pool alongside it.
     if (Object.keys(immediateGrowth).length > 0) {
       nextRecruits = helpers.addRecruitGrowth(nextRecruits, immediateGrowth);
       recruitsChanged = true;

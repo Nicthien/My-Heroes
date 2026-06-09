@@ -5,6 +5,18 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.9] - 2026-06-09
+
+Pools de recrutement séparés pour les créatures de base et améliorées.
+
+### Modifié
+
+- **Ville** — un bâtiment de base et son amélioration disposent désormais de
+  réserves de recrutement **distinctes** qui croissent indépendamment chaque
+  semaine. Construire l'amélioration n'absorbe plus la réserve de base : une
+  ville où les deux sont bâtis produit la croissance de base **et** celle de
+  l'amélioration, sur deux compteurs séparés.
+
 ## [1.1.8] - 2026-06-09
 
 Correction de l'engagement d'un héros ennemi posté devant un château.

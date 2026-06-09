@@ -81,6 +81,8 @@ export async function handleArmyAction({
     const town = gamePlayer.towns.find((item) => item.id === action.townId);
     if (!rule || !town) return NextResponse.json({ error: "Unite invalide" }, { status: 400 });
 
+    // Base and upgraded creatures keep separate recruit pools — each unit type
+    // draws from (and decrements) its own counter.
     const available = town.availableRecruits?.[unitType] ?? 0;
     if (available < count) return NextResponse.json({ error: "Pas assez d'unités disponibles" }, { status: 400 });
 

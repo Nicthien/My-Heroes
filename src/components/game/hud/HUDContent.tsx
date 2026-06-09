@@ -821,17 +821,9 @@ export function HUDContent() {
     townFaction: Faction
   ) => {
     const growth = getGrowthForBuiltTownBuilding(townFaction, building);
-    const buildRule = getFactionBuildingRules(townFaction).find((r) => r.type === building);
     const next = { ...stock };
-    // Mirror the server: an upgrade dwelling migrates leftover base creatures into the
-    // upgraded type, so the tier keeps a single recruit pool rather than stacking both.
-    if (buildRule?.replacesUnit && buildRule.unlocksUnit) {
-      const carriedOver = Math.max(0, next[buildRule.replacesUnit] ?? 0);
-      if (carriedOver > 0) {
-        next[buildRule.unlocksUnit] = (next[buildRule.unlocksUnit] ?? 0) + carriedOver;
-        next[buildRule.replacesUnit] = 0;
-      }
-    }
+    // Base and upgraded dwellings keep separate, independently-growing recruit
+    // pools — building the upgrade just adds its own pool, no migration.
     if (Object.keys(growth).length === 0) return next;
     for (const [unitType, amount] of Object.entries(growth)) {
       next[unitType as UnitType] = (next[unitType as UnitType] ?? 0) + (amount ?? 0);

@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.9",
+    date: "2026-06-09",
+    summary: "Pools de recrutement séparés pour les créatures de base et améliorées.",
+    sections: [
+      {
+        category: "changed",
+        items: [
+          "**Ville** — un bâtiment de base et son amélioration disposent désormais de réserves de recrutement distinctes qui croissent indépendamment chaque semaine. Construire l'amélioration n'absorbe plus la réserve de base : une ville où les deux sont bâtis produit la croissance de base ET celle de l'amélioration, sur deux compteurs séparés.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.8",
     date: "2026-06-09",
     summary: "Correction de l'engagement d'un héros ennemi posté devant un château.",

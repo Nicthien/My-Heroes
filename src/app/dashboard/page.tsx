@@ -203,7 +203,7 @@ function playerStatusClass(status?: string | null) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const { locale, setLocale, t } = useI18n();
-  const { shouldShow: showSupportPrompt, dismiss: dismissSupportPrompt } = useSupportPrompt(session?.user?.id);
+  const { shouldShow: showSupportPrompt, dismiss: dismissSupportPrompt } = useSupportPrompt();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);

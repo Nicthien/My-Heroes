@@ -22,6 +22,25 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.5",
+    date: "2026-06-09",
+    summary: "Descriptions de recrutement plus claires et ajustement du tableau de bord.",
+    sections: [
+      {
+        category: "changed",
+        items: [
+          "**Construction de ville** — les descriptions des demeures indiquent désormais quelle créature elles permettent de recruter (par ex. « palier 1 : Piquier ») au lieu d'afficher uniquement le numéro de palier.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Tableau de bord** — le numéro de version ne repasse plus à la ligne sous le titre.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.4",
     date: "2026-06-09",
     summary: "Ajustement de la fin du tutoriel.",

@@ -5,6 +5,21 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.5] - 2026-06-09
+
+Descriptions de recrutement plus claires et ajustement du tableau de bord.
+
+### Modifié
+
+- **Construction de ville** — les descriptions des demeures indiquent désormais
+  quelle créature elles permettent de recruter (par ex. « palier 1 : Piquier »)
+  au lieu d'afficher uniquement le numéro de palier.
+
+### Corrigé
+
+- **Tableau de bord** — le numéro de version ne repasse plus à la ligne sous le
+  titre.
+
 ## [1.1.4] - 2026-06-09
 
 Ajustement de la fin du tutoriel.

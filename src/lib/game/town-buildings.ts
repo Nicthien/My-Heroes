@@ -1,4 +1,5 @@
 import { BuildingType, Faction, Resources, UnitType } from "./types";
+import { getUnitRule } from "./units";
 
 export type ResourceCost = Partial<Resources>;
 
@@ -532,7 +533,7 @@ export function getTownBuildingRules(
     return {
       type,
       label: dwellings[index].base,
-      description: `Permet de recruter les créatures de palier ${index + 1}.`,
+      description: `Permet de recruter l'unité de palier ${index + 1} : ${getUnitRule(baseUnits[index]).label}.`,
       category: "dwelling",
       cost: dwellingCost(safeFaction, index, false),
       requires,
@@ -543,7 +544,7 @@ export function getTownBuildingRules(
   const upgradedDwellingRules = UPGRADED_DWELLING_TYPES.map((type, index): TownBuildingRule => ({
     type,
     label: dwellings[index].upgraded,
-    description: `Permet de recruter les créatures améliorées de palier ${index + 1}.`,
+    description: `Permet de recruter l'unité améliorée de palier ${index + 1} : ${getUnitRule(upgradedUnits[index]).label}.`,
     category: "dwelling_upgrade",
     cost: dwellingCost(safeFaction, index, true),
     requires: [BASE_DWELLING_TYPES[index]],

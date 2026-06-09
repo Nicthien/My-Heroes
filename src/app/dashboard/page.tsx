@@ -45,6 +45,7 @@ import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
 import { SupportButton, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
 import { StatsPanel } from "./StatsPanel";
+import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 
@@ -215,6 +216,7 @@ export default function DashboardPage() {
   const [showOptions, setShowOptions] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [showRmgTuning, setShowRmgTuning] = useState(false);
@@ -907,6 +909,23 @@ export default function DashboardPage() {
             )}
             <button
               type="button"
+              onClick={() => {
+                setShowReport(true);
+                setShowOptions(false);
+                setShowAdmin(false);
+                setShowStats(false);
+                setShowCreate(false);
+                setShowJoin(false);
+                setShowRmgPreview(false);
+              }}
+              title={t("dashboard.report.button")}
+              aria-label={t("dashboard.report.button")}
+              className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-red-500/50 bg-stone-950/80 text-red-300/85 transition hover:border-red-400/70 hover:text-red-200 sm:w-12"
+            >
+              <BugIcon />
+            </button>
+            <button
+              type="button"
               onClick={openOptions}
               title={t("dashboard.options.title")}
               aria-label={t("dashboard.options.title")}
@@ -1115,6 +1134,16 @@ export default function DashboardPage() {
         )}
 
         {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+
+        {showReport && (
+          <ReportBugModal
+            onClose={() => setShowReport(false)}
+            fetchWithAuth={fetchWithAuth}
+            t={t}
+            locale={locale}
+            appVersion={APP_VERSION}
+          />
+        )}
 
         {showStats && isAdmin && (
           <StatsPanel

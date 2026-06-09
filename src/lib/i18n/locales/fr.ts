@@ -38,6 +38,8 @@ export const fr = {
   "auth.login.noAccount": "Pas de compte ?",
   "auth.login.createAccount": "Créer un compte",
   "auth.login.invalidCredentials": "Email, pseudo ou mot de passe incorrect",
+  "auth.login.emailNotConfirmed": "Confirmez votre adresse email avant de vous connecter. Vérifiez votre boîte mail.",
+  "auth.login.resendConfirmation": "Renvoyer l'email de confirmation",
 
   // --- Auth: register ---
   "auth.register.title": "Créer un compte",
@@ -52,6 +54,20 @@ export const fr = {
   "auth.register.passwordMismatch": "Les mots de passe ne correspondent pas",
   "auth.register.genericError": "Erreur lors de l'inscription",
   "auth.register.accountCreatedSignInFailed": "Compte créé, mais connexion impossible.",
+  "auth.register.checkEmailTitle": "Vérifiez votre boîte mail",
+  "auth.register.checkEmailBody": "Votre compte a été créé. Cliquez sur le lien de confirmation envoyé à cette adresse pour l'activer :",
+  "auth.register.resend": "Renvoyer l'email",
+  "auth.register.resending": "Envoi...",
+  "auth.register.resent": "Email renvoyé",
+
+  // --- Auth: email confirmation ---
+  "auth.confirm.title": "Confirmation de l'email",
+  "auth.confirm.pending": "Confirmation en cours...",
+  "auth.confirm.success": "Votre adresse email est confirmée. Vous pouvez maintenant vous connecter.",
+  "auth.confirm.expired": "Ce lien de confirmation a expiré. Demandez-en un nouveau depuis la page de connexion.",
+  "auth.confirm.invalid": "Lien de confirmation invalide ou déjà utilisé.",
+  "auth.confirm.error": "Une erreur est survenue lors de la confirmation. Réessayez plus tard.",
+  "auth.confirm.goToLogin": "Aller à la connexion",
 
   // --- Auth: shared errors ---
   "auth.error.network":
@@ -183,6 +199,19 @@ export const fr = {
   "dashboard.signOut": "Déconnexion",
   "dashboard.signingOut": "Déconnexion...",
   "dashboard.signOutError": "Impossible de se déconnecter.",
+  "dashboard.report.button": "Signaler un bug",
+  "dashboard.report.title": "Signaler un bug",
+  "dashboard.report.intro": "Décrivez le problème rencontré. Votre signalement est envoyé à l'équipe NTH Studio.",
+  "dashboard.report.fieldTitle": "Titre",
+  "dashboard.report.titlePlaceholder": "Résumé court du problème",
+  "dashboard.report.fieldDescription": "Description",
+  "dashboard.report.descriptionPlaceholder": "Étapes pour reproduire, comportement attendu, ce qui s'est passé…",
+  "dashboard.report.submit": "Envoyer",
+  "dashboard.report.sending": "Envoi…",
+  "dashboard.report.success": "Merci ! Votre signalement a bien été envoyé.",
+  "dashboard.report.error": "Échec de l'envoi du signalement.",
+  "dashboard.report.titleRequired": "Le titre est requis.",
+  "dashboard.report.descriptionRequired": "La description est requise.",
   "dashboard.myGames": "Mes parties",
   "dashboard.noGames": "Aucune partie. Créez ou rejoignez-en une !",
   "dashboard.turn": "Tour {n}",

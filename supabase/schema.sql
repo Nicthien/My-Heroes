@@ -11,11 +11,23 @@ create table public.profiles (
   must_change_password boolean not null default false,
   god_mode_enabled boolean not null default false,
   language text not null default 'fr' check (language in ('fr', 'en')),
+  email_confirmed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index profiles_name_lower_unique on public.profiles (lower(name)) where name is not null;
+
+-- Pending email-confirmation tokens (app-managed, sent via nodemailer; gated by
+-- USE_SMTP). Only the SHA-256 hash is stored; the raw token lives only in the
+-- email. Service-role only — RLS enabled with no policies, never client-exposed.
+create table public.email_confirmations (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  token_hash text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+alter table public.email_confirmations enable row level security;
 
 -- Cross-game aggregate leaderboard stats, one row per user (updated when a game completes).
 create table public.player_stats (

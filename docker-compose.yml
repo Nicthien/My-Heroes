@@ -22,6 +22,20 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       # Defaults to SUPABASE_URL in code when empty (see src/lib/config/supabaseEnv.ts).
       SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-}
+      # --- Email / SMTP (signup confirmation + welcome mail) -----------------
+      # Master switch. Leave "false" on test servers: signup is instant, no email
+      # confirmation required and no mail is sent. Set "true" to require it.
+      USE_SMTP: ${USE_SMTP:-false}
+      # Public URL the app is reached at, used to build confirmation links.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      # "true" for implicit TLS (port 465); "false" for STARTTLS (587/25).
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # From header, e.g. "My Heroes <no-reply@example.com>".
+      SMTP_FROM: ${SMTP_FROM:-}
     # Lets the container reach a Supabase stack running on the host machine
     # (e.g. `supabase start`) via http://host.docker.internal:<port>.
     extra_hosts:

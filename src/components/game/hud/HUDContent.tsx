@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
+import { version as APP_VERSION } from "../../../../package.json";
+import { ReportBugModal } from "@/components/ReportBugModal";
 import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
 import { useTurnTimer, formatTurnRemaining } from "./useTurnTimer";
@@ -115,6 +117,7 @@ export function HUDContent() {
   const [tutorialClosed, setTutorialClosed] = useState(false);
   const [tutorialManuallyOpen, setTutorialManuallyOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
@@ -1162,6 +1165,12 @@ export function HUDContent() {
                     ]
                   : []),
                 {
+                  key: "report",
+                  label: t("dashboard.report.button"),
+                  onClick: () => setReportOpen(true),
+                  dataTestId: "menu-report",
+                },
+                {
                   key: "quit",
                   label: t("menu.quit"),
                   tone: "danger",
@@ -1197,6 +1206,24 @@ export function HUDContent() {
       )}
 
       <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
+
+      {reportOpen && (
+        <ReportBugModal
+          onClose={() => setReportOpen(false)}
+          fetchWithAuth={fetchWithSupabaseAuth}
+          t={t}
+          locale={locale}
+          appVersion={APP_VERSION}
+          extraContext={{
+            Partie: gameState.id,
+            Tour: String(gameState.turnNumber),
+            Statut: gameState.status,
+            Faction: myPlayer?.faction ?? "—",
+            Joueurs: String(gameState.players.length),
+            Carte: `${gameState.map.width}x${gameState.map.height}`,
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmQuitOpen}

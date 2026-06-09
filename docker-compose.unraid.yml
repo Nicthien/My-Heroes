@@ -51,6 +51,21 @@ services:
       # Where the /api/supabase proxy forwards server-side: Kong on the shared
       # docker network. This is what makes the PROXY strategy work.
       SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://kong:8000}
+      # --- Email / SMTP (signup confirmation + welcome mail) -----------------
+      # Master switch. "false" (default) = instant signup, no email confirmation
+      # (good for test servers). "true" = require email validation before login.
+      USE_SMTP: ${USE_SMTP:-false}
+      # Public URL the app is reached at (e.g. https://heroes.example.com), used
+      # to build the confirmation links embedded in emails.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      # "true" for implicit TLS (port 465); "false" for STARTTLS (587/25).
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # From header, e.g. "My Heroes <no-reply@example.com>".
+      SMTP_FROM: ${SMTP_FROM:-}
     networks:
       - supabase
     # No depends_on: Kong lives in a SEPARATE Portainer stack, so it can't be

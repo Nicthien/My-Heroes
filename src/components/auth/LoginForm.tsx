@@ -19,6 +19,8 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const router = useRouter();
   const supabase = createClient();
 
@@ -26,6 +28,8 @@ export default function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setUnconfirmedEmail("");
+    setResendState("idle");
 
     try {
       let email = identifier.trim();
@@ -48,13 +52,29 @@ export default function LoginForm() {
         }
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (signInError) {
+      if (signInError || !signInData.user) {
         setError(t("auth.login.invalidCredentials"));
+        setLoading(false);
+        return;
+      }
+
+      // Email-confirmation gate: a signed-in but unconfirmed account is rejected
+      // and immediately signed out (soft gate; see register flow / USE_SMTP).
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email_confirmed")
+        .eq("id", signInData.user.id)
+        .maybeSingle();
+
+      if (profile && profile.email_confirmed === false) {
+        await supabase.auth.signOut();
+        setUnconfirmedEmail(email);
+        setError(t("auth.login.emailNotConfirmed"));
         setLoading(false);
         return;
       }
@@ -68,9 +88,38 @@ export default function LoginForm() {
     }
   };
 
+  const handleResend = async () => {
+    setResendState("sending");
+    try {
+      await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: unconfirmedEmail }),
+      });
+    } catch (error) {
+      console.error("Resend confirmation network error:", error);
+    }
+    setResendState("sent");
+  };
+
   return (
     <AuthFrame title={t("common.appName")} subtitle={t("auth.login.tagline")} showHeader={false}>
       {error && <div className={authErrorClass}>{error}</div>}
+
+      {unconfirmedEmail && (
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resendState !== "idle"}
+          className="mb-4 w-full text-sm text-amber-200 underline underline-offset-2 hover:text-amber-100 disabled:opacity-60"
+        >
+          {resendState === "sending"
+            ? t("auth.register.resending")
+            : resendState === "sent"
+              ? t("auth.register.resent")
+              : t("auth.login.resendConfirmation")}
+        </button>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

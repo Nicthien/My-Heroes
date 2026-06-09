@@ -5,6 +5,19 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.6] - 2026-06-09
+
+Rassemblement de héros en ville et renforcement anti-triche.
+
+### Corrigé
+
+- **Ville** — vous pouvez de nouveau rassembler plusieurs héros (jusqu'à 5) dans
+  l'une de vos villes ; un message clair s'affiche désormais lorsque la ville est
+  pleine.
+- **Sécurité (anti-triche)** — les informations cachées des adversaires
+  (positions des héros, garnisons, combats, emplacement du Graal) ne sont plus
+  accessibles côté client.
+
 ## [1.1.5] - 2026-06-09
 
 Descriptions de recrutement plus claires et ajustement du tableau de bord.

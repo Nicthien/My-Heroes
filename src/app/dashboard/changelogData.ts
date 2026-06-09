@@ -22,6 +22,20 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.6",
+    date: "2026-06-09",
+    summary: "Rassemblement de héros en ville et renforcement anti-triche.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Ville** — vous pouvez de nouveau rassembler plusieurs héros (jusqu'à 5) dans l'une de vos villes ; un message clair s'affiche désormais lorsque la ville est pleine.",
+          "**Sécurité (anti-triche)** — les informations cachées des adversaires (positions des héros, garnisons, combats, emplacement du Graal) ne sont plus accessibles côté client.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.5",
     date: "2026-06-09",
     summary: "Descriptions de recrutement plus claires et ajustement du tableau de bord.",

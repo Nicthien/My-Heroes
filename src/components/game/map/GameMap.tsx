@@ -1791,7 +1791,15 @@ export default function GameMapComponent() {
             refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap })
               .then((state) => {
                 if (state) useGameStore.getState().setGameState(state);
-                useGameStore.getState().selectTown(obj.id);
+                // Only open the town panel when the hero actually entered. If the move
+                // ran into a blocking interaction (e.g. an enemy hero on/blocking the
+                // castle returned a COMBAT interaction that opened the engage dialog),
+                // selecting the town would null out selectedHeroId, which triggers the
+                // deselection effect and immediately closes the just-opened combat
+                // dialog — leaving the player unable to engage. Keep the hero selected.
+                if (!handledInteraction) {
+                  useGameStore.getState().selectTown(obj.id);
+                }
               })
               .finally(() => {
                 isSyncingMoveRef.current = false;

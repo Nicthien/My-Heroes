@@ -5,6 +5,17 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.8] - 2026-06-09
+
+Correction de l'engagement d'un héros ennemi posté devant un château.
+
+### Corrigé
+
+- **Combat** — lorsqu'un héros adverse est posté sur ou devant l'un de vos
+  châteaux, cliquer dessus ouvre désormais correctement la fenêtre « Engager le
+  combat ? » : elle ne se referme plus instantanément et votre héros n'est plus
+  désélectionné, ce qui vous permet enfin d'attaquer ou de fuir.
+
 ## [1.1.7] - 2026-06-09
 
 Descriptifs des objets de la carte au survol.

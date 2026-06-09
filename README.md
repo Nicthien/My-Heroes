@@ -85,6 +85,14 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `SUPABASE_INTERNAL_URL` | non | Où le serveur joint Supabase. Défaut : `SUPABASE_URL`. |
 | `SUPABASE_DB_URL` | non | URL Postgres directe (`postgres` + `POSTGRES_PASSWORD`) pour appliquer les migrations au démarrage. Absente = pas d'auto-migration. Voir [`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. |
 | `MIGRATE_ON_BOOT` | non | `false` pour désactiver la migration au démarrage. Défaut : `true`. |
+| `USE_SMTP` | non | `true` pour activer l'envoi d'emails (confirmation d'inscription + bienvenue) ; la connexion reste bloquée tant que l'adresse n'est pas confirmée. Défaut : `false` (inscription instantanée, aucun email). |
+| `APP_PUBLIC_URL` | si SMTP | URL publique de l'app (ex. `https://myheroes.exemple.fr`), utilisée pour construire les liens de confirmation. |
+| `SMTP_HOST` | si SMTP | Hôte du serveur SMTP. |
+| `SMTP_PORT` | non | Port SMTP. Défaut : `587`. |
+| `SMTP_SECURE` | non | `true` pour TLS implicite (port 465), `false` pour STARTTLS (587/25). Défaut : `false`. |
+| `SMTP_USER` | si SMTP | Identifiant SMTP. |
+| `SMTP_PASS` | si SMTP | Mot de passe SMTP. |
+| `SMTP_FROM` | si SMTP | En-tête `From`, ex. `My Heroes <no-reply@exemple.fr>`. |
 
 > En local, `npm run dev` injecte automatiquement la config depuis
 > `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme

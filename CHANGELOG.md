@@ -5,6 +5,24 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.1.2] - 2026-06-09
+
+Emails de confirmation d'inscription, de bienvenue et signalement de bug.
+
+### Ajouté
+
+- **Confirmation d'email** — lorsque l'envoi SMTP est activé (variable
+  `USE_SMTP`), l'inscription envoie un email de confirmation et la connexion
+  reste bloquée tant que l'adresse n'est pas validée, avec un bouton pour
+  renvoyer le lien. Un email de bienvenue est envoyé une fois le compte confirmé.
+- **Signaler un bug** — un bouton dédié sur le tableau de bord et dans le menu en
+  partie permet d'envoyer un signalement à l'équipe NTH Studio
+  (`contact@nthstudio.eu`, sujet `[My-Heroes][BUG-REPORT]`) ; le rapport en
+  partie joint automatiquement le contexte (identifiant de partie, tour, faction,
+  taille de carte…).
+- **Emails personnalisés** — logo du jeu en en-tête et pied de page avec NTH
+  Studio (nthstudio.eu) et un lien de soutien Ko-fi.
+
 ## [1.1.1] - 2026-06-08
 
 Tableau de bord d'administration enrichi de statistiques globales.

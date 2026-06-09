@@ -22,6 +22,21 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.2",
+    date: "2026-06-09",
+    summary: "Emails de confirmation d'inscription, de bienvenue et signalement de bug.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Confirmation d'email** — lorsque l'envoi SMTP est activé (variable `USE_SMTP`), l'inscription envoie un email de confirmation et la connexion reste bloquée tant que l'adresse n'est pas validée, avec un bouton pour renvoyer le lien. Un email de bienvenue est envoyé une fois le compte confirmé.",
+          "**Signaler un bug** — un bouton dédié sur le tableau de bord et dans le menu en partie permet d'envoyer un signalement à l'équipe NTH Studio ; le rapport en partie joint automatiquement le contexte (identifiant de partie, tour, faction, taille de carte…).",
+          "**Emails personnalisés** — logo du jeu en en-tête et pied de page avec NTH Studio (nthstudio.eu) et un lien de soutien Ko-fi.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.1",
     date: "2026-06-08",
     summary: "Tableau de bord d'administration enrichi de statistiques globales.",

@@ -24,6 +24,8 @@ export default function RegisterForm() {
   const [language, setLanguage] = useState(getSavedLocale());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const router = useRouter();
   const supabase = createClient();
 
@@ -52,6 +54,16 @@ export default function RegisterForm() {
         return;
       }
 
+      const registerData = await registerResponse.json().catch(() => null);
+
+      // SMTP enabled: the account must confirm its email before it can sign in.
+      if (registerData?.requiresConfirmation) {
+        setLocale(language);
+        setAwaitingConfirmation(true);
+        setLoading(false);
+        return;
+      }
+
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) {
         setError(signInError.message || t("auth.register.accountCreatedSignInFailed"));
@@ -69,6 +81,48 @@ export default function RegisterForm() {
     router.push("/dashboard");
     router.refresh();
   };
+
+  const handleResend = async () => {
+    setResendState("sending");
+    try {
+      await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch (error) {
+      console.error("Resend confirmation network error:", error);
+    }
+    setResendState("sent");
+  };
+
+  if (awaitingConfirmation) {
+    return (
+      <AuthFrame title={t("auth.register.checkEmailTitle")} subtitle={t("common.appName")}>
+        <p className="text-center text-amber-100/85">
+          {t("auth.register.checkEmailBody")}
+        </p>
+        <p className="mt-2 text-center font-semibold text-amber-200">{email}</p>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resendState !== "idle"}
+          className={authPrimaryButtonClass + " mt-6"}
+        >
+          {resendState === "sending"
+            ? t("auth.register.resending")
+            : resendState === "sent"
+              ? t("auth.register.resent")
+              : t("auth.register.resend")}
+        </button>
+        <p className="mt-4 text-center text-sm text-amber-100/65">
+          <a href="/auth/login" className={authLinkClass}>
+            {t("auth.register.signIn")}
+          </a>
+        </p>
+      </AuthFrame>
+    );
+  }
 
   return (
     <AuthFrame title={t("auth.register.title")} subtitle={t("common.appName")}>

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeLocale } from "@/lib/i18n/types";
+import { isEmailEnabled } from "@/lib/config/emailEnv";
+import { createConfirmationToken } from "@/lib/email/confirmationTokens";
+import { sendConfirmationEmail } from "@/lib/email/send";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -34,6 +37,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: createError?.message ?? "Impossible de creer le compte." }, { status: 400 });
   }
 
+  // When SMTP is enabled the account must validate its email before logging in.
+  // When disabled (e.g. test servers, USE_SMTP=false) the account is confirmed
+  // instantly — the historical behaviour.
+  const requiresConfirmation = isEmailEnabled();
+
   const { error: profileError } = await supabase.from("profiles").insert({
     id: created.user.id,
     email,
@@ -41,6 +49,7 @@ export async function POST(request: Request) {
     role: "user",
     must_change_password: false,
     language,
+    email_confirmed: !requiresConfirmation,
   });
 
   if (profileError) {
@@ -48,5 +57,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: profileError.message }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true }, { status: 201 });
+  if (requiresConfirmation) {
+    const token = await createConfirmationToken(supabase, created.user.id);
+    if (token) {
+      await sendConfirmationEmail(email, name, token);
+    }
+  }
+
+  return NextResponse.json({ success: true, requiresConfirmation }, { status: 201 });
 }

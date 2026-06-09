@@ -39,6 +39,8 @@ export const en: Record<TranslationKey, string> = {
   "auth.login.noAccount": "No account?",
   "auth.login.createAccount": "Create an account",
   "auth.login.invalidCredentials": "Incorrect email, username or password",
+  "auth.login.emailNotConfirmed": "Please confirm your email address before signing in. Check your inbox.",
+  "auth.login.resendConfirmation": "Resend confirmation email",
 
   // --- Auth: register ---
   "auth.register.title": "Create an account",
@@ -53,6 +55,20 @@ export const en: Record<TranslationKey, string> = {
   "auth.register.passwordMismatch": "Passwords do not match",
   "auth.register.genericError": "Registration failed",
   "auth.register.accountCreatedSignInFailed": "Account created, but sign-in failed.",
+  "auth.register.checkEmailTitle": "Check your inbox",
+  "auth.register.checkEmailBody": "Your account has been created. Click the confirmation link sent to this address to activate it:",
+  "auth.register.resend": "Resend email",
+  "auth.register.resending": "Sending...",
+  "auth.register.resent": "Email resent",
+
+  // --- Auth: email confirmation ---
+  "auth.confirm.title": "Email confirmation",
+  "auth.confirm.pending": "Confirming...",
+  "auth.confirm.success": "Your email address is confirmed. You can now sign in.",
+  "auth.confirm.expired": "This confirmation link has expired. Request a new one from the login page.",
+  "auth.confirm.invalid": "Invalid or already-used confirmation link.",
+  "auth.confirm.error": "Something went wrong during confirmation. Please try again later.",
+  "auth.confirm.goToLogin": "Go to login",
 
   // --- Auth: shared errors ---
   "auth.error.network":
@@ -184,6 +200,19 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.signOut": "Sign out",
   "dashboard.signingOut": "Signing out...",
   "dashboard.signOutError": "Could not sign out.",
+  "dashboard.report.button": "Report a bug",
+  "dashboard.report.title": "Report a bug",
+  "dashboard.report.intro": "Describe the problem you ran into. Your report is sent to the NTH Studio team.",
+  "dashboard.report.fieldTitle": "Title",
+  "dashboard.report.titlePlaceholder": "Short summary of the problem",
+  "dashboard.report.fieldDescription": "Description",
+  "dashboard.report.descriptionPlaceholder": "Steps to reproduce, expected behavior, what happened…",
+  "dashboard.report.submit": "Send",
+  "dashboard.report.sending": "Sending…",
+  "dashboard.report.success": "Thank you! Your report has been sent.",
+  "dashboard.report.error": "Failed to send the report.",
+  "dashboard.report.titleRequired": "Title is required.",
+  "dashboard.report.descriptionRequired": "Description is required.",
   "dashboard.myGames": "My games",
   "dashboard.noGames": "No games. Create or join one!",
   "dashboard.turn": "Turn {n}",

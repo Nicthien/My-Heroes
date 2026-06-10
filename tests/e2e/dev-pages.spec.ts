@@ -404,6 +404,21 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.locator('[data-testid="minimap-control-overlay"][opacity="0.9"]').first()).toBeVisible();
   });
 
+  test("minimap keeps neutral towns neutral instead of enemy-coloured", async ({ page }) => {
+    await page.goto("/dev/hud?admin=1", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByLabel("Mini carte").first()).toBeVisible();
+    // Neutral town renders its own grey marker (not a player colour).
+    const neutralTown = page.locator('[data-testid="minimap-neutral-town"]').first();
+    await expect(neutralTown).toBeVisible();
+    await expect(neutralTown).toHaveAttribute("fill", "#a8a29e");
+    // Its zone (shared with a p2 dwelling) must not be painted as a fully
+    // owned enemy zone, so no 0.9-opacity overlay should land on the town tile.
+    await expect(
+      page.locator('[data-testid="minimap-control-overlay"][opacity="0.9"][x="17"][y="16"]'),
+    ).toHaveCount(0);
+  });
+
   test("admin observer overlay groups map positions by player", async ({ page }) => {
     await page.goto("/dev/admin-observer?status=pending", { waitUntil: "domcontentloaded" });
 

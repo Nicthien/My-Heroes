@@ -1041,7 +1041,7 @@ export const en: Record<TranslationKey, string> = {
   "options.animations": "Animations",
   "options.animationsHint": "Disable to reduce on-screen motion.",
   "options.renderQuality": "Render quality",
-  "options.renderQualityHint": "Automatic: self-adjusts when it lags. Performance: drops effects for smoother frames (handy on Edge or a weak GPU).",
+  "options.renderQualityHint": "Automatic: adjusts rendering to your device's performance. Performance: prioritizes smoothness by reducing effects. Quality: keeps all visual effects.",
   "options.renderQualityAuto": "Auto",
   "options.renderQualityHigh": "Quality",
   "options.renderQualityPerformance": "Performance",

@@ -141,6 +141,19 @@ export default function MiniMap() {
               opacity={0.88}
             />
           ))}
+          {getKnownNeutralTowns(gameState, map, activeMapLevel, visibility).map((position) => (
+            <rect
+              key={`neutral-town-${position.x}-${position.y}`}
+              data-testid="minimap-neutral-town"
+              x={position.x - 0.15}
+              y={position.y - 0.15}
+              width={1.3}
+              height={1.3}
+              fill="#a8a29e"
+              stroke="#140b05"
+              strokeWidth={0.25}
+            />
+          ))}
           {gameState.players.flatMap((player) =>
             player.towns
               .filter((town) => normalizeMapLevel(town.position.level) === activeMapLevel && isKnownPosition(town.position, player, currentPlayer, visibility))
@@ -289,6 +302,36 @@ function getKnownBuildings(gameState: GameState, activeMapLevel: Position["level
   return positions;
 }
 
+function getOwnedTownPositionKeys(gameState: GameState) {
+  const keys = new Set<string>();
+  for (const player of gameState.players) {
+    for (const town of player.towns) {
+      keys.add(`${town.position.x},${town.position.y}`);
+    }
+  }
+  return keys;
+}
+
+function getKnownNeutralTowns(
+  gameState: GameState,
+  activeMap: GameState["map"],
+  activeMapLevel: Position["level"],
+  visibility: MiniMapVisibility,
+): Position[] {
+  const ownedTownKeys = getOwnedTownPositionKeys(gameState);
+  const positions: Position[] = [];
+  for (const row of activeMap.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type !== "town") continue;
+      const key = `${tile.x},${tile.y}`;
+      if (ownedTownKeys.has(key)) continue;
+      if (!visibility.visible.has(key) && !visibility.explored.has(key)) continue;
+      positions.push({ x: tile.x, y: tile.y, level: normalizeMapLevel(activeMapLevel) });
+    }
+  }
+  return positions;
+}
+
 function getMiniMapControlTiles(
   gameState: GameState,
   activeMap: GameState["map"],
@@ -362,11 +405,20 @@ function collectControlSitesByZone(
     pushSite({ id: `gate-${gate.id}`, ownerId: gate.ownerId, position: gate.position });
   }
 
+  const ownedTownKeys = getOwnedTownPositionKeys(gameState);
   for (const row of activeMap.tiles) {
     for (const tile of row) {
       const object = tile.object;
-      if (!isExternalDwellingObject(object)) continue;
-      pushSite({ id: `external-dwelling-${object.id}`, ownerId: object.ownerId ?? null, position: { x: tile.x, y: tile.y, level: normalizeMapLevel(activeMapLevel) } });
+      if (isExternalDwellingObject(object)) {
+        pushSite({ id: `external-dwelling-${object.id}`, ownerId: object.ownerId ?? null, position: { x: tile.x, y: tile.y, level: normalizeMapLevel(activeMapLevel) } });
+        continue;
+      }
+      // Neutral towns live only as map tile objects (no game_player_id), so they
+      // never appear in player.towns. Register them as null-owner sites so their
+      // zone stays neutral instead of inheriting a nearby enemy's color.
+      if (object?.type === "town" && !ownedTownKeys.has(`${tile.x},${tile.y}`)) {
+        pushSite({ id: `neutral-town-${object.id}`, ownerId: null, position: { x: tile.x, y: tile.y, level: normalizeMapLevel(activeMapLevel) } });
+      }
     }
   }
 

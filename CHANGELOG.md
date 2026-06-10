@@ -5,6 +5,26 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.4] - 2026-06-10
+
+Ville de départ équipée, mini-carte plus lisible et FPS en combat.
+
+### Ajouté
+
+- **FPS en combat** — quand l'option « Afficher les FPS » est activée, le compteur
+  d'images par seconde s'affiche aussi pendant les combats, et non plus seulement
+  sur la carte d'aventure.
+- **Ville de départ équipée** — la première ville démarre avec l'hôtel de ville,
+  la taverne, le fort et le bâtiment de créatures de niveau 1 déjà construits, avec
+  des recrues disponibles dès le premier tour.
+
+### Modifié
+
+- **Mini-carte** — les villes neutres restent grises (neutres) au lieu d'hériter
+  de la couleur d'un joueur ennemi voisin.
+- **Options** — l'aide du réglage « Qualité d'affichage » a été reformulée pour
+  être plus claire.
+
 ## [1.2.3] - 2026-06-10
 
 Optimisations de performance et avertissements anti-ralentissement (Edge).

@@ -22,6 +22,27 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.3",
+    date: "2026-06-10",
+    summary: "Optimisations de performance et avertissements anti-ralentissement (Edge).",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Avertissement de performance** — un message s'affiche (au tableau de bord et en jeu) lorsque le navigateur n'utilise pas l'accélération matérielle (rendu logiciel), avec la marche à suivre pour l'activer. Option « Ne plus afficher ».",
+          "**Qualité d'affichage** — nouveau réglage dans les Options : Auto, Performance ou Qualité, pour adapter le rendu aux machines moins puissantes.",
+          "**Affichage des FPS** — nouvelle option pour afficher le compteur d'images par seconde dans la barre du haut.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Rendu adaptatif** — le jeu réduit automatiquement les effets d'ambiance (eau, lave, brouillard) en cas de ralentissement prolongé ou de rendu logiciel détecté, pour préserver la fluidité.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.2",
     date: "2026-06-10",
     summary: "Tableau de bord plus compact et nouveau graphique de statistiques.",

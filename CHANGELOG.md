@@ -5,6 +5,26 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.3] - 2026-06-10
+
+Optimisations de performance et avertissements anti-ralentissement (Edge).
+
+### Ajouté
+
+- **Avertissement de performance** — un message s'affiche (au tableau de bord et
+  en jeu) lorsque le navigateur n'utilise pas l'accélération matérielle (rendu
+  logiciel), avec la marche à suivre pour l'activer. Option « Ne plus afficher ».
+- **Qualité d'affichage** — nouveau réglage dans les Options : Auto, Performance
+  ou Qualité, pour adapter le rendu aux machines moins puissantes.
+- **Affichage des FPS** — nouvelle option pour afficher le compteur d'images par
+  seconde dans la barre du haut.
+
+### Modifié
+
+- **Rendu adaptatif** — le jeu réduit automatiquement les effets d'ambiance
+  (eau, lave, brouillard) en cas de ralentissement prolongé ou de rendu logiciel
+  détecté, pour préserver la fluidité.
+
 ## [1.2.2] - 2026-06-10
 
 Tableau de bord plus compact et nouveau graphique de statistiques.

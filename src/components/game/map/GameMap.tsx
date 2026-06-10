@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
-import { MapRenderer } from "@/lib/rendering/mapRenderer";
+import { MapRenderer, type RenderPerformanceNotice } from "@/lib/rendering/mapRenderer";
 import { AdventureBuildingType, GameState, Position, TerrainType, UnitStack, UnitType } from "@/lib/game/types";
 import { SURFACE_LEVEL, UNDERGROUND_LEVEL, normalizeExploredTileKey, normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getAdventureBuildingLabel } from "@/lib/game/adventure-buildings";
@@ -132,6 +132,8 @@ export default function GameMapComponent() {
   const [pendingWarMachineFactory, setPendingWarMachineFactory] = useState<PendingWarMachineFactory | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
+  const [performanceNotice, setPerformanceNotice] = useState<RenderPerformanceNotice | null>(null);
+  const [performanceNoticeDismissed, setPerformanceNoticeDismissed] = useState(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const loadingFinishTimeoutRef = useRef<number | null>(null);
   const completedLoadingNonceRef = useRef(0);
@@ -321,6 +323,7 @@ export default function GameMapComponent() {
       }
 
       setRendererReadyVersion((version) => version + 1);
+      setPerformanceNotice(renderer.getPerformanceNotice());
     });
     initPromiseRef.current = initPromise;
 
@@ -2520,6 +2523,24 @@ export default function GameMapComponent() {
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
+      {performanceNotice?.isSoftwareRendering && !performanceNoticeDismissed && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center px-3 pt-3">
+          <div className="pointer-events-auto flex max-w-md items-start gap-3 rounded border border-amber-500/50 bg-stone-950/95 p-3 shadow-2xl">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-amber-100">{t("map.softwareRenderingTitle")}</p>
+              <p className="mt-1 text-xs leading-snug text-stone-300">{t("map.softwareRenderingBody")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPerformanceNoticeDismissed(true)}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-400"
+              aria-label={t("common.close")}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {gameState && selectedGateId && (
         <GateGarrisonModal
           gameState={gameState}

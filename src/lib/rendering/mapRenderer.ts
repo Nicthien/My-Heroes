@@ -31,6 +31,14 @@ export interface SpellRevealHint {
 export type RendererLoadingProgress = (progress: number, message?: string) => void;
 export type FogTheme = "surface" | "underground";
 
+// Surfaced to the UI when the renderer detects a degraded GPU path (notably
+// Edge falling back to software WebGL). Lets us show an actionable hint rather
+// than leaving players to wonder why the map crawls.
+export interface RenderPerformanceNotice {
+  isSoftwareRendering: boolean;
+  renderer: string;
+}
+
 export interface MapRenderer {
   init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress): Promise<void>;
   isReady(): boolean;
@@ -55,5 +63,7 @@ export interface MapRenderer {
   getObjectsAtScreen(screenX: number, screenY: number): MapObjectData[];
   /** Fades a night-time darkening overlay in (true) or out (false). */
   setNightMode(enabled: boolean): void;
+  /** Performance notice (e.g. software-rendering fallback), or null if healthy. */
+  getPerformanceNotice(): RenderPerformanceNotice | null;
   destroy(): void;
 }

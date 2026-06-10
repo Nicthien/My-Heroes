@@ -20,7 +20,10 @@ export function buildMockState(): GameState {
       elevation: 0,
       isPassable: true,
       movementCost: 1,
-      zoneId: x < 12 ? 0 : 1,
+      // Zone 0 = west (p1), zone 1 = north-east (fully p2-owned), zone 2 =
+      // south-east pocket mixing a p2 dwelling with a neutral town so the
+      // minimap's neutral-town handling is exercised.
+      zoneId: x < 12 ? 0 : x >= 12 && y >= 14 ? 2 : 1,
     }))
   );
 
@@ -37,6 +40,14 @@ export function buildMockState(): GameState {
     ownerId: "p2",
     targetId: UnitType.GOG,
     amount: 8,
+  };
+  // Neutral town sharing zone 2 with the p2 dwelling: must stay neutral on the
+  // minimap (grey marker, no enemy control tint over it).
+  tiles[16][17].object = {
+    type: "town",
+    id: "town-dev-neutral",
+    subtype: Faction.INFERNO,
+    name: "Bastion Oublié",
   };
 
   return {

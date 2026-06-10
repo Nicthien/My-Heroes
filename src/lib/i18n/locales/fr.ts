@@ -1040,7 +1040,7 @@ export const fr = {
   "options.animations": "Animations",
   "options.animationsHint": "Désactivez pour réduire les mouvements à l'écran.",
   "options.renderQuality": "Qualité d'affichage",
-  "options.renderQualityHint": "Automatique : s'ajuste tout seul si ça rame. Performances : coupe les effets pour gagner en fluidité (utile sur Edge ou GPU faible).",
+  "options.renderQualityHint": "Automatique : ajuste le rendu selon les performances de votre appareil. Performance : privilégie la fluidité en réduisant les effets. Qualité : conserve tous les effets visuels.",
   "options.renderQualityAuto": "Auto",
   "options.renderQualityHigh": "Qualité",
   "options.renderQualityPerformance": "Performance",

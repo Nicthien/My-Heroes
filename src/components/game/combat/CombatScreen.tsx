@@ -17,6 +17,8 @@ import ConfirmDialog from "../menu/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { goldText, ornateFrame, ornateFramePolished } from "@/components/game/hud/theme";
 import { TurnTimerBadge } from "@/components/game/hud/TurnTimerBadge";
+import { useDevPerformanceStats } from "@/components/game/hud/DevPerformancePanel";
+import { DISPLAY_PREFERENCE_EVENT, getSavedFpsDisplay } from "@/lib/settings/displayPreferences";
 import { InitiativeQueue, UnitDetails } from "./combatPanels";
 import { CombatFloatingPanel } from "./CombatFloatingPanel";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
@@ -81,6 +83,19 @@ export default function CombatScreen() {
   const [tacticsSelectedUnitId, setTacticsSelectedUnitId] = useState<string | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+  const [showFps, setShowFps] = useState(getSavedFpsDisplay);
+  const performanceStats = useDevPerformanceStats(showFps);
+
+  // Keep the FPS overlay toggle in sync with the Options dialog (and other tabs).
+  useEffect(() => {
+    const sync = () => setShowFps(getSavedFpsDisplay());
+    window.addEventListener(DISPLAY_PREFERENCE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(DISPLAY_PREFERENCE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
   const isSubmittingActionRef = useRef(false);
   const actionSubmissionTokenRef = useRef(0);
   const neutralActionKeyRef = useRef<string | null>(null);
@@ -571,6 +586,15 @@ export default function CombatScreen() {
           {combatStatusLabel}
         </div>
         <div className="flex items-center gap-3">
+          {showFps && (
+            <div
+              className="rounded-lg border border-amber-400/45 bg-amber-950/45 px-2.5 py-1.5 font-mono text-xs font-black uppercase tracking-[0.18em] text-amber-100"
+              aria-label={`${t("hud.fps")}: ${performanceStats.hasFrameSample ? `${Math.round(performanceStats.fps)} FPS` : "-- FPS"}`}
+              title={t("hud.fps")}
+            >
+              {performanceStats.hasFrameSample ? `${Math.round(performanceStats.fps)} FPS` : "-- FPS"}
+            </div>
+          )}
           <TurnTimerBadge gameState={gameState} myPlayer={myPlayer} />
           {pendingTargetSpell && (
             <button

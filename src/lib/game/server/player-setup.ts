@@ -1,7 +1,7 @@
 import { computeVisibleTiles, getDailyAdventureMovement, placePlayerStart } from "@/lib/game/engine";
 import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { makeRng } from "@/lib/game/engine/rng";
-import { FACTION_UNITS, UNIT_RULES } from "@/lib/game/economy";
+import { FACTION_UNITS, UNIT_RULES, getTownWeeklyGrowth } from "@/lib/game/economy";
 import { getUnitRule } from "@/lib/game/units";
 import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
 import { normalizePlayableFaction } from "@/lib/game/playable-factions";
@@ -22,6 +22,17 @@ export const STARTING_RESOURCES = {
 };
 
 const STARTER_ARMY_COUNTS: [number, number, number] = [20, 12, 4];
+/**
+ * Heroes III-style starting town: never a bare plot. The first castle ships with
+ * the town hall, a tavern (hero hiring), a fort (defense + unlocks dwellings) and
+ * the tier-1 creature dwelling already built.
+ */
+const STARTING_TOWN_BUILDINGS: BuildingType[] = [
+  BuildingType.VILLAGE_HALL,
+  BuildingType.TAVERN,
+  BuildingType.FORT,
+  BuildingType.DWELLING_1,
+];
 const AI_FACTIONS: Faction[] = [
   Faction.CASTLE,
   Faction.RAMPART,
@@ -212,7 +223,10 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     town_type: factionKey,
     x: startPos.x,
     y: startPos.y,
-    buildings: [BuildingType.VILLAGE_HALL],
+    buildings: STARTING_TOWN_BUILDINGS,
+    // Seed the tier-1 dwelling with its first week's growth so the player can
+    // recruit immediately, instead of waiting for the first weekly refresh.
+    available_recruits: getTownWeeklyGrowth(factionKey, STARTING_TOWN_BUILDINGS),
     garrison: buildStartingGarrison(victoryType),
     is_neutral: false,
   });

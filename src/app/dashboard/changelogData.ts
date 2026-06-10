@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.1",
+    date: "2026-06-10",
+    summary: "Décompte des connexions pour la fenêtre de soutien.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Soutien** — la fenêtre invitant à soutenir le jeu se base désormais sur les connexions réelles via le bouton « Connexion » (et non plus sur l'horodatage de session). Elle s'affiche bien à la troisième connexion.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-06-10",
     summary: "Lien vers le studio NTH Studio et classement plus équitable.",

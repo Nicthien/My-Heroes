@@ -37,6 +37,7 @@ interface AdminStats {
   gamesByStatus: { key: string; count: number }[];
   factionDistribution: { key: string; count: number }[];
   gamesOverTime: { date: string; count: number }[];
+  usersOverTime: { date: string; count: number }[];
   topPlayers: { name: string; gamesPlayed: number; gamesWon: number; bestScore: number }[];
 }
 
@@ -94,7 +95,31 @@ function BarRow({ label, count, total, color }: { label: string; count: number; 
   );
 }
 
-function GamesOverTimeChart({ data, t }: { data: { date: string; count: number }[]; t: TFn }) {
+interface OverTimeColors {
+  /** Gradient/area fill base color. */
+  area: string;
+  /** Line stroke color. */
+  line: string;
+  /** Data point dot color. */
+  dot: string;
+}
+
+const GAMES_OVER_TIME_COLORS: OverTimeColors = { area: "#f59e0b", line: "#fbbf24", dot: "#fde68a" };
+const USERS_OVER_TIME_COLORS: OverTimeColors = { area: "#22d3ee", line: "#67e8f9", dot: "#a5f3fc" };
+
+function OverTimeChart({
+  data,
+  title,
+  gradientId,
+  colors,
+  t,
+}: {
+  data: { date: string; count: number }[];
+  title: string;
+  gradientId: string;
+  colors: OverTimeColors;
+  t: TFn;
+}) {
   const width = 720;
   const height = 180;
   const padX = 32;
@@ -112,21 +137,21 @@ function GamesOverTimeChart({ data, t }: { data: { date: string; count: number }
       ? `${linePath} L${pointX(data.length - 1).toFixed(1)},${height - padY} L${pointX(0).toFixed(1)},${height - padY} Z`
       : "";
 
-  const total = data.reduce((sum, point) => sum + point.count, 0);
+  const periodTotal = data.reduce((sum, point) => sum + point.count, 0);
   const labelEvery = Math.max(1, Math.ceil(data.length / 6));
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.gamesOverTime")}</h3>
-        <span className="text-xs font-semibold text-amber-200/60">{t("stats.last30Days", { n: total })}</span>
+        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{title}</h3>
+        <span className="text-xs font-semibold text-amber-200/60">{t("stats.last30Days", { n: periodTotal })}</span>
       </div>
       <div className="rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
         <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full" preserveAspectRatio="none" role="img">
           <defs>
-            <linearGradient id="stats-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={colors.area} stopOpacity="0.45" />
+              <stop offset="100%" stopColor={colors.area} stopOpacity="0.02" />
             </linearGradient>
           </defs>
           {[0, 0.5, 1].map((fraction) => (
@@ -141,11 +166,11 @@ function GamesOverTimeChart({ data, t }: { data: { date: string; count: number }
               strokeWidth="1"
             />
           ))}
-          {areaPath && <path d={areaPath} fill="url(#stats-area)" />}
-          {linePath && <path d={linePath} fill="none" stroke="#fbbf24" strokeWidth="2" />}
+          {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
+          {linePath && <path d={linePath} fill="none" stroke={colors.line} strokeWidth="2" />}
           {data.map((point, index) =>
             point.count > 0 ? (
-              <circle key={point.date} cx={pointX(index)} cy={pointY(point.count)} r="2.5" fill="#fde68a" />
+              <circle key={point.date} cx={pointX(index)} cy={pointY(point.count)} r="2.5" fill={colors.dot} />
             ) : null,
           )}
           {data.map((point, index) =>
@@ -281,7 +306,21 @@ export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClos
                 </div>
               </section>
 
-              <GamesOverTimeChart data={stats.gamesOverTime} t={t} />
+              <OverTimeChart
+                data={stats.gamesOverTime}
+                title={t("stats.gamesOverTime")}
+                gradientId="stats-games-area"
+                colors={GAMES_OVER_TIME_COLORS}
+                t={t}
+              />
+
+              <OverTimeChart
+                data={stats.usersOverTime}
+                title={t("stats.usersOverTime")}
+                gradientId="stats-users-area"
+                colors={USERS_OVER_TIME_COLORS}
+                t={t}
+              />
 
               <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <div>

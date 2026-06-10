@@ -1642,13 +1642,16 @@ export function HUDContent() {
               )}
             </div>
             {canStartPendingGame ? (
-              <button
-                className="mt-4 rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-2 font-black uppercase tracking-widest text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
-                onClick={handleStartGame}
-                data-testid="start-game"
-              >
-                {t("hud.startGame")}
-              </button>
+              <>
+                <div className="mt-3 text-xs text-amber-200/60">{t("hud.startGameHint")}</div>
+                <button
+                  className="mt-3 rounded-md border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-6 py-2 font-black uppercase tracking-widest text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
+                  onClick={handleStartGame}
+                  data-testid="start-game"
+                >
+                  {t("hud.startGame")}
+                </button>
+              </>
             ) : (
               <div className="mt-4 text-sm text-amber-200/60">{t("hud.waitingForHost")}</div>
             )}

@@ -22,6 +22,27 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.2",
+    date: "2026-06-10",
+    summary: "Tableau de bord plus compact et nouveau graphique de statistiques.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Statistiques (admin)** — un graphique « Inscrits dans le temps » montre désormais le nombre d'inscriptions par jour, comme celui des parties créées.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Classement** — seuls les 5 meilleurs joueurs (par meilleur score) sont affichés sur le tableau de bord.",
+          "**Mes parties** — seules les 3 parties les plus récentes sont visibles ; les autres restent accessibles en faisant défiler la liste.",
+          "**Salle d'attente** — l'hôte voit désormais un message précisant d'attendre que les autres joueurs se connectent ou de lancer la partie avec des IA.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.1",
     date: "2026-06-10",
     summary: "Décompte des connexions pour la fenêtre de soutien.",

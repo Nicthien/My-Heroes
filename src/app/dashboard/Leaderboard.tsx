@@ -5,17 +5,21 @@ import { CornerOrnaments, OrnateHeader, ParchmentBackground, goldText, ornateFra
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
+const LEADERBOARD_DISPLAY_LIMIT = 5;
 
 export function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   const { t, locale } = useI18n();
   const numberLocale = locale === "en" ? "en-US" : "fr-FR";
+  // Entries arrive already sorted by best score (descending) from the API;
+  // only surface the top few so the dashboard stays compact.
+  const topEntries = entries.slice(0, LEADERBOARD_DISPLAY_LIMIT);
   return (
     <div className={`relative ${ornateFrame}`}>
       <CornerOrnaments />
       <ParchmentBackground />
       <OrnateHeader>{t("leaderboard.title")}</OrnateHeader>
       <div className="p-4">
-        {entries.length === 0 ? (
+        {topEntries.length === 0 ? (
           <div className="py-10 text-center italic text-amber-200/40">
             {t("leaderboard.empty")}
           </div>
@@ -32,7 +36,7 @@ export function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, index) => (
+              {topEntries.map((entry, index) => (
                 <tr
                   key={entry.userId}
                   className="border-t border-amber-700/20 text-amber-100/90 transition hover:bg-amber-900/15"

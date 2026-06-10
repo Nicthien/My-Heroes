@@ -16,10 +16,10 @@ function dayKey(value: unknown): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-function bucketGamesPerDay(games: DbRow[], days: number) {
+function bucketRowsPerDay(rows: DbRow[], days: number) {
   const counts = new Map<string, number>();
-  for (const game of games) {
-    const key = dayKey(game.created_at);
+  for (const row of rows) {
+    const key = dayKey(row.created_at);
     if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
@@ -138,7 +138,8 @@ export async function GET(request: Request) {
     },
     gamesByStatus,
     factionDistribution: tallyBy(players, "faction"),
-    gamesOverTime: bucketGamesPerDay(games, 30),
+    gamesOverTime: bucketRowsPerDay(games, 30),
+    usersOverTime: bucketRowsPerDay(profiles, 30),
     topPlayers,
   });
 }

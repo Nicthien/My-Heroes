@@ -1630,6 +1630,10 @@ export default function DashboardPage() {
                 {t("dashboard.noGames")}
               </div>
             )}
+            {games.length > 0 && (
+            // Show roughly the 3 most recent games (already ordered newest-first
+            // by the API); older games stay reachable by scrolling.
+            <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-1">
             {games.map((game) => {
               const myPlayer = game.players.find(
                 (player) => player.userId === session?.user?.id
@@ -1743,6 +1747,8 @@ export default function DashboardPage() {
               </div>
               );
             })}
+            </div>
+            )}
           </div>
         </div>
 

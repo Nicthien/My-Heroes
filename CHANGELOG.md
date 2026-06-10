@@ -5,6 +5,24 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.2] - 2026-06-10
+
+Tableau de bord plus compact et nouveau graphique de statistiques.
+
+### Ajouté
+
+- **Statistiques (admin)** — un graphique « Inscrits dans le temps » montre
+  désormais le nombre d'inscriptions par jour, comme celui des parties créées.
+
+### Modifié
+
+- **Classement** — seuls les 5 meilleurs joueurs (par meilleur score) sont
+  affichés sur le tableau de bord.
+- **Mes parties** — seules les 3 parties les plus récentes sont visibles ; les
+  autres restent accessibles en faisant défiler la liste.
+- **Salle d'attente** — l'hôte voit désormais un message précisant d'attendre
+  que les autres joueurs se connectent ou de lancer la partie avec des IA.
+
 ## [1.2.1] - 2026-06-10
 
 Décompte des connexions pour la fenêtre de soutien.

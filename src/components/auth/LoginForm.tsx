@@ -12,6 +12,7 @@ import AuthFrame, {
   authLinkClass,
   authPrimaryButtonClass,
 } from "@/components/auth/AuthFrame";
+import { recordSupportLogin } from "@/app/dashboard/SupportKofi";
 
 export default function LoginForm() {
   const { t, locale, setLocale } = useI18n();
@@ -78,6 +79,9 @@ export default function LoginForm() {
         setLoading(false);
         return;
       }
+
+      // Count this deliberate login toward the one-time "support the game" nudge.
+      recordSupportLogin(signInData.user.id);
 
       router.push("/dashboard");
       router.refresh();

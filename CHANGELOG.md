@@ -5,6 +5,16 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.1] - 2026-06-10
+
+Décompte des connexions pour la fenêtre de soutien.
+
+### Corrigé
+
+- **Soutien** — la fenêtre invitant à soutenir le jeu se base désormais sur les
+  connexions réelles via le bouton « Connexion » (et non plus sur l'horodatage
+  de session). Elle s'affiche bien à la troisième connexion.
+
 ## [1.2.0] - 2026-06-10
 
 Lien vers le studio NTH Studio et classement plus équitable.

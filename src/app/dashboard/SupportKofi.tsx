@@ -63,62 +63,71 @@ export function SupportFooter({ t }: { t: TFn }) {
 interface SupportPromptState {
   logins: number;
   shown: boolean;
-  lastSignIn: string | null;
+}
+
+const SUPPORT_PROMPT_THRESHOLD = 3;
+
+function supportPersistKey(userId: string) {
+  return `myheroes:support-prompt:${userId}`;
+}
+
+function readSupportState(userId: string): SupportPromptState {
+  const state: SupportPromptState = { logins: 0, shown: false };
+  try {
+    const raw = window.localStorage.getItem(supportPersistKey(userId));
+    if (raw) return { ...state, ...JSON.parse(raw) };
+  } catch {
+    // Corrupt/inaccessible storage — fall back to defaults.
+  }
+  return state;
+}
+
+function writeSupportState(userId: string, state: SupportPromptState) {
+  try {
+    window.localStorage.setItem(supportPersistKey(userId), JSON.stringify(state));
+  } catch {
+    // Ignore write failures (private mode, quota, etc.).
+  }
 }
 
 /**
- * Persisted, per-user nudge that opens the Ko-fi prompt the third time a player
- * signs in, then never again. A "login" is detected by a change of the Supabase
- * `last_sign_in_at` timestamp, which updates on each real sign-in but stays stable
- * across token refreshes and dashboard re-mounts — so logging out and back in
- * (even in the same tab) correctly counts as a new connection.
+ * Count one explicit connection for the support nudge. Called from the login
+ * form the moment the player clicks "Connexion" and the sign-in succeeds — so
+ * the counter tracks deliberate logins, not token refreshes or dashboard
+ * re-mounts. The third connection arms the Ko-fi prompt (see useSupportPrompt).
+ */
+export function recordSupportLogin(userId: string) {
+  if (!userId || typeof window === "undefined") return;
+  const state = readSupportState(userId);
+  if (state.shown) return; // already nudged — stop counting
+  writeSupportState(userId, { ...state, logins: state.logins + 1 });
+}
+
+/**
+ * Persisted, per-user nudge that opens the Ko-fi prompt once the player has
+ * signed in three times, then never again. The login count is incremented by
+ * `recordSupportLogin()` on the explicit "Connexion" click; this hook only
+ * reads the stored count on dashboard mount to decide whether to show.
  */
 export function useSupportPrompt() {
   const user = useSupabaseUser();
   const userId = user?.id;
-  const lastSignIn = user?.last_sign_in_at ?? null;
   const [shouldShow, setShouldShow] = useState(false);
 
   useEffect(() => {
     if (!userId || typeof window === "undefined") return;
 
-    const persistKey = `myheroes:support-prompt:${userId}`;
-
-    let state: SupportPromptState = { logins: 0, shown: false, lastSignIn: null };
-    try {
-      const raw = window.localStorage.getItem(persistKey);
-      if (raw) state = { ...state, ...JSON.parse(raw) };
-    } catch {
-      // Corrupt/inaccessible storage — fall back to defaults.
-    }
-
-    // Count a connection only when the sign-in timestamp changes (new session).
-    if (lastSignIn && lastSignIn !== state.lastSignIn) {
-      state = { ...state, logins: state.logins + 1, lastSignIn };
-      try {
-        window.localStorage.setItem(persistKey, JSON.stringify(state));
-      } catch {
-        // Ignore write failures (private mode, quota, etc.).
-      }
-    }
-
-    if (!state.shown && state.logins >= 3) {
+    const state = readSupportState(userId);
+    if (!state.shown && state.logins >= SUPPORT_PROMPT_THRESHOLD) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShouldShow(true);
     }
-  }, [userId, lastSignIn]);
+  }, [userId]);
 
   const dismiss = useCallback(() => {
     setShouldShow(false);
     if (!userId || typeof window === "undefined") return;
-    const persistKey = `myheroes:support-prompt:${userId}`;
-    try {
-      const raw = window.localStorage.getItem(persistKey);
-      const prev = raw ? JSON.parse(raw) : {};
-      window.localStorage.setItem(persistKey, JSON.stringify({ ...prev, shown: true }));
-    } catch {
-      // Ignore write failures.
-    }
+    writeSupportState(userId, { ...readSupportState(userId), shown: true });
   }, [userId]);
 
   return { shouldShow, dismiss };

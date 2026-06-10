@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DISPLAY_PREFERENCE_EVENT, getSavedFpsDisplay } from "@/lib/settings/displayPreferences";
 import { fetchWithSupabaseAuth, useSession } from "@/lib/auth/client";
 import { version as APP_VERSION } from "../../../../package.json";
 import { ReportBugModal } from "@/components/ReportBugModal";
@@ -118,7 +119,19 @@ export function HUDContent() {
   const [tutorialClosed, setTutorialClosed] = useState(false);
   const [tutorialManuallyOpen, setTutorialManuallyOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [showFps, setShowFps] = useState(getSavedFpsDisplay);
   const [reportOpen, setReportOpen] = useState(false);
+
+  // Keep the FPS overlay toggle in sync with the Options dialog (and other tabs).
+  useEffect(() => {
+    const sync = () => setShowFps(getSavedFpsDisplay());
+    window.addEventListener(DISPLAY_PREFERENCE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(DISPLAY_PREFERENCE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
@@ -1140,6 +1153,15 @@ export function HUDContent() {
             ) : myPlayer ? (
               <ResourceBar player={myPlayer} />
             ) : null}
+            {showFps && !adminObserverMode && (
+              <div
+                className="self-center rounded-lg border border-amber-400/45 bg-amber-950/45 px-2.5 py-2 font-mono text-xs font-black uppercase tracking-[0.18em] text-amber-100"
+                aria-label={`${t("hud.fps")}: ${devPanel.fpsText}`}
+                title={t("hud.fps")}
+              >
+                {devPanel.fpsText}
+              </div>
+            )}
             <GameMenuButton
               dataTutorial="menu"
               items={[

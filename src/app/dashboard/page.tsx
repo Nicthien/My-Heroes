@@ -47,6 +47,7 @@ import { SupportFooter, SupportPromptModal, useSupportPrompt } from "./SupportKo
 import { StatsPanel } from "./StatsPanel";
 import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
+import { RenderPerformanceWarning } from "./RenderPerformanceWarning";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 
 interface PlayerInfo {
@@ -841,6 +842,7 @@ export default function DashboardPage() {
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900">
       <DashboardBackgroundLayers />
       <div className="relative z-10 mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        <RenderPerformanceWarning />
         <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <FleurDeLis className="h-10 w-10 text-amber-400 drop-shadow" />

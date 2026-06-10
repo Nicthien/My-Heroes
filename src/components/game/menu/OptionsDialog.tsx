@@ -6,8 +6,20 @@ import AudioSettingsPanel from "@/components/game/audio/AudioSettingsPanel";
 import {
   DISPLAY_PREFERENCE_EVENT,
   getSavedAnimationsEnabled,
+  getSavedFpsDisplay,
+  getSavedRenderQuality,
   saveAnimationsEnabled,
+  saveFpsDisplay,
+  saveRenderQuality,
+  type RenderQualityMode,
 } from "@/lib/settings/displayPreferences";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+const RENDER_QUALITY_OPTIONS: { mode: RenderQualityMode; labelKey: TranslationKey }[] = [
+  { mode: "auto", labelKey: "options.renderQualityAuto" },
+  { mode: "performance", labelKey: "options.renderQualityPerformance" },
+  { mode: "high", labelKey: "options.renderQualityHigh" },
+];
 
 type OptionsDialogProps = {
   open: boolean;
@@ -21,9 +33,15 @@ type OptionsDialogProps = {
 export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
   const { t } = useI18n();
   const [animationsEnabled, setAnimationsEnabled] = useState(getSavedAnimationsEnabled);
+  const [renderQuality, setRenderQuality] = useState(getSavedRenderQuality);
+  const [fpsEnabled, setFpsEnabled] = useState(getSavedFpsDisplay);
 
   useEffect(() => {
-    const sync = () => setAnimationsEnabled(getSavedAnimationsEnabled());
+    const sync = () => {
+      setAnimationsEnabled(getSavedAnimationsEnabled());
+      setRenderQuality(getSavedRenderQuality());
+      setFpsEnabled(getSavedFpsDisplay());
+    };
     window.addEventListener(DISPLAY_PREFERENCE_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
@@ -47,6 +65,17 @@ export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
     const next = !animationsEnabled;
     setAnimationsEnabled(next);
     saveAnimationsEnabled(next);
+  };
+
+  const changeRenderQuality = (mode: RenderQualityMode) => {
+    setRenderQuality(mode);
+    saveRenderQuality(mode);
+  };
+
+  const toggleFps = () => {
+    const next = !fpsEnabled;
+    setFpsEnabled(next);
+    saveFpsDisplay(next);
   };
 
   return (
@@ -88,6 +117,31 @@ export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-300/80">
             {t("options.displaySection")}
           </h3>
+          <div className="mt-2 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
+            <p className="text-sm font-bold">{t("options.renderQuality")}</p>
+            <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t("options.renderQuality")}>
+              {RENDER_QUALITY_OPTIONS.map(({ mode, labelKey }) => {
+                const active = renderQuality === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => changeRenderQuality(mode)}
+                    className={`touch-target rounded border px-1.5 py-1.5 text-[11px] font-bold leading-tight transition ${
+                      active
+                        ? "border-amber-400/80 bg-amber-500/20 text-amber-100"
+                        : "border-amber-700/40 bg-stone-950/60 text-amber-200/70 hover:border-amber-500/60 hover:text-amber-100"
+                    }`}
+                  >
+                    {t(labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] font-semibold text-amber-200/60">{t("options.renderQualityHint")}</p>
+          </div>
           <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
             <input
               type="checkbox"
@@ -99,6 +153,20 @@ export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
               <span className="font-bold">{t("options.animations")}</span>
               <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
                 {t("options.animationsHint")}
+              </span>
+            </span>
+          </label>
+          <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={fpsEnabled}
+              onChange={toggleFps}
+              className="mt-0.5 h-4 w-4 accent-amber-300"
+            />
+            <span className="text-sm">
+              <span className="font-bold">{t("options.showFps")}</span>
+              <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
+                {t("options.showFpsHint")}
               </span>
             </span>
           </label>

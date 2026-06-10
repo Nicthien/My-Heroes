@@ -5,7 +5,8 @@ import { UNDERGROUND_LEVEL } from "@/lib/game/map-levels";
 import { DecorItem, GameMap, MapObject, MapTile, Position, RoadType, TerrainType } from "@/lib/game/types";
 import { translate } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
-import { MapObjectData, MapRenderer, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
+import { MapObjectData, MapRenderer, type RenderPerformanceNotice, type RendererLoadingProgress, type SpellRevealHint } from "@/lib/rendering/mapRenderer";
+import { AdaptiveQualityMonitor, detectGpuRenderer } from "./adaptiveQuality";
 import { BASE_HEIGHT, TILE_HEIGHT, TILE_WIDTH, cartToIso, isoToCart } from "@/lib/rendering/phaser/iso";
 import { DIRECTIONAL_SPRITESHEETS, HERO_DIRECTIONS, MAP_SPRITES, MAP_SPRITE_PATHS, getBoatSpritesheet, getHeroSpritesheet, getMonsterSpritePath, getTerrainSideTexturePath, getTownSpritePath, type DirectionalSpriteState, type HeroDirection, type TerrainTopTexture } from "@/lib/rendering/phaser/assets";
 import {
@@ -100,7 +101,7 @@ import {
   updateTerrainEffectFrame,
   type LavaTileEffect,
 } from "@/lib/rendering/phaser/terrainAnimation";
-import { areAnimationsEnabled } from "@/lib/settings/displayPreferences";
+import { areAnimationsEnabled, getRenderQuality } from "@/lib/settings/displayPreferences";
 import {
   applyTerrainTopTextureCrop,
   getTerrainTopTextureTransform,
@@ -331,6 +332,9 @@ class PhaserMapScene extends Phaser.Scene {
   // Tracks the last animations-enabled state seen by the render loop so we can
   // rebuild the fog drift tweens when the player toggles the preference.
   private lastAnimationsEnabled = areAnimationsEnabled();
+  // Set by the renderer's adaptive-quality monitor. When true (software WebGL or
+  // sustained low frame rate) ambient animations are suspended to ease GPU load.
+  adaptiveDegraded = false;
   private objectLayerSortDirty = false;
   private mapTileObjectSprites: Phaser.GameObjects.GameObject[] = [];
   private objectsByTile = new Map<string, MapObjectData[]>();
@@ -617,8 +621,9 @@ class PhaserMapScene extends Phaser.Scene {
 
     // Ambient map animations (water shimmer, lava ripple, fog drift) honor the
     // player's "animations" display preference. Functional motion such as hero
-    // movement along a path is never gated.
-    const animationsEnabled = areAnimationsEnabled();
+    // movement along a path is never gated. Adaptive degraded mode (weak GPU /
+    // Edge software rendering) additionally suspends them to recover frame rate.
+    const animationsEnabled = areAnimationsEnabled() && !this.adaptiveDegraded;
     if (animationsEnabled !== this.lastAnimationsEnabled) {
       this.lastAnimationsEnabled = animationsEnabled;
       if (this.map) this.updateFogDriftTweens(this.map);
@@ -3991,6 +3996,8 @@ export class PhaserMapRenderer implements MapRenderer {
   private readyResolve: (() => void) | null = null;
   private frameMeasureStartedAt: number | null = null;
   private lastSceneGraphGaugeAt = 0;
+  private qualityMonitor = new AdaptiveQualityMonitor();
+  private performanceNotice: RenderPerformanceNotice | null = null;
 
   async init(container: HTMLDivElement, onLoadingProgress?: RendererLoadingProgress) {
     this.destroyed = false;
@@ -4044,11 +4051,20 @@ export class PhaserMapRenderer implements MapRenderer {
           this.lastSceneGraphGaugeAt = now;
           this.scene?.recordSceneGraphGauges();
         }
+        // Always feed the monitor so cadence data stays fresh, then let the
+        // player's render-quality preference override the auto decision:
+        // "high" never degrades, "performance" always does, "auto" follows the
+        // monitor (which also force-degrades on detected software rendering).
+        const autoDegraded = this.qualityMonitor.sample(now);
+        const mode = getRenderQuality();
+        const degraded = mode === "high" ? false : mode === "performance" ? true : autoDegraded;
+        if (this.scene) this.scene.adaptiveDegraded = degraded;
       });
 
       await ready;
       this.readyResolve = null;
       if (this.destroyed) return;
+      this.detectRenderPerformance();
       onLoadingProgress?.(90, "Affichage de la carte...");
       this.initialized = true;
     } catch (error) {
@@ -4064,6 +4080,30 @@ export class PhaserMapRenderer implements MapRenderer {
 
   isReady() {
     return this.initialized && !this.destroyed && Boolean(this.scene);
+  }
+
+  // Inspect the live WebGL backend once the game is ready. A software fallback
+  // (SwiftShader / Microsoft WARP — common on Edge when the GPU can't be
+  // acquired) is the dominant cause of "lags on Edge, fine on Chrome", so we
+  // pre-emptively degrade and surface an actionable notice to the UI.
+  private detectRenderPerformance() {
+    const renderer = this.game?.renderer;
+    const gl = renderer && "gl" in renderer ? renderer.gl : null;
+    const info = detectGpuRenderer(gl);
+    if (!info) return;
+    if (info.isSoftware) {
+      this.qualityMonitor.forceDegraded();
+      if (this.scene) this.scene.adaptiveDegraded = true;
+      this.performanceNotice = { isSoftwareRendering: true, renderer: info.renderer };
+      console.warn(
+        `[MyHeroes] Software WebGL rendering detected (${info.renderer || "unknown"}). ` +
+          "Hardware acceleration is likely disabled — performance will be degraded.",
+      );
+    }
+  }
+
+  getPerformanceNotice(): RenderPerformanceNotice | null {
+    return this.performanceNotice;
   }
 
   renderMap(map: GameMap) {

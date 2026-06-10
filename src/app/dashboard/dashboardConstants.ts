@@ -12,6 +12,9 @@ export type MapSizeKey = keyof typeof MAP_SIZES;
 // Ko-fi donation page for the project.
 export const KOFI_URL = "https://ko-fi.com/nthstudio";
 
+// NthStudio website.
+export const STUDIO_URL = "https://nthstudio.eu";
+
 export const TURN_TIMER_UNITS = ["minutes", "hours", "days"] as const;
 export type TurnTimerUnit = (typeof TURN_TIMER_UNITS)[number];
 

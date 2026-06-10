@@ -137,10 +137,16 @@ function playerHasLivingKing(player: LifecyclePlayer) {
 
 /** Upsert cross-game leaderboard aggregates for every human player when a game completes. */
 async function recordCompletedGameStats(supabase: SupabaseAdmin, players: ScoreSourcePlayer[], winnerId: string | null) {
+  const godModeUserIds = await fetchGodModeUserIds(
+    supabase,
+    players.map((player) => player.userId).filter((id): id is string => Boolean(id))
+  );
+
   for (const player of players) {
     const userId = player.userId ?? null;
     if (!userId) continue; // AI players are not ranked
     if (player.surrendered) continue; // forfeited games never count toward leaderboard stats
+    if (godModeUserIds.has(userId)) continue; // god-mode players can cheat, so they never count toward the leaderboard
 
     const score = computePlayerScore(scorableFromDbPlayer(player)).total;
     const won = player.id === winnerId;
@@ -173,6 +179,29 @@ async function recordCompletedGameStats(supabase: SupabaseAdmin, players: ScoreS
       console.error("player_stats upsert failed", upsertError);
     }
   }
+}
+
+/** Look up which of the given users have god mode enabled (and must be excluded from the leaderboard). */
+async function fetchGodModeUserIds(supabase: SupabaseAdmin, userIds: string[]): Promise<Set<string>> {
+  const unique = [...new Set(userIds)];
+  if (unique.length === 0) return new Set();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("god_mode_enabled", true)
+    .in("id", unique);
+
+  if (error) {
+    // Older databases without the god_mode_enabled column → nobody is god-mode.
+    if (`${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase().includes("god_mode_enabled")) {
+      return new Set();
+    }
+    console.error("god_mode_enabled lookup failed", error);
+    return new Set();
+  }
+
+  return new Set((data ?? []).map((row) => String(row.id)));
 }
 
 function isMissingPlayerStatsTable(error: { code?: string; message?: string; details?: string | null }) {

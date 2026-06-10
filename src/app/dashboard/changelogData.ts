@@ -22,6 +22,25 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.0",
+    date: "2026-06-10",
+    summary: "Lien vers le studio NTH Studio et classement plus équitable.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Tableau de bord** — un lien vers le studio NTH Studio (nthstudio.eu) apparaît désormais à côté du bouton « Soutien », séparé par une petite épée.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Classement** — les joueurs ayant activé le mode dieu ne sont plus comptabilisés dans le classement, afin de préserver l'équité des scores.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.9",
     date: "2026-06-09",
     summary: "Pools de recrutement séparés pour les créatures de base et améliorées.",

@@ -5,6 +5,20 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.0] - 2026-06-10
+
+Lien vers le studio NTH Studio et classement plus équitable.
+
+### Ajouté
+
+- **Tableau de bord** — un lien vers le studio **NTH Studio** (nthstudio.eu)
+  apparaît désormais à côté du bouton « Soutien », séparé par une petite épée.
+
+### Modifié
+
+- **Classement** — les joueurs ayant activé le **mode dieu** ne sont plus
+  comptabilisés dans le classement, afin de préserver l'équité des scores.
+
 ## [1.1.9] - 2026-06-09
 
 Pools de recrutement séparés pour les créatures de base et améliorées.

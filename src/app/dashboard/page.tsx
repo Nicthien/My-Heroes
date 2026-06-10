@@ -43,7 +43,7 @@ type TFn = (key: TranslationKey, params?: Record<string, string | number>) => st
 import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
-import { SupportButton, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
+import { SupportFooter, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
 import { StatsPanel } from "./StatsPanel";
 import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
@@ -1751,7 +1751,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-8 flex justify-center pb-2">
-          <SupportButton t={t} />
+          <SupportFooter t={t} />
         </div>
       </div>
 

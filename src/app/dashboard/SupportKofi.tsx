@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   CornerOrnaments,
   ParchmentBackground,
@@ -8,7 +9,7 @@ import {
   ornateFramePolished,
 } from "@/components/game/hud/theme";
 import { useSupabaseUser } from "@/lib/auth/client";
-import { KOFI_URL } from "./dashboardConstants";
+import { KOFI_URL, STUDIO_URL } from "./dashboardConstants";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -18,6 +19,44 @@ function HeartIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
       <path d="M12 21s-6.7-4.35-9.33-8.05C.9 10.4 1.5 7.1 4.1 5.9c1.9-.88 4.07-.2 5.2 1.43L12 10l2.7-2.67c1.13-1.63 3.3-2.31 5.2-1.43 2.6 1.2 3.2 4.5 1.43 7.05C18.7 16.65 12 21 12 21z" />
     </svg>
+  );
+}
+
+/** Small decorative sword used as a separator between the studio and support links. */
+function SwordIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
+      <path d="M14.5 17.5 3 6V3h3l11.5 11.5" />
+      <path d="m13 19 6-6" />
+      <path d="m16 16 4 4" />
+      <path d="m19 21 2-2" />
+    </svg>
+  );
+}
+
+/** Studio logo link pointing to the NthStudio website. */
+export function StudioButton() {
+  return (
+    <a
+      href={STUDIO_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-stone-950/70 px-4 py-2 text-sm font-bold uppercase tracking-wider text-sky-200/90 transition hover:border-sky-300/70 hover:bg-sky-950/40 hover:text-sky-100"
+    >
+      <Image src="/logo_nthstudio.png" alt="NTH Studio" width={24} height={24} className="h-5 w-5" />
+      NTH Studio
+    </a>
+  );
+}
+
+/** Footer row: NthStudio logo · sword separator · Support button. */
+export function SupportFooter({ t }: { t: TFn }) {
+  return (
+    <div className="flex items-center justify-center gap-3 sm:gap-4">
+      <StudioButton />
+      <SwordIcon className="h-5 w-5 text-amber-400/70" />
+      <SupportButton t={t} />
+    </div>
   );
 }
 

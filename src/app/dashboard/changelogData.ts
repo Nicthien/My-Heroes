@@ -22,6 +22,20 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.5",
+    date: "2026-06-11",
+    summary: "La ville de départ est pleinement opérationnelle dès le premier tour.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Taverne fonctionnelle au départ** — la taverne de la ville de départ propose désormais des héros à recruter dès le premier tour. Son offre était auparavant vide jusqu'au premier changement de semaine.",
+          "**Recrues disponibles au départ** — le bâtiment de créatures de niveau 1 est approvisionné de sa croissance hebdomadaire dès la création de la partie, au lieu d'attendre la première semaine.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.4",
     date: "2026-06-10",
     summary: "Ville de départ équipée, mini-carte plus lisible et FPS en combat.",

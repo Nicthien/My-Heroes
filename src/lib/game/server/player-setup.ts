@@ -3,7 +3,7 @@ import { SURFACE_LEVEL } from "@/lib/game/map-levels";
 import { makeRng } from "@/lib/game/engine/rng";
 import { FACTION_UNITS, UNIT_RULES, getTownWeeklyGrowth } from "@/lib/game/economy";
 import { getUnitRule } from "@/lib/game/units";
-import { CLASS_STARTING_STATS, HERO_ROSTER } from "@/lib/game/heroes";
+import { CLASS_STARTING_STATS, HERO_ROSTER, pickTavernOffer } from "@/lib/game/heroes";
 import { normalizePlayableFaction } from "@/lib/game/playable-factions";
 import { BuildingType, Faction, GameMap, HeroClass, UnitType, type VictoryConditionType } from "@/lib/game/types";
 import { pickTownName } from "@/lib/game/town-generation";
@@ -227,6 +227,9 @@ export async function createGamePlayerSetup(options: CreateGamePlayerSetupOption
     // Seed the tier-1 dwelling with its first week's growth so the player can
     // recruit immediately, instead of waiting for the first weekly refresh.
     available_recruits: getTownWeeklyGrowth(factionKey, STARTING_TOWN_BUILDINGS),
+    // Seed the tavern hero offer so the built tavern shows recruitable heroes
+    // from turn 1; exclude the hero the player already starts with.
+    tavern_offer: pickTavernOffer(factionKey, hero?.id ? [hero.id] : []),
     garrison: buildStartingGarrison(victoryType),
     is_neutral: false,
   });

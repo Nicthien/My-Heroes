@@ -5,6 +5,19 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.5] - 2026-06-11
+
+La ville de départ est pleinement opérationnelle dès le premier tour.
+
+### Corrigé
+
+- **Taverne fonctionnelle au départ** — la taverne de la ville de départ propose
+  désormais des héros à recruter dès le premier tour. Son offre était auparavant
+  vide jusqu'au premier changement de semaine.
+- **Recrues disponibles au départ** — le bâtiment de créatures de niveau 1 est
+  approvisionné de sa croissance hebdomadaire dès la création de la partie, au
+  lieu d'attendre la première semaine.
+
 ## [1.2.4] - 2026-06-10
 
 Ville de départ équipée, mini-carte plus lisible et FPS en combat.

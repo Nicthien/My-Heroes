@@ -5,6 +5,16 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.6] - 2026-06-11
+
+Correctif de stabilité : quitter ou supprimer une partie ne provoque plus d'erreur.
+
+### Corrigé
+
+- **Erreur en quittant une partie** — la suppression d'une partie (par exemple
+  lorsque le créateur quitte une partie en attente) ne déclenche plus d'erreur de
+  base de données liée aux notifications temps réel.
+
 ## [1.2.5] - 2026-06-11
 
 La ville de départ est pleinement opérationnelle dès le premier tour.

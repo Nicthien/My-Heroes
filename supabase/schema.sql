@@ -523,7 +523,11 @@ begin
     where c.id = v_row.combat_id;
   end if;
 
-  if v_game_id is not null then
+  -- Skip when the owning game no longer exists. During a cascade delete of a
+  -- game, this AFTER DELETE trigger fires on child rows (towns, players, ...)
+  -- once the parent games row is already gone; inserting into game_events here
+  -- would violate game_events_game_id_fkey (and resurrect an orphan event row).
+  if v_game_id is not null and exists (select 1 from public.games where id = v_game_id) then
     insert into public.game_events (game_id, updated_at)
     values (v_game_id, now())
     on conflict (game_id) do update set updated_at = excluded.updated_at;

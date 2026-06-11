@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.6",
+    date: "2026-06-11",
+    summary: "Correctif de stabilité : quitter ou supprimer une partie ne provoque plus d'erreur.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Erreur en quittant une partie** — la suppression d'une partie (par exemple lorsque le créateur quitte une partie en attente) ne déclenche plus d'erreur de base de données liée aux notifications temps réel.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.5",
     date: "2026-06-11",
     summary: "La ville de départ est pleinement opérationnelle dès le premier tour.",

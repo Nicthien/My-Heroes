@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Heroes</title>
+  <style>
+    :root {
+      --bg: #1a1410;
+      --panel: #2a2018;
+      --gold: #e8b84b;
+      --gold-soft: #f5d98a;
+      --text: #efe6d2;
+      --muted: #b6a37e;
+      --accent: #c0392b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      width: 100%;
+      font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #3a2c1c 0%, transparent 60%),
+        linear-gradient(160deg, #1a1410 0%, #120d0a 100%);
+    }
+    .wrap {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      gap: 22px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(40px, 9vw, 86px);
+      letter-spacing: 2px;
+      color: var(--gold);
+      text-shadow: 0 2px 0 #5a3f1a, 0 0 24px rgba(232, 184, 75, 0.35);
+    }
+    .tagline {
+      margin: 0;
+      max-width: 620px;
+      font-size: clamp(15px, 2.4vw, 19px);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .play {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+      padding: 18px 42px;
+      font-size: clamp(20px, 3.5vw, 26px);
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #2a1c08;
+      text-decoration: none;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      background: linear-gradient(180deg, var(--gold-soft) 0%, var(--gold) 55%, #c9952f 100%);
+      box-shadow:
+        0 6px 0 #7a531a,
+        0 10px 26px rgba(0, 0, 0, 0.45);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+    }
+    .play:hover { filter: brightness(1.06); }
+    .play:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #7a531a, 0 6px 16px rgba(0, 0, 0, 0.45);
+    }
+    .sword { font-size: 1.1em; }
+    .hint {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: #8c7a58;
+    }
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      justify-content: center;
+      max-width: 640px;
+      margin-top: 4px;
+    }
+    .features span {
+      font-size: 13px;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid #3c2e1e;
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>⚔ My Heroes</h1>
+    <p class="tagline">
+      Stratégie fantasy au tour par tour. Explore des cartes générées,
+      gère tes ressources, recrute des armées et affronte tes adversaires
+      dans des combats tactiques en ligne.
+    </p>
+    <div class="features">
+      <span>🗺️ Exploration</span>
+      <span>🏰 Gestion de villes</span>
+      <span>⚔️ Combats hexagonaux</span>
+      <span>🌐 Multijoueur en ligne</span>
+    </div>
+    <a class="play" href="https://myheroes.nthstudio.eu/" target="_top" rel="noopener">
+      <span class="sword">▶</span> Jouer maintenant
+    </a>
+    <p class="hint">Le jeu s'ouvre sur myheroes.nthstudio.eu — pense à activer le plein écran.</p>
+  </main>
+</body>
+</html>

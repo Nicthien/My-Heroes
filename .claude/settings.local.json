@@ -20,7 +20,8 @@
       "Bash(supabase start *)",
       "Bash(git diff *)",
       "Bash(npx tsx *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(Select-Object -First 30)"
     ]
   }
 }

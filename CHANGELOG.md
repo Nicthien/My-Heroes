@@ -5,6 +5,16 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.7] - 2026-06-13
+
+Retrouvez le jeu sur Facebook, itch.io, Discord et le site du studio.
+
+### Ajouté
+
+- **Liens communautaires** — la page de connexion et le tableau de bord affichent
+  désormais des liens vers la page Facebook, la fiche itch.io, le serveur Discord
+  et le site NTH Studio.
+
 ## [1.2.6] - 2026-06-11
 
 Correctif de stabilité : quitter ou supprimer une partie ne provoque plus d'erreur.

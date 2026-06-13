@@ -66,8 +66,8 @@ function readSupabaseEnv() {
   }
 
   return {
-    url: values.API_URL || values.SUPABASE_URL || "http://127.0.0.1:54321",
-    studioUrl: values.STUDIO_URL || "http://127.0.0.1:54323",
+    url: values.API_URL || values.SUPABASE_URL || "http://127.0.0.1:48321",
+    studioUrl: values.STUDIO_URL || "http://127.0.0.1:48323",
     anonKey: values.ANON_KEY || values.SUPABASE_ANON_KEY,
     serviceRoleKey: values.SERVICE_ROLE_KEY || values.SUPABASE_SERVICE_ROLE_KEY,
   };
@@ -79,6 +79,13 @@ function ensureAdminAccount(supabase) {
     encoding: "utf8",
     env: {
       ...process.env,
+      // Inject the LIVE Supabase URL under every name the code resolves, so a
+      // stale `.env` (e.g. an old 54321 port left after a WinNAT port remap)
+      // can't win. ensure-admin reads SUPABASE_INTERNAL_URL first, then
+      // NEXT_PUBLIC_SUPABASE_URL; its loadDotEnv only fills *unset* vars (`??=`),
+      // so setting them here makes them authoritative.
+      SUPABASE_URL: supabase.url,
+      SUPABASE_INTERNAL_URL: supabase.url,
       NEXT_PUBLIC_SUPABASE_URL: supabase.url,
       SUPABASE_SERVICE_ROLE_KEY: supabase.serviceRoleKey,
     },
@@ -111,6 +118,13 @@ async function main() {
     stdio: "inherit",
     env: {
       ...process.env,
+      // Server-side code reads SUPABASE_URL / SUPABASE_INTERNAL_URL first (see
+      // src/lib/config/supabaseEnv.ts); Next does NOT override already-set
+      // process.env vars with `.env`, so injecting the live port here makes the
+      // running app immune to a stale `.env` URL after a local port remap.
+      SUPABASE_URL: supabase.url,
+      SUPABASE_INTERNAL_URL: supabase.url,
+      SUPABASE_ANON_KEY: supabase.anonKey,
       NEXT_PUBLIC_SUPABASE_URL: supabase.url,
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.anonKey,
       SUPABASE_SERVICE_ROLE_KEY: supabase.serviceRoleKey,

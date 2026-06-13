@@ -74,8 +74,8 @@ export function readSupabaseEnv() {
   }
 
   return {
-    url: values.API_URL || values.SUPABASE_URL || "http://127.0.0.1:54321",
-    studioUrl: values.STUDIO_URL || "http://127.0.0.1:54323",
+    url: values.API_URL || values.SUPABASE_URL || "http://127.0.0.1:48321",
+    studioUrl: values.STUDIO_URL || "http://127.0.0.1:48323",
     anonKey: values.ANON_KEY || values.SUPABASE_ANON_KEY,
     serviceRoleKey: values.SERVICE_ROLE_KEY || values.SUPABASE_SERVICE_ROLE_KEY,
   };

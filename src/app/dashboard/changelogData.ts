@@ -22,6 +22,19 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.7",
+    date: "2026-06-13",
+    summary: "Retrouvez le jeu sur Facebook, itch.io, Discord et le site du studio.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Liens communautaires** — la page de connexion et le tableau de bord affichent désormais des liens vers la page Facebook, la fiche itch.io, le serveur Discord et le site NTH Studio.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.6",
     date: "2026-06-11",
     summary: "Correctif de stabilité : quitter ou supprimer une partie ne provoque plus d'erreur.",

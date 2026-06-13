@@ -44,6 +44,7 @@ import { CreateGameWizard } from "./CreateGameWizard";
 import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
 import { SupportFooter, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
+import { SocialLinks } from "./SocialLinks";
 import { StatsPanel } from "./StatsPanel";
 import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
@@ -1758,8 +1759,9 @@ export default function DashboardPage() {
           <Leaderboard entries={leaderboard} />
         </div>
 
-        <div className="mt-8 flex justify-center pb-2">
+        <div className="mt-8 flex flex-col items-center gap-4 pb-2">
           <SupportFooter t={t} />
+          <SocialLinks />
         </div>
       </div>
 

@@ -15,6 +15,11 @@ export const KOFI_URL = "https://ko-fi.com/nthstudio";
 // NthStudio website.
 export const STUDIO_URL = "https://nthstudio.eu";
 
+// Community & store links surfaced on the login and dashboard screens.
+export const FACEBOOK_URL = "https://www.facebook.com/people/My-Heroes/61590578679625/";
+export const ITCH_URL = "https://nth-studio.itch.io/my-heroes";
+export const DISCORD_URL = "https://discord.gg/BZdsASgR";
+
 export const TURN_TIMER_UNITS = ["minutes", "hours", "days"] as const;
 export type TurnTimerUnit = (typeof TURN_TIMER_UNITS)[number];
 

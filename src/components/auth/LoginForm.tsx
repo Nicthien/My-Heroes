@@ -13,6 +13,7 @@ import AuthFrame, {
   authPrimaryButtonClass,
 } from "@/components/auth/AuthFrame";
 import { recordSupportLogin } from "@/app/dashboard/SupportKofi";
+import { SocialLinks } from "@/app/dashboard/SocialLinks";
 
 export default function LoginForm() {
   const { t, locale, setLocale } = useI18n();
@@ -166,6 +167,10 @@ export default function LoginForm() {
 
       <div className="mt-6">
         <LanguageSelect value={locale} onChange={setLocale} />
+      </div>
+
+      <div className="mt-5 border-t border-amber-700/30 pt-4">
+        <SocialLinks />
       </div>
     </AuthFrame>
   );

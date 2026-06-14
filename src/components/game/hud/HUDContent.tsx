@@ -84,6 +84,7 @@ import {
   CornerOrnaments,
   FleurDeLis,
   HourglassIcon,
+  SpinnerIcon,
   ParchmentBackground,
   goldText,
   ornateFramePolished,
@@ -140,6 +141,9 @@ export function HUDContent() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const grailPuzzleOpen = useGameStore((state) => state.grailPuzzleOpen);
   const setGrailPuzzleOpen = useGameStore((state) => state.setGrailPuzzleOpen);
+  // Shared with the map renderer so the night overlay greys the screen on click,
+  // before the end-turn roundtrip resolves. See gameStore.endingTurn.
+  const turnSubmitting = useGameStore((state) => state.endingTurn);
   const setGameState = useGameStore((state) => state.setGameState);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
@@ -168,7 +172,20 @@ export function HUDContent() {
   const isWaitingForPlayers = Boolean(
     myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn
   );
+  // Optimistic display state: while an end/cancel-turn request is in flight, drive the
+  // button + screen overlay from intent rather than waiting for the server roundtrip.
+  const displayWaiting = isWaitingForPlayers || (turnSubmitting && canAct);
+  const displayCanAct = canAct && !turnSubmitting;
   const turnNotificationKey = `${gameState.id}:${gameState.turnNumber}:${myPlayer?.hasEndedTurn ? "done" : "ready"}`;
+
+  // Release the in-flight end/cancel-turn lock the instant the real turn state
+  // settles. Realtime can flip hasEndedTurn before the handler's own
+  // refreshGameState resolves; without this, a slow or failed refresh would leave
+  // the now-opposite button disabled — e.g. unable to cancel a turn just ended.
+  const realHasEndedTurn = myPlayer?.hasEndedTurn;
+  useEffect(() => {
+    useGameStore.getState().setEndingTurn(false);
+  }, [realHasEndedTurn]);
 
   // One-time rules popup: shown once a seated player reaches an ACTIVE game and
   // hasn't already dismissed it for this seat. Derived at render time (HUDContent
@@ -307,37 +324,47 @@ export function HUDContent() {
   };
 
   const handleEndTurn = async () => {
-    if (!canAct) return;
-    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "END_TURN" }),
-    });
+    if (!canAct || turnSubmitting) return;
+    useGameStore.getState().setEndingTurn(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "END_TURN" }),
+      });
 
-    if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.endTurnFailed"), locale));
-      return;
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response, t("hud.endTurnFailed"), locale));
+        return;
+      }
+
+      const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshedState) useGameStore.getState().setGameState(refreshedState);
+    } finally {
+      useGameStore.getState().setEndingTurn(false);
     }
-
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
-    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
   const handleCancelEndTurn = async () => {
-    if (!isWaitingForPlayers) return;
-    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "CANCEL_END_TURN" }),
-    });
+    if (!isWaitingForPlayers || turnSubmitting) return;
+    useGameStore.getState().setEndingTurn(true);
+    try {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CANCEL_END_TURN" }),
+      });
 
-    if (!response.ok) {
-      setCombatMessage(await getApiErrorMessage(response, t("hud.cancelEndTurnFailed"), locale));
-      return;
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response, t("hud.cancelEndTurnFailed"), locale));
+        return;
+      }
+
+      const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+      if (refreshedState) useGameStore.getState().setGameState(refreshedState);
+    } finally {
+      useGameStore.getState().setEndingTurn(false);
     }
-
-    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
-    if (refreshedState) useGameStore.getState().setGameState(refreshedState);
   };
 
   const handleStartGame = async () => {
@@ -1086,7 +1113,7 @@ export function HUDContent() {
                 controls now live in the Options dialog. */}
             <AdventureMusicControl
               faction={(myPlayer?.faction ?? null) as Faction | null}
-              night={isWaitingForPlayers}
+              night={displayWaiting}
               showControl={false}
             />
           </div>
@@ -1113,14 +1140,14 @@ export function HUDContent() {
                   } ${
                     myPlayer?.isAlive === false
                       ? "border-stone-400/50 bg-gradient-to-b from-stone-600 to-stone-900 text-stone-100"
-                      : canAct
+                      : displayCanAct
                       ? "border-emerald-300/55 bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-800 text-white"
-                      : isWaitingForPlayers
+                      : displayWaiting
                       ? "border-indigo-300/45 bg-gradient-to-b from-indigo-500 via-indigo-600 to-indigo-900 text-indigo-50"
                       : "border-amber-300/45 bg-gradient-to-b from-amber-600 to-amber-900 text-amber-50"
                   }`}
                 >
-                  {myPlayer?.isAlive === false ? t("gameover.defeat") : canAct ? t("hud.statusYourTurn") : isWaitingForPlayers ? t("hud.turnEnded") : t("hud.statusObservation")}
+                  {myPlayer?.isAlive === false ? t("gameover.defeat") : displayCanAct ? t("hud.statusYourTurn") : displayWaiting ? t("hud.turnEnded") : t("hud.statusObservation")}
                 </span>
               </>
             )}
@@ -1686,14 +1713,14 @@ export function HUDContent() {
             </div>
           )}
           <button
-            className={`group relative h-24 w-24 rounded-full border-4 transition ${
-              isWaitingForPlayers
+            className={`group relative h-24 w-24 rounded-full border-4 transition ${turnSubmitting ? "opacity-70" : ""} ${
+              displayWaiting
                 ? "border-stone-400 bg-gradient-to-b from-stone-500 via-stone-700 to-stone-950 text-stone-100 shadow-[0_0_24px_rgba(120,113,108,0.4),inset_0_0_0_2px_rgba(214,211,209,0.24)] hover:-translate-y-0.5 hover:from-stone-400"
-                : canAct && !hasActiveCombats
+                : displayCanAct && !hasActiveCombats
                   ? "border-amber-300 bg-gradient-to-b from-red-600 via-red-800 to-red-950 text-amber-50 shadow-[0_0_30px_rgba(220,38,38,0.5),inset_0_0_0_2px_rgba(252,211,77,0.4)] hover:-translate-y-0.5 hover:from-red-500"
                 : "cursor-not-allowed border-stone-700 bg-stone-900 text-stone-500"
             } ${showTurnTimerRing ? "!border-2 !border-black/45 shadow-[0_0_28px_rgba(0,0,0,0.45)]" : ""}`}
-            disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
+            disabled={turnSubmitting || (!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn"
             data-tutorial="end-turn"
@@ -1701,7 +1728,29 @@ export function HUDContent() {
           >
             {/* Glossy top-light sheen for a polished, three-dimensional bead. */}
             <span className="pointer-events-none absolute inset-[3px] rounded-full bg-[radial-gradient(circle_at_50%_22%,rgba(255,255,255,0.32),rgba(255,255,255,0.05)_42%,transparent_62%)]" />
-            {showTurnTimerRing && (
+            {turnSubmitting && (
+              <svg
+                aria-hidden
+                viewBox="0 0 100 100"
+                className="pointer-events-none absolute -inset-[6px] h-[calc(100%+12px)] w-[calc(100%+12px)] animate-spin [animation-duration:0.9s]"
+              >
+                {/* Faint full track + a bright amber arc that sweeps around the bead. */}
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="5" />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="45"
+                  fill="none"
+                  stroke="#fcd34d"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 45}
+                  strokeDashoffset={2 * Math.PI * 45 * 0.7}
+                  className="drop-shadow-[0_0_4px_rgba(252,211,77,0.7)]"
+                />
+              </svg>
+            )}
+            {showTurnTimerRing && !turnSubmitting && (
               <svg
                 aria-hidden
                 viewBox="0 0 100 100"
@@ -1750,7 +1799,7 @@ export function HUDContent() {
               <HourglassIcon className="relative mx-auto h-9 w-9 drop-shadow" />
             )}
             <span className="relative mt-1 block text-[10px] font-black uppercase tracking-[0.18em] [text-shadow:_0_1px_2px_rgba(0,0,0,0.6)]">
-              {isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
+              {turnSubmitting ? t("hud.endTurnPending") : isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
             </span>
           </button>
           </div>
@@ -1774,19 +1823,24 @@ export function HUDContent() {
         ))}
         {!isPending && !adminObserverMode && (
           <button
-            className={`touch-target min-w-[4.5rem] rounded-full border-2 px-2 text-[10px] font-black uppercase tracking-wide ${
-              isWaitingForPlayers
+            className={`touch-target min-w-[4.5rem] rounded-full border-2 px-2 text-[10px] font-black uppercase tracking-wide ${turnSubmitting ? "opacity-70" : ""} ${
+              displayWaiting
                 ? "border-stone-400 bg-stone-800 text-stone-100"
-                : canAct && !hasActiveCombats
+                : displayCanAct && !hasActiveCombats
                   ? "border-amber-300 bg-red-800 text-amber-50"
                   : "cursor-not-allowed border-stone-700 bg-stone-900 text-stone-500"
             }`}
-            disabled={(!canAct && !isWaitingForPlayers) || hasActiveCombats}
+            disabled={turnSubmitting || (!canAct && !isWaitingForPlayers) || hasActiveCombats}
             onClick={isWaitingForPlayers ? handleCancelEndTurn : handleEndTurn}
             data-testid="end-turn-mobile"
             title={isWaitingForPlayers ? t("hud.cancelEndTurn") : t("hud.endTurn")}
           >
-            {isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
+            {turnSubmitting ? (
+              <span className="inline-flex items-center justify-center gap-1">
+                <SpinnerIcon className="h-3 w-3" />
+                {t("hud.endTurnPending")}
+              </span>
+            ) : isWaitingForPlayers ? t("common.cancel") : t("hud.endTurnShort")}
           </button>
         )}
       </div>

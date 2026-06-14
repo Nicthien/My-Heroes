@@ -269,6 +269,14 @@ export function damageSiegeWithCatapult(
   return { siege: { ...state, towers: nextTowers, lastCatapultHit: hit }, hit };
 }
 
+export function damageSiegeGateMelee(siege: SiegeState | null | undefined, damage: 1 | 2 = 1) {
+  const state = normalizeSiegeState(siege);
+  if (!state || state.gate.hp <= 0) return { siege: state, destroyed: false };
+  const hp = reduceHp(state.gate.hp, damage);
+  const next = { ...state, gate: { ...state.gate, hp, open: hp <= 0 ? true : state.gate.open } };
+  return { siege: next, destroyed: hp <= 0 };
+}
+
 export function applyTowerVolleyInRound(units: CombatBoardUnit[], siege: SiegeState | null | undefined) {
   const state = normalizeSiegeState(siege);
   const activeTowers = state?.towers.filter((tower) => tower.hp > 0 && tower.damage > 0) ?? [];

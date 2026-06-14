@@ -38,6 +38,10 @@ interface GameStore {
   loadingMessage: string;
   loadingNonce: number;
   isMovePending: boolean;
+  // True from the instant the player clicks "End turn" until the server roundtrip
+  // resolves. Lets the HUD button and the map night overlay react immediately
+  // instead of waiting for the refreshed gameState (with hasEndedTurn) to arrive.
+  endingTurn: boolean;
   devRevealMap: boolean;
   devInfiniteMana: boolean;
   devTeleportArmed: boolean;
@@ -49,6 +53,7 @@ interface GameStore {
 
   setGameState: (state: GameState) => void;
   setMovePending: (pending: boolean) => void;
+  setEndingTurn: (ending: boolean) => void;
   focusTile: (x: number, y: number) => void;
   zoomMap: (direction: number) => void;
   setCombatMessage: (message: string | null) => void;
@@ -103,6 +108,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadingMessage: "Chargement de la partie...",
   loadingNonce: 0,
   isMovePending: false,
+  endingTurn: false,
   devRevealMap: false,
   devInfiniteMana: false,
   devTeleportArmed: false,
@@ -126,6 +132,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
   }),
   setMovePending: (pending) => set({ isMovePending: pending }),
+  setEndingTurn: (ending) => set({ endingTurn: ending }),
   focusTile: (x, y) =>
     set((state) => ({
       cameraTarget: { x, y, nonce: (state.cameraTarget?.nonce ?? 0) + 1 },
@@ -243,6 +250,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadingMessage: "Chargement de la partie...",
       loadingNonce: 0,
       isMovePending: false,
+      endingTurn: false,
       devRevealMap: false,
       devInfiniteMana: false,
       devTeleportArmed: false,

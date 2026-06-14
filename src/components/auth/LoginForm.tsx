@@ -108,7 +108,12 @@ export default function LoginForm() {
   };
 
   return (
-    <AuthFrame title={t("common.appName")} subtitle={t("auth.login.tagline")} showHeader={false}>
+    <AuthFrame
+      title={t("common.appName")}
+      subtitle={t("auth.login.tagline")}
+      showHeader={false}
+      showGameIntro
+    >
       {error && <div className={authErrorClass}>{error}</div>}
 
       {unconfirmedEmail && (

@@ -181,6 +181,7 @@ export default function GameMapComponent() {
   const zoomRequest = useGameStore((state) => state.zoomRequest);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
+  const endingTurn = useGameStore((state) => state.endingTurn);
   const forceDevPartialFog = Boolean(
     gameState?.id.startsWith("dev-map-showcase-") &&
     typeof window !== "undefined" &&
@@ -256,9 +257,11 @@ export default function GameMapComponent() {
     const renderer = rendererRef.current;
     if (!renderer?.isReady() || !gameState) return;
     const myPlayer = gameState.players.find((player) => player.userId === session?.user?.id);
-    const waiting = Boolean(myPlayer && gameState.status === "ACTIVE" && myPlayer.hasEndedTurn);
+    // `endingTurn` greys the screen the instant the player clicks End turn, before the
+    // refreshed state (with hasEndedTurn) arrives; hasEndedTurn keeps it grey afterwards.
+    const waiting = Boolean(myPlayer && gameState.status === "ACTIVE" && (myPlayer.hasEndedTurn || endingTurn));
     renderer.setNightMode(waiting);
-  }, [gameState, rendererReadyVersion, session?.user?.id]);
+  }, [gameState, rendererReadyVersion, session?.user?.id, endingTurn]);
 
   useEffect(() => {
     const container = containerRef.current;

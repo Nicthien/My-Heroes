@@ -5,6 +5,27 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.8] - 2026-06-14
+
+Nouvelle page d'accueil, bâtiments de ville inédits, sièges plus tactiques et fin de tour plus réactive.
+
+### Ajouté
+
+- **Page d'accueil enrichie** — la page de connexion présente désormais le jeu avec
+  une introduction et une galerie de captures d'écran (carte d'aventure, combats,
+  siège, exploration navale, bataille hivernale et quête du Graal).
+- **Nouveaux bâtiments de ville** — la Cathédrale confère +1 Connaissance définitif
+  au héros en visite, et la Source de mana lui restaure tous ses points de magie
+  une fois par semaine.
+- **Assaut de la porte en mêlée** — lors d'un siège, les attaquants peuvent charger
+  la porte fermée du château au corps à corps pour l'enfoncer.
+
+### Modifié
+
+- **Fin de tour plus réactive** — le bouton, l'indicateur de chargement et
+  l'assombrissement de l'écran réagissent instantanément au clic, sans attendre la
+  réponse du serveur, et l'annulation de fin de tour reste toujours disponible.
+
 ## [1.2.7] - 2026-06-13
 
 Retrouvez le jeu sur Facebook, itch.io, Discord et le site du studio.

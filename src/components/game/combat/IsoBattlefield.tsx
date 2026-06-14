@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CombatBoardUnit, CombatEnvironment, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildCombatEnvironment } from "@/lib/game/combat/environment";
-import { getCellKey, isSiegeLandingBlocked } from "@/lib/game/combat/siege";
+import { getCellKey, isGateEffectivelyOpen, isSiegeLandingBlocked } from "@/lib/game/combat/siege";
 import {
   COMBAT_COLS,
   COMBAT_BASE_ROWS,
@@ -521,6 +521,13 @@ export function IsoBattlefield({
         : null;
       const canShoot = Boolean(shotProfile?.canStrike);
       const meleeApproach = currentUnit && enemyUnit ? findMeleeApproach(currentUnit, enemyUnit, units, terrain, siege) : null;
+      // Attackers can charge the closed castle gate in melee to break it down.
+      const isClosedGateCell = Boolean(
+        siege && siege.gate.hp > 0 && siege.gate.cell.q === q && siege.gate.cell.r === r && !isGateEffectivelyOpen(siege, units)
+      );
+      const gateMeleeApproach = isClosedGateCell && currentUnit && currentUnit.side === "attacker" && !unit
+        ? findMeleeApproach(currentUnit, { q, r } as unknown as CombatBoardUnit, units, terrain, siege)
+        : null;
       const isTacticsSelectableUnit = Boolean(isTacticsActive && tacticsPhase && unit && unit.side === tacticsPhase.side);
       const isTacticsDestination = Boolean(
         isTacticsActive &&
@@ -542,9 +549,11 @@ export function IsoBattlefield({
             : "ranged"
           : enemyUnit && meleeApproach
             ? "mêlée"
-            : reachable
-              ? "move"
-              : null;
+            : gateMeleeApproach
+              ? "mêlée"
+              : reachable
+                ? "move"
+                : null;
       const attackable = hoverAction === "mêlée" || hoverAction === "ranged" || hoverAction === "rangedHampered";
       const { x, y } = getIsoPosition(q, r);
       const canClick = isTacticsActive
@@ -614,6 +623,9 @@ export function IsoBattlefield({
             } else if (unit && hoverAction === "mêlée") {
               setPendingMove(null);
               onAction({ type: "ATTACK", targetUnitId: unit.id });
+            } else if (gateMeleeApproach && siege) {
+              setPendingMove(null);
+              onAction({ type: "ATTACK", targetSiegeId: siege.gate.id });
             } else if (reachable && currentUnit) {
               if (isPendingDestination) {
                 setPendingMove(null);
@@ -629,7 +641,7 @@ export function IsoBattlefield({
           }}
           onMouseEnter={() => setHoveredUnitId(unit?.id ?? null)}
           onMouseLeave={() => setHoveredUnitId((prev) => (prev === unit?.id ? null : prev))}
-          title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature, environment) : `${q},${r}`}
+          title={unit ? getUnitTitle(unit) : feature ? getTerrainTitle(feature, environment) : isClosedGateCell ? "Porte du château" : `${q},${r}`}
         >
           <IsoTile
             feature={feature}

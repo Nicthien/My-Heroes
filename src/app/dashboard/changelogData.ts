@@ -22,6 +22,27 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.8",
+    date: "2026-06-14",
+    summary: "Nouvelle page d'accueil, bâtiments de ville inédits, sièges plus tactiques et fin de tour plus réactive.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Page d'accueil enrichie** — la page de connexion présente désormais le jeu avec une introduction et une galerie de captures d'écran (carte d'aventure, combats, siège, exploration navale, bataille hivernale et quête du Graal).",
+          "**Nouveaux bâtiments de ville** — la Cathédrale confère +1 Connaissance définitif au héros en visite, et la Source de mana lui restaure tous ses points de magie une fois par semaine.",
+          "**Assaut de la porte en mêlée** — lors d'un siège, les attaquants peuvent charger la porte fermée du château au corps à corps pour l'enfoncer.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Fin de tour plus réactive** — le bouton, l'indicateur de chargement et l'assombrissement de l'écran réagissent instantanément au clic, sans attendre la réponse du serveur, et l'annulation de fin de tour reste toujours disponible.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.7",
     date: "2026-06-13",
     summary: "Retrouvez le jeu sur Facebook, itch.io, Discord et le site du studio.",

@@ -4,7 +4,7 @@ import { buildConcessionBoardState, findNextPrimaryParticipant, getHeroCombatUni
 import { buildCombatEnvironment } from "../src/lib/game/combat/environment";
 import { findHexPath, getBlockedCombatCells, getOccupiedCombatCells, getReachableCombatCells } from "../src/lib/game/combat/movement";
 import { buildTurnQueue, createCombatBoard, executeManualCombatAction } from "../src/lib/game/combat/persistent";
-import { applyTowerVolleyInRound, createCastleSiegeState, damageSiegeWithCatapult, filterSiegeTerrain, isGateEffectivelyOpen } from "../src/lib/game/combat/siege";
+import { applyTowerVolleyInRound, createCastleSiegeState, damageSiegeGateMelee, damageSiegeWithCatapult, filterSiegeTerrain, isGateEffectivelyOpen } from "../src/lib/game/combat/siege";
 import { computeSurrenderGoldCost } from "../src/lib/game/combat/surrender";
 import { executeCombatSpell, hasHeroCastCombatSpell, markHeroCombatSpellCast } from "../src/lib/game/combat/spells";
 import { findActiveCombatTruce, hasPlayerUsedTruce } from "../src/lib/game/combat/truce";
@@ -732,6 +732,46 @@ function testSiegeCatapultAndTowerShots() {
   assert.ok((volley.units.find((item) => item.id === "attacker")?.health ?? 200) < 200);
 }
 
+function testSiegeGateMeleeBreak() {
+  // The pure helper knocks the gate down one HP and flings it open at 0.
+  const siege = createCastleSiegeState({ towerCount: 0, towerDamage: 0 });
+  const firstBlow = damageSiegeGateMelee(siege, 1);
+  assert.equal(firstBlow.siege?.gate.hp, 1);
+  assert.equal(firstBlow.destroyed, false);
+  const finalBlow = damageSiegeGateMelee(firstBlow.siege, 1);
+  assert.equal(finalBlow.siege?.gate.hp, 0);
+  assert.equal(finalBlow.destroyed, true);
+  assert.equal(isGateEffectivelyOpen(finalBlow.siege, []), true);
+
+  // An attacker adjacent to the closed gate breaks it via a melee ATTACK action.
+  const attacker = unit({ id: "ram", unitType: UnitType.PIKEMAN, side: "attacker", q: 7, r: 4, count: 20, health: 200, maxHealth: 10 });
+  const result = executeManualCombatAction({
+    units: [attacker],
+    turnQueue: ["ram"],
+    round: 1,
+    currentUnitId: "ram",
+    action: { type: "ATTACK", targetSiegeId: "gate-main" },
+    attackerStats: stats(),
+    defenderStats: stats(),
+    siege,
+  });
+  assert.equal(result.siege?.gate.hp, 1);
+
+  // Defenders cannot target the gate (they own the castle).
+  const defender = unit({ id: "guard", unitType: UnitType.PIKEMAN, side: "defender", q: 9, r: 4 });
+  const blocked = executeManualCombatAction({
+    units: [defender],
+    turnQueue: ["guard"],
+    round: 1,
+    currentUnitId: "guard",
+    action: { type: "ATTACK", targetSiegeId: "gate-main" },
+    attackerStats: stats(),
+    defenderStats: stats(),
+    siege,
+  });
+  assert.equal(blocked.siege?.gate.hp, 2);
+}
+
 function testMoveDoesNotAttack() {
   const units = [
     unit({ id: "mover", unitType: UnitType.PIKEMAN, side: "attacker", q: 1, r: 1, speed: 4, minDamage: 10, maxDamage: 10 }),
@@ -1072,6 +1112,7 @@ testSiegeGateRules();
 testSiegeMoatStopsGroundOnly();
 testSiegeTerrainFiltering();
 testSiegeCatapultAndTowerShots();
+testSiegeGateMeleeBreak();
 testMoveDoesNotAttack();
 testSpellDamageAndMana();
 testCombatSpellOncePerRoundAndDamage();

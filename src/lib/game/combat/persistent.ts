@@ -26,6 +26,7 @@ import { assignMoraleToBoard, refreshMoraleForRound, rollMorale, type MoraleCont
 import {
   applyMoatToUnit,
   closeGateIfClear,
+  damageSiegeGateMelee,
   damageSiegeWithCatapult,
   findFirstMoatCellInPath,
   openGateForDefenderPath,
@@ -242,7 +243,7 @@ export function executeManualCombatAction(params: {
   turnQueue: string[];
   round: number;
   currentUnitId: string | null;
-  action: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string };
+  action: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string; targetSiegeId?: string };
   attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   immortalHeroId?: string | null;
@@ -387,6 +388,29 @@ export function executeManualCombatAction(params: {
         if (moatCell && siege) applyMoatToUnit(actor, siege, log);
         didAct = true;
         log.push(`${getUnitRule(actor.unitType).label} se déplace.`);
+      }
+    }
+  } else if (params.action.type === "ATTACK" && params.action.targetSiegeId) {
+    // Melee assault on the castle gate. Only attackers care to breach it; the
+    // approach cell sits in the moat, so the unit pays the moat toll just like
+    // any other melee charge across it.
+    const gate = siege?.gate;
+    if (actor.side === "attacker" && siege && gate && gate.hp > 0 && params.action.targetSiegeId === gate.id) {
+      const gateCell = { q: gate.cell.q, r: gate.cell.r } as unknown as CombatBoardUnit;
+      const approach = findMeleeApproach(actor, gateCell, units, params.terrain ?? [], siege);
+      if (approach) {
+        const moatCell = findFirstMoatCellInPath(siege, actor, approach.path);
+        actor.q = moatCell?.q ?? approach.destination.q;
+        actor.r = moatCell?.r ?? approach.destination.r;
+        if (moatCell) applyMoatToUnit(actor, siege, log);
+        if (actor.count > 0 && getHexDistance(actor, gate.cell) <= 1) {
+          const gateHit = damageSiegeGateMelee(siege, 1);
+          siege = gateHit.siege;
+          log.push(gateHit.destroyed
+            ? `${getUnitRule(actor.unitType).label} enfonce la porte.`
+            : `${getUnitRule(actor.unitType).label} frappe la porte.`);
+        }
+        didAct = true;
       }
     }
   } else if (params.action.type === "ATTACK" || params.action.type === "SHOOT") {

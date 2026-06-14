@@ -207,8 +207,8 @@ const RESOURCE_SILO_PRODUCTION: Record<Faction, ResourceCost> = {
 const UNIQUE_BUILDINGS: Record<Faction, UniqueBuildingTemplate[]> = {
   [Faction.CASTLE]: [
     { label: "Garde d'honneur", description: "+2 au moral des défenseurs de la ville.", cost: { gold: 500, wood: 5 }, requires: [BuildingType.TAVERN] },
-    { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
-    { label: "Phare", description: "+500 mouvement naval par phare possédé.", cost: { gold: 2000, wood: 10 }, requires: [BuildingType.UNIQUE_2], boatMovementBonus: 500 },
+    { label: "Cathédrale", description: "+1 Connaissance définitif au héros en visite (une fois).", cost: { gold: 2000, wood: 5, ore: 5 }, requires: [BuildingType.MAGE_GUILD], permanentVisitBonus: { knowledge: 1 } },
+    { label: "Phare", description: "+500 mouvement naval par phare possédé.", cost: { gold: 2000, wood: 10 }, requires: [BuildingType.SHIPYARD], boatMovementBonus: 500 },
     { label: "Écuries", description: "+400 mouvement au héros en visite pour la semaine.", cost: { gold: 2000, wood: 10 }, requires: [BuildingType.DWELLING_4], weeklyVisitBonus: { movement: 400 } },
     { label: "Volière des griffons", description: "+3 à la croissance hebdomadaire des griffons.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_3], growthBonus: { [UnitType.GRIFFIN]: 3, [UnitType.ROYAL_GRIFFIN]: 3 } },
     { label: "Colosse", description: "Bâtiment du Graal : +5000 or/jour et +50% de croissance des créatures.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
@@ -268,7 +268,7 @@ const UNIQUE_BUILDINGS: Record<Faction, UniqueBuildingTemplate[]> = {
   ],
   [Faction.CONFLUX]: [
     { label: "Université de magie", description: "Permet au héros en visite d'apprendre les écoles de magie élémentaire.", cost: { gold: 5000, wood: 10 }, requires: [BuildingType.MAGE_GUILD] },
-    { label: "Chantier naval", description: "Permet d'acheter un bateau si la ville borde l'eau.", cost: { gold: 2000, wood: 20 } },
+    { label: "Source de mana", description: "Restaure tous les points de magie du héros en visite (1×/semaine).", cost: { gold: 2000, wood: 5, ore: 5 }, requires: [BuildingType.MAGE_GUILD], weeklyVisitBonus: { fullMana: true } },
     { label: "Marchands d'artefacts", description: "Permet aux héros en visite d'acheter des artefacts.", cost: { gold: 10000 }, requires: [BuildingType.MARKET] },
     { label: "Jardin de vie", description: "+10 à la croissance hebdomadaire des pixies.", cost: { gold: 1000 }, requires: [BuildingType.DWELLING_1], growthBonus: { [UnitType.PIXIE]: 10, [UnitType.SPRITE]: 10 } },
     { label: "Aurore boréale", description: "Bâtiment du Graal : +5000 or/jour, +50% de croissance et tous les sorts.", cost: { gold: 10000 }, dailyProduction: { gold: 5000 }, grail: true },
@@ -606,9 +606,8 @@ export function hasTownBuilding(buildings: Array<BuildingType | string>, buildin
   return built.has(building);
 }
 
-export function isShipyardBuilding(faction: Faction | string | undefined, building: BuildingType | string) {
-  return building === BuildingType.SHIPYARD ||
-    ((faction === Faction.CASTLE || faction === Faction.CONFLUX) && building === BuildingType.UNIQUE_2);
+export function isShipyardBuilding(_faction: Faction | string | undefined, building: BuildingType | string) {
+  return building === BuildingType.SHIPYARD;
 }
 
 export function hasShipyardBuilding(faction: Faction | string | undefined, buildings: Array<BuildingType | string>) {

@@ -1190,7 +1190,7 @@ function executeActionThenNeutralTurns(params: {
   turnQueue: string[];
   round: number;
   currentUnitId: string | null;
-  playerAction: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string } | null;
+  playerAction: { type: "MOVE" | "ATTACK" | "SHOOT" | "WAIT" | "DEFEND" | "HEAL"; q?: number; r?: number; targetUnitId?: string; targetSiegeId?: string } | null;
   allowAutomatedAction: boolean;
   attackerStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };
   defenderStats: { attack: number; defense: number; skills?: Partial<Record<string, "basic" | "advanced" | "expert">> };

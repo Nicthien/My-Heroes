@@ -1,4 +1,4 @@
-import type { CombatConcessionParticipant } from "@/lib/game/combat/concession";
+import { findNextPrimaryParticipant, type CombatConcessionParticipant } from "@/lib/game/combat/concession";
 import type { CombatBoardUnit, Resources } from "@/lib/game/types";
 
 export const RESOURCE_KEYS: Array<keyof Resources> = ["gold", "wood", "ore", "mercury", "crystals", "gems", "sulfur"];
@@ -98,6 +98,25 @@ export function combatHasPlayerHeroesOnBothSides(
   const attackerHasHero = Boolean(combat.attacker_player_id) || units.some((unit) => unit.side === "attacker" && unit.ownerPlayerId && unit.heroId);
   const defenderHasHero = Boolean(combat.defender_player_id && combat.defender_hero_id) || units.some((unit) => unit.side === "defender" && unit.ownerPlayerId && unit.heroId);
   return attackerHasHero && defenderHasHero;
+}
+
+/**
+ * The player id to credit/display as the winner (or surrender target) for one combat side.
+ * Normally the primary slot (`attacker_player_id` / `defender_player_id`), but when that side
+ * defended a neutral objective with no primary player — e.g. a neutral castle — the primary id
+ * stays null even after an enemy player reinforced it (the join route only adds a participant
+ * row). In that case fall back to the side's primary active participant so the player who helped
+ * win is still recognised. Capturing the neutral town stays gated on the attacker-wins path, so
+ * this never transfers the castle to the reinforcing player.
+ */
+export function resolveSideWinnerPlayerId(
+  combat: { attacker_player_id: string; defender_player_id?: string | null; combat_participants?: CombatConcessionParticipant[] },
+  units: CombatBoardUnit[],
+  side: "attacker" | "defender"
+): string | null {
+  const primary = side === "attacker" ? combat.attacker_player_id : combat.defender_player_id ?? null;
+  if (primary) return primary;
+  return findNextPrimaryParticipant(combat.combat_participants ?? [], units, side)?.player_id ?? null;
 }
 
 export function getActiveCombatTruce(

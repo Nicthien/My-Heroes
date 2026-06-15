@@ -40,7 +40,7 @@ import { HERO_ARMY_STACK_LIMIT } from "@/lib/game/army-stacks";
 import type { HeroSkills } from "@/lib/game/skills";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, recordTownCaptureFromCombat, sanitizeActionForLog } from "@/lib/game/server/action-log";
-import { applyCombatScoreOutcome } from "@/lib/game/server/score-stats";
+import { applyCombatScoreOutcome, applyConcessionScoreOutcome } from "@/lib/game/server/score-stats";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGamePlayer, toCombat } from "@/lib/supabase/game-db";
 import {
@@ -60,6 +60,7 @@ import {
   normalizeAcknowledgedPlayerIds,
   normalizeSurrenderOffer,
   playerResources,
+  resolveSideWinnerPlayerId,
   type CombatTruceRow,
   type SurrenderNegotiationRow,
 } from "./combatRouteHelpers";
@@ -449,6 +450,9 @@ export async function POST(
         await supabase.from("armies").update({ health: nextHealth }).eq("id", fleeingKing.id);
       }
     }
+    // Align with the other concession paths: the escape-tunnel result already declares the
+    // defender as winner, so credit them the combat-win stat to match the displayed victory.
+    await applyConcessionScoreOutcome(supabase, id, combat.defender_player_id);
     await evaluateGameLifecycle(supabase, id);
     const mapped = toCombat(data);
     await logCombatAction({ supabase, gameId: id, gamePlayerId, turnNumber: Number(game.turn_number ?? 0), action, combatId });
@@ -787,15 +791,11 @@ async function createSurrenderNegotiation(params: {
   if (!combatHasPlayerHeroesOnBothSides(params.combat, params.boardState.units ?? [])) {
     return NextResponse.json({ error: "La reddition est possible uniquement contre un héros." }, { status: 400 });
   }
-  // Attacking a neutral garrison leaves the primary defender slot null even after an enemy
-  // player reinforces that side (the join route only adds a combat_participants row, it never
-  // promotes the joiner to defender_player_id). Fall back to the opposing side's primary active
-  // participant so the surrender can still target the real player who joined the neutral defense.
+  // Attacking a neutral garrison leaves the primary slot of the opposing side null even after an
+  // enemy player reinforces it; resolveSideWinnerPlayerId falls back to that side's primary active
+  // participant so the surrender still targets the real player who joined the neutral defense.
   const opposingSide: "attacker" | "defender" = concedingSide === "attacker" ? "defender" : "attacker";
-  const primaryOpposingPlayerId = opposingSide === "attacker" ? params.combat.attacker_player_id : params.combat.defender_player_id;
-  const targetPlayerId = primaryOpposingPlayerId
-    ?? findNextPrimaryParticipant(params.combat.combat_participants ?? [], params.boardState.units ?? [], opposingSide)?.player_id
-    ?? null;
+  const targetPlayerId = resolveSideWinnerPlayerId(params.combat, params.boardState.units ?? [], opposingSide);
   if (!targetPlayerId) return NextResponse.json({ error: "Joueur adverse introuvable" }, { status: 400 });
 
   const { data: surrenderHero, error: surrenderHeroError } = await fetchCombatHero(params.supabase, concedingParticipant.heroId);
@@ -972,7 +972,11 @@ async function applyCombatConcession(params: {
   const nextAttackerHeroId = promoted && params.concedingSide === "attacker" ? promoted.hero_id : params.combat.attacker_hero_id;
   const nextDefenderPlayerId = promoted && params.concedingSide === "defender" ? promoted.player_id : params.combat.defender_player_id ?? null;
   const nextDefenderHeroId = promoted && params.concedingSide === "defender" ? promoted.hero_id : params.combat.defender_hero_id ?? null;
-  const winnerPlayerId = winnerSide === "attacker" ? nextAttackerPlayerId : nextDefenderPlayerId;
+  // Display credit: the winning side's primary player, or — when that side defended a neutral
+  // objective (null primary) — the player who reinforced it, so a helper who contributed to the
+  // win is still shown as winner. The neutral town is never transferred (capture is gated on the
+  // attacker-wins path only).
+  const winnerPlayerId = resolveSideWinnerPlayerId(params.combat, boardAfterUnits, winnerSide);
   const winnerHeroId = winnerSide === "attacker" ? nextAttackerHeroId : nextDefenderHeroId;
   const combatResolved = !activeConcedingSide;
   const result: CombatSummary | null = combatResolved ? {
@@ -1012,6 +1016,7 @@ async function applyCombatConcession(params: {
     concedingHeroId: params.concedingHeroId,
     winnerSide,
     winnerHeroId: combatResolved ? winnerHeroId ?? null : null,
+    winnerPlayerId: combatResolved ? winnerPlayerId : null,
     preserveArmy: params.preserveArmy || Boolean(params.halveArmyLosses),
   });
   await deleteConsumedCombatParticipants(params.supabase, params.combatId, [
@@ -1388,11 +1393,11 @@ function buildManualCombatResult(
   winnerSide: "attacker" | "defender",
   before: CombatBoardUnit[],
   after: CombatBoardUnit[],
-  combat: { attacker_player_id: string; defender_player_id: string | null }
+  combat: { attacker_player_id: string; defender_player_id: string | null; combat_participants?: CombatConcessionParticipant[] }
 ): CombatSummary {
   return {
     winnerId: winnerSide,
-    winnerPlayerId: winnerSide === "attacker" ? combat.attacker_player_id : combat.defender_player_id,
+    winnerPlayerId: resolveSideWinnerPlayerId(combat, after, winnerSide),
     attackerLosses: getSideLosses("attacker", before, after),
     defenderLosses: getSideLosses("defender", before, after),
     experienceGained: winnerSide === "attacker" ? 500 : 0,
@@ -1413,6 +1418,7 @@ async function persistResolvedCombat(
     x: number;
     y: number;
     map_level: string;
+    combat_participants?: CombatConcessionParticipant[];
   },
   before: CombatBoardUnit[],
   after: CombatBoardUnit[],
@@ -1495,7 +1501,9 @@ async function persistResolvedCombat(
     }
   }
 
-  await applyCombatScoreOutcome(supabase, combat, winnerSide);
+  // Credit the win to a player who reinforced a neutral defense when the primary slot is null.
+  const winnerPlayerIdOverride = winnerSide ? resolveSideWinnerPlayerId(combat, after, winnerSide) : null;
+  await applyCombatScoreOutcome(supabase, combat, winnerSide, winnerPlayerIdOverride);
 }
 
 /**
@@ -1545,6 +1553,7 @@ async function persistConcededCombat(
     concedingHeroId: string;
     winnerSide: "attacker" | "defender";
     winnerHeroId: string | null;
+    winnerPlayerId: string | null;
     preserveArmy: boolean;
   }
 ) {
@@ -1582,6 +1591,10 @@ async function persistConcededCombat(
     await applyCombatXp(supabase, combat.game_id, options.winnerHeroId, before, after);
   }
   await applyCombatXp(supabase, combat.game_id, options.concedingHeroId, before, after);
+  // Credit the win to the side that the opponent conceded to (combatsWon only — the conceding
+  // hero retreats to the tavern, it is not destroyed). options.winnerPlayerId already resolves a
+  // neutral-defense reinforcer, so a player who forced the surrender is credited too.
+  await applyConcessionScoreOutcome(supabase, combat.game_id, options.winnerPlayerId);
 }
 
 /**

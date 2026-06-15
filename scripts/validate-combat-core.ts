@@ -1062,15 +1062,18 @@ function testPositiveLuckDoublesDamageAndMarksAttacker() {
   }
 }
 
-function testUpgradedDwellingReplacesBaseGrowth() {
-  // HoMM3: an upgrade dwelling replaces the base pool — the tier yields a single
-  // upgraded pool, not base + upgraded growth.
+function testUpgradedDwellingKeepsSeparateGrowthPool() {
+  // Design (commit d3e8e85b): base and upgraded dwellings of a tier each keep their
+  // OWN recruit pool and grow independently — a town with both built produces base
+  // growth + upgraded growth every week, not a single shared/replaced pool.
   const baseOnly = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1]);
   assert.ok((baseOnly[UnitType.CENTAUR] ?? 0) > 0);
 
-  const upgraded = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
-  assert.equal(upgraded[UnitType.CENTAUR] ?? 0, 0);
-  assert.ok((upgraded[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
+  const both = getTownWeeklyGrowth(Faction.RAMPART, [BuildingType.DWELLING_1, BuildingType.UPG_DWELLING_1]);
+  // The base pool keeps growing...
+  assert.ok((both[UnitType.CENTAUR] ?? 0) > 0);
+  // ...and the upgraded pool grows alongside it.
+  assert.ok((both[UnitType.CENTAUR_CAPTAIN] ?? 0) > 0);
 }
 
 function testFortificationGrowthBonus() {
@@ -1126,7 +1129,7 @@ testLopsidedAutoResolveIsCheapForTheStronger();
 testRangedUnitsAreShieldedByMelee();
 testCombatBoardNormalizesStackStats();
 testPositiveLuckDoublesDamageAndMarksAttacker();
-testUpgradedDwellingReplacesBaseGrowth();
+testUpgradedDwellingKeepsSeparateGrowthPool();
 testFortificationGrowthBonus();
 
 console.log("Combat core validation passed.");

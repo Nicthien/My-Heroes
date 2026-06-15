@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { isTileTraversable, computeVisibleTiles, getPlayerVisionCenters, normalizeMapMovement } from "@/lib/game/engine";
+import { normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { SKILL_DEFINITIONS, type HeroSkills } from "@/lib/game/skills";
 import type { GameMap, Position, Resources } from "@/lib/game/types";
@@ -103,7 +104,7 @@ export async function handleDevAction({
       return NextResponse.json({ error: heroInCombatError }, { status: 400 });
     }
 
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(hero.mapLevel));
     const destination = getActionPosition(action.position);
     if (!destination) return NextResponse.json({ error: "Destination invalide" }, { status: 400 });
     const tile = mapData.tiles[destination.y]?.[destination.x];

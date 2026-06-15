@@ -24,7 +24,7 @@ import {
 } from "@/lib/game/artifacts";
 import { AdventureBuildingType, BuildingType, Faction, GameMap, MapObject, Position, Resources, TerrainType, UnitType } from "@/lib/game/types";
 import { getArmyNativeTerrain } from "@/lib/game/native-terrain";
-import { normalizeMapLevel, SURFACE_LEVEL } from "@/lib/game/map-levels";
+import { mapLevels, normalizeMapLevel, SURFACE_LEVEL } from "@/lib/game/map-levels";
 import {
   canMoveAdventureStep,
   canMoveAdventureStepForMode,
@@ -766,10 +766,19 @@ function normalizeHeroStatChoice(value: unknown): HeroStatKey | "gold" | "experi
 }
 
 function findAdventureBuildingById(map: GameMap, buildingId: string): { object: MapObject; position: Position } | null {
-  for (const row of map.tiles) {
-    for (const tile of row) {
-      if (tile.object?.type === "adventure_building" && tile.object.id === buildingId) {
-        return { object: tile.object, position: { x: tile.x, y: tile.y } };
+  // Search every map layer (surface + underground), not just `map.tiles`. The
+  // move handler resolves the visited tile via `withActiveMapLayer(hero level)`,
+  // so an adventure building on the underground layer is reachable and hands its
+  // id to the client — but that id only lives in `map.levels.underground`, not
+  // in the top-level surface `map.tiles`. Scanning a single layer here made the
+  // choice resolution (treasure chest, arena, schools, war-machine factory)
+  // 404 with "Bâtiment d'aventure introuvable" for any underground building.
+  for (const layer of mapLevels(map)) {
+    for (const row of layer.tiles) {
+      for (const tile of row) {
+        if (tile.object?.type === "adventure_building" && tile.object.id === buildingId) {
+          return { object: tile.object, position: { x: tile.x, y: tile.y } };
+        }
       }
     }
   }

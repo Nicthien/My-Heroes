@@ -659,6 +659,78 @@ export function HUDContent() {
     });
   };
 
+  const handleRecruitAll = async () => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown || isPending) return;
+
+    // Strongest creatures first: highest tier, then upgraded before base.
+    const candidates = selectedTownRecruitEntries
+      .filter((entry) => entry.rule && selectedTown.buildings.includes(entry.dwelling))
+      .filter((entry) => (selectedTown.availableRecruits[entry.rule.type] ?? 0) > 0)
+      .sort((a, b) => b.tier - a.tier || Number(b.upgraded) - Number(a.upgraded));
+
+    // Greedily plan recruits against the running resource pool.
+    let runningResources = myPlayer.resources;
+    const plan: Array<{ unitType: UnitType; count: number; health: number; cost: ReturnType<typeof multiplyCost> }> = [];
+    for (const entry of candidates) {
+      const available = selectedTown.availableRecruits[entry.rule.type] ?? 0;
+      const count = getMaxRecruitCount(runningResources, entry.rule.cost, available);
+      if (count <= 0) continue;
+      const cost = multiplyCost(entry.rule.cost, count);
+      runningResources = subtractCost(runningResources, cost);
+      plan.push({ unitType: entry.rule.type, count, health: entry.rule.health, cost });
+    }
+
+    if (plan.length === 0) {
+      setCombatMessage(t("hud.resourcesOrRecruitsInsufficient"));
+      return;
+    }
+
+    setRecruitDialog(null);
+
+    for (const item of plan) {
+      const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "RECRUIT_UNIT",
+          townId: selectedTown.id,
+          unitType: item.unitType,
+          count: item.count,
+        }),
+      });
+
+      if (!response.ok) {
+        setCombatMessage(await getApiErrorMessage(response, t("hud.recruitFailed"), locale));
+        const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+        if (refreshed) setGameState(refreshed);
+        return;
+      }
+    }
+
+    setGameState({
+      ...gameState,
+      players: gameState.players.map((player) => {
+        if (player.id !== myPlayer.id) return player;
+        let resources = player.resources;
+        for (const item of plan) resources = subtractCost(resources, item.cost);
+        return {
+          ...player,
+          resources,
+          towns: player.towns.map((town) => {
+            if (town.id !== selectedTown.id) return town;
+            let garrison = town.garrison;
+            const availableRecruits = { ...town.availableRecruits };
+            for (const item of plan) {
+              garrison = addUnitsToLocalStackList(garrison, item.unitType, item.count, item.health);
+              availableRecruits[item.unitType] = Math.max(0, (availableRecruits[item.unitType] ?? 0) - item.count);
+            }
+            return { ...town, garrison, availableRecruits };
+          }),
+        };
+      }),
+    });
+  };
+
   const handleUpgradeTroops = async (unitType: UnitType, count = 1, sourceHeroId?: string) => {
     if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
 
@@ -1012,6 +1084,19 @@ export function HUDContent() {
         selectedTown.buildings.includes(dwelling)
       )
     : selectedTownRecruitEntries;
+  const canRecruitAll = Boolean(
+    selectedTown && myPlayer && canAct && isMyTown && !isPending &&
+    selectedTownRecruitEntries.some(
+      (entry) =>
+        entry.rule &&
+        selectedTown.buildings.includes(entry.dwelling) &&
+        getMaxRecruitCount(
+          myPlayer.resources,
+          entry.rule.cost,
+          selectedTown.availableRecruits[entry.rule.type] ?? 0
+        ) > 0
+    )
+  );
   const getUpgradeOption = (unitType: UnitType, available: number) => {
     if (!selectedTown || !myPlayer) return null;
     const baseEntry = selectedTownRecruitEntries.find((entry) => entry.rule.type === unitType && !entry.upgraded);
@@ -1476,6 +1561,8 @@ export function HUDContent() {
                 isMyTown={isMyTown}
                 recruitDialog={recruitDialog}
                 setRecruitDialog={setRecruitDialog}
+                canRecruitAll={canRecruitAll}
+                onRecruitAll={handleRecruitAll}
               />
             )}
 

@@ -23,6 +23,8 @@ export function TownRecruitTab({
   isMyTown,
   recruitDialog,
   setRecruitDialog,
+  canRecruitAll,
+  onRecruitAll,
 }: {
   selectedTown: Town;
   selectedTownFaction: Faction;
@@ -35,6 +37,8 @@ export function TownRecruitTab({
   isMyTown: boolean;
   recruitDialog: { townId: string; unitType: UnitType; count: number } | null;
   setRecruitDialog: (next: { townId: string; unitType: UnitType; count: number } | null) => void;
+  canRecruitAll: boolean;
+  onRecruitAll: () => void;
 }) {
   const { t, locale } = useI18n();
   return (
@@ -48,6 +52,23 @@ export function TownRecruitTab({
         />
         <span>{t("recruit.hideMissing")}</span>
       </label>
+      <button
+        type="button"
+        className={`flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-bold transition ${
+          canRecruitAll
+            ? "border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] hover:from-emerald-500 hover:to-emerald-700"
+            : "cursor-not-allowed border-stone-700 bg-stone-800/60 text-stone-500"
+        }`}
+        disabled={!canRecruitAll}
+        title={t("recruit.recruitAllHint")}
+        onClick={() => {
+          setRecruitDialog(null);
+          onRecruitAll();
+        }}
+      >
+        <RecruitUnitsIcon className="h-4 w-4" />
+        <span>{t("recruit.recruitAll")}</span>
+      </button>
       {displayedRecruitEntries.map(({ rule, tier, dwelling, upgraded }) => {
         const hasDwelling = selectedTown.buildings.includes(dwelling);
         const available = selectedTown.availableRecruits[rule.type] ?? 0;

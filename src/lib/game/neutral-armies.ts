@@ -49,13 +49,14 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
 // across every guard source — mines, zone guardians, patrols, gates), not the unit
 // tier or the creature band. GUARD_BAND_LOW/HIGH bound which slice of the eligible
 // creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
-// Difficulty boost: ~3.6× over the original 2.1 basis (2.1 → 7.5) so neutral guards
-// (mines, wandering monsters, zone guardians, gates) are a real but fair fight against
-// an early hero instead of a free pick-up. Dialed down from 9.45 once combat-immortal
-// dev god mode was decoupled (it had been masking all losses). Starting wood/ore mines
-// land around ~900-1250 combat power; high-tier mines (gold/crystal) scale up
-// proportionally and are meant to be taken later.
-const GUARD_STRENGTH_MULTIPLIER = 7.5;
+// Difficulty boost history: 2.1 (legacy) → 9.45 → 7.5. Halved again to 3.75 in response
+// to "too hard" player feedback — a uniform -50% on the unit count of EVERY neutral guard
+// source (mines, wandering monsters, zone guardians, patrols, gates, pockets, artifacts).
+// The world is meant to start soft; it then ramps back up over time via the weekly neutral
+// growth in `server/turns.ts` (undefeated neutrals gain +25%/week, capped at ×3 of base),
+// so a max-grown guard ends at ~1.5× its pre-nerf strength. This affects newly generated
+// stacks only (existing in-progress games keep their already-seeded neutral_army_stacks).
+const GUARD_STRENGTH_MULTIPLIER = 3.75;
 const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
 

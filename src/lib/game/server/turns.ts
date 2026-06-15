@@ -359,6 +359,14 @@ export async function completePlayerTurn(
     }
   }
 
+  if (shouldApplyWeeklyGrowth) {
+    // Undefeated neutral guards harden over time: every week each surviving neutral
+    // (monster army, guarded mine, gate, neutral town garrison) gains +25%, compounding
+    // but capped at ×3 of its base. Counterpart to the soft start from the halved
+    // GUARD_STRENGTH_MULTIPLIER in `neutral-armies.ts`.
+    await applyWeeklyNeutralGrowth(supabase, gameId, nextTurnNumber);
+  }
+
   if (shouldApplyWeeklyGrowth && mapData?.tiles) {
     nextExternalDwellings = applyExternalDwellingGrowth(mapData, mapState);
   }
@@ -415,6 +423,115 @@ export async function cancelPlayerTurnCompletion(
 
 function isStartOfWeek(dayNumber: number) {
   return dayNumber > 1 && (dayNumber - 1) % 7 === 0;
+}
+
+// Weekly escalation for undefeated neutral guards.
+const NEUTRAL_WEEKLY_GROWTH = 1.25; // +25% per week
+const NEUTRAL_GROWTH_CAP = 3; // never grow past ×3 of the base strength
+
+/**
+ * Growth factor to apply at a given week-start so that the *cumulative* growth follows
+ * `min(×3, 1.25^weeksElapsed)`. Returns 1 once the ×3 ceiling is reached (≈ week 6), which
+ * lets callers skip the work entirely. Caller guarantees `isStartOfWeek(dayNumber)`, so
+ * `(dayNumber - 1) / 7` is an integer week index (1 on day 8, 2 on day 15, …).
+ */
+function neutralWeeklyGrowthFactor(dayNumber: number): number {
+  const week = (dayNumber - 1) / 7;
+  const prev = Math.min(NEUTRAL_GROWTH_CAP, NEUTRAL_WEEKLY_GROWTH ** (week - 1));
+  const curr = Math.min(NEUTRAL_GROWTH_CAP, NEUTRAL_WEEKLY_GROWTH ** week);
+  return curr / prev;
+}
+
+function grownCount(count: number, factor: number): number {
+  return Math.max(1, Math.round((count ?? 0) * factor));
+}
+
+async function applyWeeklyNeutralGrowth(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  dayNumber: number,
+) {
+  const factor = neutralWeeklyGrowthFactor(dayNumber);
+  if (factor <= 1.0001) return; // ×3 ceiling reached — neutrals no longer grow
+
+  const writes: PromiseLike<unknown>[] = [];
+
+  // 1. Wandering / zone / pocket monster armies still alive.
+  const { data: armies } = await supabase
+    .from("neutral_armies")
+    .select("id, neutral_army_stacks(id, count, max_health)")
+    .eq("game_id", gameId)
+    .eq("status", "ACTIVE");
+  for (const army of (armies ?? []) as Array<{ neutral_army_stacks?: Array<{ id: string; count: number; max_health: number }> }>) {
+    for (const stack of army.neutral_army_stacks ?? []) {
+      const count = grownCount(stack.count, factor);
+      writes.push(
+        supabase
+          .from("neutral_army_stacks")
+          .update({ count, health: count * (stack.max_health ?? 0) })
+          .eq("id", stack.id),
+      );
+    }
+  }
+
+  // 2. Guarded resource buildings (mines) still in neutral hands.
+  const { data: buildings } = await supabase
+    .from("resource_buildings")
+    .select("id, guardian_power")
+    .eq("game_id", gameId)
+    .is("game_player_id", null)
+    .gt("guardian_power", 0);
+  for (const building of (buildings ?? []) as Array<{ id: string; guardian_power: number }>) {
+    writes.push(
+      supabase
+        .from("resource_buildings")
+        .update({ guardian_power: Math.round((building.guardian_power ?? 0) * factor) })
+        .eq("id", building.id),
+    );
+  }
+
+  // 3. Gate guards: scale both the guardian_power budget and any persisted gate_stacks.
+  const { data: gates } = await supabase
+    .from("gates")
+    .select("id, guardian_power, gate_stacks(id, count, max_health)")
+    .eq("game_id", gameId)
+    .is("game_player_id", null)
+    .gt("guardian_power", 0);
+  for (const gate of (gates ?? []) as Array<{ id: string; guardian_power: number; gate_stacks?: Array<{ id: string; count: number; max_health: number }> }>) {
+    writes.push(
+      supabase
+        .from("gates")
+        .update({ guardian_power: Math.round((gate.guardian_power ?? 0) * factor) })
+        .eq("id", gate.id),
+    );
+    for (const stack of gate.gate_stacks ?? []) {
+      const count = grownCount(stack.count, factor);
+      writes.push(
+        supabase
+          .from("gate_stacks")
+          .update({ count, health: count * (stack.max_health ?? 0) })
+          .eq("id", stack.id),
+      );
+    }
+  }
+
+  // 4. Neutral town garrisons (stored as a camelCase UnitStack[] jsonb blob).
+  const { data: towns } = await supabase
+    .from("towns")
+    .select("id, neutral_garrison")
+    .eq("game_id", gameId)
+    .eq("is_neutral", true);
+  for (const town of (towns ?? []) as Array<{ id: string; neutral_garrison?: Array<{ count: number; health?: number; maxHealth?: number }> }>) {
+    const garrison = town.neutral_garrison ?? [];
+    if (garrison.length === 0) continue;
+    const grown = garrison.map((stack) => {
+      const count = grownCount(stack.count, factor);
+      return { ...stack, count, health: count * (stack.maxHealth ?? stack.health ?? 0) };
+    });
+    writes.push(supabase.from("towns").update({ neutral_garrison: grown }).eq("id", town.id));
+  }
+
+  await Promise.all(writes);
 }
 
 async function updatePlayerResources(

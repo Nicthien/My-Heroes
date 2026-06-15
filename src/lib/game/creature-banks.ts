@@ -143,10 +143,10 @@ export const CREATURE_BANK_DEFINITIONS: Record<CreatureBankType, CreatureBankDef
     variant(10, 4200, [[UnitType.JUGGERNAUT, 4], [UnitType.BOUNTY_HUNTER, 28]], { experience: 4200, gold: 4500, resources: { ore: 20, crystals: 6 }, artifactTokens: ["major"] }),
   ]),
   griffin_conservatory: bank("griffin_conservatory", "Aire des griffons", "Rocher-nid de griffons royaux.", [TerrainType.GRASS, TerrainType.MOUNTAIN, TerrainType.SNOW], 0.8, [
-    variant(30, 1000, [[UnitType.GRIFFIN, 28]], { creatures: [{ unitType: UnitType.ANGEL, count: 1 }] }),
-    variant(30, 1600, [[UnitType.GRIFFIN, 42], [UnitType.ROYAL_GRIFFIN, 10]], { creatures: [{ unitType: UnitType.ANGEL, count: 2 }] }),
-    variant(30, 2500, [[UnitType.ROYAL_GRIFFIN, 45]], { creatures: [{ unitType: UnitType.ANGEL, count: 3 }] }),
-    variant(10, 3800, [[UnitType.ROYAL_GRIFFIN, 70], [UnitType.CHAMPION, 8]], { creatures: [{ unitType: UnitType.ARCHANGEL, count: 1 }] }),
+    variant(30, 1000, [[UnitType.GRIFFIN, 28]], { experience: 1000, creatures: [{ unitType: UnitType.ROYAL_GRIFFIN, count: 9 }] }),
+    variant(30, 1600, [[UnitType.GRIFFIN, 42], [UnitType.ROYAL_GRIFFIN, 10]], { experience: 1600, creatures: [{ unitType: UnitType.ROYAL_GRIFFIN, count: 12 }] }),
+    variant(30, 2500, [[UnitType.ROYAL_GRIFFIN, 45]], { experience: 2500, creatures: [{ unitType: UnitType.ROYAL_GRIFFIN, count: 15 }] }),
+    variant(10, 3800, [[UnitType.ROYAL_GRIFFIN, 70], [UnitType.CHAMPION, 8]], { experience: 3800, creatures: [{ unitType: UnitType.ROYAL_GRIFFIN, count: 25 }] }),
   ]),
   imp_cache: bank("imp_cache", "Cache des diablotins", "Cache infernale pleine de soufre et d'or vole.", [TerrainType.LAVA, TerrainType.DIRT, TerrainType.SAND], 1.2, [
     variant(30, 450, [[UnitType.IMP, 80]], { gold: 700, resources: { sulfur: 1 } }),

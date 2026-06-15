@@ -1,4 +1,4 @@
-import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, Hero, UnitStack, UnitType } from "../types";
+import { CombatBoardUnit, CombatEnvironment, CombatSide, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, Faction, Hero, UnitStack, UnitType } from "../types";
 import { canRegenerateHealth, getUnitRule } from "../units";
 import { autoResolveCombat, applyLossesToArmies } from "./autoResolve";
 import {
@@ -58,6 +58,8 @@ export interface CombatParticipantSnapshot {
   skills?: CombatSideStatsSnapshot["skills"];
   morale?: number;
   luck?: number;
+  /** Owner's faction, used to stamp the King's faction group on the board. */
+  faction?: Faction | string | null;
   armies: UnitStack[];
 }
 
@@ -71,8 +73,8 @@ export function createCombatBoard(
   const defenderAdvance = Math.max(0, Math.min(3, options.tacticsAdvance?.defender ?? 0));
   const rowCount = getInitialCombatRows(attacker.armies.length, defender.armies.length);
   const terrain = createCombatTerrain(rowCount, options.environment);
-  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain, attacker.luck);
-  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain, defender.luck);
+  addUnits(units, attacker.armies, "attacker", attacker.playerId, attacker.heroId ?? (attacker.playerId ? attacker.id : null), attacker.participantId ?? null, getInitialColumns("attacker", attackerAdvance), 1, rowCount, terrain, attacker.luck, attacker.faction);
+  addUnits(units, defender.armies, "defender", defender.playerId, defender.heroId ?? (defender.playerId ? defender.id : null), defender.participantId ?? null, getInitialColumns("defender", defenderAdvance), 1, rowCount, terrain, defender.luck, defender.faction);
   assignMoraleToBoard(units, buildMoraleContext({ attacker, defender, environment: options.environment }));
   const turnQueue = buildTurnQueue(units, 1);
   const initialUnits = cloneCombatUnits(units);
@@ -124,7 +126,8 @@ function addUnits(
   joinsRound: number,
   rowCount = COMBAT_BASE_ROWS,
   terrain: CombatTerrainFeature[] = [],
-  luck = 0
+  luck = 0,
+  faction: Faction | string | null = null
 ) {
   const preferredRows = Array.from({ length: rowCount }, (_, row) => row);
   armies.filter((army) => army.count > 0).forEach((army, index) => {
@@ -158,6 +161,9 @@ function addUnits(
       waited: false,
       luck: clampLuck(luck),
       luckTriggered: false,
+      // The King isn't a catalog creature: stamp its owner's faction so morale and
+      // native-terrain logic treat it as that faction, not the Pikeman fallback.
+      ...(army.unitType === UnitType.KING && faction ? { factionGroup: String(faction) } : {}),
     });
   });
 }
@@ -171,11 +177,12 @@ export function addReinforcementUnits(params: {
   heroId: string;
   participantId: string;
   joinsRound: number;
+  faction?: Faction | string | null;
   moraleContext?: MoraleContext;
 }) {
   const q = params.side === "attacker" ? 0 : COMBAT_COLS - 1;
   const rowCount = getReinforcementCombatRows(params.units, params.armies.length, q, params.terrain ?? []);
-  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, [q], params.joinsRound, rowCount, params.terrain ?? [], getHeroLuckForSide(params.side, params.moraleContext));
+  addUnits(params.units, params.armies, params.side, params.ownerPlayerId, params.heroId, params.participantId, [q], params.joinsRound, rowCount, params.terrain ?? [], getHeroLuckForSide(params.side, params.moraleContext), params.faction ?? null);
   assignMoraleToBoard(params.units, params.moraleContext ?? {});
 }
 

@@ -680,6 +680,12 @@ export interface CombatBoardUnit extends UnitStack {
   statusEffects?: import("./combat/effects").CombatStatusEffect[];
   retaliationsThisRound?: number;
   summoned?: boolean;
+  /**
+   * Faction-group override for units that aren't catalog creatures (the King),
+   * stamped from the owner's faction at board creation so morale and native-terrain
+   * logic treat the King as its owner's faction instead of the Pikeman fallback.
+   */
+  factionGroup?: string;
 }
 
 export type HeroSkillLevel = "basic" | "advanced" | "expert";

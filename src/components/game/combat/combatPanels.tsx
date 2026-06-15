@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { CombatBoardUnit, GameState, PersistentCombat } from "@/lib/game/types";
 import { buildTurnQueue } from "@/lib/game/combat/persistent";
-import { getCreature } from "@/lib/game/creature-catalog";
+import { getCreatureEntry } from "@/lib/game/creature-catalog";
 import { getUnitRule } from "@/lib/game/units";
 import { goldText } from "@/components/game/hud/theme";
 import { type DamagePreview, formatRange, getEffectiveCombatUnitStats } from "./combatLayout";
@@ -281,7 +281,8 @@ function InitiativeMiniature({ unit, unitFaction }: { unit: CombatBoardUnit; uni
 export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit; combat: PersistentCombat; gameState: GameState }) {
   const { t, locale } = useI18n();
   const rule = getUnitRule(unit.unitType);
-  const creature = getCreature(unit.unitType);
+  const creature = getCreatureEntry(unit.unitType);
+  const abilities = rule.abilities ?? [];
   const effectiveStats = getEffectiveCombatUnitStats(unit, combat, gameState);
   const states = [
     unit.defended ? t("combat.stateDefend") : null,
@@ -309,10 +310,10 @@ export function UnitDetails({ unit, combat, gameState }: { unit: CombatBoardUnit
           <span className={moraleClass(unit.morale)}>{t("combat.statMorale", { v: formatMorale(unit.morale) })}</span>
         </div>
         {unit.ranged && <div className="mt-2 text-xs font-bold text-amber-200">{t("combat.statShots", { n: unit.shots })}</div>}
-        {creature.abilities.length > 0 && (
-          <div className="mt-2 text-xs text-stone-300">{localizeCreatureAbilities(creature.abilities, locale)}</div>
+        {abilities.length > 0 && (
+          <div className="mt-2 text-xs text-stone-300">{localizeCreatureAbilities(abilities, locale)}</div>
         )}
-        {creature.special && <div className="mt-1 text-xs text-amber-100/85">{localizeCreatureSpecial(creature.special, locale)}</div>}
+        {creature?.special && <div className="mt-1 text-xs text-amber-100/85">{localizeCreatureSpecial(creature.special, locale)}</div>}
         {states.length > 0 && <div className="mt-2 text-xs font-bold text-sky-200">{states.join(" | ")}</div>}
       </div>
     </div>

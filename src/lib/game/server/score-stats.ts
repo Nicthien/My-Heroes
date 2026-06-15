@@ -84,11 +84,16 @@ interface CombatScoreContext {
 export async function applyCombatScoreOutcome(
   supabase: SupabaseAdmin,
   combat: CombatScoreContext,
-  winnerSide: "attacker" | "defender" | null
+  winnerSide: "attacker" | "defender" | null,
+  // When the winning side defended a neutral objective (null primary slot) but a player
+  // reinforced it, the caller resolves that player from the participants and passes it here
+  // so the helper still gets combat-win credit. Ignored when the primary slot is set.
+  winnerPlayerIdOverride?: string | null
 ) {
   if (!winnerSide) return;
-  const winnerPlayerId = winnerSide === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
-  if (!winnerPlayerId) return; // neutral defender victory — nothing to credit
+  const primaryWinnerPlayerId = winnerSide === "attacker" ? combat.attacker_player_id : combat.defender_player_id;
+  const winnerPlayerId = primaryWinnerPlayerId ?? winnerPlayerIdOverride ?? null;
+  if (!winnerPlayerId) return; // neutral victory with no player to credit
 
   const deltas: Partial<ScoreStats> = { combatsWon: 1 };
   let loserPlayerId: string | null = null;
@@ -118,6 +123,23 @@ export async function applyCombatScoreOutcome(
     defeatedHero: Boolean(deltas.heroesDefeated),
     eliminatedPlayer,
   });
+}
+
+/**
+ * Credit a combat win earned because the opponent conceded (surrender / retreat). Unlike
+ * applyCombatScoreOutcome this only bumps `combatsWon` and logs the key moment: the conceding
+ * hero survives (it retreats to the tavern), so no heroesDefeated / playersDefeated is counted.
+ * winnerPlayerId is the resolved side winner — for a neutral defense reinforced by a player it is
+ * that player, so the helper who forced the surrender still gets the victory credit.
+ */
+export async function applyConcessionScoreOutcome(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  winnerPlayerId: string | null | undefined
+) {
+  if (!winnerPlayerId) return;
+  await applyScoreDelta(supabase, winnerPlayerId, { combatsWon: 1 });
+  await recordCombatVictory(supabase, gameId, winnerPlayerId, { defeatedHero: false, eliminatedPlayer: false });
 }
 
 /** A player is eliminated when they hold no active hero and no town. Mirrors lifecycle `hasPlayerSeat`. */

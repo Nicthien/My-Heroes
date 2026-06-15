@@ -414,6 +414,8 @@ export const fr = {
   "recruit.requires": "Prérequis : {name}",
   "recruit.recruit": "Recruter",
   "recruit.recruitUnit": "Recruter {name}",
+  "recruit.recruitAll": "Tout recruter dans la garnison",
+  "recruit.recruitAllHint": "Recrute le maximum, en commençant par les créatures les plus fortes",
 
   // --- Hero panel ---
   "hero.tabProfile": "Profil",

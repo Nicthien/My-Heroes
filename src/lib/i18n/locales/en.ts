@@ -415,6 +415,8 @@ export const en: Record<TranslationKey, string> = {
   "recruit.requires": "Requires: {name}",
   "recruit.recruit": "Recruit",
   "recruit.recruitUnit": "Recruit {name}",
+  "recruit.recruitAll": "Recruit all into garrison",
+  "recruit.recruitAllHint": "Recruits the maximum, strongest creatures first",
 
   // --- Hero panel ---
   "hero.tabProfile": "Profile",

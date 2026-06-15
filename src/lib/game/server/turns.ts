@@ -24,6 +24,7 @@ import {
 } from "@/lib/game/heroes";
 import { getTownGoldProduction } from "@/lib/game/town-buildings";
 import { BuildingType, Faction, GameMap, Resources, UnitType } from "@/lib/game/types";
+import { mapLevels } from "@/lib/game/map-levels";
 import { getGameWithRelations, type SupabaseAdmin } from "@/lib/supabase/game-db";
 import { evaluateGameLifecycle } from "./lifecycle";
 import { recordRoundScoreSnapshots } from "./scoreHistory";
@@ -359,12 +360,13 @@ export async function completePlayerTurn(
     }
   }
 
+  let neutralGrowthChangedMapData = false;
   if (shouldApplyWeeklyGrowth) {
     // Undefeated neutral guards harden over time: every week each surviving neutral
-    // (monster army, guarded mine, gate, neutral town garrison) gains +25%, compounding
-    // but capped at ×3 of its base. Counterpart to the soft start from the halved
-    // GUARD_STRENGTH_MULTIPLIER in `neutral-armies.ts`.
-    await applyWeeklyNeutralGrowth(supabase, gameId, nextTurnNumber);
+    // (monster army, guarded mine, gate, neutral town garrison, artifact guard) gains
+    // +25%, compounding but capped at ×3 of its base. Counterpart to the soft start from
+    // the halved GUARD_STRENGTH_MULTIPLIER in `neutral-armies.ts`.
+    neutralGrowthChangedMapData = await applyWeeklyNeutralGrowth(supabase, gameId, nextTurnNumber, mapData);
   }
 
   if (shouldApplyWeeklyGrowth && mapData?.tiles) {
@@ -379,6 +381,11 @@ export async function completePlayerTurn(
   };
   if (nextExternalDwellings) {
     gameUpdate.map_state = { ...mapState, externalDwellings: nextExternalDwellings };
+  }
+  if (neutralGrowthChangedMapData) {
+    // Weekly neutral growth scaled mine/artifact guardianPower in the map blob — persist it
+    // so the display source stays in sync with the (already-written) combat-side values.
+    gameUpdate.map_data = mapData;
   }
   await supabase.from("games").update(gameUpdate).eq("id", gameId);
 }
@@ -446,13 +453,26 @@ function grownCount(count: number, factor: number): number {
   return Math.max(1, Math.round((count ?? 0) * factor));
 }
 
+/**
+ * Grows every undefeated neutral guard by `factor`, harmonising the three storage shapes
+ * so the displayed threat badge and the actual fight always agree:
+ *  - DB stacks (monster armies, gate garrisons) and the neutral-town garrison blob are
+ *    scaled in place — both the preview and combat read these directly.
+ *  - Mines store their strength as `resource_buildings.guardian_power` (the value the
+ *    server fights with); the displayed badge instead reads `mapData.object.guardianPower`.
+ *    We scale the table value and MIRROR it back into mapData (by id) so the two can't drift.
+ *  - Map-object artifact guards live only in mapData (read by both preview and combat) and
+ *    are scaled there too.
+ * Returns whether mapData was mutated, so the caller knows to persist `map_data`.
+ */
 async function applyWeeklyNeutralGrowth(
   supabase: SupabaseAdmin,
   gameId: string,
   dayNumber: number,
-) {
+  mapData: GameMap | undefined,
+): Promise<boolean> {
   const factor = neutralWeeklyGrowthFactor(dayNumber);
-  if (factor <= 1.0001) return; // ×3 ceiling reached — neutrals no longer grow
+  if (factor <= 1.0001) return false; // ×3 ceiling reached — neutrals no longer grow
 
   const writes: PromiseLike<unknown>[] = [];
 
@@ -474,7 +494,10 @@ async function applyWeeklyNeutralGrowth(
     }
   }
 
-  // 2. Guarded resource buildings (mines) still in neutral hands.
+  // 2. Guarded resource buildings (mines) still in neutral hands. resource_buildings holds
+  //    the value the server fights with; we capture each new value to mirror into mapData
+  //    (the display source) afterwards so the badge and the fight stay in lockstep.
+  const nextBuildingPower = new Map<string, number>();
   const { data: buildings } = await supabase
     .from("resource_buildings")
     .select("id, guardian_power")
@@ -482,11 +505,10 @@ async function applyWeeklyNeutralGrowth(
     .is("game_player_id", null)
     .gt("guardian_power", 0);
   for (const building of (buildings ?? []) as Array<{ id: string; guardian_power: number }>) {
+    const next = Math.max(1, Math.round((building.guardian_power ?? 0) * factor));
+    nextBuildingPower.set(building.id, next);
     writes.push(
-      supabase
-        .from("resource_buildings")
-        .update({ guardian_power: Math.round((building.guardian_power ?? 0) * factor) })
-        .eq("id", building.id),
+      supabase.from("resource_buildings").update({ guardian_power: next }).eq("id", building.id),
     );
   }
 
@@ -532,6 +554,32 @@ async function applyWeeklyNeutralGrowth(
   }
 
   await Promise.all(writes);
+
+  // 5. mapData pass: mirror the new mine power into the display source, and grow map-object
+  //    artifact guards (which live only in mapData, read by both their preview and combat).
+  let mapDataChanged = false;
+  if (mapData) {
+    for (const layer of mapLevels(mapData)) {
+      for (const row of layer.tiles) {
+        for (const tile of row) {
+          const object = tile.object;
+          if (!object) continue;
+          if (object.type === "building") {
+            const next = nextBuildingPower.get(object.id);
+            if (next !== undefined && next !== object.guardianPower) {
+              object.guardianPower = next;
+              mapDataChanged = true;
+            }
+          } else if (object.type === "artifact" && (object.guardianPower ?? 0) > 0) {
+            object.guardianPower = Math.max(1, Math.round((object.guardianPower ?? 0) * factor));
+            mapDataChanged = true;
+          }
+        }
+      }
+    }
+  }
+
+  return mapDataChanged;
 }
 
 async function updatePlayerResources(

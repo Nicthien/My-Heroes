@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getEffectiveHeroStatsFromValues } from "@/lib/game/artifacts";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { normalizeMapMovement } from "@/lib/game/engine";
-import { normalizeMapLevel } from "@/lib/game/map-levels";
+import { normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import { getGrailLocation } from "@/lib/game/grail";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell, type SpellId } from "@/lib/game/spells";
@@ -91,7 +91,7 @@ export async function handleAdventureAction({
       return NextResponse.json({ error: heroInCombatError }, { status: 400 });
     }
 
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(hero.mapLevel));
     const found = helpers.findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
     if (!found) return NextResponse.json({ error: "Bâtiment d'aventure introuvable" }, { status: 404 });
     if (!helpers.areAdjacentOrSame({ x: hero.x, y: hero.y }, found.position)) {
@@ -126,7 +126,7 @@ export async function handleAdventureAction({
       return NextResponse.json({ error: heroInCombatError }, { status: 400 });
     }
 
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(hero.mapLevel));
     const found = helpers.findAdventureBuildingById(mapData, String(action.buildingId ?? ""));
     if (!found || found.object.subtype !== AdventureBuildingType.WAR_MACHINE_FACTORY) {
       return NextResponse.json({ error: "Usine de machines de guerre introuvable" }, { status: 404 });
@@ -238,7 +238,7 @@ export async function handleAdventureAction({
     if (!spell.implemented) return NextResponse.json({ error: "Sort non implemente" }, { status: 400 });
     if (!hasDevInfiniteMana && mana < cost) return NextResponse.json({ error: "Mana insuffisant" }, { status: 400 });
 
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(hero.mapLevel));
     const mapState = (game.mapState as Record<string, unknown>) ?? {};
     const explored = new Set<string>(gamePlayer.exploredTiles ?? []);
     const result = await helpers.applyAdventureSpell({

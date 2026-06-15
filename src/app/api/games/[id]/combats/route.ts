@@ -28,6 +28,7 @@ import {
   getUsableAdventureMovement,
   normalizeMapMovement,
 } from "@/lib/game/engine";
+import { normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
@@ -93,6 +94,7 @@ export async function POST(
       armies: Parameters<typeof createCombatBoard>[0]["armies"];
       x: number;
       y: number;
+      mapLevel?: string | null;
     }>;
   }>;
   const neutralArmies = (game?.neutralArmies ?? []) as unknown as Array<{
@@ -129,7 +131,11 @@ export async function POST(
     return NextResponse.json({ error: "Ce héros est déjà engagé dans un combat." }, { status: 400 });
   }
 
-  const mapData = normalizeMapMovement(game.mapData as GameMap);
+  // Scope to the attacker's layer: `game.mapData.tiles` is the surface layer, so
+  // resolving an underground combat target (monster, creature bank, artifact
+  // guardian, gate) against the surface tiles would fail with "Cible de combat
+  // invalide".
+  const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(attacker.mapLevel));
   const mapState = (game.mapState as Record<string, unknown> | undefined) ?? {};
   const gates = getEffectiveGates(dbGates, mapData);
   const defender = getDefender({

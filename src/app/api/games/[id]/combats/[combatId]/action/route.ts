@@ -29,6 +29,7 @@ import {
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
 import { clearDestroyedWarMachines } from "@/lib/game/server/war-machines";
 import { CombatBoardUnit, CombatSideStatsSnapshot, CombatSummary, CombatTerrainFeature, GameMap, Resources, UnitType } from "@/lib/game/types";
+import { getMapLayer, normalizeMapLevel } from "@/lib/game/map-levels";
 import { getHeroMana, getSpell, getSpellCost, heroKnowsSpell } from "@/lib/game/spells";
 import { GRAIL_ARTIFACT_ID, getEffectiveHeroStatsFromValues, normalizeArtifactBag } from "@/lib/game/artifacts";
 import { getAllyGrailAura, getGrailNecromancyPercent } from "@/lib/game/grail";
@@ -786,7 +787,15 @@ async function createSurrenderNegotiation(params: {
   if (!combatHasPlayerHeroesOnBothSides(params.combat, params.boardState.units ?? [])) {
     return NextResponse.json({ error: "La reddition est possible uniquement contre un héros." }, { status: 400 });
   }
-  const targetPlayerId = concedingSide === "attacker" ? params.combat.defender_player_id : params.combat.attacker_player_id;
+  // Attacking a neutral garrison leaves the primary defender slot null even after an enemy
+  // player reinforces that side (the join route only adds a combat_participants row, it never
+  // promotes the joiner to defender_player_id). Fall back to the opposing side's primary active
+  // participant so the surrender can still target the real player who joined the neutral defense.
+  const opposingSide: "attacker" | "defender" = concedingSide === "attacker" ? "defender" : "attacker";
+  const primaryOpposingPlayerId = opposingSide === "attacker" ? params.combat.attacker_player_id : params.combat.defender_player_id;
+  const targetPlayerId = primaryOpposingPlayerId
+    ?? findNextPrimaryParticipant(params.combat.combat_participants ?? [], params.boardState.units ?? [], opposingSide)?.player_id
+    ?? null;
   if (!targetPlayerId) return NextResponse.json({ error: "Joueur adverse introuvable" }, { status: 400 });
 
   const { data: surrenderHero, error: surrenderHeroError } = await fetchCombatHero(params.supabase, concedingParticipant.heroId);
@@ -1403,6 +1412,7 @@ async function persistResolvedCombat(
     defender_hero_id: string | null;
     x: number;
     y: number;
+    map_level: string;
   },
   before: CombatBoardUnit[],
   after: CombatBoardUnit[],
@@ -1454,7 +1464,7 @@ async function persistResolvedCombat(
       if (creatureBankReward) {
         await markCreatureBankDefeated(supabase, combat.game_id, creatureBankReward);
       } else if (!capturedTown) {
-        const artifactDefeated = await markArtifactDefeatedAt(supabase, combat.game_id, combat.x, combat.y);
+        const artifactDefeated = await markArtifactDefeatedAt(supabase, combat.game_id, combat.x, combat.y, combat.map_level);
         if (!artifactDefeated) {
           await supabase
             .from("resource_buildings")
@@ -1474,7 +1484,7 @@ async function persistResolvedCombat(
     await applyCombatXp(supabase, combat.game_id, combat.attacker_hero_id, before, after);
   } else if (winnerSide === "defender") {
     if (!combat.defender_player_id && !combat.neutral_army_id && !combat.gate_id) {
-      await persistGeneratedNeutralDefenderSurvivorsAt(supabase, combat.game_id, combat.x, combat.y, after);
+      await persistGeneratedNeutralDefenderSurvivorsAt(supabase, combat.game_id, combat.x, combat.y, combat.map_level, after);
     }
     await transferGrailOnDefeat(supabase, combat.game_id, combat.attacker_hero_id, combat.defender_hero_id);
     await supabase.from("armies").delete().eq("hero_id", combat.attacker_hero_id);
@@ -1639,6 +1649,7 @@ async function persistGeneratedNeutralDefenderSurvivorsAt(
   gameId: string,
   x: number,
   y: number,
+  mapLevel: string,
   units: CombatBoardUnit[],
 ) {
   const survivors = units
@@ -1671,7 +1682,7 @@ async function persistGeneratedNeutralDefenderSurvivorsAt(
     .eq("id", gameId)
     .maybeSingle();
   const mapData = game?.map_data as GameMap | undefined;
-  const object = mapData?.tiles?.[y]?.[x]?.object;
+  const object = mapData ? getMapLayer(mapData, normalizeMapLevel(mapLevel)).tiles?.[y]?.[x]?.object : undefined;
   const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
 
   if (object?.type === "adventure_building" && isCreatureBankType(object.subtype)) {
@@ -1837,6 +1848,7 @@ async function markArtifactDefeatedAt(
   gameId: string,
   x: number,
   y: number,
+  mapLevel: string,
 ) {
   const { data: game } = await supabase
     .from("games")
@@ -1844,7 +1856,7 @@ async function markArtifactDefeatedAt(
     .eq("id", gameId)
     .maybeSingle();
   const mapData = game?.map_data as GameMap | undefined;
-  const object = mapData?.tiles?.[y]?.[x]?.object;
+  const object = mapData ? getMapLayer(mapData, normalizeMapLevel(mapLevel)).tiles?.[y]?.[x]?.object : undefined;
   if (object?.type !== "artifact") return false;
   const mapState = (game?.map_state as Record<string, unknown> | undefined) ?? {};
   const defeatedArtifacts = new Set<string>((mapState.defeatedArtifacts as string[] | undefined) ?? []);
@@ -1898,6 +1910,7 @@ async function findCreatureBankRewardForCombat(
     attacker_hero_id: string;
     x: number;
     y: number;
+    map_level: string;
   },
 ): Promise<PendingCreatureBankReward | null> {
   const { data: game } = await supabase
@@ -1906,7 +1919,7 @@ async function findCreatureBankRewardForCombat(
     .eq("id", combat.game_id)
     .maybeSingle();
   const mapData = game?.map_data as GameMap | undefined;
-  const object = mapData?.tiles?.[combat.y]?.[combat.x]?.object;
+  const object = mapData ? getMapLayer(mapData, normalizeMapLevel(combat.map_level)).tiles?.[combat.y]?.[combat.x]?.object : undefined;
   if (object?.type !== "adventure_building" || !isCreatureBankType(object.subtype)) return null;
 
   const creatureBanks = (((game?.map_state as Record<string, unknown> | undefined)?.creatureBanks as Record<string, { pendingReward?: PendingCreatureBankReward | null }> | undefined) ?? {});

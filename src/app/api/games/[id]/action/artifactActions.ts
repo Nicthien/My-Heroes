@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isHeroInActiveCombat } from "@/lib/game/combat/active-heroes";
 import { normalizeMapMovement } from "@/lib/game/engine";
+import { normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { getArtifact, pickArtifactId } from "@/lib/game/artifacts";
 import type { GameMap, Position } from "@/lib/game/types";
 import type { MinimalHero, MinimalPlayer, MinimalTown, SupabaseAdminClient } from "./types";
@@ -103,7 +104,10 @@ export async function handleArtifactAction({
     const hero = findOwnedHero(gamePlayer, action.heroId);
     if (!hero) return NextResponse.json({ error: "Héros invalide" }, { status: 400 });
     if (isHeroInActiveCombat(game.combats, hero.id)) return NextResponse.json({ error: heroInCombatError }, { status: 400 });
-    const mapData = normalizeMapMovement(game.mapData as GameMap);
+    // Scope the map to the hero's current layer: `game.mapData.tiles` is the
+    // surface layer, so an underground artifact would otherwise be looked up on
+    // the wrong tile and 404 with "Artefact introuvable".
+    const mapData = withActiveMapLayer(normalizeMapMovement(game.mapData as GameMap), normalizeMapLevel(hero.mapLevel));
     const targetPosition = getActionPosition(action.targetPosition);
     if (!targetPosition) return NextResponse.json({ error: "Artefact invalide" }, { status: 400 });
     const object = mapData.tiles[targetPosition.y]?.[targetPosition.x]?.object;

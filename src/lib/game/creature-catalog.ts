@@ -65,6 +65,15 @@ export function getCreature(unitType: UnitType | string): CreatureCatalogEntry {
 }
 
 /**
+ * Like {@link getCreature} but returns null instead of the Pikeman fallback when the
+ * unit isn't a catalog creature (war machines, the special "Roi"). Use this for display
+ * fields (abilities / special flavor) so non-catalog units don't borrow Pikeman's text.
+ */
+export function getCreatureEntry(unitType: UnitType | string): CreatureCatalogEntry | null {
+  return CREATURE_BY_TYPE[unitType as UnitType] ?? null;
+}
+
+/**
  * Returns the upgraded variant of a creature (same group + tier, higher upgradeLevel),
  * mirroring the classic neutral "upgrade flag". Returns null when no upgrade exists
  * (e.g. the `neutral` group has no upgrades), so callers keep the base creature.

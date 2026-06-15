@@ -76,6 +76,7 @@ export async function POST(
   const players = (game?.players ?? []) as unknown as Array<{
     id: string;
     userId: string | null;
+    faction?: string;
     isAi?: boolean;
     isAlive?: boolean;
     exploredTiles: string[];
@@ -289,6 +290,7 @@ export async function POST(
       skills: (attacker as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveAttackerMorale,
       luck: effectiveAttackerLuck,
+      faction: gamePlayer.faction,
       armies: attackerArmiesWithMachines,
     },
     {
@@ -300,6 +302,7 @@ export async function POST(
       skills: (targetDefender as unknown as { skills?: Partial<Record<string, "basic" | "advanced" | "expert">> }).skills ?? {},
       morale: effectiveDefenderMorale,
       luck: effectiveDefenderLuck,
+      faction: defenderPlayer?.faction,
       armies: targetDefender.armies,
     },
     {

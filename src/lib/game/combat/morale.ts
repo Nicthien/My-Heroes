@@ -1,5 +1,5 @@
 import type { CombatBoardUnit, CombatSide } from "../types";
-import { TerrainType } from "../types";
+import { TerrainType, UnitType } from "../types";
 import { getCreature, type CreatureGroupKey } from "../creature-catalog";
 import { getNativeTerrainForGroup } from "../native-terrain";
 
@@ -8,7 +8,23 @@ export const MORALE_MAX = 3;
 export const MORALE_GOOD_CHANCE_PER_POINT = 1 / 24;
 export const MORALE_BAD_CHANCE_PER_POINT = 1 / 12;
 
+/** The King always rallies his troops: his morale is guaranteed to stay positive. */
+export const KING_MIN_MORALE = 1;
+
 const UNDEAD_GROUP: CreatureGroupKey = "necropolis";
+
+function isKingUnit(unit: CombatBoardUnit) {
+  return unit.unitType === UnitType.KING;
+}
+
+/**
+ * The faction group used for morale faction-mixing and native terrain. Honours the
+ * board-stamped {@link CombatBoardUnit.factionGroup} override (the King adopts its
+ * owner's faction) and falls back to the catalog group for normal creatures.
+ */
+function unitFactionGroup(unit: CombatBoardUnit): CreatureGroupKey {
+  return (unit.factionGroup as CreatureGroupKey | undefined) ?? getCreature(unit.unitType).group;
+}
 
 export interface MoraleContext {
   attackerHeroMorale?: number;
@@ -42,7 +58,7 @@ export function computeUnitMorale(
       hasUndeadAlly = true;
     } else {
       hasLivingAlly = true;
-      factions.add(getCreature(ally.unitType).group);
+      factions.add(unitFactionGroup(ally));
     }
   }
 
@@ -61,9 +77,11 @@ export function computeUnitMorale(
   morale += Number.isFinite(heroBonus) ? heroBonus : 0;
 
   if (context.terrain) {
-    const native = getNativeTerrain(getCreature(unit.unitType).group);
+    const native = getNativeTerrain(unitFactionGroup(unit));
     if (native && native === context.terrain) morale += 1;
   }
+
+  if (isKingUnit(unit)) morale = Math.max(KING_MIN_MORALE, morale);
 
   return clampMorale(morale);
 }

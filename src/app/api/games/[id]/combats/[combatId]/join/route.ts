@@ -26,6 +26,7 @@ export async function POST(
 
   const gamePlayer = await getGamePlayer(supabase, id, user.id) as unknown as {
     id: string;
+    faction?: string;
     isAlive?: boolean;
     heroes: Array<{ id: string; armies: UnitStack[] }>;
   } | null;
@@ -83,7 +84,7 @@ export async function POST(
     return NextResponse.json({ pending: true, message: "Demande de renfort envoyee." });
   }
 
-  return addHeroToCombat({ supabase, combatId, playerId: gamePlayer.id, hero, side });
+  return addHeroToCombat({ supabase, combatId, playerId: gamePlayer.id, faction: gamePlayer.faction, hero, side });
 }
 
 async function handleReinforcementDecision({
@@ -122,7 +123,7 @@ async function handleReinforcementDecision({
 
   const { data: requesterPlayer, error: playerError } = await supabase
     .from("game_players")
-    .select("id,is_alive,heroes(*,armies(*))")
+    .select("id,is_alive,faction,heroes(*,armies(*))")
     .eq("id", reinforcementRequest.requester_player_id)
     .eq("game_id", gameId)
     .single();
@@ -148,6 +149,7 @@ async function handleReinforcementDecision({
     supabase,
     combatId,
     playerId: String(reinforcementRequest.requester_player_id),
+    faction: (requesterPlayer as { faction?: string }).faction,
     hero,
     side: reinforcementRequest.side === "defender" ? "defender" : "attacker",
   });
@@ -166,12 +168,14 @@ async function addHeroToCombat({
   supabase,
   combatId,
   playerId,
+  faction,
   hero,
   side,
 }: {
   supabase: ReturnType<typeof createAdminClient>;
   combatId: string;
   playerId: string;
+  faction?: string | null;
   hero: { id: string; armies: UnitStack[] };
   side: CombatSide;
 }) {
@@ -219,6 +223,7 @@ async function addHeroToCombat({
       heroId: hero.id,
       participantId: participantRow.id,
       joinsRound: round + 1,
+      faction,
       moraleContext: {
         attackerHeroMorale: Number(boardState.moraleContext?.attackerHeroMorale ?? 0),
         defenderHeroMorale: Number(boardState.moraleContext?.defenderHeroMorale ?? 0),

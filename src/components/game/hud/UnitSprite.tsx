@@ -5,7 +5,8 @@ import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { UnitSilhouette, getUnitModel, getUnitPalette } from "@/components/game/combat/CombatScreen";
 import { UNIT_RULES as COMBAT_UNIT_RULES } from "@/lib/game/units";
-import { getCreature } from "@/lib/game/creature-catalog";
+import { getCreatureEntry } from "@/lib/game/creature-catalog";
+import { getUnitRule } from "@/lib/game/units";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { localizeCreatureAbilities, localizeCreatureSpecial } from "@/lib/i18n/creatureAbilities";
 import type { CombatBoardUnit, UnitType } from "@/lib/game/types";
@@ -98,22 +99,24 @@ function tooltipStyle(anchor: { cx: number; top: number; bottom: number }): CSSP
 
 function UnitDescriptionCard({ unitType }: { unitType: UnitType }) {
   const { t, locale } = useI18n();
-  const creature = getCreature(unitType);
+  const rule = getUnitRule(unitType);
+  const creature = getCreatureEntry(unitType);
+  const abilities = rule.abilities ?? [];
   return (
     <div className="w-56 rounded-md border border-amber-500/60 bg-stone-950/95 p-3 text-amber-100 shadow-xl shadow-black/60">
       <div className="font-black text-amber-200">{unitTypeLabel(unitType, locale)}</div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-amber-100/85">
-        <span>{t("combat.statAttack", { v: creature.attack })}</span>
-        <span>{t("combat.statDefense", { v: creature.defense })}</span>
-        <span>{t("combat.statSpeed", { v: creature.speed })}</span>
-        <span>{t("combat.statDamage", { min: creature.minDamage, max: creature.maxDamage })}</span>
-        <span>{t("combat.statHpPerUnit", { v: creature.health })}</span>
-        {creature.ranged && <span>{t("combat.statShots", { n: creature.shots })}</span>}
+        <span>{t("combat.statAttack", { v: rule.attack })}</span>
+        <span>{t("combat.statDefense", { v: rule.defense })}</span>
+        <span>{t("combat.statSpeed", { v: rule.speed })}</span>
+        <span>{t("combat.statDamage", { min: rule.minDamage, max: rule.maxDamage })}</span>
+        <span>{t("combat.statHpPerUnit", { v: rule.health })}</span>
+        {rule.ranged && <span>{t("combat.statShots", { n: rule.shots ?? 0 })}</span>}
       </div>
-      {creature.abilities.length > 0 && (
-        <div className="mt-2 text-[11px] text-amber-100/70">{localizeCreatureAbilities(creature.abilities, locale)}</div>
+      {abilities.length > 0 && (
+        <div className="mt-2 text-[11px] text-amber-100/70">{localizeCreatureAbilities(abilities, locale)}</div>
       )}
-      {creature.special && <div className="mt-1 text-[11px] text-amber-200/80">{localizeCreatureSpecial(creature.special, locale)}</div>}
+      {creature?.special && <div className="mt-1 text-[11px] text-amber-200/80">{localizeCreatureSpecial(creature.special, locale)}</div>}
     </div>
   );
 }

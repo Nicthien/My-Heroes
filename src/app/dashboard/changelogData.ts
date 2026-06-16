@@ -22,6 +22,26 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.9",
+    date: "2026-06-16",
+    summary: "Raccourcis clavier configurables et menu d'options réorganisé en onglets.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Raccourcis clavier** — la carte d'aventure se contrôle désormais au clavier : déplacement de la caméra (ZQSD/WASD et flèches), Espace pour centrer sur le héros ou le château sélectionné, 1 et 2 pour passer au héros / château suivant, Entrée pour terminer le tour, + / − pour zoomer et Échap pour ouvrir le menu.",
+          "**Disposition FR/EN et touches personnalisables** — un nouvel onglet des options permet de choisir la disposition du clavier (AZERTY / QWERTY) et de réassigner chaque touche, avec un bouton de réinitialisation. Les raccourcis sont reconnus par leur position physique, donc une même configuration fonctionne sur les deux dispositions.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Menu d'options en onglets** — les réglages sont répartis en trois onglets (Son, Graphismes, Clavier) avec un contenu défilant.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.8",
     date: "2026-06-14",
     summary: "Nouvelle page d'accueil, bâtiments de ville inédits, sièges plus tactiques et fin de tour plus réactive.",

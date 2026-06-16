@@ -1,5 +1,5 @@
-import { MapTile, Position, ResourceBuildingType, TerrainType } from "../types";
-import { ARTIFACT_GUARDIAN_POWER, ARTIFACT_POOLS, type ArtifactClass, pickArtifactId } from "../artifacts";
+import { GameMap, MapTile, Position, ResourceBuildingType, TerrainType, ZoneMeta } from "../types";
+import { ARTIFACT_GUARDIAN_POWER, type ArtifactClass, pickArtifactId } from "../artifacts";
 import { ZoneGrid, tilesInZone } from "./zones";
 import {
   BUILDING_SPECS,
@@ -10,7 +10,7 @@ import {
   buildingSpec,
   makePileSpec,
 } from "./value";
-import { RNG, randInt, shuffle, weightedPick } from "./rng";
+import { RNG, makeRng, randInt, shuffle, weightedPick } from "./rng";
 import { DEFAULT_RMG_TUNING, RmgTuning, tuningPercentToMultiplier } from "./rmg-tuning";
 import { Chokepoint } from "./connections";
 import { GUARD_MULTIPLIER, MONSTER_STRENGTH_MULTIPLIER } from "./template";
@@ -386,6 +386,186 @@ function swapStartingMineObjects(
 
 function chebyshevDistance(a: Position, b: Position): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+type StartingMineRole = NonNullable<NonNullable<MapTile["object"]>["strategicRole"]>;
+
+export interface StartingEconomyRepair {
+  ownerIndex: number;
+  zoneId: number;
+  mapLevel: string;
+  role: StartingMineRole;
+  buildingType: ResourceBuildingType;
+  x: number | null;
+  y: number | null;
+  /** false when even the relaxed fallback found no placeable tile in the zone. */
+  resolved: boolean;
+}
+
+interface RepairLayer {
+  tiles: MapTile[][];
+  zones: ZoneMeta[];
+  width: number;
+  height: number;
+  mapLevel: string;
+}
+
+/**
+ * Safety net run once at game start, after every player's faction is known.
+ *
+ * `placeStartingEconomy` guarantees one mine of each `STARTING_MINE_SPECS` role
+ * per player zone at generation time, but a cramped or over-filled zone can make
+ * it skip a mine (`if (!tile) continue`). Maps are generated before players join,
+ * so this re-checks each player's home zone right before the game turns ACTIVE
+ * and forces any missing mine back onto the map — constrained to that player's
+ * zone, reusing the same placement logic as generation.
+ *
+ * Mutates `map` in place (like `finalizeStartingRareMines`) and returns the list
+ * of mines it had to re-add. Re-added rare mines keep the generic `start_rare`
+ * role/`CRYSTAL_CAVERN` type; call `finalizeStartingRareMines` afterwards to swap
+ * their subtype to the owner faction's rare resource.
+ */
+export function repairStartingEconomy(map: GameMap): StartingEconomyRepair[] {
+  const repairs: StartingEconomyRepair[] = [];
+  for (const layer of collectRepairLayers(map)) {
+    repairLayerStartingEconomy(map.seed ?? "", layer, repairs);
+  }
+  return repairs;
+}
+
+function collectRepairLayers(map: GameMap): RepairLayer[] {
+  const levels = map.levels;
+  if (levels && Object.keys(levels).length > 0) {
+    const layers: RepairLayer[] = [];
+    for (const [mapLevel, layer] of Object.entries(levels)) {
+      if (!layer) continue;
+      layers.push({
+        tiles: layer.tiles,
+        zones: layer.zones ?? [],
+        width: layer.width,
+        height: layer.height,
+        mapLevel,
+      });
+    }
+    return layers;
+  }
+  return [{ tiles: map.tiles, zones: map.zones ?? [], width: map.width, height: map.height, mapLevel: "surface" }];
+}
+
+function repairLayerStartingEconomy(seed: string, layer: RepairLayer, out: StartingEconomyRepair[]): void {
+  const ctx = reconstructPlacementContext(seed, layer);
+
+  for (const town of findPlayerTowns(layer)) {
+    const placed = collectExistingStartingMines(layer, town.ownerIndex);
+    const presentRoles = new Set(placed.map((item) => item.role));
+
+    for (const entry of STARTING_MINE_SPECS) {
+      if (presentRoles.has(entry.role)) continue;
+
+      const spec = buildingSpec(entry.type);
+      const tile = findStartingMineTile(ctx, town.zoneId, town.position, spec, entry, placed);
+      if (!tile) {
+        out.push({
+          ownerIndex: town.ownerIndex,
+          zoneId: town.zoneId,
+          mapLevel: layer.mapLevel,
+          role: entry.role,
+          buildingType: entry.type,
+          x: null,
+          y: null,
+          resolved: false,
+        });
+        continue;
+      }
+
+      prepareStartingMineTile(tile);
+      placeBuilding(ctx, tile, spec, entry.guardianPower, {
+        ownerIndex: town.ownerIndex,
+        strategicRole: entry.role,
+      });
+      placeMineResourceCluster(ctx, tile.x, tile.y, town.zoneId, spec);
+      placed.push({ x: tile.x, y: tile.y, spec, role: entry.role });
+      out.push({
+        ownerIndex: town.ownerIndex,
+        zoneId: town.zoneId,
+        mapLevel: layer.mapLevel,
+        role: entry.role,
+        buildingType: entry.type,
+        x: tile.x,
+        y: tile.y,
+        resolved: true,
+      });
+    }
+  }
+}
+
+/** Rebuild a placement context from a persisted layer (per-tile `zoneId` survives serialization). */
+function reconstructPlacementContext(seed: string, layer: RepairLayer): PlacementContext {
+  const tilesZone: number[][] = [];
+  for (let y = 0; y < layer.height; y++) {
+    tilesZone[y] = [];
+    for (let x = 0; x < layer.width; x++) {
+      tilesZone[y][x] = layer.tiles[y]?.[x]?.zoneId ?? -1;
+    }
+  }
+  const meta: ZoneMeta[] = [];
+  for (const zone of layer.zones) meta[zone.id] = zone;
+
+  return {
+    tiles: layer.tiles,
+    zoneGrid: { tilesZone, meta },
+    width: layer.width,
+    height: layer.height,
+    // Deterministic per (map seed, level) so repeated starts repair identically.
+    rng: makeRng(`${seed}:economy-repair:${layer.mapLevel}`),
+  };
+}
+
+function findPlayerTowns(layer: RepairLayer): Array<{ ownerIndex: number; zoneId: number; position: Position }> {
+  const towns: Array<{ ownerIndex: number; zoneId: number; position: Position }> = [];
+  for (const row of layer.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (object?.type !== "town") continue;
+      const ownerIndex = playerOwnerIndexFromTown(object);
+      if (ownerIndex === null) continue;
+      const zoneId = tile.zoneId ?? -1;
+      if (zoneId < 0) continue;
+      towns.push({ ownerIndex, zoneId, position: { x: tile.x, y: tile.y } });
+    }
+  }
+  return towns;
+}
+
+/** Player towns are tagged `subtype: "player-{ownerIndex}"`; neutral towns are skipped. */
+function playerOwnerIndexFromTown(object: NonNullable<MapTile["object"]>): number | null {
+  if (typeof object.ownerIndex === "number") return object.ownerIndex;
+  const subtype = object.subtype;
+  const prefix = "player-";
+  if (!subtype || !subtype.startsWith(prefix)) return null;
+  const parsed = Number(subtype.slice(prefix.length));
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function collectExistingStartingMines(layer: RepairLayer, ownerIndex: number): StartingEconomyPlacement[] {
+  const placed: StartingEconomyPlacement[] = [];
+  for (const row of layer.tiles) {
+    for (const tile of row) {
+      const object = tile.object;
+      if (object?.type !== "building" || object.ownerIndex !== ownerIndex) continue;
+      const role = object.strategicRole;
+      if (!role) continue;
+      // `spec` here is only used for spacing bookkeeping by the repair pass, so the
+      // canonical role spec is enough even if the rare mine subtype was finalized.
+      placed.push({ x: tile.x, y: tile.y, spec: specForStartingMineRole(role), role });
+    }
+  }
+  return placed;
+}
+
+function specForStartingMineRole(role: StartingMineRole): BuildingSpec {
+  const entry = STARTING_MINE_SPECS.find((item) => item.role === role) ?? STARTING_MINE_SPECS[0];
+  return buildingSpec(entry.type);
 }
 
 function canPlaceTownAtDoor(ctx: PlacementContext, zoneId: number, x: number, y: number): boolean {
@@ -857,12 +1037,14 @@ export function placeZoneArtifacts(ctx: PlacementContext, zoneId: number, zoneVa
 }
 
 function artifactClassesForZone(type: string, value: number): ArtifactClass[] {
+  // Minor artifacts are reserved for neutral-monster loot and never spawn loose on the map;
+  // ground slots that used to be minor are promoted to major (one tier up).
   if (type === "treasure") {
-    if (value >= 10000) return ["relic", "major", "minor"];
-    if (value >= 6500) return ["major", "minor"];
-    return ["minor", "treasure"];
+    if (value >= 10000) return ["relic", "major", "major"];
+    if (value >= 6500) return ["major", "major"];
+    return ["major", "treasure"];
   }
-  return ARTIFACT_POOLS.minor.length > 0 ? ["minor"] : ["treasure"];
+  return ["major"];
 }
 
 function tryPlacePile(

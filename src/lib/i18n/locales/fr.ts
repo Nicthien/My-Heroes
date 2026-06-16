@@ -71,7 +71,7 @@ export const fr = {
 
   // --- Auth: register ---
   "auth.register.title": "Créer un compte",
-  "auth.register.name": "Nom",
+  "auth.register.name": "Pseudo",
   "auth.register.email": "Email",
   "auth.register.password": "Mot de passe",
   "auth.register.confirm": "Confirmer",
@@ -1261,6 +1261,8 @@ export const fr = {
   "map.gateNeutral": "Porte neutre",
   "map.combatInProgress": "Combat en cours",
   "map.neutralArmy": "Armée neutre",
+  "map.monsterLoot": "Butin : {loot}",
+  "map.monsterArtifactLoot": "+ Artefact mineur",
   "map.dwellingGeneric": "Permet de recruter des créatures sur la carte.",
   "map.dwellingRecruit": "Permet de recruter {unit} chaque semaine. Croissance : {growth}.",
   "map.creatureBankGeneric": "Combat protégeant un trésor.",

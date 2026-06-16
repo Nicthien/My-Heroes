@@ -55,6 +55,7 @@ import {
 } from "./underground";
 import { measureDevPerformance } from "@/lib/dev/performanceMetrics";
 export { finalizeStartingRareMines, rareMineForFaction } from "./starting-economy";
+export { repairStartingEconomy, type StartingEconomyRepair } from "./placement";
 
 function isPassable(terrain: TerrainType): boolean {
   return terrain !== TerrainType.LAVA;

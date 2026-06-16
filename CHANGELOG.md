@@ -7,7 +7,7 @@ et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [1.2.9] - 2026-06-16
 
-Raccourcis clavier configurables et menu d'options réorganisé en onglets.
+Raccourcis clavier configurables, menu d'options en onglets, et plusieurs ajouts et rééquilibrages de jeu.
 
 ### Ajouté
 
@@ -20,11 +20,35 @@ Raccourcis clavier configurables et menu d'options réorganisé en onglets.
   chaque touche, avec un bouton de réinitialisation. Les raccourcis sont reconnus
   par leur position physique, donc une même configuration fonctionne sur les deux
   dispositions.
+- **Aperçu du butin et des créatures en combat** — les fenêtres d'avant et
+  d'après-combat affichent désormais les sprites des créatures et le butin
+  (ressources, artefacts).
+- **Conversion de ville capturée** — une ville étrangère capturée peut être
+  convertie à votre faction pour 5000 d'or.
+- **Butin des monstres errants** — vaincre un monstre errant rapporte désormais des
+  ressources et, une fois sur deux, un artefact mineur.
+- **Recruter tout dans la garnison** — un nouveau bouton recrute d'un coup toutes
+  les créatures disponibles dans la garnison de la ville.
 
 ### Modifié
 
 - **Menu d'options en onglets** — les réglages sont répartis en trois onglets
   (Son, Graphismes, Clavier) avec un contenu défilant.
+- **Difficulté des gardiens neutres rééquilibrée** — la puissance des gardiens
+  neutres a été revue (début de partie en difficulté moyenne, courbe aplanie), avec
+  une escalade hebdomadaire de +25 % et des portes/gardes ajustés vers le haut de la
+  fourchette « moyenne ».
+
+### Corrigé
+
+- **Roi (King)** — utilise désormais ses propres statistiques, conserve un moral
+  positif et adopte la faction de son propriétaire en combat.
+- **Reddition contre un château neutre** — il est possible de se rendre face à un
+  château neutre rejoint par un joueur, et la victoire est correctement créditée.
+- **Conservatoire de griffons** — récompense désormais des griffons royaux, et non
+  des anges.
+- **Souterrain** — les recherches de carte sont limitées au bon niveau
+  (héros / combat), corrigeant des incohérences sous terre.
 
 ## [1.2.8] - 2026-06-14
 

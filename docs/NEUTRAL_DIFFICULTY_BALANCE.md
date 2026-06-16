@@ -14,10 +14,15 @@ pass that flattened the curve and softened the early/mid game.
 
 | # | Lever | Value | Effect |
 |---|-------|-------|--------|
-| 1 | `GUARD_STRENGTH_MULTIPLIER` | **2.8125** (was 7.5) | Global **−62.5 %** on the unit count of every neutral guard. |
-| 2 | `GUARD_BUDGET_ANCHOR` / `GUARD_BUDGET_COMPRESSION` | **250** / **0.55** | Sub-linear **curve compression**: budgets ≤ anchor untouched, larger ones grow by a fractional power. Flattens the spread. |
+| 1 | `GUARD_STRENGTH_MULTIPLIER` | **4.5** (was 7.5) | Global **−40 %** on the unit count of every neutral guard. |
+| 2 | `GUARD_BUDGET_ANCHOR` / `GUARD_BUDGET_COMPRESSION` | **300** / **0.40** | Sub-linear **curve compression**: budgets ≤ anchor untouched, larger ones grow by a fractional power. Flattens the spread. |
 | 3 | `calculateStackCount` | `min(7, ceil(total/5))`, 1 stack if `< 4` | **Finer splitting** — ~5 units/stack, max 7 (classic army slots). |
 | 4 | `NEUTRAL_WEEKLY_GROWTH` / `NEUTRAL_GROWTH_CAP` | **1.25** / **3** | Undefeated neutrals gain **+25 %/week**, compounding, capped at **×3** of base. |
+
+> **Calibration history:** lever 1 was cut to 2.8125 (−62.5 %) with a gentle 250/0.55 curve,
+> but that made the early game *too easy* (the starting hero's first gate read "Easy"). It was
+> walked back to **4.5 / 300 / 0.40**: a higher multiplier lifts the early/mid game, and the
+> steeper compression (lower exponent) keeps the central gate from going back to suicidal.
 
 ### How a guard's unit count is derived (`createNeutralArmyStacksForTile`)
 
@@ -28,17 +33,42 @@ totalCount  = round(budget * GUARD_STRENGTH_MULTIPLIER / unit.aiValue)   // leve
 stacks      = split totalCount into calculateStackCount(totalCount) near-equal slots   // lever 3
 ```
 
-`compressGuardBudget(b) = b` if `b ≤ 250`, else `250 * (b/250) ^ 0.55`. The budget is
+`compressGuardBudget(b) = b` if `b ≤ 300`, else `300 * (b/300) ^ 0.40`. The budget is
 compressed **before** anything derives from it (tier, creature band, count), so high-end
 guards ease in **both tier and number** together (and never degenerate into "1 lone elite").
 
 ---
 
-## Difficulty spread — before vs after
+## Current calibration — badge vs the starting hero
+
+The combat-choice badge is `defenderPower / heroPower`. A fresh Castle hero (20 pikemen +
+12 archers + 4 griffins, ~5 450 power) sees, on `jebus-cross` 2p, with the **current 4.5 /
+300 / 0.40** levers:
+
+| Guard | budget | units | ratio | Badge |
+|-------|-------:|------:|------:|-------|
+| Wandering monster | 100 | 7 | 0.10 | Easy |
+| 🪵 Wood mine | 180 | 10 | 0.15 | Easy |
+| ⛏️ Ore mine | 220 | 12 | 0.18 | Easy |
+| 💰 Gold mine | 760 | 24 | 0.35 | Medium |
+| 🚪 Entry gate | 1000 | 19 | 0.40 | **Medium** |
+| 🗡️ Zone guardian | 1000 | 16 | 0.41 | Medium |
+| 💎 Crystal mine | 1350 | 21 | 0.44 | Medium |
+| 🚪 Central gate | 7800 | ~34 | ~0.91 | Hard |
+
+Target shape: starting mines/monsters **Easy** (clearable turn 1-2), the first gate and the
+gold/crystal mines **Medium** (a real fight), the central gate **Hard** (a late objective).
+
+## Difficulty spread — before vs the −62.5 % phase
+
+> ⚠️ The table below compares the original 7.5 basis against the **−62.5 % phase** (2.8125 /
+> 250 / 0.55). The current 4.5 / 300 / 0.40 calibration sits ~1.5-1.7× above the "after"
+> column here (see the badge table above for the live numbers). It is kept to show the
+> shape of the flattening; the deltas are illustrative, not the current absolute values.
 
 `Puissance` = the badge metric (`Σ unit.power × count`). Measured on `jebus-cross`, 2p, same map.
 
-| Guard | budget | BEFORE (power) | AFTER (power) | Δ |
+| Guard | budget | BEFORE (power) | −62.5 % phase | Δ |
 |-------|-------:|---------------:|--------------:|----:|
 | Wandering monster | 133 | 1 095 | **412** | −62 % |
 | 🪵 Wood mine | 180 | 1 360 | **480** | −65 % |

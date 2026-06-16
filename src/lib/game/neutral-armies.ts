@@ -49,14 +49,15 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
 // across every guard source — mines, zone guardians, patrols, gates), not the unit
 // tier or the creature band. GUARD_BAND_LOW/HIGH bound which slice of the eligible
 // creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
-// Difficulty boost history: 2.1 (legacy) → 9.45 → 7.5 → 3.75 → 2.8125. Cut in stages in
-// response to "too hard" player feedback: a uniform reduction on the unit count of EVERY
-// neutral guard source (mines, wandering monsters, zone guardians, patrols, gates, pockets,
-// artifacts). 2.8125 = 7.5 × 0.375, i.e. ~-62.5% off the old basis. The world starts soft;
-// it then ramps back up over time via the weekly neutral growth in `server/turns.ts`
-// (undefeated neutrals gain +25%/week, capped at ×3 of base). This affects newly generated
-// stacks only (existing in-progress games keep their already-seeded neutral_army_stacks).
-const GUARD_STRENGTH_MULTIPLIER = 2.8125;
+// Difficulty boost history: 2.1 (legacy) → 9.45 → 7.5 → 3.75 → 2.8125 → 4.5. Cut hard in
+// response to "too hard" feedback (down to 2.8125 = -62.5%), then partly walked back to 4.5
+// (= 7.5 × 0.6, i.e. ~-40% off the old basis) once the early game read as *too easy* — the
+// starting hero's first gate should be a "medium" fight, not "easy". Paired with a steeper
+// compression curve (see below) so this higher multiplier lifts the early/mid game without
+// sending the central gate back toward suicidal. The world still ramps over time via the
+// weekly neutral growth in `server/turns.ts` (undefeated neutrals gain +25%/week, capped at
+// ×3). Affects newly generated stacks only (in-progress games keep their seeded stacks).
+const GUARD_STRENGTH_MULTIPLIER = 4.5;
 const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
 
@@ -67,8 +68,8 @@ const GUARD_BAND_HIGH = 0.6;
 // tier, creature band AND count): values at or below the anchor are untouched, larger ones
 // grow only by a fractional power. High-end guards thus ease in both tier and number, so
 // the unit-count curve flattens from ~40:1 to ~9:1 — a smooth ramp instead of a cliff.
-const GUARD_BUDGET_ANCHOR = 250;
-const GUARD_BUDGET_COMPRESSION = 0.55;
+const GUARD_BUDGET_ANCHOR = 300;
+const GUARD_BUDGET_COMPRESSION = 0.40;
 
 function compressGuardBudget(budget: number): number {
   if (budget <= GUARD_BUDGET_ANCHOR) return budget;

@@ -48,6 +48,10 @@ interface GameStore {
   devGodMode: boolean;
   cameraTarget: { x: number; y: number; nonce: number } | null;
   zoomRequest: { direction: number; nonce: number } | null;
+  // Continuous keyboard camera pan vector in screen pixels per frame. The map
+  // renderer runs a requestAnimationFrame loop while this is non-zero. Set by
+  // the keyboard-shortcuts hook from the currently-held camera keys.
+  cameraPan: { dx: number; dy: number };
   adminObserverMode: boolean;
   activeMapLevel: MapLevelId;
 
@@ -56,6 +60,7 @@ interface GameStore {
   setEndingTurn: (ending: boolean) => void;
   focusTile: (x: number, y: number) => void;
   zoomMap: (direction: number) => void;
+  setCameraPan: (dx: number, dy: number) => void;
   setCombatMessage: (message: string | null) => void;
   setGrailPuzzleOpen: (open: boolean) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
@@ -115,6 +120,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   devGodMode: false,
   cameraTarget: null,
   zoomRequest: null,
+  cameraPan: { dx: 0, dy: 0 },
   adminObserverMode: false,
   activeMapLevel: SURFACE_LEVEL,
 
@@ -141,6 +147,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       zoomRequest: { direction, nonce: (state.zoomRequest?.nonce ?? 0) + 1 },
     })),
+  setCameraPan: (dx, dy) =>
+    set((state) =>
+      // Keep object identity stable when the vector is unchanged so the renderer
+      // effect doesn't restart its rAF loop on every keydown repeat.
+      state.cameraPan.dx === dx && state.cameraPan.dy === dy
+        ? {}
+        : { cameraPan: { dx, dy } },
+    ),
 
   setCombatMessage: (message) => set({ combatMessage: message }),
   setGrailPuzzleOpen: (open) => set({ grailPuzzleOpen: open }),

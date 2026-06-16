@@ -99,6 +99,25 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByLabel("Effets")).toBeVisible();
   });
 
+  test("keyboard shortcuts panel renders and relabels keys per layout", async ({ page }) => {
+    await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("game-menu-button").click();
+    await page.getByTestId("menu-options").click();
+    await expect(page.getByTestId("options-dialog")).toBeVisible();
+
+    // The dialog is tabbed (Sound / Graphics / Keyboard) — open the Keyboard tab.
+    await page.getByTestId("options-tab-keyboard").click();
+    await expect(page.getByText("Caméra haut")).toBeVisible();
+
+    // Camera up is bound to the physical "KeyW" code. The layout setting only
+    // relabels it: "Z" on French AZERTY, "W" on English QWERTY — same key.
+    const cameraUpRow = page.locator("li", { hasText: "Caméra haut" });
+    await page.getByRole("radio", { name: "Français (AZERTY)" }).click();
+    await expect(cameraUpRow.getByRole("button")).toHaveText("Z");
+    await page.getByRole("radio", { name: "Anglais (QWERTY)" }).click();
+    await expect(cameraUpRow.getByRole("button")).toHaveText("W");
+  });
+
   test("combat town preview renders siege sprites", async ({ page }) => {
     await page.goto("/dev/combat", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Ville" }).click();

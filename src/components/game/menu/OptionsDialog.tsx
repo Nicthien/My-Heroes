@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import AudioSettingsPanel from "@/components/game/audio/AudioSettingsPanel";
+import KeyboardShortcutsPanel from "@/components/game/menu/KeyboardShortcutsPanel";
 import {
   DISPLAY_PREFERENCE_EVENT,
   getSavedAnimationsEnabled,
@@ -21,17 +22,26 @@ const RENDER_QUALITY_OPTIONS: { mode: RenderQualityMode; labelKey: TranslationKe
   { mode: "high", labelKey: "options.renderQualityHigh" },
 ];
 
+type OptionsTab = "audio" | "display" | "keyboard";
+
+const OPTIONS_TABS: { id: OptionsTab; labelKey: TranslationKey }[] = [
+  { id: "audio", labelKey: "options.tabAudio" },
+  { id: "display", labelKey: "options.tabDisplay" },
+  { id: "keyboard", labelKey: "options.tabKeyboard" },
+];
+
 type OptionsDialogProps = {
   open: boolean;
   onClose: () => void;
 };
 
 /**
- * Full in-game options menu opened from the HUD/combat menu. Hosts the audio
- * controls (mute + volumes) and display preferences (animations toggle).
+ * Full in-game options menu opened from the HUD/combat menu. Organised into
+ * tabs — Sound, Graphics, Keyboard — each hosting its own settings panel.
  */
 export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
   const { t } = useI18n();
+  const [tab, setTab] = useState<OptionsTab>("audio");
   const [animationsEnabled, setAnimationsEnabled] = useState(getSavedAnimationsEnabled);
   const [renderQuality, setRenderQuality] = useState(getSavedRenderQuality);
   const [fpsEnabled, setFpsEnabled] = useState(getSavedFpsDisplay);
@@ -89,8 +99,8 @@ export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
       }}
       data-testid="options-dialog"
     >
-      <div className="w-full max-w-md rounded-xl border border-amber-600/60 bg-gradient-to-b from-[#1a1208] via-stone-950 to-black/95 p-5 text-amber-100 shadow-2xl shadow-black/70">
-        <div className="flex items-center justify-between border-b border-amber-700/40 pb-3">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl border border-amber-600/60 bg-gradient-to-b from-[#1a1208] via-stone-950 to-black/95 text-amber-100 shadow-2xl shadow-black/70">
+        <div className="flex items-center justify-between border-b border-amber-700/40 px-5 pt-5 pb-3">
           <h2 className="text-lg font-black uppercase tracking-[0.18em] text-amber-200">
             {t("options.title")}
           </h2>
@@ -104,73 +114,100 @@ export default function OptionsDialog({ open, onClose }: OptionsDialogProps) {
           </button>
         </div>
 
-        <section className="mt-4">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-300/80">
-            {t("options.audioSection")}
-          </h3>
-          <div className="mt-2">
-            <AudioSettingsPanel />
-          </div>
-        </section>
+        <div className="flex gap-1 px-5 pt-3" role="tablist" aria-label={t("options.title")}>
+          {OPTIONS_TABS.map(({ id, labelKey }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(id)}
+                data-testid={`options-tab-${id}`}
+                className={`touch-target flex-1 rounded-t-md border-b-2 px-2 py-2 text-xs font-black uppercase tracking-[0.12em] transition ${
+                  active
+                    ? "border-amber-400 bg-amber-500/15 text-amber-100"
+                    : "border-transparent text-amber-200/55 hover:bg-amber-950/30 hover:text-amber-100"
+                }`}
+              >
+                {t(labelKey)}
+              </button>
+            );
+          })}
+        </div>
 
-        <section className="mt-5">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-300/80">
-            {t("options.displaySection")}
-          </h3>
-          <div className="mt-2 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
-            <p className="text-sm font-bold">{t("options.renderQuality")}</p>
-            <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t("options.renderQuality")}>
-              {RENDER_QUALITY_OPTIONS.map(({ mode, labelKey }) => {
-                const active = renderQuality === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => changeRenderQuality(mode)}
-                    className={`touch-target rounded border px-1.5 py-1.5 text-[11px] font-bold leading-tight transition ${
-                      active
-                        ? "border-amber-400/80 bg-amber-500/20 text-amber-100"
-                        : "border-amber-700/40 bg-stone-950/60 text-amber-200/70 hover:border-amber-500/60 hover:text-amber-100"
-                    }`}
-                  >
-                    {t(labelKey)}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1.5 text-[11px] font-semibold text-amber-200/60">{t("options.renderQualityHint")}</p>
-          </div>
-          <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
-            <input
-              type="checkbox"
-              checked={animationsEnabled}
-              onChange={toggleAnimations}
-              className="mt-0.5 h-4 w-4 accent-amber-300"
-            />
-            <span className="text-sm">
-              <span className="font-bold">{t("options.animations")}</span>
-              <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
-                {t("options.animationsHint")}
-              </span>
-            </span>
-          </label>
-          <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
-            <input
-              type="checkbox"
-              checked={fpsEnabled}
-              onChange={toggleFps}
-              className="mt-0.5 h-4 w-4 accent-amber-300"
-            />
-            <span className="text-sm">
-              <span className="font-bold">{t("options.showFps")}</span>
-              <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
-                {t("options.showFpsHint")}
-              </span>
-            </span>
-          </label>
-        </section>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+          {tab === "audio" && (
+            <section role="tabpanel" aria-label={t("options.tabAudio")}>
+              <AudioSettingsPanel />
+            </section>
+          )}
+
+          {tab === "display" && (
+            <section role="tabpanel" aria-label={t("options.tabDisplay")}>
+              <div className="rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
+                <p className="text-sm font-bold">{t("options.renderQuality")}</p>
+                <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t("options.renderQuality")}>
+                  {RENDER_QUALITY_OPTIONS.map(({ mode, labelKey }) => {
+                    const active = renderQuality === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => changeRenderQuality(mode)}
+                        className={`touch-target rounded border px-1.5 py-1.5 text-[11px] font-bold leading-tight transition ${
+                          active
+                            ? "border-amber-400/80 bg-amber-500/20 text-amber-100"
+                            : "border-amber-700/40 bg-stone-950/60 text-amber-200/70 hover:border-amber-500/60 hover:text-amber-100"
+                        }`}
+                      >
+                        {t(labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[11px] font-semibold text-amber-200/60">{t("options.renderQualityHint")}</p>
+              </div>
+              <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={animationsEnabled}
+                  onChange={toggleAnimations}
+                  className="mt-0.5 h-4 w-4 accent-amber-300"
+                />
+                <span className="text-sm">
+                  <span className="font-bold">{t("options.animations")}</span>
+                  <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
+                    {t("options.animationsHint")}
+                  </span>
+                </span>
+              </label>
+              <label className="mt-2 flex cursor-pointer items-start gap-3 rounded border border-amber-700/35 bg-black/30 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={fpsEnabled}
+                  onChange={toggleFps}
+                  className="mt-0.5 h-4 w-4 accent-amber-300"
+                />
+                <span className="text-sm">
+                  <span className="font-bold">{t("options.showFps")}</span>
+                  <span className="mt-0.5 block text-[11px] font-semibold text-amber-200/60">
+                    {t("options.showFpsHint")}
+                  </span>
+                </span>
+              </label>
+            </section>
+          )}
+
+          {tab === "keyboard" && (
+            <section role="tabpanel" aria-label={t("options.tabKeyboard")}>
+              <KeyboardShortcutsPanel />
+            </section>
+          )}
+        </div>
       </div>
     </div>
   );

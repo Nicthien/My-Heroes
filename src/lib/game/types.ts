@@ -844,6 +844,9 @@ export interface CombatSummary {
   log: string[];
   attackerDied?: boolean;
   creatureBankReward?: import("./creature-banks").PendingCreatureBankReward;
+  // Loot from defeating a free neutral monster (gold + resources + maybe a minor artifact),
+  // surfaced to the winner in the combat result. See `server/grantMonsterReward.ts`.
+  monsterLoot?: { gold: number; resources: Partial<Record<string, number>>; artifactId: string | null };
   // Exact post-combat state for non-regenerating winner units (the King): persisted
   // verbatim so they keep their auto-combat wounds instead of healing to full.
   survivorOverrides?: Array<{ id: string; count: number; health: number }>;

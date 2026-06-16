@@ -22,6 +22,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/hud",          expect: { selector: "body",   description: "HUD preview body" } },
   { path: "/dev/hud-build",    expect: { selector: "body",   description: "HUD build preview body" } },
   { path: "/dev/combat",       expect: { selector: "body",   description: "Combat preview body" } },
+  { path: "/dev/combat-modals", expect: { selector: "body",  description: "Combat modals preview body" } },
   { path: "/dev/admin-observer", expect: { selector: "[data-testid='admin-observer-panel']", description: "Admin observer panel" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
@@ -618,6 +619,20 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByRole("button", { name: "Attendre" })).toBeEnabled();
   });
 
+  test("combat modals preview shows creature sprites and loot", async ({ page }) => {
+    await page.goto("/dev/combat-modals", { waitUntil: "domcontentloaded" });
+
+    // Choice modal: forces preview + the potential-loot block with a resource sprite.
+    await expect(page.getByText("Forces aperçues", { exact: false })).toBeVisible();
+    await expect(page.getByText("Butin potentiel")).toBeVisible();
+    await expect(page.locator('img[src*="/assets/sprites/resources/gold.webp"]').first()).toBeVisible();
+
+    // Toggle to the result modal: the battle-loot panel with a resource sprite.
+    await page.getByRole("button", { name: "Résultat du combat" }).click();
+    await expect(page.getByText("Butin de bataille")).toBeVisible();
+    await expect(page.locator('img[src*="/assets/sprites/resources/gold.webp"]').first()).toBeVisible();
+  });
+
   test("AI dev page proves gate and boat navigation decisions", async ({ page }) => {
     await page.goto("/dev/ai", { waitUntil: "domcontentloaded" });
 
@@ -660,6 +675,96 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(buildTree.getByRole("heading", { name: "Guilde des mages (niveau 2)" })).toBeVisible();
     await expect(buildTree.getByRole("heading", { name: "Guilde des mages (niveau 3)" })).toBeVisible();
     await expect(buildTree.getByRole("button", { name: "Construire" }).first()).toBeVisible();
+  });
+});
+
+const GUIDE_PAGES: Array<{ path: string; heading: string }> = [
+  { path: "/guide", heading: "Bienvenue, héros" },
+  { path: "/guide/debuter", heading: "Vos premiers pas" },
+  { path: "/guide/ressources", heading: "Les ressources" },
+  { path: "/guide/villes", heading: "La ville & les bâtiments" },
+  { path: "/guide/heros", heading: "Les héros" },
+  { path: "/guide/combat", heading: "Le combat" },
+  { path: "/guide/carte", heading: "La carte d’aventure" },
+  { path: "/guide/factions", heading: "Les factions" },
+  { path: "/guide/creatures", heading: "Bestiaire" },
+  { path: "/guide/artefacts", heading: "Artefacts" },
+  { path: "/guide/competences", heading: "Compétences" },
+  { path: "/guide/sorts", heading: "Grimoire" },
+  { path: "/guide/mecaniques", heading: "Le Graal" },
+  { path: "/guide/glossaire", heading: "Glossaire" },
+  { path: "/guide/recherche", heading: "Rechercher" },
+  { path: "/guide/factions/necropolis", heading: "Voile d'Os" },
+];
+
+test.describe("Smoke — /guide encyclopedia pages render without errors", () => {
+  for (const guidePage of GUIDE_PAGES) {
+    test(`${guidePage.path} renders`, async ({ page }) => {
+      const consoleErrors: string[] = [];
+      const pageErrors: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error" && !/failed to load resource/i.test(message.text())) {
+          consoleErrors.push(message.text());
+        }
+      });
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+
+      const response = await page.goto(guidePage.path, { waitUntil: "domcontentloaded" });
+      expect(response!.status(), `unexpected status for ${guidePage.path}`).toBeLessThan(400);
+      await expect(page.getByRole("heading", { name: guidePage.heading, exact: true })).toBeVisible();
+
+      await page.waitForTimeout(400);
+      expect(pageErrors, `uncaught page errors on ${guidePage.path}:\n${pageErrors.join("\n")}`).toEqual([]);
+      expect(consoleErrors, `console errors on ${guidePage.path}:\n${consoleErrors.join("\n")}`).toEqual([]);
+    });
+  }
+
+  test("faction index links through to a faction detail page", async ({ page }) => {
+    await page.goto("/guide/factions", { waitUntil: "domcontentloaded" });
+    await page.getByRole("link", { name: /Voile d'Os/ }).click();
+    await expect(page).toHaveURL(/\/guide\/factions\/necropolis$/);
+    await expect(page.getByRole("heading", { name: "Créatures", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bâtiments de la ville" })).toBeVisible();
+  });
+
+  test("bestiary filters creatures by faction", async ({ page }) => {
+    await page.goto("/guide/creatures", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /Braises Profanes/ }).click();
+    // Inferno tier-1 creature (Diablotin) appears in the table after filtering.
+    await expect(page.getByRole("cell", { name: /Diablotin/ }).first()).toBeVisible();
+  });
+
+  test("artifact view filters by class", async ({ page }) => {
+    await page.goto("/guide/artefacts", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Relique", exact: true }).click();
+    await expect(page.getByText("Lame du verdict céleste")).toBeVisible();
+  });
+
+  test("spell grimoire filters by school", async ({ page }) => {
+    await page.goto("/guide/sorts", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Feu", exact: true }).click();
+    await expect(page.getByRole("cell", { name: "Boule de feu" })).toBeVisible();
+    // A water spell should be filtered out once "Feu" is selected.
+    await expect(page.getByRole("cell", { name: "Bouclier d'air" })).toHaveCount(0);
+  });
+
+  test("wiki search returns matching entries", async ({ page }) => {
+    await page.goto("/guide/recherche", { waitUntil: "domcontentloaded" });
+    await page.getByRole("searchbox").fill("dragon");
+    await expect(page.getByRole("link").filter({ hasText: /dragon/i }).first()).toBeVisible();
+  });
+
+  test("fits a mobile viewport without horizontal overflow", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    try {
+      await page.goto("/guide/creatures", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Bestiaire" })).toBeVisible();
+      await page.waitForTimeout(500);
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      await context.close();
+    }
   });
 });
 

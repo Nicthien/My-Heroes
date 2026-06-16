@@ -34,6 +34,7 @@ const DEV_ROUTES = [
   { href: "/dev/hud", label: "HUD de test" },
   { href: "/dev/hud-build", label: "HUD construction" },
   { href: "/dev/combat", label: "Combats de test" },
+  { href: "/dev/combat-modals", label: "Modals de combat" },
   { href: "/dev/map-showcase", label: "Carte des tests" },
   { href: "/dev/sprites", label: "Galerie de sprites" },
   { href: "/dev/rmg", label: "RMG" },

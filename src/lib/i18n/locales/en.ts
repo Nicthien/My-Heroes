@@ -641,6 +641,8 @@ export const en: Record<TranslationKey, string> = {
   "combat.campDefender": "Defending side",
   "combat.wanderingMonsters": "Wandering monsters",
   "combat.rewardGold": "{n} gold",
+  "combat.lootLabel": "Battle loot",
+  "combat.lootPreview": "Potential loot",
 
   // --- Combat: choice modal ---
   "combat.opponentHero": "Enemy hero",
@@ -1071,6 +1073,7 @@ export const en: Record<TranslationKey, string> = {
   "audio.effects": "Effects",
   "menu.options": "Options",
   "menu.help": "Help",
+  "menu.guide": "Guide",
   "menu.quit": "Quit",
   "menu.reduce": "Minimize",
   "menu.quitTitle": "Leave the game",

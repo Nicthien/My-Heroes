@@ -9,9 +9,13 @@ import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
 import { getAdventurePathCost, getUsableAdventureMovement } from "@/lib/game/engine";
 import { GameMap, GameState, Hero, MapObject, MapTile, UnitStack, type MapLevelId } from "@/lib/game/types";
 import { getUnitRule } from "@/lib/game/units";
+import { getArtifact } from "@/lib/game/artifacts";
+import { getMonsterReward, isMonsterRewardEligible, type MonsterReward } from "@/lib/game/monster-rewards";
+import { UnitSprite } from "@/components/game/hud/UnitSprite";
+import { LootArtifactIcon, ResourceSprite, lootResourceEntries } from "@/components/game/combat/lootSprites";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { localizedLabelFromId, localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import { localizedServerMessage } from "@/lib/i18n/serverMessages";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
@@ -136,9 +140,12 @@ export default function CombatChoiceModal() {
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {encounterInfo.units.length > 0 ? encounterInfo.units.map((unit) => (
-                <div key={`${unit.unitType}-${unit.position}`} className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2">
-                  <div className="text-sm font-bold text-red-100">{unit.label}</div>
-                  <div className="mt-0.5 text-xs text-stone-400">{unit.range}</div>
+                <div key={`${unit.unitType}-${unit.position}`} className="flex items-center gap-2 rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2">
+                  <UnitSprite unitType={unit.unitType} size="xs" side="defender" />
+                  <div>
+                    <div className="text-sm font-bold text-red-100">{unit.label}</div>
+                    <div className="mt-0.5 text-xs text-stone-400">{unit.range}</div>
+                  </div>
                 </div>
               )) : (
                 <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
@@ -191,9 +198,12 @@ export default function CombatChoiceModal() {
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {encounterInfo.units.length > 0 ? encounterInfo.units.map((unit) => (
-              <div key={`${unit.unitType}-${unit.position}`} className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2">
-                <div className="text-sm font-bold text-yellow-100">{unit.label}</div>
-                <div className="mt-0.5 text-xs text-stone-400">{unit.range}</div>
+              <div key={`${unit.unitType}-${unit.position}`} className="flex items-center gap-2 rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2">
+                <UnitSprite unitType={unit.unitType} size="xs" side="defender" />
+                <div>
+                  <div className="text-sm font-bold text-yellow-100">{unit.label}</div>
+                  <div className="mt-0.5 text-xs text-stone-400">{unit.range}</div>
+                </div>
               </div>
             )) : (
               <div className="rounded-md border border-stone-700/70 bg-stone-900/70 px-3 py-2 text-sm text-stone-300">
@@ -201,6 +211,22 @@ export default function CombatChoiceModal() {
               </div>
             )}
           </div>
+          {encounterInfo.loot && (
+            <div className="mt-4 border-t border-yellow-700/30 pt-3">
+              <div className="text-xs uppercase tracking-[0.22em] text-amber-400/80">{t("combat.lootPreview")}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                {lootResourceEntries(encounterInfo.loot).map(([resource, amount]) => (
+                  <ResourceSprite key={resource} resource={resource} amount={amount} locale={locale} />
+                ))}
+                {encounterInfo.loot.artifactId && (
+                  <span className="flex items-center gap-2 text-sm font-bold text-amber-200">
+                    <LootArtifactIcon artifactId={encounterInfo.loot.artifactId} size="sm" />
+                    {localizedLabelFromId(encounterInfo.loot.artifactId, getArtifact(encounterInfo.loot.artifactId)?.name ?? encounterInfo.loot.artifactId, locale)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </section>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <button className="rounded-lg border border-blue-500 bg-blue-950/80 p-4 text-left hover:bg-blue-900" onClick={() => startCombat("AUTO")}>
@@ -343,6 +369,7 @@ function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat, t:
   return {
     sourceLabel: getSourceLabel(pendingCombat.targetType, t),
     difficulty: getDifficulty(defenderPower / Math.max(1, attackerPower), t),
+    loot: getMonsterLootPreview(gameState, pendingCombat),
     units: defenderStacks
       .slice()
       .sort((a, b) => a.position - b.position)
@@ -353,6 +380,15 @@ function getEncounterInfo(gameState: GameState, pendingCombat: PendingCombat, t:
         range: formatCountRange(stack.count, t),
       })),
   };
+}
+
+function getMonsterLootPreview(gameState: GameState, pendingCombat: PendingCombat): MonsterReward | null {
+  if (pendingCombat.targetType !== "monster" || !isMonsterRewardEligible(pendingCombat.targetId)) return null;
+  const army = gameState.neutralArmies?.find((item) => item.id === pendingCombat.targetId && item.status === "ACTIVE");
+  if (!army) return null;
+  const guardianPower = Number(gameState.map.tiles[army.position.y]?.[army.position.x]?.object?.guardianPower ?? 0);
+  if (guardianPower <= 0) return null;
+  return getMonsterReward(pendingCombat.targetId, guardianPower);
 }
 
 function getDefenderStacks(gameState: GameState, pendingCombat: PendingCombat): UnitStack[] {

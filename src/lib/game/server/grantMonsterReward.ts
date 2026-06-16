@@ -1,7 +1,7 @@
 import type { SupabaseAdmin } from "@/lib/supabase/game-db";
 import { mapLevels } from "@/lib/game/map-levels";
 import { normalizeArtifactBag } from "@/lib/game/artifacts";
-import { getMonsterReward, isMonsterRewardEligible } from "@/lib/game/monster-rewards";
+import { getMonsterReward, isMonsterRewardEligible, type MonsterReward } from "@/lib/game/monster-rewards";
 import type { GameMap, Resources } from "@/lib/game/types";
 
 function findMonsterGuardianPower(mapData: GameMap | undefined, monsterId: string): number {
@@ -19,10 +19,27 @@ function findMonsterGuardianPower(mapData: GameMap | undefined, monsterId: strin
 }
 
 /**
+ * Read-only: the deterministic loot a given monster would yield, or null if it isn't an
+ * eligible free monster. Used both to grant the loot and to show it in the combat result
+ * (same function → the displayed loot always matches what was granted).
+ */
+export async function computeMonsterRewardForCombat(
+  supabase: SupabaseAdmin,
+  gameId: string,
+  monsterId: string | null | undefined,
+): Promise<MonsterReward | null> {
+  if (!monsterId || !isMonsterRewardEligible(monsterId)) return null;
+  const { data: gameRow } = await supabase.from("games").select("map_data").eq("id", gameId).maybeSingle();
+  const guardianPower = findMonsterGuardianPower(gameRow?.map_data as GameMap | undefined, monsterId);
+  if (guardianPower <= 0) return null;
+  return getMonsterReward(monsterId, guardianPower);
+}
+
+/**
  * Grants the deterministic loot of a just-defeated neutral monster: gold + resources to the
  * winning player, and (for ~50% of monsters) a minor artifact into the winning hero's bag.
- * No-ops for pocket guardians and anything that isn't a free monster. Safe to call on every
- * neutral defeat — non-eligible / non-monster ids simply grant nothing.
+ * Returns the granted loot (or null if nothing was granted) so callers can surface it in the
+ * combat result. No-ops for pocket guardians and anything that isn't a free monster.
  */
 export async function grantMonsterDefeatReward(
   supabase: SupabaseAdmin,
@@ -30,14 +47,10 @@ export async function grantMonsterDefeatReward(
   monsterId: string,
   playerId: string | null | undefined,
   heroId: string | null | undefined,
-): Promise<void> {
-  if (!playerId || !isMonsterRewardEligible(monsterId)) return;
-
-  const { data: gameRow } = await supabase.from("games").select("map_data").eq("id", gameId).maybeSingle();
-  const guardianPower = findMonsterGuardianPower(gameRow?.map_data as GameMap | undefined, monsterId);
-  if (guardianPower <= 0) return;
-
-  const reward = getMonsterReward(monsterId, guardianPower);
+): Promise<MonsterReward | null> {
+  if (!playerId) return null;
+  const reward = await computeMonsterRewardForCombat(supabase, gameId, monsterId);
+  if (!reward) return null;
 
   // Resources → player.
   const { data: player } = await supabase
@@ -64,4 +77,6 @@ export async function grantMonsterDefeatReward(
       .update({ artifacts: { ...bag, inventory: [...bag.inventory, reward.artifactId] } })
       .eq("id", heroId);
   }
+
+  return reward;
 }

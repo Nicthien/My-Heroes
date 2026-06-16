@@ -17,12 +17,15 @@ export function UnitSprite({
   side = "attacker",
   size = "sm",
   describe = false,
+  faction,
 }: {
   unitType: UnitType;
   side?: "attacker" | "defender";
   size?: "xs" | "sm";
   /** When true, hovering the sprite reveals a tooltip with the unit's description. */
   describe?: boolean;
+  /** Owner faction — selects the per-faction sprite for the King; ignored by catalog creatures. */
+  faction?: string;
 }) {
   const [anchor, setAnchor] = useState<{ cx: number; top: number; bottom: number } | null>(null);
   const rule = COMBAT_UNIT_RULES[unitType];
@@ -67,7 +70,7 @@ export function UnitSprite({
         className={`block drop-shadow-[0_5px_5px_rgba(0,0,0,0.55)] ${spriteSize}`}
         style={{ transform: side === "defender" ? "scaleX(-1)" : undefined }}
       >
-        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unitType} />
+        <UnitSilhouette kind={model} palette={palette} ranged={unit.ranged} unitType={unitType} unitFaction={faction} />
       </span>
       {describe && anchor && typeof document !== "undefined" && createPortal(
         <div className="pointer-events-none fixed z-[100]" style={tooltipStyle(anchor)}>

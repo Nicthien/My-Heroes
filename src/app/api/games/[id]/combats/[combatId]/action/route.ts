@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { buildTurnQueue, executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
-import { grantMonsterDefeatReward } from "@/lib/game/server/grantMonsterReward";
+import { computeMonsterRewardForCombat, grantMonsterDefeatReward } from "@/lib/game/server/grantMonsterReward";
 import { applyTowerVolleyInRound, type SiegeState } from "@/lib/game/combat/siege";
 import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
 import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
@@ -623,6 +623,10 @@ export async function POST(
   if (result && execution.result === "attacker") {
     const pendingReward = await findCreatureBankRewardForCombat(supabase, combat);
     if (pendingReward) result = { ...result, creatureBankReward: pendingReward };
+    // Monster loot is granted by persistResolvedCombat; recompute it (read-only, same
+    // deterministic function) for display so the result shows exactly what was awarded.
+    const monsterLoot = await computeMonsterRewardForCombat(supabase, combat.game_id, combat.neutral_army_id);
+    if (monsterLoot) result = { ...result, monsterLoot };
   }
   const actionLog = [...(combat.action_log ?? []), ...execution.log, ...towerLog];
 

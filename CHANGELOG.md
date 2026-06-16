@@ -5,6 +5,27 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.2.9] - 2026-06-16
+
+Raccourcis clavier configurables et menu d'options réorganisé en onglets.
+
+### Ajouté
+
+- **Raccourcis clavier** — la carte d'aventure se contrôle désormais au clavier :
+  déplacement de la caméra (ZQSD/WASD et flèches), Espace pour centrer sur le héros
+  ou le château sélectionné, 1 et 2 pour passer au héros / château suivant, Entrée
+  pour terminer le tour, + / − pour zoomer et Échap pour ouvrir le menu.
+- **Disposition FR/EN et touches personnalisables** — un nouvel onglet des options
+  permet de choisir la disposition du clavier (AZERTY / QWERTY) et de réassigner
+  chaque touche, avec un bouton de réinitialisation. Les raccourcis sont reconnus
+  par leur position physique, donc une même configuration fonctionne sur les deux
+  dispositions.
+
+### Modifié
+
+- **Menu d'options en onglets** — les réglages sont répartis en trois onglets
+  (Son, Graphismes, Clavier) avec un contenu défilant.
+
 ## [1.2.8] - 2026-06-14
 
 Nouvelle page d'accueil, bâtiments de ville inédits, sièges plus tactiques et fin de tour plus réactive.

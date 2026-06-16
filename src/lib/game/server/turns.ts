@@ -365,7 +365,7 @@ export async function completePlayerTurn(
     // Undefeated neutral guards harden over time: every week each surviving neutral
     // (monster army, guarded mine, gate, neutral town garrison, artifact guard) gains
     // +25%, compounding but capped at ×3 of its base. Counterpart to the soft start from
-    // the halved GUARD_STRENGTH_MULTIPLIER in `neutral-armies.ts`.
+    // the reduced GUARD_STRENGTH_MULTIPLIER in `neutral-armies.ts`.
     neutralGrowthChangedMapData = await applyWeeklyNeutralGrowth(supabase, gameId, nextTurnNumber, mapData);
   }
 

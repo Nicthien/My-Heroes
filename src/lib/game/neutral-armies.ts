@@ -49,16 +49,31 @@ export function getNeutralArmyUnitPool(terrain: TerrainType | string | undefined
 // across every guard source — mines, zone guardians, patrols, gates), not the unit
 // tier or the creature band. GUARD_BAND_LOW/HIGH bound which slice of the eligible
 // creature band is drawn from (lower-mid = more units, sturdier-feeling fights).
-// Difficulty boost history: 2.1 (legacy) → 9.45 → 7.5. Halved again to 3.75 in response
-// to "too hard" player feedback — a uniform -50% on the unit count of EVERY neutral guard
-// source (mines, wandering monsters, zone guardians, patrols, gates, pockets, artifacts).
-// The world is meant to start soft; it then ramps back up over time via the weekly neutral
-// growth in `server/turns.ts` (undefeated neutrals gain +25%/week, capped at ×3 of base),
-// so a max-grown guard ends at ~1.5× its pre-nerf strength. This affects newly generated
+// Difficulty boost history: 2.1 (legacy) → 9.45 → 7.5 → 3.75 → 2.8125. Cut in stages in
+// response to "too hard" player feedback: a uniform reduction on the unit count of EVERY
+// neutral guard source (mines, wandering monsters, zone guardians, patrols, gates, pockets,
+// artifacts). 2.8125 = 7.5 × 0.375, i.e. ~-62.5% off the old basis. The world starts soft;
+// it then ramps back up over time via the weekly neutral growth in `server/turns.ts`
+// (undefeated neutrals gain +25%/week, capped at ×3 of base). This affects newly generated
 // stacks only (existing in-progress games keep their already-seeded neutral_army_stacks).
-const GUARD_STRENGTH_MULTIPLIER = 3.75;
+const GUARD_STRENGTH_MULTIPLIER = 2.8125;
 const GUARD_BAND_LOW = 0.15;
 const GUARD_BAND_HIGH = 0.6;
+
+// Difficulty-curve compression. Raw guardianPower budgets span a huge range (~120 for a
+// wandering pack to ~7800 for a central gate), and a flat multiplier preserves that ~40:1
+// ratio — so starting wood/ore mines are trivial while gold/crystal mines, zone buildings
+// and gates feel brutal-to-suicidal. We compress the whole budget (which then drives unit
+// tier, creature band AND count): values at or below the anchor are untouched, larger ones
+// grow only by a fractional power. High-end guards thus ease in both tier and number, so
+// the unit-count curve flattens from ~40:1 to ~9:1 — a smooth ramp instead of a cliff.
+const GUARD_BUDGET_ANCHOR = 250;
+const GUARD_BUDGET_COMPRESSION = 0.55;
+
+function compressGuardBudget(budget: number): number {
+  if (budget <= GUARD_BUDGET_ANCHOR) return budget;
+  return GUARD_BUDGET_ANCHOR * (budget / GUARD_BUDGET_ANCHOR) ** GUARD_BUDGET_COMPRESSION;
+}
 
 /**
  * Builds a classic homogeneous neutral guard: a single creature type is picked
@@ -71,7 +86,10 @@ export function createNeutralArmyStacksForTile(
   armyId: string,
 ): NeutralArmyStackInput[] {
   const pool = getNeutralArmyUnitPool(tile.terrain);
-  const budget = Math.max(120, Math.floor(guardianPower));
+  // Compress the difficulty budget BEFORE anything derives from it (unit tier, creature
+  // band, count), so high-end guards drop in both tier and number together — a smooth,
+  // gentle ramp rather than a cliff — and never degenerate into "1 lone elite".
+  const budget = Math.max(120, Math.floor(compressGuardBudget(Math.max(120, Math.floor(guardianPower)))));
   const maxIndex = getMaxPoolIndex(pool, budget);
   const seed = hashString(`${armyId}:${tile.x}:${tile.y}:${tile.terrain}:${budget}`);
 
@@ -129,13 +147,15 @@ export function isUnitType(value: unknown): value is UnitType {
   return typeof value === "string" && value in UNIT_RULES;
 }
 
-// Number of identical stacks the total count is split into. Tuned to avoid
-// single-unit stacks while keeping a classic spread of slots.
+// Number of stacks the total count is split into. Splitting a guard into MORE, smaller
+// stacks (~5 units each, capped at the classic 7 army slots) makes it easier to chew
+// through: each stack the player wipes removes a smaller slice of the guard's damage, so
+// its output falls off faster than one or two big blocks would. Tiny guards stay as a
+// single stack to avoid silly 1-unit slivers. NB: this does NOT change the raw power /
+// displayed threat (same total units) — it only affects how the fight plays out.
 function calculateStackCount(totalCount: number) {
-  if (totalCount < 5) return 1;
-  if (totalCount < 20) return 2;
-  if (totalCount < 60) return 3;
-  return 4;
+  if (totalCount < 4) return 1;
+  return Math.min(7, Math.ceil(totalCount / 5));
 }
 
 function getMaxPoolIndex(pool: UnitType[], budget: number) {

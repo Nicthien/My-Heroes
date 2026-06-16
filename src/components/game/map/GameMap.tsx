@@ -179,6 +179,7 @@ export default function GameMapComponent() {
   const activeCombat = useGameStore((state) => state.activeCombat);
   const cameraTarget = useGameStore((state) => state.cameraTarget);
   const zoomRequest = useGameStore((state) => state.zoomRequest);
+  const cameraPan = useGameStore((state) => state.cameraPan);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
   const endingTurn = useGameStore((state) => state.endingTurn);
@@ -543,6 +544,22 @@ export default function GameMapComponent() {
       renderer.followHero(state.selectedHeroId);
     }
   }, [zoomRequest, rendererReadyVersion]);
+
+  // Continuous keyboard camera panning: while the held-key vector is non-zero,
+  // nudge the camera every frame. The vector object identity only changes when
+  // the held keys change (see gameStore.setCameraPan), so this effect restarts
+  // its loop on direction change, not on every keydown repeat.
+  useEffect(() => {
+    if (cameraPan.dx === 0 && cameraPan.dy === 0) return;
+    let raf = 0;
+    const step = () => {
+      const renderer = rendererRef.current;
+      if (renderer?.isReady()) renderer.panCamera(cameraPan.dx, cameraPan.dy);
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [cameraPan, rendererReadyVersion]);
 
   useEffect(() => {
     const renderer = rendererRef.current;

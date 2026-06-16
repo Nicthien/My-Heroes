@@ -7,6 +7,7 @@ import { version as APP_VERSION } from "../../../../package.json";
 import { ReportBugModal } from "@/components/ReportBugModal";
 import { useDevPanel } from "./useDevPanel";
 import { useTurnNotifications } from "./useTurnNotifications";
+import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { useTurnTimer, formatTurnRemaining } from "./useTurnTimer";
 import { HeroPanel } from "./HeroPanel";
 import { GameOverScreen } from "./GameOverScreen";
@@ -148,6 +149,7 @@ export function HUDContent() {
   const setGameState = useGameStore((state) => state.setGameState);
   const devRevealMap = useGameStore((state) => state.devRevealMap);
   const adminObserverMode = useGameStore((state) => state.adminObserverMode);
+  const isCombatMode = useGameStore((state) => state.isCombatMode);
   const gameState = nullableGameState!;
   const devPanel = useDevPanel(gameState?.id);
 
@@ -971,6 +973,18 @@ export function HUDContent() {
   };
 
   const turnNotifications = useTurnNotifications({ canAct, isPending, turnNotificationKey });
+
+  // Global adventure-map keyboard shortcuts (camera, selection, end turn, menu).
+  // Scoped to my interactive turn on the adventure HUD — disabled in combat,
+  // for observers, and before the game is active. Bindings live in the Options.
+  useKeyboardShortcuts({
+    enabled: gameState.status === "ACTIVE" && !isCombatMode && !adminObserverMode && Boolean(myPlayer),
+    myPlayerId: myPlayer?.id,
+    canAct,
+    optionsOpen,
+    onEndTurn: handleEndTurn,
+    onOpenMenu: () => setOptionsOpen(true),
+  });
   // While it's my active turn, the live clock is the game's current-turn start.
   // Once I've ended my turn (waiting), anchor to my own turn's recorded start so
   // the countdown keeps running during the wait instead of disappearing.

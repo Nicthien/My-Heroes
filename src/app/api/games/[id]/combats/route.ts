@@ -341,6 +341,7 @@ export async function POST(
       { immortalHeroId: devGodModeHeroId }
     )
     : null;
+  let monsterLoot: Awaited<ReturnType<typeof grantMonsterDefeatReward>> = null;
   let result = autoResult
     ? {
       ...autoResult,
@@ -465,7 +466,7 @@ export async function POST(
           .eq("game_id", id)
           .eq("x", targetDefender.x)
           .eq("y", targetDefender.y);
-        await grantMonsterDefeatReward(supabase, id, targetDefender.neutralArmyId, gamePlayer.id, attacker.id);
+        monsterLoot = await grantMonsterDefeatReward(supabase, id, targetDefender.neutralArmyId, gamePlayer.id, attacker.id);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (body.targetType === "gate") {
@@ -520,7 +521,7 @@ export async function POST(
       environment,
     });
   }
-  return NextResponse.json({ combat: toCombat(combatRow), result }, { status: 201 });
+  return NextResponse.json({ combat: toCombat(combatRow), result: monsterLoot ? { ...result, monsterLoot } : result }, { status: 201 });
 }
 
 function combatTargetLabel(targetType: unknown) {

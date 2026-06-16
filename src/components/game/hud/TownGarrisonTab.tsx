@@ -24,6 +24,7 @@ export function TownGarrisonTab({
   upgradeDialog,
   setUpgradeDialog,
   getUpgradeOption,
+  ownerFaction,
 }: {
   selectedTown: Town;
   isMyTown: boolean;
@@ -39,6 +40,8 @@ export function TownGarrisonTab({
   upgradeDialog: UpgradeDialog | null;
   setUpgradeDialog: (next: UpgradeDialog | null) => void;
   getUpgradeOption: (unitType: UnitType, available: number) => { label: string; max: number } | null;
+  /** Faction of the town/garrison owner — selects the King's per-faction sprite. */
+  ownerFaction?: string;
 }) {
   const { t, locale } = useI18n();
   return (
@@ -97,7 +100,7 @@ export function TownGarrisonTab({
               <div key={unit.id} className="rounded-lg border border-amber-700/40 bg-gradient-to-b from-stone-900/80 to-black/60 p-3 shadow-inner shadow-black/40">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <UnitSprite unitType={unit.unitType} side="defender" describe />
+                    <UnitSprite unitType={unit.unitType} side="defender" describe faction={ownerFaction} />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType, locale)}</div>
                       <div className="text-xs text-amber-200/60">{t("garrison.inGarrison", { n: unit.count })}</div>
@@ -176,7 +179,7 @@ export function TownGarrisonTab({
                   <div key={unit.id} className="rounded-lg border border-amber-700/35 bg-gradient-to-b from-stone-900/75 to-black/55 p-3 shadow-inner shadow-black/35">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <UnitSprite unitType={unit.unitType} describe />
+                        <UnitSprite unitType={unit.unitType} describe faction={ownerFaction} />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-bold text-amber-100">{unitTypeLabel(unit.unitType, locale)}</div>
                           <div className="text-xs text-amber-200/60">{t("garrison.withHero", { n: unit.count })}</div>

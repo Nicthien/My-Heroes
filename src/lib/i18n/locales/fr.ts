@@ -640,6 +640,8 @@ export const fr = {
   "combat.campDefender": "Camp défenseur",
   "combat.wanderingMonsters": "Monstres errants",
   "combat.rewardGold": "{n} or",
+  "combat.lootLabel": "Butin de bataille",
+  "combat.lootPreview": "Butin potentiel",
 
   // --- Combat: choice modal ---
   "combat.opponentHero": "Héros adverse",
@@ -1070,6 +1072,7 @@ export const fr = {
   "audio.effects": "Effets",
   "menu.options": "Options",
   "menu.help": "Aide",
+  "menu.guide": "Guide",
   "menu.quit": "Quitter",
   "menu.reduce": "Réduire",
   "menu.quitTitle": "Quitter la partie",

@@ -44,11 +44,14 @@ export function HeroPanel({
   townAtHero,
   readOnly = false,
   storagePlayerId,
+  ownerFaction,
 }: {
   hero: Hero;
   townAtHero: Town | undefined;
   readOnly?: boolean;
   storagePlayerId?: string;
+  /** Faction of the hero's owner — selects the King's per-faction sprite. */
+  ownerFaction?: string;
 }) {
   const { data: session } = useSession();
   const { t, locale } = useI18n();
@@ -324,7 +327,7 @@ export function HeroPanel({
             <HeroSkillsPanel hero={hero} canDig={canDig} onDig={() => void digGrail()} t={t} locale={locale} />
           )}
 
-          {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} t={t} locale={locale} />}
+          {activeTab === "army" && <HeroArmyPanel hero={hero} readOnly={readOnly} onAction={performHeroStackAction} t={t} locale={locale} ownerFaction={ownerFaction} />}
 
           {activeTab === "artifacts" && (
             <ArtifactPanel
@@ -550,7 +553,7 @@ function HeroTabIcon({ tab }: { tab: HeroTab }) {
   }
 }
 
-function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; readOnly?: boolean; onAction: (body: Record<string, unknown>) => Promise<void>; t: TFn; locale: Locale }) {
+function HeroArmyPanel({ hero, readOnly, onAction, t, locale, ownerFaction }: { hero: Hero; readOnly?: boolean; onAction: (body: Record<string, unknown>) => Promise<void>; t: TFn; locale: Locale; ownerFaction?: string }) {
   const [selectedStackId, setSelectedStackId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState(1);
   const sortedArmies = [...hero.armies].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
@@ -585,7 +588,7 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
       {selected && (
         <div className="mb-3 rounded-md border border-amber-700/35 bg-black/40 p-2">
           <div className="flex items-center gap-2 text-xs text-amber-100">
-            <UnitSprite unitType={selected.unitType} size="xs" describe />
+            <UnitSprite unitType={selected.unitType} size="xs" describe faction={ownerFaction} />
             <span className="min-w-0 flex-1 truncate font-black">{unitTypeLabel(selected.unitType, locale)}</span>
             <span>{selected.count}/{UNIT_STACK_COUNT_CAP}</span>
           </div>
@@ -641,7 +644,7 @@ function HeroArmyPanel({ hero, readOnly, onAction, t, locale }: { hero: Hero; re
               }`}
               title={`${unitTypeLabel(unit.unitType, locale)} x ${unit.count}`}
             >
-              <UnitSprite unitType={unit.unitType} size="xs" describe />
+              <UnitSprite unitType={unit.unitType} size="xs" describe faction={ownerFaction} />
               <span className="min-w-0">
                 <span className="block truncate text-[11px] font-black leading-tight text-amber-100">{unitTypeLabel(unit.unitType, locale)}</span>
                 <span className="mt-1 block text-sm font-black leading-none text-amber-50">{unit.count}</span>

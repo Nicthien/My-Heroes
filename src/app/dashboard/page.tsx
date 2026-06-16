@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession, getSupabaseAccessToken, signOutWithLocalFallback } from "@/lib/auth/client";
 import { generateMap } from "@/lib/game/engine";
 import {
@@ -30,7 +31,7 @@ import {
   ornateFrame,
   ornateFramePolished,
 } from "@/components/game/hud/theme";
-import { GearIcon, SignOutIcon } from "./dashboardRmgControls";
+import { BookIcon, GearIcon, SignOutIcon } from "./dashboardRmgControls";
 import { MAP_SIZES, randomSeedValue, summarizeMap, turnTimerToSeconds, type TurnTimerUnit } from "./dashboardConstants";
 import { factionLabel } from "./factionMeta";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -910,6 +911,14 @@ export default function DashboardPage() {
                 {t("dashboard.stats")}
               </button>
             )}
+            <Link
+              href="/guide"
+              title={t("menu.guide")}
+              aria-label={t("menu.guide")}
+              className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 sm:w-12"
+            >
+              <BookIcon />
+            </Link>
             <button
               type="button"
               onClick={() => {

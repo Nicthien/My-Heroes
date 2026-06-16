@@ -8,8 +8,12 @@ import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { getUnitRule } from "@/lib/game/units";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
+import { localizedLabelFromId, localizedUnitLabel } from "@/lib/i18n/gameLabels";
 import { resourceLabel } from "@/lib/game/economy";
+import { getArtifact } from "@/lib/game/artifacts";
+import { UnitSprite } from "@/components/game/hud/UnitSprite";
+import { LootArtifactIcon, ResourceSprite, lootResourceEntries } from "@/components/game/combat/lootSprites";
+import type { UnitType } from "@/lib/game/types";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/types";
 
@@ -75,6 +79,7 @@ export default function CombatResultModal() {
           <Losses title={t("combat.attackerLosses")} losses={aggregateLosses(result.attackerLosses)} t={t} locale={locale} />
           <Losses title={t("combat.defenderLosses")} losses={aggregateLosses(result.defenderLosses)} t={t} locale={locale} />
         </div>
+        {iWon && result.monsterLoot && <MonsterLootPanel loot={result.monsterLoot} t={t} locale={locale} />}
         {bankReward && gameState && (
           <CreatureBankRewardPanel
             key={bankReward.bankId}
@@ -106,6 +111,36 @@ export default function CombatResultModal() {
           {bankReward ? t("combat.rewardToClaim") : t("combat.backToMap")}
         </button>
       </div>
+    </div>
+  );
+}
+
+function MonsterLootPanel({
+  loot,
+  t,
+  locale,
+}: {
+  loot: NonNullable<NonNullable<ReturnType<typeof useGameStore.getState>["lastCombatResult"]>["monsterLoot"]>;
+  t: TFn;
+  locale: Locale;
+}) {
+  const artifact = loot.artifactId ? getArtifact(loot.artifactId) : null;
+  const artifactName = artifact ? localizedLabelFromId(loot.artifactId!, artifact.name, locale) : null;
+
+  return (
+    <div className="mt-5 rounded border border-amber-700/70 bg-amber-950/30 p-4">
+      <div className="text-sm font-bold text-amber-100">{t("combat.lootLabel")}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+        {lootResourceEntries(loot).map(([resource, amount]) => (
+          <ResourceSprite key={resource} resource={resource} amount={amount} locale={locale} />
+        ))}
+      </div>
+      {loot.artifactId && (
+        <div className="mt-3 flex items-center gap-2">
+          <LootArtifactIcon artifactId={loot.artifactId} />
+          <span className="text-sm font-bold text-amber-200">{artifactName ?? loot.artifactId}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,10 +274,13 @@ function Losses({ title, losses, t, locale }: { title: string; losses: { unitTyp
   return (
     <div className="rounded border border-stone-700 bg-stone-900/80 p-3">
       <div className="font-bold text-stone-100">{title}</div>
-      <div className="mt-2 space-y-1 text-sm text-stone-300">
+      <div className="mt-2 space-y-1.5 text-sm text-stone-300">
         {losses.length === 0 ? <div>{t("combat.noLosses")}</div> : losses.map((loss) => (
-          <div key={loss.unitType} className="flex justify-between">
-            <span>{localizedUnitLabel(loss.unitType, getUnitRule(loss.unitType).label, locale)}</span>
+          <div key={loss.unitType} className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <UnitSprite unitType={loss.unitType as UnitType} size="xs" />
+              <span>{localizedUnitLabel(loss.unitType, getUnitRule(loss.unitType).label, locale)}</span>
+            </span>
             <span className="font-bold text-red-300">-{loss.lost}</span>
           </div>
         ))}

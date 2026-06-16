@@ -215,6 +215,9 @@ export function HUDContent() {
 
   const selectedHero = (adminObserverMode ? gameState.players.flatMap((player) => player.heroes) : myPlayer?.heroes ?? [])
     .find((h) => h.id === selectedHeroId);
+  const selectedHeroOwner = selectedHero
+    ? gameState.players.find((player) => player.heroes.some((h) => h.id === selectedHero.id))
+    : undefined;
 
   const selectedTown = (adminObserverMode ? allTowns : myPlayer?.towns ?? [])
     .find((t) => t.id === selectedTownId);
@@ -1334,6 +1337,13 @@ export function HUDContent() {
                     ]
                   : []),
                 {
+                  key: "guide",
+                  label: t("menu.guide"),
+                  // Opens the standalone guide in a new tab so the player never loses their game.
+                  onClick: () => window.open("/guide", "_blank", "noopener,noreferrer"),
+                  dataTestId: "menu-guide",
+                },
+                {
                   key: "report",
                   label: t("dashboard.report.button"),
                   onClick: () => setReportOpen(true),
@@ -1489,7 +1499,7 @@ export function HUDContent() {
       )}
 
       {/* Hero panel */}
-      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} storagePlayerId={hudStoragePlayerId} />}
+      {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} storagePlayerId={hudStoragePlayerId} ownerFaction={selectedHeroOwner?.faction} />}
 
       {/* Town panel */}
       {selectedTown && (
@@ -1586,6 +1596,7 @@ export function HUDContent() {
                 upgradeDialog={upgradeDialog}
                 setUpgradeDialog={setUpgradeDialog}
                 getUpgradeOption={getUpgradeOption}
+                ownerFaction={selectedTownOwner?.faction}
               />
             )}
 

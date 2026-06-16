@@ -614,6 +614,43 @@ export function hasShipyardBuilding(faction: Faction | string | undefined, build
   return buildings.some((building) => isShipyardBuilding(faction, building));
 }
 
+// Gold price to convert a captured foreign-architecture town into the owner's
+// faction (see CONVERT_TOWN_FACTION). Shared between the server handler and the
+// HUD so the displayed cost and the enforced cost never drift apart.
+export const TOWN_CONVERSION_COST_GOLD = 5000;
+
+const MAGE_GUILD_LEVEL_BY_TYPE: Partial<Record<BuildingType, number>> = {
+  [BuildingType.MAGE_GUILD]: 1,
+  [BuildingType.MAGE_GUILD_2]: 2,
+  [BuildingType.MAGE_GUILD_3]: 3,
+  [BuildingType.MAGE_GUILD_4]: 4,
+  [BuildingType.MAGE_GUILD_5]: 5,
+};
+
+export function getMageGuildMax(faction: Faction): number {
+  return MAGE_GUILD_MAX[faction] ?? MAGE_GUILD_MAX[Faction.CASTLE];
+}
+
+// Rewrites a captured town's building list for a new owning faction. Common,
+// fortification, town-center, dwelling and mage-guild buildings are
+// faction-agnostic (the BuildingType enum is shared across factions) and are
+// kept — except Mage Guild levels above the target faction's cap, which that
+// faction simply cannot have. The six faction-unique buildings (UNIQUE_1..6)
+// belong to the original faction's identity and are demolished by the
+// conversion.
+export function convertTownBuildingsToFaction(
+  buildings: Array<BuildingType | string>,
+  faction: Faction,
+): BuildingType[] {
+  const mageGuildCap = getMageGuildMax(faction);
+  return buildings.filter((building) => {
+    if (UNIQUE_TYPES.includes(building as BuildingType)) return false;
+    const mageLevel = MAGE_GUILD_LEVEL_BY_TYPE[building as BuildingType];
+    if (mageLevel !== undefined && mageLevel > mageGuildCap) return false;
+    return true;
+  }) as BuildingType[];
+}
+
 export function normalizeTownBuildings(buildings: Array<BuildingType | string>) {
   const normalized = buildings.filter((building) => building !== BuildingType.CASTLE) as BuildingType[];
   const hasTownCenter = normalized.some((building) =>

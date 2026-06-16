@@ -199,6 +199,39 @@ export function dwellingForUnit(unitType: UnitType): BuildingType | null {
   return info ? DWELLING_TIERS[info.tier] : null;
 }
 
+// Locates a unit within the faction unit tables, distinguishing the base
+// dwelling unit from its upgraded variant (the two keep separate recruit pools).
+function unitTierAndUpgrade(unitType: UnitType): { tier: number; upgraded: boolean } | null {
+  for (const faction of Object.keys(FACTION_UNITS) as Faction[]) {
+    const baseIdx = FACTION_UNITS[faction].indexOf(unitType);
+    if (baseIdx >= 0) return { tier: baseIdx, upgraded: false };
+    const upgIdx = FACTION_UPGRADED_UNITS[faction].indexOf(unitType);
+    if (upgIdx >= 0) return { tier: upgIdx, upgraded: true };
+  }
+  return null;
+}
+
+// Re-keys an availableRecruits pool when a town changes faction: each pending
+// recruit count moves to the equivalent tier (and base/upgraded variant) of the
+// target faction, so a captured town's accumulated growth carries over to the
+// new faction's creatures instead of being stranded under stale unit keys.
+export function remapRecruitsToFaction(
+  available: Partial<Record<UnitType, number>>,
+  faction: Faction,
+): Partial<Record<UnitType, number>> {
+  const baseUnits = FACTION_UNITS[faction] ?? FACTION_UNITS[Faction.CASTLE];
+  const upgradedUnits = FACTION_UPGRADED_UNITS[faction] ?? FACTION_UPGRADED_UNITS[Faction.CASTLE];
+  const result: Partial<Record<UnitType, number>> = {};
+  for (const [unit, count] of Object.entries(available) as Array<[UnitType, number]>) {
+    if (!count) continue;
+    const info = unitTierAndUpgrade(unit);
+    if (!info) continue;
+    const target = info.upgraded ? upgradedUnits[info.tier] : baseUnits[info.tier];
+    result[target] = (result[target] ?? 0) + count;
+  }
+  return result;
+}
+
 export const BUILDING_RULES: BuildingRule[] = [
   {
     type: BuildingType.TAVERN,

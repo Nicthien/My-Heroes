@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { buildTurnQueue, executeManualCombatAction, getHexDistance } from "@/lib/game/combat/persistent";
+import { grantMonsterDefeatReward } from "@/lib/game/server/grantMonsterReward";
 import { applyTowerVolleyInRound, type SiegeState } from "@/lib/game/combat/siege";
 import { chooseAiCombatAction, planAiTacticsPlacements, type AiCombatAction } from "@/lib/game/ai/combat-tactics";
 import { chooseAiCombatSpell, executeAiSpellCast, type AiSpellHero } from "@/lib/game/ai/combat-spells";
@@ -1454,6 +1455,7 @@ async function persistResolvedCombat(
         .eq("game_id", combat.game_id)
         .eq("x", combat.x)
         .eq("y", combat.y);
+      await grantMonsterDefeatReward(supabase, combat.game_id, combat.neutral_army_id, combat.attacker_player_id, combat.attacker_hero_id);
     } else if (combat.gate_id) {
       await supabase
         .from("gates")

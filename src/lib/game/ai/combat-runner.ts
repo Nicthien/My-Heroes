@@ -1,4 +1,5 @@
 import { buildTurnQueue, executeManualCombatAction } from "@/lib/game/combat/persistent";
+import { grantMonsterDefeatReward } from "@/lib/game/server/grantMonsterReward";
 import { markHeroCombatSpellCast } from "@/lib/game/combat/spells";
 import type { SiegeState } from "@/lib/game/combat/siege";
 import { evaluateGameLifecycle } from "@/lib/game/server/lifecycle";
@@ -345,6 +346,7 @@ export async function persistResolvedCombat(
   if (winnerSide === "attacker") {
     if (combat.neutral_army_id) {
       await supabase.from("neutral_armies").update({ status: "DEFEATED" }).eq("id", combat.neutral_army_id);
+      await grantMonsterDefeatReward(supabase, combat.game_id, combat.neutral_army_id, combat.attacker_player_id, combat.attacker_hero_id);
     } else if (!combat.defender_player_id) {
       const capturedTown = await captureNeutralTownAt(supabase, combat);
       if (capturedTown) {

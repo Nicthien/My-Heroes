@@ -1262,6 +1262,8 @@ export const en: Record<TranslationKey, string> = {
   "map.gateNeutral": "Neutral gate",
   "map.combatInProgress": "Combat in progress",
   "map.neutralArmy": "Neutral army",
+  "map.monsterLoot": "Loot: {loot}",
+  "map.monsterArtifactLoot": "+ Minor artifact",
   "map.dwellingGeneric": "Lets you recruit creatures on the map.",
   "map.dwellingRecruit": "Lets you recruit {unit} each week. Growth: {growth}.",
   "map.creatureBankGeneric": "A fight guarding a treasure.",

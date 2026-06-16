@@ -3,6 +3,7 @@ import { getArtifact, getArtifactMapLabel } from "@/lib/game/artifacts";
 import { getCreatureBankDefinition, isCreatureBankType } from "@/lib/game/creature-banks";
 import { getResourceBuildingLabel, getResourceBuildingProduction, resourceLabel, UNIT_RULES as ECONOMY_UNIT_RULES } from "@/lib/game/economy";
 import { getExternalDwellingLabel, isExternalDwellingType } from "@/lib/game/external-dwellings";
+import { getMonsterReward, isMonsterRewardEligible } from "@/lib/game/monster-rewards";
 import { localizedBuildingDescription } from "@/lib/game/buildings-i18n";
 import { MapObject, MapTile } from "@/lib/game/types";
 import { UNIT_RULES } from "@/lib/game/units";
@@ -205,6 +206,17 @@ export function getMapObjectHoverTitle(object: MapObject, locale: Locale = "fr")
 }
 
 export function getMapObjectHoverDescription(object: MapObject, locale: Locale = "fr"): string | null {
+  if (object.type === "monster" && isMonsterRewardEligible(object.id) && (object.guardianPower ?? 0) > 0) {
+    const reward = getMonsterReward(object.id, object.guardianPower ?? 0);
+    const parts = [`+${reward.gold} ${resourceLabel("gold", locale)}`];
+    for (const [resource, amount] of Object.entries(reward.resources)) {
+      parts.push(`+${amount} ${resourceLabel(resource, locale)}`);
+    }
+    let text = translate(locale, "map.monsterLoot", { loot: parts.join(", ") });
+    if (reward.artifactId) text += `\n${translate(locale, "map.monsterArtifactLoot")}`;
+    return text;
+  }
+
   if (object.type === "building" && object.subtype) {
     const production = getResourceBuildingProduction(object.subtype);
     if (!production) return null;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
-import { finalizeStartingRareMines } from "@/lib/game/engine";
+import { finalizeStartingRareMines, repairStartingEconomy } from "@/lib/game/engine";
 import { runAiTurnsUntilHuman } from "@/lib/game/ai/simple-ai";
 import { recordGameAction } from "@/lib/game/server/action-log";
 import { createGamePlayerSetup, PLAYER_COLORS, pickAiFaction, pickAiName } from "@/lib/game/server/player-setup";
@@ -79,11 +79,32 @@ export async function POST(
   const firstPlayer = [...activePlayers].sort((a, b) => a.turnOrder - b.turnOrder)[0];
   if (!firstPlayer) return NextResponse.json({ error: "Aucun joueur dans la partie" }, { status: 400 });
 
+  // Safety net before the game goes ACTIVE: maps are generated before players
+  // join, so re-guarantee every player's home zone owns one mine of each starting
+  // role and force any missing one back onto the map (constrained to its zone).
+  const mapToFinalize = gameWithAi.mapData as GameMap;
+  const economyRepairs = repairStartingEconomy(mapToFinalize);
+  // Type the freshly re-added rare mines (still generic) to each owner's faction.
   const finalizedMapData = finalizeStartingRareMines(
-    gameWithAi.mapData as GameMap,
+    mapToFinalize,
     new Map(activePlayers.map((player) => [Number(player.turnOrder), player.faction])),
   );
   await syncResourceBuildingsFromMap(supabase, id, finalizedMapData);
+
+  if (economyRepairs.length > 0) {
+    const unresolved = economyRepairs.filter((repair) => !repair.resolved).length;
+    await recordGameAction(supabase, {
+      gameId: id,
+      actorKind: "system",
+      turnNumber: Number(game.turnNumber ?? 1),
+      actionType: "REPAIR_STARTING_ECONOMY",
+      category: "setup",
+      summary: `Filet de sécurité : ${economyRepairs.length - unresolved} mine(s) de départ rétablie(s)${
+        unresolved > 0 ? `, ${unresolved} non rétablie(s)` : ""
+      }.`,
+      details: { repairs: economyRepairs },
+    });
+  }
 
   const { error } = await supabase
     .from("games")

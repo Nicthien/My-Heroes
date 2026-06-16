@@ -5,6 +5,7 @@ import {
   getAdventurePathCostAvoiding,
   placePlayerStart,
   rareMineForFaction,
+  repairStartingEconomy,
 } from "../src/lib/game/engine";
 import { getMinimumStargateDistance } from "../src/lib/game/engine/adventure-buildings";
 import { listTemplatesForPlayers, TEMPLATES } from "../src/lib/game/engine/template";
@@ -80,6 +81,7 @@ const TOWN_FOOTPRINT_OFFSETS = [
 ] as const;
 
 validateResourceProductionRules();
+validateStartingEconomySafetyNet();
 
 for (const playerCount of playerCounts) {
   const templates = listTemplatesForPlayers(playerCount);
@@ -878,6 +880,79 @@ function validateResourceProductionRules(): void {
       addIssue("error", "economy", "rules", 0, 0, `unexpected production for ${type}`);
     }
   }
+}
+
+/**
+ * Exercise the `repairStartingEconomy` safety net: maps are generated before
+ * players join, so the net must re-guarantee every player's four starting mines
+ * just before the game starts. We simulate the failure (`if (!tile) continue` in
+ * generation) by stripping a player's starting mines, then assert the net puts
+ * them back inside that player's own zone — and that it never disturbs a healthy
+ * economy (idempotent no-op).
+ */
+function validateStartingEconomySafetyNet(): void {
+  const roles = ["start_wood", "start_ore", "start_gold", "start_rare"] as const;
+
+  for (const playerCount of [2, 4, 6]) {
+    const template = listTemplatesForPlayers(playerCount)[0];
+    if (!template) continue;
+    const seed = `${template.id}-${playerCount}-72-SAFETYNET`;
+    const baseMap = generateMap({ width: 72, height: 72, seed, playerCount, templateId: template.id });
+    const label = `${template.id}/${playerCount}p safety-net`;
+
+    // Idempotency: an untouched, fully-placed map needs no repair.
+    const untouched = repairStartingEconomy(structuredClone(baseMap));
+    if (untouched.length > 0) {
+      addIssue("error", template.id, "SAFETYNET", playerCount, 72, `${label}: repaired a healthy map (${untouched.length} change(s))`);
+    }
+
+    const ownerIndex = 0;
+    const townZone = playerTownZone(baseMap, ownerIndex);
+    if (townZone === null) {
+      addIssue("error", template.id, "SAFETYNET", playerCount, 72, `${label}: no player-${ownerIndex} town found`);
+      continue;
+    }
+
+    // Strip all four starting mines of player 0, then expect the net to restore them.
+    const broken = structuredClone(baseMap);
+    for (const tile of findStartingMines(broken, ownerIndex)) {
+      if (tile.object?.strategicRole) tile.object = undefined;
+    }
+
+    const repairs = repairStartingEconomy(broken);
+    for (const role of roles) {
+      const repair = repairs.find((item) => item.ownerIndex === ownerIndex && item.role === role);
+      if (!repair || !repair.resolved) {
+        addIssue("error", template.id, "SAFETYNET", playerCount, 72, `${label}: ${role} not restored`);
+        continue;
+      }
+      if (repair.zoneId !== townZone || broken.tiles[repair.y ?? -1]?.[repair.x ?? -1]?.zoneId !== townZone) {
+        addIssue("error", template.id, "SAFETYNET", playerCount, 72, `${label}: restored ${role} fell outside player zone ${townZone}`);
+      }
+    }
+
+    const restored = findStartingMines(broken, ownerIndex);
+    for (const role of roles) {
+      const count = restored.filter((tile) => tile.object?.strategicRole === role).length;
+      if (count !== 1) {
+        addIssue("error", template.id, "SAFETYNET", playerCount, 72, `${label}: expected exactly one ${role} after repair, got ${count}`);
+      }
+    }
+  }
+
+  summaries.push(`starting-economy safety net: checked ${[2, 4, 6].length} player counts`);
+}
+
+/** Zone id of a player's home town (`subtype: "player-{ownerIndex}"`), or null if absent. */
+function playerTownZone(map: GameMap, ownerIndex: number): number | null {
+  for (const row of map.tiles) {
+    for (const tile of row) {
+      if (tile.object?.type === "town" && tile.object.subtype === `player-${ownerIndex}`) {
+        return tile.zoneId ?? null;
+      }
+    }
+  }
+  return null;
 }
 
 function validationFactionsFor(playerCount: number): Faction[] {

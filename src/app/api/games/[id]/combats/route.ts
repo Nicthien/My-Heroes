@@ -30,6 +30,7 @@ import {
 } from "@/lib/game/engine";
 import { normalizeMapLevel, withActiveMapLayer } from "@/lib/game/map-levels";
 import { createNeutralArmyStacksForTile } from "@/lib/game/neutral-armies";
+import { grantMonsterDefeatReward } from "@/lib/game/server/grantMonsterReward";
 import { applyHeroExperienceGain } from "@/lib/game/server/level-up";
 import { recordGameAction, sanitizeActionForLog } from "@/lib/game/server/action-log";
 import { getUnitRule } from "@/lib/game/units";
@@ -464,6 +465,7 @@ export async function POST(
           .eq("game_id", id)
           .eq("x", targetDefender.x)
           .eq("y", targetDefender.y);
+        await grantMonsterDefeatReward(supabase, id, targetDefender.neutralArmyId, gamePlayer.id, attacker.id);
       } else if (body.targetType === "town") {
         await captureNeutralTown(supabase, id, targetDefender.id, gamePlayer.id);
       } else if (body.targetType === "gate") {

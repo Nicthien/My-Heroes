@@ -226,13 +226,14 @@ function tryPlacePocket(
 }
 
 function defaultPocketArtifactClass(zoneType: string, zoneValue: number): ArtifactClass {
+  // Minor artifacts are reserved for neutral-monster loot; pocket slots that used to be
+  // minor are promoted to major (one tier up).
   if (zoneType === "treasure") {
     if (zoneValue >= 9000) return "relic";
     if (zoneValue >= 6000) return "major";
-    return "minor";
+    return "major";
   }
-  if (zoneType === "junction") return zoneValue >= 3500 ? "major" : "minor";
-  return "minor";
+  return "major";
 }
 
 function findSeedCandidates(

@@ -12,12 +12,19 @@ export function TownSummaryTab({
   buildableBuildings,
   recruitableUnits,
   heroesAtSelectedTown,
+  conversion,
 }: {
   selectedTown: Town;
   selectedTownFaction: Faction;
   buildableBuildings: number;
   recruitableUnits: number;
   heroesAtSelectedTown: Hero[];
+  conversion?: {
+    cost: number;
+    canAfford: boolean;
+    disabled: boolean;
+    onConvert: () => void;
+  };
 }) {
   const { t, locale } = useI18n();
   return (
@@ -36,6 +43,19 @@ export function TownSummaryTab({
           </div>
         )}
       </div>
+      {conversion && (
+        <div className="rounded-md border border-amber-600/40 bg-amber-950/30 px-3 py-2">
+          <div className="mb-2 text-[11px] text-amber-200/70">{t("town.convertHint")}</div>
+          <button
+            type="button"
+            disabled={conversion.disabled || !conversion.canAfford}
+            onClick={conversion.onConvert}
+            className="w-full rounded-md border border-amber-500/60 bg-gradient-to-b from-amber-700/70 to-amber-900/70 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-50 transition hover:from-amber-600/70 hover:to-amber-800/70 disabled:cursor-not-allowed disabled:border-stone-600/40 disabled:from-stone-800/60 disabled:to-stone-900/60 disabled:text-stone-400"
+          >
+            {t("town.convert", { n: conversion.cost })}
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
         <div className="rounded-md border border-amber-700/30 bg-black/40 px-2 py-2">
           <div className="text-lg font-black text-amber-100">{buildableBuildings}</div>

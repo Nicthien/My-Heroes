@@ -67,7 +67,7 @@ import {
   getRecruitableUnitsForFaction,
   subtractCost,
 } from "@/lib/game/economy";
-import { getTownCenterLevel, hasShipyardBuilding, hasTownBuilding } from "@/lib/game/town-buildings";
+import { TOWN_CONVERSION_COST_GOLD, getTownCenterLevel, hasShipyardBuilding, hasTownBuilding } from "@/lib/game/town-buildings";
 import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import SidePanel from "./SidePanel";
 import CollapsiblePanel from "./CollapsiblePanel";
@@ -134,6 +134,7 @@ export function HUDContent() {
     };
   }, []);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+  const [convertTownOpen, setConvertTownOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
   const selectedTownId = useGameStore((state) => state.selectedTownId);
@@ -476,6 +477,29 @@ export function HUDContent() {
     const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
     if (refreshedState) setGameState(refreshedState);
     setCombatMessage(t("hud.boatBuilt"));
+  };
+
+  const handleConvertTown = async () => {
+    if (!selectedTown || !myPlayer || !canAct || !isMyTown) return;
+    if (myPlayer.resources.gold < TOWN_CONVERSION_COST_GOLD) {
+      setCombatMessage(t("hud.conversionGoldInsufficient", { n: TOWN_CONVERSION_COST_GOLD }));
+      return;
+    }
+
+    const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "CONVERT_TOWN_FACTION", townId: selectedTown.id }),
+    });
+
+    if (!response.ok) {
+      setCombatMessage(await getApiErrorMessage(response, t("hud.conversionFailed"), locale));
+      return;
+    }
+
+    const refreshedState = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+    if (refreshedState) setGameState(refreshedState);
+    setCombatMessage(t("hud.conversionDone"));
   };
 
   const handleRecruitHero = async (templateId: string) => {
@@ -965,6 +989,22 @@ export function HUDContent() {
     : Faction.CASTLE;
   const selectedTownBuildingRules = getFactionBuildingRules(selectedTownFaction);
   const selectedTownRecruitEntries = getRecruitableUnitsForFaction(selectedTownFaction);
+  // A captured town keeps its original architecture (townType) while its owner
+  // (faction) is the player. Offer faction conversion when those differ — but
+  // not while the town still holds the once-per-map Grail structure (the server
+  // refuses to demolish it).
+  const selectedTownHoldsGrail = Boolean(
+    selectedTown &&
+    selectedTownBuildingRules.some((rule) => rule.grail && selectedTown.buildings.includes(rule.type))
+  );
+  const canConvertSelectedTown = Boolean(
+    selectedTown &&
+    myPlayer &&
+    isMyTown &&
+    !selectedTown.isNeutral &&
+    !selectedTownHoldsGrail &&
+    selectedTownFaction !== (myPlayer.faction as Faction)
+  );
   const hasPlayerCapitol = Boolean(
     myPlayer?.towns.some((town) => town.buildings.includes(BuildingType.CAPITOL))
   );
@@ -1375,6 +1415,19 @@ export function HUDContent() {
         onCancel={() => setConfirmQuitOpen(false)}
       />
 
+      <ConfirmDialog
+        open={convertTownOpen}
+        eyebrow={t("town.convertEyebrow")}
+        title={t("town.convertTitle")}
+        description={t("town.convertDescription", { n: TOWN_CONVERSION_COST_GOLD })}
+        confirmLabel={t("town.convertConfirm")}
+        onConfirm={() => {
+          setConvertTownOpen(false);
+          void handleConvertTown();
+        }}
+        onCancel={() => setConvertTownOpen(false)}
+      />
+
       {showTutorial && (
         <HudTutorial
           heroId={myPlayer?.heroes[0]?.id}
@@ -1504,6 +1557,16 @@ export function HUDContent() {
                 buildableBuildings={buildableBuildings}
                 recruitableUnits={recruitableUnits}
                 heroesAtSelectedTown={heroesAtSelectedTown}
+                conversion={
+                  canConvertSelectedTown
+                    ? {
+                        cost: TOWN_CONVERSION_COST_GOLD,
+                        canAfford: (myPlayer?.resources.gold ?? 0) >= TOWN_CONVERSION_COST_GOLD,
+                        disabled: !canAct,
+                        onConvert: () => setConvertTownOpen(true),
+                      }
+                    : undefined
+                }
               />
             )}
 

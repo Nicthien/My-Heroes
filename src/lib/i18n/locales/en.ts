@@ -535,6 +535,9 @@ export const en: Record<TranslationKey, string> = {
   "hud.boatResourcesInsufficient": "Insufficient resources to build a boat.",
   "hud.boatBuildFailed": "Cannot build the boat.",
   "hud.boatBuilt": "Boat built.",
+  "hud.conversionGoldInsufficient": "Converting this town requires {n} gold.",
+  "hud.conversionFailed": "Cannot convert the town.",
+  "hud.conversionDone": "Town converted to your faction.",
   "hud.goldInsufficientHero": "Insufficient gold to hire a hero.",
   "hud.maxHeroes": "Maximum of {n} heroes reached.",
   "hud.heroRecruitFailed": "Cannot recruit hero.",
@@ -570,6 +573,12 @@ export const en: Record<TranslationKey, string> = {
   "town.garrisonCount": "garrison",
   "town.heroesAtTown": "Heroes at the town",
   "town.stacks": "{n} stack(s)",
+  "town.convert": "Convert town ({n} gold)",
+  "town.convertHint": "This town keeps its original faction's architecture. Convert it to your faction to build and recruit your own creatures here.",
+  "town.convertEyebrow": "Town",
+  "town.convertTitle": "Convert town",
+  "town.convertDescription": "Converting this town to your faction costs {n} gold. Already-built structures are kept and adapted, but buildings unique to the original faction are demolished. This action is permanent.",
+  "town.convertConfirm": "Convert",
 
   // --- HUD content: status + nav + end turn ---
   "hud.waiting": "Waiting",

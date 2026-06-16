@@ -937,6 +937,7 @@ export type GameAction =
   | { type: "TRANSFER_ARTIFACT"; fromHeroId: string; toHeroId: string; artifactId: string }
   | { type: "RECRUIT_HERO"; townId: string; templateId: string }
   | { type: "BUILD"; townId: string; building: BuildingType }
+  | { type: "CONVERT_TOWN_FACTION"; townId: string }
   | { type: "CLAIM_CREATURE_BANK_REWARD"; bankId: string; heroId: string; creatures?: Partial<Record<UnitType, number>> }
   | { type: "COLLECT_RESOURCE"; heroId: string; position: Position }
   | { type: "FIGHT_MONSTER"; heroId: string; position: Position }

@@ -3,7 +3,9 @@ import {
   UNIT_RULES,
   canAfford,
   getFactionBuildingRule,
+  getFactionBuildingRules,
   getGrowthForBuiltTownBuilding,
+  remapRecruitsToFaction,
   subtractCost,
 } from "@/lib/game/economy";
 import { getDailyAdventureMovement, normalizeMapMovement } from "@/lib/game/engine";
@@ -17,7 +19,13 @@ import {
   startingArmyForFaction,
   type TavernOffer,
 } from "@/lib/game/heroes";
-import { getTownCenterLevel, hasTownBuilding, isShipyardBuilding } from "@/lib/game/town-buildings";
+import {
+  TOWN_CONVERSION_COST_GOLD,
+  convertTownBuildingsToFaction,
+  getTownCenterLevel,
+  hasTownBuilding,
+  isShipyardBuilding,
+} from "@/lib/game/town-buildings";
 import { GRAIL_ARTIFACT_ID, normalizeArtifactBag } from "@/lib/game/artifacts";
 import { SPELLS } from "@/lib/game/spells";
 import { BuildingType, Faction, type GameMap, type HeroClass, type Resources, type UnitType } from "@/lib/game/types";
@@ -235,6 +243,63 @@ export async function handleTownAction({
     await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
 
     return NextResponse.json({ success: true });
+  }
+
+  if (action.type === "CONVERT_TOWN_FACTION") {
+    const town = gamePlayer.towns.find((item) => item.id === action.townId);
+    if (!town) return NextResponse.json({ error: "Château invalide" }, { status: 400 });
+    if (town.isNeutral) return NextResponse.json({ error: "Ce château est neutre" }, { status: 400 });
+
+    const playerFaction = (gamePlayer.faction ?? Faction.CASTLE) as Faction;
+    const currentFaction = (town.townType ?? playerFaction) as Faction;
+    if (currentFaction === playerFaction) {
+      return NextResponse.json({ error: "Ce château est déjà de votre faction" }, { status: 400 });
+    }
+
+    // The Grail structure is a once-per-map, faction-unique building. Converting
+    // would demolish it like any other unique, but the map stays flagged as
+    // "Grail built", so it could never be rebuilt — block the conversion instead
+    // of silently destroying it.
+    const buildings = (town.buildings ?? []) as BuildingType[];
+    const hasGrail = getFactionBuildingRules(currentFaction).some(
+      (rule) => rule.grail && buildings.includes(rule.type),
+    );
+    if (hasGrail) {
+      return NextResponse.json({ error: "Impossible de convertir un château abritant le Graal" }, { status: 400 });
+    }
+
+    const resources = helpers.playerResources(gamePlayer);
+    if (!canAfford(resources, { gold: TOWN_CONVERSION_COST_GOLD })) {
+      return NextResponse.json({ error: "Ressources insuffisantes" }, { status: 400 });
+    }
+
+    const nextBuildings = convertTownBuildingsToFaction(buildings, playerFaction);
+    const nextRecruits = remapRecruitsToFaction(
+      (town.availableRecruits ?? {}) as Partial<Record<UnitType, number>>,
+      playerFaction,
+    );
+
+    await supabase
+      .from("game_players")
+      .update(subtractCost(resources, { gold: TOWN_CONVERSION_COST_GOLD }))
+      .eq("id", gamePlayer.id);
+    const { error: convertErr } = await supabase
+      .from("towns")
+      .update({
+        town_type: playerFaction,
+        buildings: nextBuildings,
+        level: getTownCenterLevel(nextBuildings),
+        available_recruits: nextRecruits,
+      })
+      .eq("id", town.id);
+    if (convertErr) {
+      console.error("towns.update (convert) failed:", convertErr, { townId: town.id });
+      return NextResponse.json({ error: `Erreur conversion: ${convertErr.message}` }, { status: 500 });
+    }
+
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+
+    return NextResponse.json({ success: true, interaction: { type: "CONVERT_TOWN_FACTION" } });
   }
 
   if (action.type === "RECRUIT_HERO") {

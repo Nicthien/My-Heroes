@@ -534,6 +534,9 @@ export const fr = {
   "hud.boatResourcesInsufficient": "Ressources insuffisantes pour construire un bateau.",
   "hud.boatBuildFailed": "Construction du bateau impossible.",
   "hud.boatBuilt": "Bateau construit.",
+  "hud.conversionGoldInsufficient": "Il faut {n} or pour convertir ce château.",
+  "hud.conversionFailed": "Conversion du château impossible.",
+  "hud.conversionDone": "Château converti à votre faction.",
   "hud.goldInsufficientHero": "Or insuffisant pour engager un héros.",
   "hud.maxHeroes": "Maximum {n} héros atteint.",
   "hud.heroRecruitFailed": "Recrutement de héros impossible.",
@@ -569,6 +572,12 @@ export const fr = {
   "town.garrisonCount": "garnison",
   "town.heroesAtTown": "Héros au château",
   "town.stacks": "{n} pile(s)",
+  "town.convert": "Convertir le château ({n} Po)",
+  "town.convertHint": "Ce château conserve l'architecture de sa faction d'origine. Convertissez-le à votre faction pour y construire et recruter vos créatures.",
+  "town.convertEyebrow": "Château",
+  "town.convertTitle": "Convertir le château",
+  "town.convertDescription": "Convertir ce château à votre faction coûte {n} or. Les bâtiments déjà construits sont conservés et adaptés, mais les bâtiments propres à la faction d'origine sont démolis. Cette action est définitive.",
+  "town.convertConfirm": "Convertir",
 
   // --- HUD content: status + nav + end turn ---
   "hud.waiting": "En attente",

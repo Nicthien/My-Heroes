@@ -155,3 +155,4 @@ between badge and fight.
 | Stop compressing earlier / let more guards keep full strength | `GUARD_BUDGET_ANCHOR` ↑ |
 | Early wood/ore mines too trivial | raise the floor: bump `STARTING_MINE_SPECS` budgets (`engine/placement.ts`) or `GUARD_BUDGET_ANCHOR` |
 | Faster/slower weekly hardening or a different ceiling | `NEUTRAL_WEEKLY_GROWTH` / `NEUTRAL_GROWTH_CAP` |
+| Gates specifically too hard/easy (independent of other guards) | `GATE_GUARD_STRENGTH` in `engine/placement.ts` (applyChokepointGuards); 0.5 = gates top out at upper-Medium |

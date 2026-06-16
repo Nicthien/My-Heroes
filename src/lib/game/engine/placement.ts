@@ -1119,13 +1119,19 @@ export function placeZoneGuardians(
 }
 
 /** Calcule et applique les gardiens aux chokepoints. */
+// Gate-specific easing: gates were reading "Hard" against a developing hero, but they
+// should top out at "upper-Medium". Halving the gate budget translates (after the budget
+// compression in neutral-armies.ts) to roughly -24% combat power — about one difficulty
+// notch down — without touching mines/zone guards/pockets.
+const GATE_GUARD_STRENGTH = 0.5;
+
 export function applyChokepointGuards(
   ctx: PlacementContext,
   chokepoints: Chokepoint[],
 ): void {
   for (const cp of chokepoints) {
     const targetZone = ctx.zoneGrid.meta[cp.toZoneId];
-    const threat = Math.floor(targetZone.value * GUARD_MULTIPLIER[cp.guardStrength]);
+    const threat = Math.floor(targetZone.value * GUARD_MULTIPLIER[cp.guardStrength] * GATE_GUARD_STRENGTH);
     const tile = ctx.tiles[cp.y][cp.x];
     if (tile.object?.type === "gate") {
       tile.object.guardianPower = threat;

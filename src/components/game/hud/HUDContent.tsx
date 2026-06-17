@@ -10,6 +10,7 @@ import { useTurnNotifications } from "./useTurnNotifications";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { useTurnTimer, formatTurnRemaining } from "./useTurnTimer";
 import { HeroPanel } from "./HeroPanel";
+import { HeroMeetDialog } from "./HeroMeetDialog";
 import { GameOverScreen } from "./GameOverScreen";
 import { GameRulesPopup } from "./GameRulesPopup";
 import { HudTutorial } from "./HudTutorial";
@@ -143,6 +144,7 @@ export function HUDContent() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const grailPuzzleOpen = useGameStore((state) => state.grailPuzzleOpen);
   const setGrailPuzzleOpen = useGameStore((state) => state.setGrailPuzzleOpen);
+  const pendingHeroMeet = useGameStore((state) => state.pendingHeroMeet);
   // Shared with the map renderer so the night overlay greys the screen on click,
   // before the end-turn roundtrip resolves. See gameStore.endingTurn.
   const turnSubmitting = useGameStore((state) => state.endingTurn);
@@ -1514,6 +1516,24 @@ export function HUDContent() {
 
       {/* Hero panel */}
       {selectedHero && <HeroPanel hero={selectedHero} townAtHero={townAtSelectedHero} readOnly={adminObserverMode} storagePlayerId={hudStoragePlayerId} ownerFaction={selectedHeroOwner?.faction} />}
+
+      {/* Hero meet dialog */}
+      {(() => {
+        const meet = pendingHeroMeet;
+        if (!meet || !myPlayer) return null;
+        const left = myPlayer.heroes.find((h) => h.id === meet.leftHeroId);
+        const right = myPlayer.heroes.find((h) => h.id === meet.rightHeroId);
+        if (!left || !right) return null;
+        return (
+          <HeroMeetDialog
+            leftHero={left}
+            rightHero={right}
+            ownerFaction={myPlayer.faction}
+            onClose={() => useGameStore.getState().setPendingHeroMeet(null)}
+          />
+        );
+      })()}
+
 
       {/* Town panel */}
       {selectedTown && (

@@ -156,6 +156,35 @@ export async function handleGarrisonAction({
     return NextResponse.json({ success: true });
   }
 
+  if (action.type === "TRANSFER_HERO_TO_HERO") {
+    const unitType = action.unitType as UnitType;
+    const count = Math.max(1, Math.floor(Number(action.count ?? 1)));
+    const rule = UNIT_RULES[unitType];
+    const fromHero = findHero(gamePlayer, action.fromHeroId);
+    const toHero = findHero(gamePlayer, action.toHeroId);
+    if (!rule || !fromHero || !toHero || fromHero.id === toHero.id) {
+      return NextResponse.json({ error: "Transfert invalide" }, { status: 400 });
+    }
+    if (!helpers.areAdjacentOrSame({ x: fromHero.x, y: fromHero.y }, { x: toHero.x, y: toHero.y })) {
+      return NextResponse.json({ error: "Les héros doivent être adjacents pour échanger des troupes" }, { status: 400 });
+    }
+
+    const source = fromHero.armies.find((army) => army.unitType === unitType);
+    if (!source || source.count < count) {
+      return NextResponse.json({ error: "Armée insuffisante" }, { status: 400 });
+    }
+    const capacity = addUnitsToStacks(sortedStacks(toHero.armies), unitType, count, rule.health, () => randomUUID());
+    if (capacity.remainder > 0) {
+      return NextResponse.json({ error: "Pas assez de place dans l'armée de destination" }, { status: 400 });
+    }
+
+    await helpers.removeUnitsFromHeroArmy(supabase, source, count, rule.health);
+    await helpers.addUnitsToHeroArmy(supabase, toHero, unitType, count, rule.health);
+    await helpers.logPlayerAction(supabase, game, gameId, gamePlayer, action);
+
+    return NextResponse.json({ success: true });
+  }
+
   if (action.type === "CASTLE_GATE_TRANSFER") {
     const fromTown = findTown(gamePlayer, action.fromTownId);
     const toTown = findTown(gamePlayer, action.toTownId);

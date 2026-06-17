@@ -5,6 +5,28 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.3.0] - 2026-06-17
+
+Rencontre entre vos héros pour échanger unités et artefacts, et plusieurs précisions dans le guide de combat.
+
+### Ajouté
+
+- **Rencontre de héros** — cliquer sur un autre de vos héros alors qu'un héros est
+  déjà sélectionné ouvre une fenêtre dédiée lorsque les deux sont adjacents : vous
+  pouvez y répartir les piles d'unités entre les deux armées et échanger les
+  artefacts équipés ou en inventaire. Si le héros visé est trop éloigné, un trajet
+  de rapprochement est proposé et la fenêtre s'ouvre automatiquement à l'arrivée.
+
+### Modifié
+
+- **Guide de combat enrichi** — la page « Le combat » du guide précise le calcul
+  des dégâts (bonus/malus par point d'écart attaque/défense, bonus de défense),
+  les pénalités des tireurs (corps-à-corps, longue portée, obstacles), les
+  capacités spéciales de riposte (Pas de riposte, Ripostes multiples, Double
+  attaque) et liste les autres options en combat (tactique, sort, fuite,
+  reddition). La taille de la grille indiquée est corrigée à 13 × 10 (jusqu'à 20
+  pour les très grandes batailles).
+
 ## [1.2.9] - 2026-06-16
 
 Raccourcis clavier configurables, menu d'options en onglets, et plusieurs ajouts et rééquilibrages de jeu.

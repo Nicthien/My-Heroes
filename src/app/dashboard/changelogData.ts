@@ -22,6 +22,25 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.0",
+    date: "2026-06-17",
+    summary: "Rencontre entre vos héros pour échanger unités et artefacts, et plusieurs précisions dans le guide de combat.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Rencontre de héros** — cliquer sur un autre de vos héros alors qu'un héros est déjà sélectionné ouvre une fenêtre dédiée lorsque les deux sont adjacents : vous pouvez y répartir les piles d'unités entre les deux armées et échanger les artefacts équipés ou en inventaire. Si le héros visé est trop éloigné, un trajet de rapprochement est proposé et la fenêtre s'ouvre automatiquement à l'arrivée.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Guide de combat enrichi** — la page « Le combat » du guide précise le calcul des dégâts (bonus/malus par point d'écart attaque/défense, bonus de défense), les pénalités des tireurs (corps-à-corps, longue portée, obstacles), les capacités spéciales de riposte (Pas de riposte, Ripostes multiples, Double attaque) et liste les autres options en combat (tactique, sort, fuite, reddition). La taille de la grille indiquée est corrigée à 13 × 10 (jusqu'à 20 pour les très grandes batailles).",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.9",
     date: "2026-06-16",
     summary: "Raccourcis clavier configurables, menu d'options en onglets, et plusieurs ajouts et rééquilibrages de jeu.",

@@ -24,6 +24,7 @@ interface GameStore {
     path?: Array<{ x: number; y: number }>;
   } | null;
   pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
+  pendingHeroMeet: { leftHeroId: string; rightHeroId: string } | null;
   pendingAdventureSpell: { heroId: string; spellId: SpellId; label: string } | null;
   spellRevealHighlight: { turnNumber: number; tiles: Position[]; label: string; hints?: SpellRevealHint[] } | null;
   // Rival score breakdowns revealed by the Visions spell. Valid for the turn they
@@ -65,6 +66,7 @@ interface GameStore {
   setGrailPuzzleOpen: (open: boolean) => void;
   setPendingCombat: (combat: GameStore["pendingCombat"]) => void;
   setPendingJoinCombat: (combat: GameStore["pendingJoinCombat"]) => void;
+  setPendingHeroMeet: (meet: GameStore["pendingHeroMeet"]) => void;
   setPendingAdventureSpell: (spell: GameStore["pendingAdventureSpell"]) => void;
   setSpellRevealHighlight: (highlight: GameStore["spellRevealHighlight"]) => void;
   revealRivalScores: (turnNumber: number, scores: Record<string, ScoreBreakdown>) => void;
@@ -101,6 +103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   grailPuzzleOpen: false,
   pendingCombat: null,
   pendingJoinCombat: null,
+  pendingHeroMeet: null,
   pendingAdventureSpell: null,
   spellRevealHighlight: null,
   revealedScores: null,
@@ -160,6 +163,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setGrailPuzzleOpen: (open) => set({ grailPuzzleOpen: open }),
   setPendingCombat: (combat) => set({ pendingCombat: combat }),
   setPendingJoinCombat: (combat) => set({ pendingJoinCombat: combat }),
+  setPendingHeroMeet: (meet) => set({ pendingHeroMeet: meet }),
   setPendingAdventureSpell: (spell) => set({ pendingAdventureSpell: spell }),
   setSpellRevealHighlight: (highlight) => set({ spellRevealHighlight: highlight }),
   revealRivalScores: (turnNumber, scores) =>
@@ -252,6 +256,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       grailPuzzleOpen: false,
       pendingCombat: null,
       pendingJoinCombat: null,
+      pendingHeroMeet: null,
       pendingAdventureSpell: null,
       spellRevealHighlight: null,
       revealedScores: null,

@@ -175,6 +175,7 @@ export default function GameMapComponent() {
   const setCombatMessage = useGameStore((state) => state.setCombatMessage);
   const setPendingCombat = useGameStore((state) => state.setPendingCombat);
   const setPendingJoinCombat = useGameStore((state) => state.setPendingJoinCombat);
+  const setPendingHeroMeet = useGameStore((state) => state.setPendingHeroMeet);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
   const activeCombat = useGameStore((state) => state.activeCombat);
   const cameraTarget = useGameStore((state) => state.cameraTarget);
@@ -2166,6 +2167,112 @@ export default function GameMapComponent() {
           if (garrisonCount > 0) setCombatMessage(tRef.current("map.gateGuarded", { count: garrisonCount }));
         }
       } else if (obj.type === "hero" && myPlayer && obj.playerId === myPlayer.id) {
+        const sourceHero = selectedHeroId
+          ? myPlayer.heroes.find((item) => item.id === selectedHeroId)
+          : undefined;
+        const targetHero = myPlayer.heroes.find((item) => item.id === obj.id);
+        if (sourceHero && targetHero && sourceHero.id !== targetHero.id) {
+          const distance = Math.max(
+            Math.abs(sourceHero.position.x - targetHero.position.x),
+            Math.abs(sourceHero.position.y - targetHero.position.y)
+          );
+          if (distance <= 1) {
+            pendingMoveRef.current = null;
+            pendingAttackRef.current = null;
+            rendererRef.current?.clearHighlights();
+            setPendingHeroMeet({ leftHeroId: sourceHero.id, rightHeroId: targetHero.id });
+            return;
+          }
+
+          if (blockIfHeroInCombat(sourceHero.id)) return;
+          const destination = { x: obj.x, y: obj.y };
+          const approach = getCombatApproach(mapForAction, sourceHero.position, destination, sourceHero.movement);
+          if (!approach) {
+            if (handleOutOfRange(sourceHero, destination) === "inaccessible") {
+              rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+              setTimeout(() => rendererRef.current?.clearHighlights(), 500);
+            }
+            return;
+          }
+          const path = approach.path;
+          const approachDestination = approach.destination;
+          const pendingMove = pendingMoveRef.current;
+          const isConfirmingMove =
+            pendingMove?.heroId === sourceHero.id &&
+            pendingMove.destination.x === approachDestination.x &&
+            pendingMove.destination.y === approachDestination.y;
+          if (!isConfirmingMove) {
+            pendingAttackRef.current = null;
+            pendingMoveRef.current = {
+              heroId: sourceHero.id,
+              destination: approachDestination,
+              path,
+              finalDestination: destination,
+            };
+            rendererRef.current.highlightPath(path);
+            rendererRef.current.highlightTile(destination.x, destination.y, 0x60a5fa);
+            setCombatMessage(tRef.current("heroMeet.tooFar"));
+            return;
+          }
+          if (!canAct) {
+            setCombatMessage(blockedTurnMessage);
+            pendingMoveRef.current = null;
+            rendererRef.current.clearHighlights();
+            return;
+          }
+          rendererRef.current.highlightPath(path);
+          isSyncingMoveRef.current = true;
+          useGameStore.getState().setMovePending(true);
+          fetchWithSupabaseAuth(`/api/games/${gameState.id}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "MOVE_HERO",
+              heroId: sourceHero.id,
+              path: path.map((p: Position) => ({ x: p.x, y: p.y })),
+            }),
+          })
+            .then(async (res) => {
+              if (!res.ok) {
+                isSyncingMoveRef.current = false;
+                useGameStore.getState().setMovePending(false);
+                setCombatMessage(await getApiErrorMessage(res, localeRef.current));
+                return null;
+              }
+              return res.json();
+            })
+            .then(async (data) => {
+              if (!data) return;
+              const acceptedPath = getAcceptedMovePath(data, path);
+              await animateHeroMovement(rendererRef.current, sourceHero.id, acceptedPath);
+              const refreshed = await refreshGameState(gameState.id, session?.user?.id, { revealMap: devRevealMap });
+              if (refreshed) {
+                useGameStore.getState().setGameState(refreshed);
+                const moved = refreshed.players
+                  .find((p) => p.userId === session?.user?.id)?.heroes
+                  .find((h) => h.id === sourceHero.id);
+                const other = refreshed.players
+                  .find((p) => p.userId === session?.user?.id)?.heroes
+                  .find((h) => h.id === targetHero.id);
+                if (moved && other) {
+                  const finalDist = Math.max(
+                    Math.abs(moved.position.x - other.position.x),
+                    Math.abs(moved.position.y - other.position.y)
+                  );
+                  if (finalDist <= 1) {
+                    pendingMoveRef.current = null;
+                    rendererRef.current?.clearHighlights();
+                    setPendingHeroMeet({ leftHeroId: moved.id, rightHeroId: other.id });
+                  }
+                }
+              }
+            })
+            .finally(() => {
+              isSyncingMoveRef.current = false;
+              useGameStore.getState().setMovePending(false);
+            });
+          return;
+        }
         pendingMoveRef.current = null;
         pendingAttackRef.current = null;
         rendererRef.current?.clearHighlights();
@@ -2526,7 +2633,7 @@ export default function GameMapComponent() {
         }
       }
     }
-  }, [activeMap, activeMapLevel, adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
+  }, [activeMap, activeMapLevel, adminObserverMode, gameState, selectedHeroId, selectedTownId, selectHero, selectTown, setCombatMessage, setPendingCombat, setPendingJoinCombat, setPendingHeroMeet, setPendingAdventureSpell, setSpellRevealHighlight, setActiveCombat, handleMoveInteraction, collectArtifact, session?.user?.id, devRevealMap, devTeleportArmed, devInfiniteMana, pendingAdventureSpell, activeCombatHeroIds]);
 
   return (
     <div

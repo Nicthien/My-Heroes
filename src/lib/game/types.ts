@@ -935,6 +935,7 @@ export type GameAction =
   | { type: "TRANSFER_HERO_TO_GARRISON"; townId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_GATE_GARRISON_TO_HERO"; gateId: string; heroId: string; unitType: UnitType; count: number }
   | { type: "TRANSFER_HERO_TO_GATE_GARRISON"; gateId: string; heroId: string; unitType: UnitType; count: number }
+  | { type: "TRANSFER_HERO_TO_HERO"; fromHeroId: string; toHeroId: string; unitType: UnitType; count: number }
   | { type: "EQUIP_ARTIFACT"; heroId: string; artifactId: string; slot?: HeroArtifactSlot }
   | { type: "UNEQUIP_ARTIFACT"; heroId: string; slot: HeroArtifactSlot }
   | { type: "TRANSFER_ARTIFACT"; fromHeroId: string; toHeroId: string; artifactId: string }

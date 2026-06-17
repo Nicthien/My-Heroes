@@ -61,6 +61,13 @@ export function AdvancedCombatView() {
           <li>Les <strong>tireurs</strong> qui tirent à distance ne subissent <strong>pas</strong> de riposte.</li>
           <li>Attaquer une pile qui a <strong>déjà riposté</strong> ce round-ci est sans danger.</li>
         </ul>
+        <p className="text-sm text-amber-200/75">
+          Certaines créatures changent la règle, selon leurs capacités : <strong>Pas de riposte</strong>{" "}
+          (leur attaque ne déclenche aucune contre-attaque), <strong>Ripostes multiples</strong> (elles
+          ripostent plusieurs fois par round) ou <strong>Double attaque</strong> (elles frappent deux fois
+          d’affilée). Le sort <em>Aveuglement</em> empêche aussi de riposter, et <em>Contre-attaque</em>{" "}
+          ajoute des ripostes.
+        </p>
         <Callout kind="do" title="Provoquez la riposte avec vos unités sacrifiables">
           Faites « griller » la riposte d’un gros monstre avec une pile bon marché, puis frappez avec
           votre élite sans craindre le retour.

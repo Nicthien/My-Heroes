@@ -169,8 +169,8 @@ export const MOVEMENT_BY_SPEED: Array<{ speed: string; pm: number }> = [
 export const COMBAT_ACTIONS: Array<{ name: string; icon: string; desc: string }> = [
   { name: "Déplacer", icon: "🦶", desc: "Avancer sur la grille hexagonale, dans la limite de la vitesse de l’unité." },
   { name: "Attaquer (corps-à-corps)", icon: "⚔️", desc: "Frapper une unité adjacente. La cible riposte une fois si elle survit." },
-  { name: "Tirer (à distance)", icon: "🏹", desc: "Frapper à distance sans riposte. Munitions limitées ; tir réduit au corps-à-corps." },
-  { name: "Défendre", icon: "🛡️", desc: "Passer son tour en réduisant les dégâts reçus. Utile pour temporiser." },
+  { name: "Tirer (à distance)", icon: "🏹", desc: "Frapper à distance sans subir de riposte. Munitions limitées ; dégâts ÷2 au corps-à-corps, à longue portée (plus de 10 cases) ou à travers un obstacle (les pénalités se cumulent)." },
+  { name: "Défendre", icon: "🛡️", desc: "Se met en garde : +20 % de défense jusqu’au prochain tour. Idéal pour encaisser ou temporiser." },
   { name: "Attendre", icon: "⏳", desc: "Repousser son action plus tard dans le round, pour réagir à l’ennemi." },
 ];
 

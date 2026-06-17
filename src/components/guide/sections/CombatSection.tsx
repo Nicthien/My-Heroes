@@ -8,15 +8,16 @@ export function CombatSection() {
     <GuideSection id="combat" title="Le combat" icon="🎯">
       <Lead>
         Quand deux armées se rencontrent, le combat se joue sur une <strong>grille hexagonale</strong>{" "}
-        (13 × 9 cases). Vos piles à gauche, l’ennemi à droite. Les unités agissent par ordre de{" "}
+        (13 colonnes × 10 rangées, étendue jusqu’à 20 pour les très grandes batailles). Vos piles à
+        gauche, l’ennemi à droite. Les unités agissent par ordre de{" "}
         <strong>vitesse décroissante</strong>, du plus rapide au plus lent, à chaque round.
       </Lead>
 
       <SubBlock title="Résolution rapide ou combat manuel">
         <p>
-          Vous pouvez laisser le jeu <strong>résoudre automatiquement</strong> un combat (comparaison
-          de puissance, rapide) ou prendre les commandes en <strong>combat manuel</strong> pour gagner
-          des affrontements serrés grâce au placement et au choix des cibles.
+          Vous pouvez laisser le jeu <strong>résoudre automatiquement</strong> un combat (il le simule
+          round par round, en quelques instants) ou prendre les commandes en <strong>combat manuel</strong>{" "}
+          pour gagner des affrontements serrés grâce au placement et au choix des cibles.
         </p>
       </SubBlock>
 
@@ -35,10 +36,23 @@ export function CombatSection() {
       <SubBlock title="Comment sont calculés les dégâts ?">
         <p>
           Les dégâts dépendent du <strong>nombre d’unités</strong> dans la pile, de leurs dégâts par
-          coup, et de l’écart <strong>attaque (attaquant) − défense (défenseur)</strong> : plus votre
-          attaque dépasse la défense ennemie, plus vous frappez fort (et inversement). Les bonus
-          d’attaque/défense de votre héros s’appliquent à toutes ses piles.
+          coup, et de l’écart <strong>attaque (attaquant) − défense (défenseur)</strong>. Concrètement :
         </p>
+        <ul className="ml-5 list-disc space-y-1 text-amber-100/90">
+          <li>Chaque point d’<strong>attaque au-dessus</strong> de la défense ennemie ajoute <strong>+5 %</strong> de dégâts (jusqu’à <strong>×4</strong>).</li>
+          <li>Chaque point de <strong>défense au-dessus</strong> de votre attaque retire <strong>−2,5 %</strong> (jusqu’à <strong>×0,3</strong>).</li>
+          <li>Les bonus d’<strong>attaque/défense du héros</strong> s’appliquent à toutes ses piles.</li>
+          <li>Se <strong>défendre</strong> augmente la défense de <strong>+20 %</strong> pour le tour.</li>
+        </ul>
+      </SubBlock>
+
+      <SubBlock title="Autres options en combat">
+        <ul className="ml-5 list-disc space-y-1 text-amber-100/90">
+          <li><strong>Tactique</strong> — repositionnez vos piles avant le premier round (avec la compétence Tactique).</li>
+          <li><strong>Lancer un sort</strong> — depuis le livre de sorts du héros, contre du mana (voir la page Sorts).</li>
+          <li><strong>Fuir</strong> — le héros quitte le combat, mais l’armée laissée derrière est perdue.</li>
+          <li><strong>Se rendre</strong> — négociez la fin du combat en payant de l’or pour conserver votre armée.</li>
+        </ul>
       </SubBlock>
 
       <Callout kind="tip" title="Tireurs : protégez-les, ciblez-les">

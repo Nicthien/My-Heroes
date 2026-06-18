@@ -22,6 +22,32 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.1",
+    date: "2026-06-18",
+    summary: "Retours plus clairs après une défaite de héros et correction d'un sprite bateau fantôme, plus une console admin pour lire et répondre aux rapports de bug envoyés par e-mail.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Console admin de rapports de bug** — un nouveau panneau dans le tableau de bord administrateur lit les e-mails marqués `[My-Heroes][BUG-REPORT]` via IMAP (activable par `USE_IMAP` et les `IMAP_*`), regroupe les conversations par expéditeur et permet de répondre directement depuis le studio. Pas activé par défaut.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Mort d'un héros mieux signalée** — quand votre héros tombe au combat, l'écran de résultat affiche désormais un message explicite qui rappelle que vous pouvez en recruter un nouveau à la taverne, la caméra recentre automatiquement sur votre château principal et celui-ci est sélectionné à la fermeture de la fenêtre.",
+          "**Bateau fantôme après rachat à la taverne** — un héros qui battait en retraite d'un combat naval se transformait en sprite bateau au-dessus de son château une fois racheté à la taverne. Le lien avec le bateau est désormais coupé dès la retraite (le bateau reste flotter à l'endroit où le héros a sauté à l'eau), avec un filet de sécurité au moment du rachat pour les parties en cours.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Mouvement de héros plus fluide** — sur un déplacement de plusieurs cases, le tween est désormais construit en un seul segment continu au lieu d'une succession de tweens case-par-case ; la décélération à chaque tuile (et les micro-à-coups visuels et sonores qu'elle produisait) disparaissent.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-06-17",
     summary: "Rencontre entre vos héros pour échanger unités et artefacts, et plusieurs précisions dans le guide de combat.",

@@ -24,6 +24,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/combat",       expect: { selector: "body",   description: "Combat preview body" } },
   { path: "/dev/combat-modals", expect: { selector: "body",  description: "Combat modals preview body" } },
   { path: "/dev/admin-observer", expect: { selector: "[data-testid='admin-observer-panel']", description: "Admin observer panel" } },
+  { path: "/dev/admin-bug-reports", expect: { selector: "[data-testid='admin-bug-reports']", description: "Admin bug reports panel" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
   { path: "/dev/map-showcase?size=S", expect: { selector: "body", description: "Generated Phaser map showcase body" } },
@@ -650,6 +651,11 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await page.getByRole("button", { name: "Résultat du combat" }).click();
     await expect(page.getByText("Butin de bataille")).toBeVisible();
     await expect(page.locator('img[src*="/assets/sprites/resources/gold.webp"]').first()).toBeVisible();
+
+    // Toggle to the hero-death variant: title + recovery hint must both show.
+    await page.getByRole("button", { name: "Défaite du héros" }).click();
+    await expect(page.getByText("Votre héros a péri au combat")).toBeVisible();
+    await expect(page.getByText("Votre héros est mort", { exact: false })).toBeVisible();
   });
 
   test("AI dev page proves gate and boat navigation decisions", async ({ page }) => {

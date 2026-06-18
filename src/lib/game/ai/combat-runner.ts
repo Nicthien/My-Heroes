@@ -295,6 +295,7 @@ export function buildManualCombatResult(
     defenderLosses: getSideLosses("defender", before, after),
     experienceGained: winnerSide === "attacker" ? 500 : 0,
     log: [`Victoire du camp ${winnerSide === "attacker" ? "attaquant" : "defenseur"}.`],
+    attackerDied: winnerSide === "defender",
   };
 }
 

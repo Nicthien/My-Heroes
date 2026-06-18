@@ -333,6 +333,11 @@ export async function handleTownAction({
       );
 
       await supabase.from("game_players").update({ gold: resources.gold - HERO_RECRUIT_COST_GOLD }).eq("id", gamePlayer.id);
+      // Defensive cleanup for legacy saves: detach any boat still bound to this hero
+      // (sea-retreat paths now do this at concession time, but games started before
+      // that fix could land here with a dangling boat.hero_id). Without it the
+      // rehired hero re-spawns at the town as a boat sprite.
+      await supabase.from("boats").update({ hero_id: null }).eq("hero_id", returningHeroId);
       await supabase.from("heroes").update({
         status: "ACTIVE",
         x: town.x,

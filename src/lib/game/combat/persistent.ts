@@ -762,6 +762,9 @@ export function resolveAutomaticCombat(
     experienceGained: 500,
     log: [`Puissance attaquant ${result.attackerPower}`, `Puissance défenseur ${result.defenderPower}`],
     survivorOverrides,
+    // Decisive defeats remove the attacker hero downstream; the UI uses this flag to
+    // surface a clear "your hero died" message and pin focus to the player's town.
+    attackerDied: !attackerWins,
   };
 }
 

@@ -27,6 +27,8 @@ export default function CombatResultModal() {
   const setCombatResult = useGameStore((state) => state.setCombatResult);
   const setActiveCombat = useGameStore((state) => state.setActiveCombat);
   const setGameState = useGameStore((state) => state.setGameState);
+  const selectTown = useGameStore((state) => state.selectTown);
+  const focusTile = useGameStore((state) => state.focusTile);
 
   // Play a victory/defeat stinger once per resolved combat. Kept above the early
   // return so the hook order stays stable; outcome is recomputed here from the
@@ -75,6 +77,11 @@ export default function CombatResultModal() {
           {t("gameover.winner")} <span className="font-bold text-green-300">{winnerName}</span>
           {iWon && result.experienceGained > 0 && <span> | XP +{result.experienceGained}</span>}
         </div>
+        {heroDied && (
+          <div className="mt-3 rounded border border-red-800/70 bg-red-950/30 p-3 text-sm text-red-100">
+            {t("combat.heroDiedHint")}
+          </div>
+        )}
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Losses title={t("combat.attackerLosses")} losses={aggregateLosses(result.attackerLosses)} t={t} locale={locale} />
           <Losses title={t("combat.defenderLosses")} losses={aggregateLosses(result.defenderLosses)} t={t} locale={locale} />
@@ -104,6 +111,17 @@ export default function CombatResultModal() {
           className={`mt-6 rounded px-5 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-stone-700 ${buttonColor}`}
           disabled={Boolean(bankReward)}
           onClick={() => {
+            // The dead hero is already gone from the map; pin the HUD to the player's
+            // main town (and pan the camera there) so they land on something useful —
+            // a tavern is available there to recruit a replacement. When `isAlive`
+            // flips to false the GameOverScreen takes over, so we skip the focus.
+            if (heroDied && myPlayer?.isAlive) {
+              const fallbackTown = myPlayer.towns[0];
+              if (fallbackTown) {
+                selectTown(fallbackTown.id);
+                focusTile(fallbackTown.position.x, fallbackTown.position.y);
+              }
+            }
             setActiveCombat(null);
             setCombatResult(null);
           }}

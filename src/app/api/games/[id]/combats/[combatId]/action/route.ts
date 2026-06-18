@@ -1407,6 +1407,7 @@ function buildManualCombatResult(
     defenderLosses: getSideLosses("defender", before, after),
     experienceGained: winnerSide === "attacker" ? 500 : 0,
     log: [`Victoire du camp ${winnerSide === "attacker" ? "attaquant" : "défenseur"}.`],
+    attackerDied: winnerSide === "defender",
   };
 }
 
@@ -1578,6 +1579,24 @@ async function persistConcededCombat(
     .find((unit) => unit.unitType === "king" && unit.count > 0);
   if (fleeingKing && concedingPlayerId) {
     await stashKingInGarrison(supabase, combat.game_id, concedingPlayerId, fleeingKing);
+  }
+  // Sea combats end with the boat still bound to the retreating hero. Cut that link
+  // before stashing the hero in the tavern, otherwise the renderer keeps treating
+  // a freshly rehired hero as embarked (boat sprite over the castle, see
+  // gameMapObjects' embarkedHeroIds set). Reposition the abandoned boat to the spot
+  // where the hero jumped ship so it stays a usable, well-placed object.
+  const { data: fleeingHeroRow } = await supabase
+    .from("heroes")
+    .select("x, y, map_level")
+    .eq("id", options.concedingHeroId)
+    .maybeSingle();
+  if (fleeingHeroRow && typeof fleeingHeroRow.x === "number" && typeof fleeingHeroRow.y === "number" && fleeingHeroRow.x >= 0 && fleeingHeroRow.y >= 0) {
+    await supabase
+      .from("boats")
+      .update({ hero_id: null, x: fleeingHeroRow.x, y: fleeingHeroRow.y, map_level: fleeingHeroRow.map_level ?? "surface" })
+      .eq("hero_id", options.concedingHeroId);
+  } else {
+    await supabase.from("boats").update({ hero_id: null }).eq("hero_id", options.concedingHeroId);
   }
   await supabase
     .from("heroes")

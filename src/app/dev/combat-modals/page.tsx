@@ -45,8 +45,23 @@ function buildMockResult(): CombatSummary {
   };
 }
 
+function buildMockDefeatResult(): CombatSummary {
+  return {
+    winnerId: "defender",
+    winnerPlayerId: null,
+    attackerLosses: [
+      { unitType: UnitType.PIKEMAN, lost: 10 },
+      { unitType: UnitType.ARCHER, lost: 6 },
+    ],
+    defenderLosses: [{ unitType: UnitType.HALBERDIER, lost: 4 }],
+    experienceGained: 0,
+    log: ["Le héros tombe sous les coups.", "L'armée est anéantie."],
+    attackerDied: true,
+  };
+}
+
 export default function DevCombatModalsPage() {
-  const [view, setView] = useState<"choice" | "result">("choice");
+  const [view, setView] = useState<"choice" | "result" | "defeat">("choice");
 
   useEffect(() => {
     const store = useGameStore.getState();
@@ -61,6 +76,9 @@ export default function DevCombatModalsPage() {
         destination: { x: 7, y: 5 },
         targetPosition: MONSTER_POS,
       });
+    } else if (view === "defeat") {
+      store.setPendingCombat(null);
+      store.setCombatResult(buildMockDefeatResult());
     } else {
       store.setPendingCombat(null);
       store.setCombatResult(buildMockResult());
@@ -83,7 +101,7 @@ export default function DevCombatModalsPage() {
           }}
         />
         <div className="fixed left-3 top-3 z-[60] flex gap-2">
-          {(["choice", "result"] as const).map((id) => (
+          {(["choice", "result", "defeat"] as const).map((id) => (
             <button
               key={id}
               type="button"
@@ -92,7 +110,7 @@ export default function DevCombatModalsPage() {
                 view === id ? "border-amber-400 bg-amber-600 text-white" : "border-stone-600 bg-stone-900 text-stone-200 hover:border-amber-400"
               }`}
             >
-              {id === "choice" ? "Choix du combat" : "Résultat du combat"}
+              {id === "choice" ? "Choix du combat" : id === "result" ? "Résultat du combat" : "Défaite du héros"}
             </button>
           ))}
         </div>

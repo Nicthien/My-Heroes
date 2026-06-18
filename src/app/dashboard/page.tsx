@@ -46,7 +46,7 @@ import { JoinGameWizard } from "./JoinGameWizard";
 import { ChangelogModal } from "./ChangelogModal";
 import { SupportFooter, SupportPromptModal, useSupportPrompt } from "./SupportKofi";
 import { SocialLinks } from "./SocialLinks";
-import { StatsPanel } from "./StatsPanel";
+import { AdminHomeDashboard } from "./AdminHomeDashboard";
 import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
 import { RenderPerformanceWarning } from "./RenderPerformanceWarning";
@@ -80,46 +80,11 @@ interface GameInfo {
   players: PlayerInfo[];
 }
 
-interface AdminGamePlayerInfo extends PlayerInfo {
-  email?: string | null;
-  joinedAt?: string | null;
-  lastSignInAt?: string | null;
-  turnStatus?: string | null;
-}
-
-interface AdminCreatorInfo {
-  id: string;
-  userId?: string | null;
-  user?: { name: string | null; email?: string | null };
-  email?: string | null;
-  isAi?: boolean;
-  aiName?: string | null;
-}
-
 interface OpenGame {
   id: string;
   name: string;
   maxPlayers: number;
   players: PlayerInfo[];
-}
-
-interface AdminUserInfo {
-  id: string;
-  email: string | null;
-  name: string | null;
-  role: string;
-  mustChangePassword: boolean;
-  godModeEnabled: boolean;
-  createdAt: string | null;
-  lastSignInAt: string | null;
-  gameCount: number;
-}
-
-interface AdminGameInfo extends Omit<GameInfo, "players"> {
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  createdBy?: AdminCreatorInfo | null;
-  players: AdminGamePlayerInfo[];
 }
 
 
@@ -181,12 +146,6 @@ function formatGameAge(value: string | null | undefined, now: number, t: TFn) {
   return parts.slice(0, 3).join(", ") || t("age.lessThanMinute");
 }
 
-function adminPlayerName(player: AdminCreatorInfo | null | undefined, t: TFn) {
-  if (!player) return "-";
-  if (player.isAi) return player.aiName || t("common.ai");
-  return player.user?.name || player.email || player.user?.email || t("common.player");
-}
-
 function playerName(player: PlayerInfo | null | undefined, t: TFn) {
   if (!player) return "-";
   if (player.isAi) return player.aiName || t("common.ai");
@@ -217,8 +176,6 @@ export default function DashboardPage() {
   const [showJoin, setShowJoin] = useState(false);
   const [joinStep, setJoinStep] = useState<1 | 2>(1);
   const [showOptions, setShowOptions] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [showStats, setShowStats] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
@@ -235,17 +192,6 @@ export default function DashboardPage() {
   const [profilePasswordConfirm, setProfilePasswordConfirm] = useState("");
   const [profileMessage, setProfileMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [dashboardMessage, setDashboardMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const [adminUsers, setAdminUsers] = useState<AdminUserInfo[]>([]);
-  const [adminGames, setAdminGames] = useState<AdminGameInfo[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminMessage, setAdminMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const [creatingAdminUser, setCreatingAdminUser] = useState(false);
-  const [adminNewUserName, setAdminNewUserName] = useState("");
-  const [adminNewUserEmail, setAdminNewUserEmail] = useState("");
-  const [adminNewUserPassword, setAdminNewUserPassword] = useState("");
-  const [adminNewUserRole, setAdminNewUserRole] = useState<"user" | "admin">("user");
-  const [adminNewUserMustChangePassword, setAdminNewUserMustChangePassword] = useState(true);
-  const [adminNewUserGodModeEnabled, setAdminNewUserGodModeEnabled] = useState(false);
   const [forcedPassword, setForcedPassword] = useState("");
   const [forcedPasswordConfirm, setForcedPasswordConfirm] = useState("");
   const [savingForcedPassword, setSavingForcedPassword] = useState(false);
@@ -418,33 +364,6 @@ export default function DashboardPage() {
     setOpenGames(Array.isArray(data) ? data : []);
   }, [fetchWithAuth, parseJsonResponse]);
 
-  const loadAdminData = useCallback(async () => {
-    if (!isAdmin) return;
-    setAdminLoading(true);
-    setAdminMessage(null);
-    const [usersResponse, gamesResponse] = await Promise.all([
-      fetchWithAuth("/api/admin/users", { cache: "no-store" }),
-      fetchWithAuth("/api/admin/games", { cache: "no-store" }),
-    ]);
-
-    if (!usersResponse.ok || !gamesResponse.ok) {
-      const data = !usersResponse.ok
-        ? await parseJsonResponse(usersResponse)
-        : await parseJsonResponse(gamesResponse);
-      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.loadFailed") });
-      setAdminUsers([]);
-      setAdminGames([]);
-      setAdminLoading(false);
-      return;
-    }
-
-    const usersData = await parseJsonResponse(usersResponse);
-    const gamesData = await parseJsonResponse(gamesResponse);
-    setAdminUsers(Array.isArray(usersData) ? usersData : []);
-    setAdminGames(Array.isArray(gamesData) ? gamesData : []);
-    setAdminLoading(false);
-  }, [fetchWithAuth, isAdmin, parseJsonResponse, locale, t]);
-
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
   }, [status, router]);
@@ -467,16 +386,6 @@ export default function DashboardPage() {
   }, [loadOpenGames, showJoin]);
 
   useEffect(() => {
-    if (!showAdmin || !isAdmin) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAdminData().catch((error) => {
-      console.error(error);
-      setAdminMessage({ kind: "error", text: t("admin.loadFailed") });
-      setAdminLoading(false);
-    });
-  }, [isAdmin, loadAdminData, showAdmin, t]);
-
-  useEffect(() => {
     if (!isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentTime(Date.now());
@@ -491,8 +400,6 @@ export default function DashboardPage() {
     setProfilePasswordConfirm("");
     setProfileMessage(null);
     setShowOptions(true);
-    setShowAdmin(false);
-    setShowStats(false);
     setShowCreate(false);
     setShowJoin(false);
     setShowRmgPreview(false);
@@ -538,98 +445,6 @@ export default function DashboardPage() {
     setSavingForcedPassword(false);
     router.refresh();
     window.location.reload();
-  };
-
-  const deleteAdminUser = async (target: AdminUserInfo) => {
-    if (!confirm(`Supprimer l'utilisateur ${target.name || target.email || target.id} ?`)) return;
-    setAdminMessage(null);
-    const response = await fetchWithAuth(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
-    if (!response.ok) {
-      const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userDeleteFailed") });
-      return;
-    }
-    setAdminMessage({ kind: "success", text: t("admin.userDeleted") });
-    await loadAdminData();
-  };
-
-  const createAdminUser = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = adminNewUserName.trim();
-    const email = adminNewUserEmail.trim();
-    const password = adminNewUserPassword;
-    setAdminMessage(null);
-
-    if (!name || !email || !password) {
-      setAdminMessage({ kind: "error", text: t("admin.fieldsRequired") });
-      return;
-    }
-    if (password.length < 6) {
-      setAdminMessage({ kind: "error", text: t("admin.passwordMinLength") });
-      return;
-    }
-
-    setCreatingAdminUser(true);
-    const response = await fetchWithAuth("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        password,
-        role: adminNewUserRole,
-        mustChangePassword: adminNewUserMustChangePassword,
-        godModeEnabled: adminNewUserGodModeEnabled,
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userCreateFailed") });
-      setCreatingAdminUser(false);
-      return;
-    }
-
-    setAdminNewUserName("");
-    setAdminNewUserEmail("");
-    setAdminNewUserPassword("");
-    setAdminNewUserRole("user");
-    setAdminNewUserMustChangePassword(true);
-    setAdminNewUserGodModeEnabled(false);
-    setAdminMessage({ kind: "success", text: t("admin.userCreated") });
-    setCreatingAdminUser(false);
-    await loadAdminData();
-  };
-
-  const updateAdminUserGodMode = async (target: AdminUserInfo, godModeEnabled: boolean) => {
-    setAdminMessage(null);
-    const response = await fetchWithAuth("/api/admin/users", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: target.id, godModeEnabled }),
-    });
-
-    if (!response.ok) {
-      const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.godModeUpdateFailed") });
-      return;
-    }
-
-    setAdminUsers((current) => current.map((item) => item.id === target.id ? { ...item, godModeEnabled } : item));
-    setAdminMessage({ kind: "success", text: godModeEnabled ? t("admin.godModeEnabled") : t("admin.godModeDisabled") });
-  };
-
-  const deleteAdminGame = async (target: AdminGameInfo) => {
-    if (!confirm(`Supprimer la partie ${target.name} ?`)) return;
-    setAdminMessage(null);
-    const response = await fetchWithAuth(`/api/admin/games?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
-    if (!response.ok) {
-      const data = await parseJsonResponse(response);
-      setAdminMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.gameDeleteFailed") });
-      return;
-    }
-    setAdminMessage({ kind: "success", text: t("admin.gameDeleted") });
-    await Promise.all([loadAdminData(), loadMyGames()]);
   };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -789,7 +604,6 @@ export default function DashboardPage() {
     }
 
     await loadMyGames();
-    if (isAdmin) await loadAdminData();
     setSurrenderTarget(null);
     setSurrenderingGameId(null);
     setDashboardMessage({
@@ -822,7 +636,6 @@ export default function DashboardPage() {
     }
     await loadMyGames();
     if (showJoin) await loadOpenGames();
-    if (isAdmin) await loadAdminData();
     setDeleteTarget(null);
     setDeletingGameId(null);
     setDashboardMessage({
@@ -868,47 +681,17 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
-              onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowAdmin(false); setShowStats(false); setShowRmgPreview(false); }}
+              onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowRmgPreview(false); }}
               className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
             >
               {t("dashboard.newGame")}
             </button>
-            <button
-              onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowAdmin(false); setShowStats(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
-              className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
-            >
-              {t("common.join")}
-            </button>
-            {isAdmin && (
+            {!isAdmin && (
               <button
-                type="button"
-                onClick={() => {
-                  setShowAdmin((value) => !value);
-                  setShowStats(false);
-                  setShowCreate(false);
-                  setShowJoin(false);
-                  setShowOptions(false);
-                  setShowRmgPreview(false);
-                }}
-                className="touch-target rounded-lg border border-cyan-400/60 bg-gradient-to-b from-cyan-700 to-cyan-900 px-4 py-3 font-black uppercase tracking-wider text-cyan-50 shadow-[inset_0_0_0_1px_rgba(165,243,252,0.2)] transition hover:from-cyan-600 hover:to-cyan-800 sm:px-5"
+                onClick={() => { setJoinStep(1); setShowJoin(true); setShowCreate(false); setShowOptions(false); setShowRmgPreview(false); loadOpenGames().catch(() => setOpenGames([])); }}
+                className="touch-target rounded-lg border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-4 py-3 font-black uppercase tracking-wider text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.3)] transition hover:from-emerald-500 hover:to-emerald-700 sm:px-6"
               >
-                {t("dashboard.admin")}
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowStats((value) => !value);
-                  setShowAdmin(false);
-                  setShowCreate(false);
-                  setShowJoin(false);
-                  setShowOptions(false);
-                  setShowRmgPreview(false);
-                }}
-                className="touch-target rounded-lg border border-violet-400/60 bg-gradient-to-b from-violet-700 to-violet-900 px-4 py-3 font-black uppercase tracking-wider text-violet-50 shadow-[inset_0_0_0_1px_rgba(196,181,253,0.2)] transition hover:from-violet-600 hover:to-violet-800 sm:px-5"
-              >
-                {t("dashboard.stats")}
+                {t("common.join")}
               </button>
             )}
             <Link
@@ -924,8 +707,6 @@ export default function DashboardPage() {
               onClick={() => {
                 setShowReport(true);
                 setShowOptions(false);
-                setShowAdmin(false);
-                setShowStats(false);
                 setShowCreate(false);
                 setShowJoin(false);
                 setShowRmgPreview(false);
@@ -1157,16 +938,6 @@ export default function DashboardPage() {
           />
         )}
 
-        {showStats && isAdmin && (
-          <StatsPanel
-            fetchWithAuth={fetchWithAuth}
-            parseJsonResponse={parseJsonResponse}
-            t={t}
-            locale={locale}
-            onClose={() => setShowStats(false)}
-          />
-        )}
-
         {/* Assistant de création de partie */}
         {showCreate && (
           <CreateGameWizard
@@ -1335,290 +1106,20 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {showAdmin && isAdmin && (
-          <div
-            className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
-            onClick={() => setShowAdmin(false)}
-          >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-panel-title"
-            className={`relative ${ornateFramePolished} my-auto w-full max-w-6xl p-4 sm:p-6`}
-            data-testid="admin-panel"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <CornerOrnaments />
-            <ParchmentBackground />
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 id="admin-panel-title" className={`text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
-                {t("admin.title")}
-              </h2>
-              <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => loadAdminData().catch(console.error)}
-                disabled={adminLoading}
-                className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-4 py-2 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {adminLoading ? t("common.loading") : t("admin.refresh")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAdmin(false)}
-                className="rounded-md border border-amber-700/40 bg-stone-950/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
-              >
-                {t("common.close")}
-              </button>
-              </div>
-            </div>
-            <div className="max-h-[calc(100dvh-10rem)] space-y-6 overflow-y-auto pr-1">
-              {adminMessage && (
-                <div
-                  role="status"
-                  className={`rounded-md border px-4 py-3 text-sm font-semibold ${
-                    adminMessage.kind === "success"
-                      ? "border-emerald-400/50 bg-emerald-950/45 text-emerald-100"
-                      : "border-red-400/50 bg-red-950/45 text-red-100"
-                  }`}
-                >
-                  {adminMessage.text}
-                </div>
-              )}
 
-              <section>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("admin.users")}</h3>
-                </div>
-                <form
-                  onSubmit={createAdminUser}
-                  className="mb-4 rounded-md border border-amber-700/35 bg-stone-950/45 p-3"
-                >
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_1fr_0.8fr_auto] lg:items-end">
-                    <div>
-                      <label htmlFor="admin-create-name" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        {t("dashboard.options.name")}
-                      </label>
-                      <input
-                        id="admin-create-name"
-                        type="text"
-                        value={adminNewUserName}
-                        onChange={(event) => setAdminNewUserName(event.target.value)}
-                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="admin-create-email" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        {t("auth.register.email")}
-                      </label>
-                      <input
-                        id="admin-create-email"
-                        type="email"
-                        value={adminNewUserEmail}
-                        onChange={(event) => setAdminNewUserEmail(event.target.value)}
-                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="admin-create-password" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        {t("auth.register.password")}
-                      </label>
-                      <input
-                        id="admin-create-password"
-                        type="password"
-                        value={adminNewUserPassword}
-                        onChange={(event) => setAdminNewUserPassword(event.target.value)}
-                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
-                        autoComplete="new-password"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="admin-create-role" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
-                        {t("admin.role")}
-                      </label>
-                      <select
-                        id="admin-create-role"
-                        value={adminNewUserRole}
-                        onChange={(event) => setAdminNewUserRole(event.target.value === "admin" ? "admin" : "user")}
-                        className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
-                      >
-                        <option value="user">{t("admin.roleUser")}</option>
-                        <option value="admin">{t("admin.roleAdmin")}</option>
-                      </select>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={creatingAdminUser}
-                      className="rounded-md border border-emerald-400/50 bg-emerald-950/60 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-100 transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {creatingAdminUser ? t("admin.creating") : t("admin.create")}
-                    </button>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-4">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
-                      <input
-                        type="checkbox"
-                        checked={adminNewUserMustChangePassword}
-                        onChange={(event) => setAdminNewUserMustChangePassword(event.target.checked)}
-                        className="h-4 w-4 accent-amber-500"
-                      />
-                      {t("admin.requirePasswordChange")}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
-                      <input
-                        type="checkbox"
-                        checked={adminNewUserGodModeEnabled}
-                        onChange={(event) => setAdminNewUserGodModeEnabled(event.target.checked)}
-                        className="h-4 w-4 accent-emerald-500"
-                      />
-                      {t("admin.godMode")}
-                    </label>
-                  </div>
-                </form>
-                <div className="overflow-x-auto rounded-md border border-amber-700/35">
-                  <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
-                    <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
-                      <tr>
-                        <th className="px-3 py-2">{t("dashboard.options.name")}</th>
-                        <th className="px-3 py-2">{t("auth.register.email")}</th>
-                        <th className="px-3 py-2">{t("admin.role")}</th>
-                        <th className="px-3 py-2">{t("admin.godMode")}</th>
-                        <th className="px-3 py-2">{t("admin.colCreatedAt")}</th>
-                        <th className="px-3 py-2">{t("dashboard.colLastLogin")}</th>
-                        <th className="px-3 py-2">{t("admin.colGames")}</th>
-                        <th className="px-3 py-2 text-right">{t("admin.colActions")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
-                      {adminUsers.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-3 py-2 font-semibold">{item.name || t("admin.noName")}</td>
-                          <td className="px-3 py-2">{item.email || "-"}</td>
-                          <td className="px-3 py-2">
-                            {item.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}
-                            {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">{t("admin.tempPassword")}</span> : null}
-                          </td>
-                          <td className="px-3 py-2">
-                            <label className="inline-flex items-center gap-2 text-xs font-semibold text-amber-100/75">
-                              <input
-                                type="checkbox"
-                                checked={item.godModeEnabled}
-                                onChange={(event) => updateAdminUserGodMode(item, event.target.checked).catch(console.error)}
-                                className="h-4 w-4 accent-emerald-500"
-                                aria-label={t("admin.godModeFor", { name: item.name || item.email || item.id })}
-                              />
-                              {item.godModeEnabled ? t("common.yes") : t("common.no")}
-                            </label>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.createdAt)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.lastSignInAt, "Jamais")}</td>
-                          <td className="px-3 py-2">{item.gameCount}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              disabled={item.id === session?.user?.id}
-                              onClick={() => deleteAdminUser(item).catch(console.error)}
-                              className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {t("common.delete")}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {adminUsers.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="px-3 py-6 text-center italic text-amber-200/50">
-                            {t("admin.noUsers")}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("admin.games")}</h3>
-                <div className="space-y-2">
-                  {adminGames.map((game) => (
-                    <div key={game.id} className="rounded-md border border-amber-700/40 bg-stone-950/55 p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="font-bold text-amber-100">{game.name}</div>
-                          <div className="text-xs uppercase tracking-wider text-amber-200/60">
-                            {t("admin.gameMeta", { status: game.status, turn: game.turnNumber, count: game.players.length, max: game.maxPlayers, w: game.mapWidth, h: game.mapHeight })} - 🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory), locale)}
-                          </div>
-                          <div className="mt-2 grid gap-1 text-xs text-amber-100/75 sm:grid-cols-2">
-                            <div>{t("admin.createdBy")} <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy, t)}</span></div>
-                            <div>{t("admin.createdAt")} {formatAdminDate(game.createdAt)}</div>
-                            <div>{t("admin.updatedAt")} {formatAdminDate(game.updatedAt)}</div>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/game/${game.id}?admin=1`)}
-                            className="rounded border border-cyan-400/50 bg-cyan-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-900"
-                          >
-                            {t("admin.observe")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteAdminGame(game).catch(console.error)}
-                            className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900"
-                          >
-                            {t("common.delete")}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="mt-3 rounded border border-amber-900/45 bg-black/25">
-                        <div className="overflow-x-auto">
-                          <div className="min-w-[760px]">
-                            <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
-                              <div>{t("leaderboard.player")}</div>
-                              <div>{t("dashboard.colFaction")}</div>
-                              <div>{t("admin.joinedAt")}</div>
-                              <div>{t("dashboard.colLastLogin")}</div>
-                              <div>{t("dashboard.colStatus")}</div>
-                            </div>
-                            <div className="divide-y divide-amber-900/35">
-                              {game.players.map((player) => (
-                                <div key={player.id} className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80">
-                                  <div className="min-w-0">
-                                    <span className="font-semibold text-amber-100">{adminPlayerName(player, t)}</span>
-                                    {player.email && !player.isAi ? <span className="ml-2 text-amber-200/45">{player.email}</span> : null}
-                                  </div>
-                                  <div>{factionLabel(player.faction, locale)}</div>
-                                  <div>{formatAdminDate(player.joinedAt)}</div>
-                                  <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, t("common.never"))}</div>
-                                  <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>{playerStatusLabel(player, locale)}</div>
-                                </div>
-                              ))}
-                              {game.players.length === 0 && (
-                                <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
-                                  {t("dashboard.noPlayers")}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {adminGames.length === 0 && (
-                    <div className="rounded-md border border-amber-700/35 bg-stone-950/35 px-3 py-6 text-center italic text-amber-200/50">
-                      {t("admin.noGames")}
-                    </div>
-                  )}
-                </div>
-              </section>
-            </div>
-          </div>
-          </div>
+        {isAdmin && (
+          <AdminHomeDashboard
+            fetchWithAuth={fetchWithAuth}
+            parseJsonResponse={parseJsonResponse}
+            t={t}
+            locale={locale}
+            sessionUserId={session?.user?.id}
+            onObserveGame={(gameId) => router.push(`/game/${gameId}?admin=1`)}
+          />
         )}
 
+        {!isAdmin && (
+        <>
         {/* Mes parties */}
         <div className={`relative ${ornateFrame}`}>
           <CornerOrnaments />
@@ -1767,14 +1268,16 @@ export default function DashboardPage() {
         <div className="mt-6">
           <Leaderboard entries={leaderboard} />
         </div>
+        </>
+        )}
 
         <div className="mt-8 flex flex-col items-center gap-4 pb-2">
-          <SupportFooter t={t} />
+          {!isAdmin && <SupportFooter t={t} />}
           <SocialLinks />
         </div>
       </div>
 
-      {showSupportPrompt && (
+      {!isAdmin && showSupportPrompt && (
         <SupportPromptModal t={t} onClose={dismissSupportPrompt} />
       )}
     </div>

@@ -3013,75 +3013,132 @@ class PhaserMapScene extends Phaser.Scene {
 
     this.setRenderedHeroSurface(renderedHero, this.isWaterPosition(startPosition), "walk");
 
+    // Build the full path as a single sequence of pixel-space segments so the
+    // whole motion can run as one continuous tween. This eliminates the
+    // per-tile stop/restart that an Ease-In-Out tween chain produced (the
+    // hero used to decelerate to ~0 at each tile boundary, creating audible
+    // and visible "jerks" on a multi-tile move).
+    type Segment = {
+      from: Position;
+      to: Position;
+      fromPoint: { x: number; y: number };
+      toPoint: { x: number; y: number };
+      distance: number;
+      cumulativeStart: number;
+      fromWater: boolean;
+      toWater: boolean;
+      direction: HeroDirection;
+    };
+
+    const segments: Segment[] = [];
+    let cumulative = 0;
+    let segmentDirection = renderedHero.direction;
+    for (let i = 1; i < path.length; i += 1) {
+      const from = path[i - 1];
+      const to = path[i];
+      const fromPoint = this.getObjectRenderPoint(from, travelMetrics.offsetY);
+      const toPoint = this.getObjectRenderPoint(to, travelMetrics.offsetY);
+      const distance = Math.hypot(toPoint.x - fromPoint.x, toPoint.y - fromPoint.y);
+      segmentDirection = getHeroDirection(from, to, segmentDirection);
+      segments.push({
+        from,
+        to,
+        fromPoint,
+        toPoint,
+        distance,
+        cumulativeStart: cumulative,
+        fromWater: this.isWaterPosition(from),
+        toWater: this.isWaterPosition(to),
+        direction: segmentDirection,
+      });
+      cumulative += distance;
+    }
+
+    const totalDistance = cumulative;
+    if (totalDistance <= 0) {
+      return Promise.resolve();
+    }
+
+    // Preserve the previous cadence (~140 ms per tile-step) on the total
+    // duration, then let pixel-space progress decide each segment's share.
+    // Diagonal steps now take proportionally longer than cardinal steps,
+    // which is what keeps the on-screen velocity uniform.
+    const PER_STEP_MS = 140;
+    const totalDuration = Math.max(60, (path.length - 1) * PER_STEP_MS);
+
     return new Promise<void>((resolve) => {
-      let index = 1;
-      const moveNext = () => {
+      const beginPath = () => {
         if (!this.isRenderedHeroUsable(renderedHero) || this.renderedHeroes.get(heroId) !== renderedHero) {
           resolve();
           return;
         }
 
-        const from = path[index - 1];
-        const to = path[index];
-        if (!from || !to) {
-          const finalPosition = path[path.length - 1] ?? startPosition;
-          this.setRenderedHeroSurface(renderedHero, this.isWaterPosition(finalPosition), "idle");
-          renderedHero.animation.mode = renderedHero.object.onWater
-            ? "boat"
-            : renderedHero.object.inTown
-            ? "idle"
-            : "mounted";
-          this.heroDirections.set(heroId, renderedHero.direction);
-          this.playHeroAnimation(renderedHero, "idle");
-          resolve();
-          return;
-        }
+        let currentIndex = -1;
+        const enterSegment = (idx: number) => {
+          const seg = segments[idx];
+          renderedHero.direction = seg.direction;
+          this.heroDirections.set(heroId, seg.direction);
+          this.setRenderedHeroSurface(renderedHero, seg.fromWater, "walk");
+          if (seg.toWater && !seg.fromWater) {
+            this.setRenderedHeroSurface(renderedHero, true, "walk");
+          }
+          this.playMovementSound(this.getMovementSoundKind(seg.fromWater, seg.toWater));
+          this.playHeroAnimation(renderedHero, "walk");
+        };
 
-        const start = this.getObjectRenderPoint(from, travelMetrics.offsetY);
-        const end = this.getObjectRenderPoint(to, travelMetrics.offsetY);
-        const tweenState = { x: start.x, y: start.y };
-        const fromWater = this.isWaterPosition(from);
-        const toWater = this.isWaterPosition(to);
-        renderedHero.direction = getHeroDirection(from, to, renderedHero.direction);
-        this.heroDirections.set(heroId, renderedHero.direction);
-        this.setRenderedHeroSurface(renderedHero, fromWater, "walk");
-        if (toWater && !fromWater) {
-          this.setRenderedHeroSurface(renderedHero, true, "walk");
-        }
-        this.playMovementSound(this.getMovementSoundKind(fromWater, toWater));
-        this.playHeroAnimation(renderedHero, "walk");
-        this.updateRenderedHeroPosition(renderedHero, start.x, start.y, true);
-
+        const tweenState = { progress: 0 };
         this.tweens.add({
           targets: tweenState,
-          x: end.x,
-          y: end.y,
-          duration: 140,
-          ease: "Sine.easeInOut",
+          progress: totalDistance,
+          duration: totalDuration,
+          ease: "Linear",
           onUpdate: () => {
             if (!this.isRenderedHeroUsable(renderedHero)) return;
-            this.updateRenderedHeroPosition(renderedHero, tweenState.x, tweenState.y, true);
+            let idx = currentIndex < 0 ? 0 : currentIndex;
+            while (
+              idx < segments.length - 1 &&
+              tweenState.progress >= segments[idx].cumulativeStart + segments[idx].distance
+            ) {
+              idx += 1;
+            }
+            if (idx !== currentIndex) {
+              currentIndex = idx;
+              enterSegment(idx);
+            }
+            const seg = segments[idx];
+            const local = seg.distance > 0
+              ? Math.min(1, Math.max(0, (tweenState.progress - seg.cumulativeStart) / seg.distance))
+              : 1;
+            const x = seg.fromPoint.x + (seg.toPoint.x - seg.fromPoint.x) * local;
+            const y = seg.fromPoint.y + (seg.toPoint.y - seg.fromPoint.y) * local;
+            this.updateRenderedHeroPosition(renderedHero, x, y, true);
           },
           onComplete: () => {
             if (!this.isRenderedHeroUsable(renderedHero) || this.renderedHeroes.get(heroId) !== renderedHero) {
               resolve();
               return;
             }
-            this.updateRenderedHeroPosition(renderedHero, end.x, end.y, true);
-            if (!toWater && fromWater) {
-              this.setRenderedHeroSurface(renderedHero, false, "walk");
-            }
-            index += 1;
-            moveNext();
+            const finalSeg = segments[segments.length - 1];
+            this.updateRenderedHeroPosition(renderedHero, finalSeg.toPoint.x, finalSeg.toPoint.y, true);
+            const finalPosition = finalSeg.to;
+            this.setRenderedHeroSurface(renderedHero, this.isWaterPosition(finalPosition), "idle");
+            renderedHero.animation.mode = renderedHero.object.onWater
+              ? "boat"
+              : renderedHero.object.inTown
+              ? "idle"
+              : "mounted";
+            this.heroDirections.set(heroId, renderedHero.direction);
+            this.playHeroAnimation(renderedHero, "idle");
+            resolve();
           },
         });
       };
 
       if (leavingTown) {
         const start = this.getObjectRenderPoint(startPosition, travelMetrics.offsetY);
-        this.promoteHeroFromTown(renderedHero, start.x, start.y, travelMetrics).then(moveNext);
+        this.promoteHeroFromTown(renderedHero, start.x, start.y, travelMetrics).then(beginPath);
       } else {
-        moveNext();
+        beginPath();
       }
     });
   }

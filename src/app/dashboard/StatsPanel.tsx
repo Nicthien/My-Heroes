@@ -49,6 +49,13 @@ interface StatsPanelProps {
   onClose: () => void;
 }
 
+interface StatsPanelBodyProps {
+  fetchWithAuth: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+  parseJsonResponse: (response: Response) => Promise<unknown>;
+  t: TFn;
+  locale: Locale;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "#fbbf24",
   ACTIVE: "#34d399",
@@ -66,6 +73,12 @@ function statusLabel(status: string, t: TFn) {
 
 function formatDecimal(value: number) {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatTooltipDate(isoDate: string) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
@@ -168,11 +181,19 @@ function OverTimeChart({
           ))}
           {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
           {linePath && <path d={linePath} fill="none" stroke={colors.line} strokeWidth="2" />}
-          {data.map((point, index) =>
-            point.count > 0 ? (
-              <circle key={point.date} cx={pointX(index)} cy={pointY(point.count)} r="2.5" fill={colors.dot} />
-            ) : null,
-          )}
+          {data.map((point, index) => {
+            if (point.count === 0) return null;
+            const cx = pointX(index);
+            const cy = pointY(point.count);
+            return (
+              <g key={point.date}>
+                <circle cx={cx} cy={cy} r="2.5" fill={colors.dot} />
+                <circle cx={cx} cy={cy} r="10" fill="transparent" style={{ cursor: "pointer" }}>
+                  <title>{`${formatTooltipDate(point.date)} : ${point.count}`}</title>
+                </circle>
+              </g>
+            );
+          })}
           {data.map((point, index) =>
             index % labelEvery === 0 ? (
               <text
@@ -197,7 +218,7 @@ function OverTimeChart({
   );
 }
 
-export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClose }: StatsPanelProps) {
+export function StatsPanelBody({ fetchWithAuth, parseJsonResponse, t, locale }: StatsPanelBodyProps) {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +251,177 @@ export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClos
   const factionTotal = stats?.factionDistribution.reduce((sum, entry) => sum + entry.count, 0) ?? 0;
 
   return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => loadStats().catch(console.error)}
+          disabled={loading}
+          className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? t("common.loading") : t("admin.refresh")}
+        </button>
+      </div>
+      <div className="space-y-6">{renderStatsBody({ stats, error, totals, factionTotal, locale, t })}</div>
+    </div>
+  );
+}
+
+function renderStatsBody({
+  stats,
+  error,
+  totals,
+  factionTotal,
+  locale,
+  t,
+}: {
+  stats: AdminStats | null;
+  error: string | null;
+  totals: AdminStats["totals"] | undefined;
+  factionTotal: number;
+  locale: Locale;
+  t: TFn;
+}) {
+  return (
+    <>
+      {error && (
+        <div className="rounded-md border border-red-400/50 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
+          {error}
+        </div>
+      )}
+
+      {!stats && !error && (
+        <div className="py-16 text-center text-sm italic text-amber-200/50">{t("common.loading")}</div>
+      )}
+
+      {totals && stats && (
+        <>
+          <section>
+            <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.overview")}</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <StatCard label={t("stats.totalUsers")} value={totals.users} />
+              <StatCard label={t("stats.totalGames")} value={totals.games} />
+              <StatCard label={t("stats.activeGames")} value={totals.activeGames} accent="text-emerald-300" />
+              <StatCard label={t("stats.completedGames")} value={totals.completedGames} accent="text-cyan-300" />
+              <StatCard label={t("stats.totalPlayers")} value={totals.players} />
+              <StatCard label={t("stats.humanPlayers")} value={totals.humanPlayers} />
+              <StatCard label={t("stats.aiPlayers")} value={totals.aiPlayers} />
+              <StatCard label={t("stats.totalCombats")} value={totals.combats} accent="text-rose-300" />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.averages")}</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <StatCard label={t("stats.avgTurns")} value={formatDecimal(stats.averages.turnsPerGame)} />
+              <StatCard
+                label={t("stats.avgTurnsCompleted")}
+                value={formatDecimal(stats.averages.turnsPerCompletedGame)}
+              />
+              <StatCard label={t("stats.avgPlayers")} value={formatDecimal(stats.averages.playersPerGame)} />
+            </div>
+          </section>
+
+          <OverTimeChart
+            data={stats.gamesOverTime}
+            title={t("stats.gamesOverTime")}
+            gradientId="stats-games-area"
+            colors={GAMES_OVER_TIME_COLORS}
+            t={t}
+          />
+
+          <OverTimeChart
+            data={stats.usersOverTime}
+            title={t("stats.usersOverTime")}
+            gradientId="stats-users-area"
+            colors={USERS_OVER_TIME_COLORS}
+            t={t}
+          />
+
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">
+                {t("stats.gamesByStatus")}
+              </h3>
+              <div className="space-y-2 rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
+                {stats.gamesByStatus.length === 0 && (
+                  <div className="py-4 text-center text-xs italic text-amber-200/50">{t("stats.noData")}</div>
+                )}
+                {stats.gamesByStatus.map((entry) => (
+                  <BarRow
+                    key={entry.key}
+                    label={statusLabel(entry.key, t)}
+                    count={entry.count}
+                    total={totals.games}
+                    color={STATUS_COLORS[entry.key] ?? "#a8a29e"}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">
+                {t("stats.factionDistribution")}
+              </h3>
+              <div className="space-y-2 rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
+                {stats.factionDistribution.length === 0 && (
+                  <div className="py-4 text-center text-xs italic text-amber-200/50">{t("stats.noData")}</div>
+                )}
+                {stats.factionDistribution.map((entry) => (
+                  <BarRow
+                    key={entry.key}
+                    label={factionLabel(entry.key, locale)}
+                    count={entry.count}
+                    total={factionTotal}
+                    color={FACTION_META[entry.key]?.color ?? "#a8a29e"}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.topPlayers")}</h3>
+            <div className="overflow-x-auto rounded-md border border-amber-700/35">
+              <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
+                <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
+                  <tr>
+                    <th className="px-3 py-2">#</th>
+                    <th className="px-3 py-2">{t("leaderboard.player")}</th>
+                    <th className="px-3 py-2 text-right">{t("stats.colGamesPlayed")}</th>
+                    <th className="px-3 py-2 text-right">{t("stats.colGamesWon")}</th>
+                    <th className="px-3 py-2 text-right">{t("stats.colBestScore")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
+                  {stats.topPlayers.map((player, index) => (
+                    <tr key={`${player.name}-${index}`}>
+                      <td className="px-3 py-2 font-black text-amber-300">{index + 1}</td>
+                      <td className="px-3 py-2 font-semibold">{player.name}</td>
+                      <td className="px-3 py-2 text-right">{player.gamesPlayed}</td>
+                      <td className="px-3 py-2 text-right font-bold text-emerald-300">{player.gamesWon}</td>
+                      <td className="px-3 py-2 text-right">{player.bestScore}</td>
+                    </tr>
+                  ))}
+                  {stats.topPlayers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center italic text-amber-200/50">
+                        {t("stats.noData")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
+export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClose }: StatsPanelProps) {
+  return (
     <div
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-6"
       onClick={onClose}
@@ -248,160 +440,19 @@ export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClos
           <h2 id="stats-panel-title" className={`text-xl font-black uppercase tracking-[0.2em] ${goldText}`}>
             {t("stats.title")}
           </h2>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => loadStats().catch(console.error)}
-              disabled={loading}
-              className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-4 py-2 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? t("common.loading") : t("admin.refresh")}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-amber-700/40 bg-stone-950/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
-            >
-              {t("common.close")}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-amber-700/40 bg-stone-950/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-200/80 transition hover:border-amber-500/60 hover:text-amber-100"
+          >
+            {t("common.close")}
+          </button>
         </div>
-
-        <div className="max-h-[calc(100dvh-10rem)] space-y-6 overflow-y-auto pr-1">
-          {error && (
-            <div className="rounded-md border border-red-400/50 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
-              {error}
-            </div>
-          )}
-
-          {!stats && !error && (
-            <div className="py-16 text-center text-sm italic text-amber-200/50">{t("common.loading")}</div>
-          )}
-
-          {totals && stats && (
-            <>
-              <section>
-                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.overview")}</h3>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  <StatCard label={t("stats.totalUsers")} value={totals.users} />
-                  <StatCard label={t("stats.totalGames")} value={totals.games} />
-                  <StatCard label={t("stats.activeGames")} value={totals.activeGames} accent="text-emerald-300" />
-                  <StatCard label={t("stats.completedGames")} value={totals.completedGames} accent="text-cyan-300" />
-                  <StatCard label={t("stats.totalPlayers")} value={totals.players} />
-                  <StatCard label={t("stats.humanPlayers")} value={totals.humanPlayers} />
-                  <StatCard label={t("stats.aiPlayers")} value={totals.aiPlayers} />
-                  <StatCard label={t("stats.totalCombats")} value={totals.combats} accent="text-rose-300" />
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.averages")}</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <StatCard label={t("stats.avgTurns")} value={formatDecimal(stats.averages.turnsPerGame)} />
-                  <StatCard
-                    label={t("stats.avgTurnsCompleted")}
-                    value={formatDecimal(stats.averages.turnsPerCompletedGame)}
-                  />
-                  <StatCard label={t("stats.avgPlayers")} value={formatDecimal(stats.averages.playersPerGame)} />
-                </div>
-              </section>
-
-              <OverTimeChart
-                data={stats.gamesOverTime}
-                title={t("stats.gamesOverTime")}
-                gradientId="stats-games-area"
-                colors={GAMES_OVER_TIME_COLORS}
-                t={t}
-              />
-
-              <OverTimeChart
-                data={stats.usersOverTime}
-                title={t("stats.usersOverTime")}
-                gradientId="stats-users-area"
-                colors={USERS_OVER_TIME_COLORS}
-                t={t}
-              />
-
-              <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div>
-                  <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">
-                    {t("stats.gamesByStatus")}
-                  </h3>
-                  <div className="space-y-2 rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
-                    {stats.gamesByStatus.length === 0 && (
-                      <div className="py-4 text-center text-xs italic text-amber-200/50">{t("stats.noData")}</div>
-                    )}
-                    {stats.gamesByStatus.map((entry) => (
-                      <BarRow
-                        key={entry.key}
-                        label={statusLabel(entry.key, t)}
-                        count={entry.count}
-                        total={totals.games}
-                        color={STATUS_COLORS[entry.key] ?? "#a8a29e"}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">
-                    {t("stats.factionDistribution")}
-                  </h3>
-                  <div className="space-y-2 rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
-                    {stats.factionDistribution.length === 0 && (
-                      <div className="py-4 text-center text-xs italic text-amber-200/50">{t("stats.noData")}</div>
-                    )}
-                    {stats.factionDistribution.map((entry) => (
-                      <BarRow
-                        key={entry.key}
-                        label={factionLabel(entry.key, locale)}
-                        count={entry.count}
-                        total={factionTotal}
-                        color={FACTION_META[entry.key]?.color ?? "#a8a29e"}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.topPlayers")}</h3>
-                <div className="overflow-x-auto rounded-md border border-amber-700/35">
-                  <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
-                    <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
-                      <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">{t("leaderboard.player")}</th>
-                        <th className="px-3 py-2 text-right">{t("stats.colGamesPlayed")}</th>
-                        <th className="px-3 py-2 text-right">{t("stats.colGamesWon")}</th>
-                        <th className="px-3 py-2 text-right">{t("stats.colBestScore")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
-                      {stats.topPlayers.map((player, index) => (
-                        <tr key={`${player.name}-${index}`}>
-                          <td className="px-3 py-2 font-black text-amber-300">{index + 1}</td>
-                          <td className="px-3 py-2 font-semibold">{player.name}</td>
-                          <td className="px-3 py-2 text-right">{player.gamesPlayed}</td>
-                          <td className="px-3 py-2 text-right font-bold text-emerald-300">{player.gamesWon}</td>
-                          <td className="px-3 py-2 text-right">{player.bestScore}</td>
-                        </tr>
-                      ))}
-                      {stats.topPlayers.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-3 py-6 text-center italic text-amber-200/50">
-                            {t("stats.noData")}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
-          )}
+        <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1">
+          <StatsPanelBody fetchWithAuth={fetchWithAuth} parseJsonResponse={parseJsonResponse} t={t} locale={locale} />
         </div>
       </div>
     </div>
   );
 }
+

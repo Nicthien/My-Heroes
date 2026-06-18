@@ -659,6 +659,7 @@ async function advanceInitialAiTurns(params: {
       defenderLosses: [],
       experienceGained: resultSide === "attacker" ? 500 : 0,
       log: [`Victoire du camp ${resultSide === "attacker" ? "attaquant" : "défenseur"}.`],
+      attackerDied: resultSide === "defender",
     }
     : null;
   const { data: updated } = await params.supabase

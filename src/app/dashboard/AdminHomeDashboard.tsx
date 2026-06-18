@@ -1,0 +1,712 @@
+"use client";
+
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CornerOrnaments,
+  OrnateHeader,
+  ParchmentBackground,
+  goldText,
+  ornateFrame,
+} from "@/components/game/hud/theme";
+import { describeVictoryCondition, normalizeVictoryCondition } from "@/lib/game/victory";
+import { localizedServerMessage } from "@/lib/i18n/serverMessages";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/types";
+import { BugReportsPanel, type BugReportCounts } from "./BugReportsPanel";
+import { StatsPanelBody } from "./StatsPanel";
+import { factionLabel } from "./factionMeta";
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+interface PlayerInfo {
+  id: string;
+  userId: string | null;
+  user?: { name: string | null; email?: string | null };
+  email?: string | null;
+  lastSignInAt?: string | null;
+  turnStatus?: string | null;
+  isAi?: boolean;
+  aiName?: string | null;
+  faction: string;
+  isAlive: boolean;
+  color: string;
+  turnOrder: number;
+}
+
+export interface AdminUserInfo {
+  id: string;
+  email: string | null;
+  name: string | null;
+  role: string;
+  mustChangePassword: boolean;
+  godModeEnabled: boolean;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  gameCount: number;
+}
+
+interface AdminGamePlayerInfo extends PlayerInfo {
+  joinedAt?: string | null;
+}
+
+interface AdminCreatorInfo {
+  id: string;
+  userId?: string | null;
+  user?: { name: string | null; email?: string | null };
+  email?: string | null;
+  isAi?: boolean;
+  aiName?: string | null;
+}
+
+export interface AdminGameInfo {
+  id: string;
+  name: string;
+  status: string;
+  turnNumber: number;
+  maxPlayers: number;
+  mapWidth: number;
+  mapHeight: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  gameConfig?: { victory?: unknown } | null;
+  createdBy?: AdminCreatorInfo | null;
+  players: AdminGamePlayerInfo[];
+}
+
+interface AdminHomeDashboardProps {
+  fetchWithAuth: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+  parseJsonResponse: (response: Response) => Promise<unknown>;
+  t: TFn;
+  locale: Locale;
+  sessionUserId: string | undefined;
+  onObserveGame: (gameId: string) => void;
+}
+
+type SectionId = "bugReports" | "users" | "games" | "stats";
+
+function formatAdminDate(value?: string | null, fallback = "-") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function adminPlayerName(player: AdminCreatorInfo | PlayerInfo | null | undefined, t: TFn) {
+  if (!player) return "-";
+  if (player.isAi) return player.aiName || t("common.ai");
+  return player.user?.name || player.email || player.user?.email || t("common.player");
+}
+
+function playerStatusClass(status?: string | null) {
+  if (status === "Doit jouer maintenant") return "text-emerald-300";
+  if (status === "A fini son tour" || status === "Pret au lancement" || status === "Partie terminee") return "text-cyan-300";
+  if (status === "Pas pret") return "text-red-300";
+  return "text-amber-200/70";
+}
+
+function playerStatusLabel(player: PlayerInfo, locale: Locale) {
+  return localizedServerMessage(player.turnStatus, locale) || "-";
+}
+
+function KpiTile({
+  label,
+  value,
+  accent,
+  onClick,
+  ariaLabel,
+}: {
+  label: string;
+  value: string | number;
+  accent: string;
+  onClick: () => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="rounded-md border border-amber-700/35 bg-stone-950/55 px-4 py-3 text-left transition hover:border-amber-400/50 hover:bg-stone-900/70 focus:outline-none focus-visible:border-amber-400"
+    >
+      <div className={`text-2xl font-black ${accent}`}>{value}</div>
+      <div className="mt-1 text-[11px] font-bold uppercase tracking-wider text-amber-200/65">{label}</div>
+    </button>
+  );
+}
+
+function SectionHeader({
+  title,
+  badge,
+  open,
+  onToggle,
+  ariaId,
+}: {
+  title: string;
+  badge?: string;
+  open: boolean;
+  onToggle: () => void;
+  ariaId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-3 border-b border-amber-900/45 px-4 py-3 text-left transition hover:bg-stone-900/40"
+      aria-expanded={open}
+      aria-controls={ariaId}
+    >
+      <div className="flex items-center gap-3">
+        <span className={`text-sm font-black uppercase tracking-[0.18em] ${goldText}`}>{title}</span>
+        {badge && (
+          <span className="rounded-full border border-red-400/50 bg-red-950/55 px-2 py-0.5 text-[11px] font-black text-red-100">
+            {badge}
+          </span>
+        )}
+      </div>
+      <span className="text-amber-300/70" aria-hidden="true">
+        {open ? "▾" : "▸"}
+      </span>
+    </button>
+  );
+}
+
+export function AdminHomeDashboard({
+  fetchWithAuth,
+  parseJsonResponse,
+  t,
+  locale,
+  sessionUserId,
+  onObserveGame,
+}: AdminHomeDashboardProps) {
+  const [users, setUsers] = useState<AdminUserInfo[]>([]);
+  const [games, setGames] = useState<AdminGameInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"user" | "admin">("user");
+  const [newUserMustChangePassword, setNewUserMustChangePassword] = useState(true);
+  const [newUserGodMode, setNewUserGodMode] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+
+  const [bugCounts, setBugCounts] = useState<BugReportCounts>({ total: 0, unread: 0, unanswered: 0 });
+
+  const [sectionsOpen, setSectionsOpen] = useState<Record<SectionId, boolean>>({
+    bugReports: true,
+    users: false,
+    games: false,
+    stats: false,
+  });
+
+  const toggleSection = useCallback((id: SectionId) => {
+    setSectionsOpen((current) => ({ ...current, [id]: !current[id] }));
+  }, []);
+
+  const openAndScrollTo = useCallback((id: SectionId) => {
+    setSectionsOpen((current) => ({ ...current, [id]: true }));
+    requestAnimationFrame(() => {
+      document.getElementById(`admin-section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setMessage(null);
+    const [usersResponse, gamesResponse] = await Promise.all([
+      fetchWithAuth("/api/admin/users", { cache: "no-store" }),
+      fetchWithAuth("/api/admin/games", { cache: "no-store" }),
+    ]);
+
+    if (!usersResponse.ok || !gamesResponse.ok) {
+      const data = !usersResponse.ok
+        ? ((await parseJsonResponse(usersResponse)) as { error?: string } | null)
+        : ((await parseJsonResponse(gamesResponse)) as { error?: string } | null);
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.loadFailed") });
+      setUsers([]);
+      setGames([]);
+      setLoading(false);
+      return;
+    }
+
+    const usersData = (await parseJsonResponse(usersResponse)) as AdminUserInfo[] | null;
+    const gamesData = (await parseJsonResponse(gamesResponse)) as AdminGameInfo[] | null;
+    setUsers(Array.isArray(usersData) ? usersData : []);
+    setGames(Array.isArray(gamesData) ? gamesData : []);
+    setLoading(false);
+  }, [fetchWithAuth, parseJsonResponse, locale, t]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData().catch((error) => {
+      console.error(error);
+      setMessage({ kind: "error", text: t("admin.loadFailed") });
+      setLoading(false);
+    });
+  }, [loadData, t]);
+
+  const deleteUser = async (target: AdminUserInfo) => {
+    if (!confirm(`Supprimer l'utilisateur ${target.name || target.email || target.id} ?`)) return;
+    setMessage(null);
+    const response = await fetchWithAuth(`/api/admin/users?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userDeleteFailed") });
+      return;
+    }
+    setMessage({ kind: "success", text: t("admin.userDeleted") });
+    await loadData();
+  };
+
+  const createUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newUserName.trim();
+    const email = newUserEmail.trim();
+    const password = newUserPassword;
+    setMessage(null);
+
+    if (!name || !email || !password) {
+      setMessage({ kind: "error", text: t("admin.fieldsRequired") });
+      return;
+    }
+    if (password.length < 6) {
+      setMessage({ kind: "error", text: t("admin.passwordMinLength") });
+      return;
+    }
+
+    setCreatingUser(true);
+    const response = await fetchWithAuth("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        role: newUserRole,
+        mustChangePassword: newUserMustChangePassword,
+        godModeEnabled: newUserGodMode,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.userCreateFailed") });
+      setCreatingUser(false);
+      return;
+    }
+
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPassword("");
+    setNewUserRole("user");
+    setNewUserMustChangePassword(true);
+    setNewUserGodMode(false);
+    setMessage({ kind: "success", text: t("admin.userCreated") });
+    setCreatingUser(false);
+    await loadData();
+  };
+
+  const updateUserGodMode = async (target: AdminUserInfo, enabled: boolean) => {
+    setMessage(null);
+    const response = await fetchWithAuth("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: target.id, godModeEnabled: enabled }),
+    });
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.godModeUpdateFailed") });
+      return;
+    }
+    setUsers((current) => current.map((item) => (item.id === target.id ? { ...item, godModeEnabled: enabled } : item)));
+    setMessage({ kind: "success", text: enabled ? t("admin.godModeEnabled") : t("admin.godModeDisabled") });
+  };
+
+  const deleteGame = async (target: AdminGameInfo) => {
+    if (!confirm(`Supprimer la partie ${target.name} ?`)) return;
+    setMessage(null);
+    const response = await fetchWithAuth(`/api/admin/games?id=${encodeURIComponent(target.id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.gameDeleteFailed") });
+      return;
+    }
+    setMessage({ kind: "success", text: t("admin.gameDeleted") });
+    await loadData();
+  };
+
+  const totals = useMemo(() => {
+    const activeGames = games.filter((game) => game.status === "ACTIVE").length;
+    return {
+      users: users.length,
+      activeGames,
+      bugUnread: bugCounts.unread,
+      bugUnanswered: bugCounts.unanswered,
+    };
+  }, [users, games, bugCounts]);
+
+  return (
+    <div className={`relative ${ornateFrame}`}>
+      <CornerOrnaments />
+      <ParchmentBackground />
+      <OrnateHeader>{t("admin.title")}</OrnateHeader>
+
+      <div className="space-y-4 p-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiTile
+            label={t("admin.kpi.users")}
+            value={totals.users}
+            accent="text-amber-200"
+            onClick={() => openAndScrollTo("users")}
+            ariaLabel={t("admin.kpi.usersAria")}
+          />
+          <KpiTile
+            label={t("admin.kpi.activeGames")}
+            value={totals.activeGames}
+            accent="text-emerald-300"
+            onClick={() => openAndScrollTo("games")}
+            ariaLabel={t("admin.kpi.activeGamesAria")}
+          />
+          <KpiTile
+            label={t("admin.kpi.bugUnread")}
+            value={totals.bugUnread}
+            accent={totals.bugUnread > 0 ? "text-red-300" : "text-amber-200/70"}
+            onClick={() => openAndScrollTo("bugReports")}
+            ariaLabel={t("admin.kpi.bugUnreadAria")}
+          />
+          <KpiTile
+            label={t("admin.kpi.bugUnanswered")}
+            value={totals.bugUnanswered}
+            accent={totals.bugUnanswered > 0 ? "text-orange-300" : "text-amber-200/70"}
+            onClick={() => openAndScrollTo("bugReports")}
+            ariaLabel={t("admin.kpi.bugUnansweredAria")}
+          />
+        </div>
+
+        {message && (
+          <div
+            role="status"
+            className={`rounded-md border px-4 py-3 text-sm font-semibold ${
+              message.kind === "success"
+                ? "border-emerald-400/50 bg-emerald-950/45 text-emerald-100"
+                : "border-red-400/50 bg-red-950/45 text-red-100"
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => loadData().catch(console.error)}
+            disabled={loading}
+            className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? t("common.loading") : t("admin.refresh")}
+          </button>
+        </div>
+
+        <div id="admin-section-bugReports" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
+          <SectionHeader
+            title={t("admin.bugReports.title")}
+            badge={
+              totals.bugUnread > 0
+                ? t("admin.bugReports.badge", { unread: totals.bugUnread })
+                : undefined
+            }
+            open={sectionsOpen.bugReports}
+            onToggle={() => toggleSection("bugReports")}
+            ariaId="admin-panel-bug-reports"
+          />
+          {sectionsOpen.bugReports && (
+            <div id="admin-panel-bug-reports" className="p-3">
+              <BugReportsPanel
+                fetchWithAuth={fetchWithAuth}
+                parseJsonResponse={parseJsonResponse}
+                t={t}
+                locale={locale}
+                onCountsChange={setBugCounts}
+              />
+            </div>
+          )}
+        </div>
+
+        <div id="admin-section-users" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
+          <SectionHeader
+            title={`${t("admin.users")} (${totals.users})`}
+            open={sectionsOpen.users}
+            onToggle={() => toggleSection("users")}
+            ariaId="admin-panel-users"
+          />
+          {sectionsOpen.users && (
+            <div id="admin-panel-users" className="space-y-3 p-3">
+              <form onSubmit={createUser} className="rounded-md border border-amber-700/35 bg-stone-950/45 p-3">
+                <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_1fr_0.8fr_auto] lg:items-end">
+                  <div>
+                    <label htmlFor="admin-create-name" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                      {t("dashboard.options.name")}
+                    </label>
+                    <input
+                      id="admin-create-name"
+                      type="text"
+                      value={newUserName}
+                      onChange={(event) => setNewUserName(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="admin-create-email" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                      {t("auth.register.email")}
+                    </label>
+                    <input
+                      id="admin-create-email"
+                      type="email"
+                      value={newUserEmail}
+                      onChange={(event) => setNewUserEmail(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="admin-create-password" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                      {t("auth.register.password")}
+                    </label>
+                    <input
+                      id="admin-create-password"
+                      type="password"
+                      value={newUserPassword}
+                      onChange={(event) => setNewUserPassword(event.target.value)}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="admin-create-role" className="mb-1 block text-[11px] font-black uppercase tracking-wider text-amber-200/70">
+                      {t("admin.role")}
+                    </label>
+                    <select
+                      id="admin-create-role"
+                      value={newUserRole}
+                      onChange={(event) => setNewUserRole(event.target.value === "admin" ? "admin" : "user")}
+                      className="w-full rounded-md border border-amber-700/50 bg-stone-950/70 p-2 text-sm text-amber-100 focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value="user">{t("admin.roleUser")}</option>
+                      <option value="admin">{t("admin.roleAdmin")}</option>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={creatingUser}
+                    className="rounded-md border border-emerald-400/50 bg-emerald-950/60 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-100 transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {creatingUser ? t("admin.creating") : t("admin.create")}
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                    <input
+                      type="checkbox"
+                      checked={newUserMustChangePassword}
+                      onChange={(event) => setNewUserMustChangePassword(event.target.checked)}
+                      className="h-4 w-4 accent-amber-500"
+                    />
+                    {t("admin.requirePasswordChange")}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                    <input
+                      type="checkbox"
+                      checked={newUserGodMode}
+                      onChange={(event) => setNewUserGodMode(event.target.checked)}
+                      className="h-4 w-4 accent-emerald-500"
+                    />
+                    {t("admin.godMode")}
+                  </label>
+                </div>
+              </form>
+
+              <div className="overflow-x-auto rounded-md border border-amber-700/35">
+                <table className="min-w-full divide-y divide-amber-900/60 text-left text-sm">
+                  <thead className="bg-stone-950/70 text-xs uppercase tracking-wider text-amber-200/70">
+                    <tr>
+                      <th className="px-3 py-2">{t("dashboard.options.name")}</th>
+                      <th className="px-3 py-2">{t("auth.register.email")}</th>
+                      <th className="px-3 py-2">{t("admin.role")}</th>
+                      <th className="px-3 py-2">{t("admin.godMode")}</th>
+                      <th className="px-3 py-2">{t("admin.colCreatedAt")}</th>
+                      <th className="px-3 py-2">{t("dashboard.colLastLogin")}</th>
+                      <th className="px-3 py-2">{t("admin.colGames")}</th>
+                      <th className="px-3 py-2 text-right">{t("admin.colActions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-900/35 bg-stone-950/35 text-amber-100/85">
+                    {users.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-3 py-2 font-semibold">{item.name || t("admin.noName")}</td>
+                        <td className="px-3 py-2">{item.email || "-"}</td>
+                        <td className="px-3 py-2">
+                          {item.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}
+                          {item.mustChangePassword ? <span className="ml-2 text-xs text-amber-300">{t("admin.tempPassword")}</span> : null}
+                        </td>
+                        <td className="px-3 py-2">
+                          <label className="inline-flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                            <input
+                              type="checkbox"
+                              checked={item.godModeEnabled}
+                              onChange={(event) => updateUserGodMode(item, event.target.checked).catch(console.error)}
+                              className="h-4 w-4 accent-emerald-500"
+                              aria-label={t("admin.godModeFor", { name: item.name || item.email || item.id })}
+                            />
+                            {item.godModeEnabled ? t("common.yes") : t("common.no")}
+                          </label>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.createdAt)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatAdminDate(item.lastSignInAt, "Jamais")}</td>
+                        <td className="px-3 py-2">{item.gameCount}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            disabled={item.id === sessionUserId}
+                            onClick={() => deleteUser(item).catch(console.error)}
+                            className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {t("common.delete")}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-6 text-center italic text-amber-200/50">
+                          {t("admin.noUsers")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div id="admin-section-games" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
+          <SectionHeader
+            title={`${t("admin.games")} (${games.length})`}
+            open={sectionsOpen.games}
+            onToggle={() => toggleSection("games")}
+            ariaId="admin-panel-games"
+          />
+          {sectionsOpen.games && (
+            <div id="admin-panel-games" className="space-y-2 p-3">
+              {games.map((game) => (
+                <div key={game.id} className="rounded-md border border-amber-700/40 bg-stone-950/55 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="font-bold text-amber-100">{game.name}</div>
+                      <div className="text-xs uppercase tracking-wider text-amber-200/60">
+                        {t("admin.gameMeta", {
+                          status: game.status,
+                          turn: game.turnNumber,
+                          count: game.players.length,
+                          max: game.maxPlayers,
+                          w: game.mapWidth,
+                          h: game.mapHeight,
+                        })} - 🏆 {describeVictoryCondition(normalizeVictoryCondition(game.gameConfig?.victory), locale)}
+                      </div>
+                      <div className="mt-2 grid gap-1 text-xs text-amber-100/75 sm:grid-cols-2">
+                        <div>
+                          {t("admin.createdBy")} <span className="font-semibold text-amber-100">{adminPlayerName(game.createdBy, t)}</span>
+                        </div>
+                        <div>{t("admin.createdAt")} {formatAdminDate(game.createdAt)}</div>
+                        <div>{t("admin.updatedAt")} {formatAdminDate(game.updatedAt)}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onObserveGame(game.id)}
+                        className="rounded border border-cyan-400/50 bg-cyan-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-900"
+                      >
+                        {t("admin.observe")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteGame(game).catch(console.error)}
+                        className="rounded border border-red-400/50 bg-red-950/60 px-3 py-1 text-xs font-black uppercase tracking-wider text-red-100 transition hover:bg-red-900"
+                      >
+                        {t("common.delete")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded border border-amber-900/45 bg-black/25">
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[760px]">
+                        <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 border-b border-amber-900/45 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-200/55">
+                          <div>{t("leaderboard.player")}</div>
+                          <div>{t("dashboard.colFaction")}</div>
+                          <div>{t("admin.joinedAt")}</div>
+                          <div>{t("dashboard.colLastLogin")}</div>
+                          <div>{t("dashboard.colStatus")}</div>
+                        </div>
+                        <div className="divide-y divide-amber-900/35">
+                          {game.players.map((player) => (
+                            <div
+                              key={player.id}
+                              className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs text-amber-100/80"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-semibold text-amber-100">{adminPlayerName(player, t)}</span>
+                                {player.email && !player.isAi ? <span className="ml-2 text-amber-200/45">{player.email}</span> : null}
+                              </div>
+                              <div>{factionLabel(player.faction, locale)}</div>
+                              <div>{formatAdminDate(player.joinedAt)}</div>
+                              <div>{player.isAi ? "-" : formatAdminDate(player.lastSignInAt, t("common.never"))}</div>
+                              <div className={`font-semibold ${playerStatusClass(player.turnStatus)}`}>
+                                {playerStatusLabel(player, locale)}
+                              </div>
+                            </div>
+                          ))}
+                          {game.players.length === 0 && (
+                            <div className="px-3 py-4 text-center text-xs italic text-amber-200/50">
+                              {t("dashboard.noPlayers")}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {games.length === 0 && (
+                <div className="rounded-md border border-amber-700/35 bg-stone-950/35 px-3 py-6 text-center italic text-amber-200/50">
+                  {t("admin.noGames")}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div id="admin-section-stats" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
+          <SectionHeader
+            title={t("stats.title")}
+            open={sectionsOpen.stats}
+            onToggle={() => toggleSection("stats")}
+            ariaId="admin-panel-stats"
+          />
+          {sectionsOpen.stats && (
+            <div id="admin-panel-stats" className="p-3">
+              <StatsPanelBody
+                fetchWithAuth={fetchWithAuth}
+                parseJsonResponse={parseJsonResponse}
+                t={t}
+                locale={locale}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

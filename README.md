@@ -93,6 +93,13 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `SMTP_USER` | si SMTP | Identifiant SMTP. |
 | `SMTP_PASS` | si SMTP | Mot de passe SMTP. |
 | `SMTP_FROM` | si SMTP | En-tête `From`, ex. `My Heroes <no-reply@exemple.fr>`. |
+| `USE_IMAP` | non | `true` pour activer la lecture des rapports de bug (`[My-Heroes][BUG-REPORT]`) depuis le panneau Admin. Défaut : `false`. |
+| `IMAP_HOST` | si IMAP | Hôte du serveur IMAP. |
+| `IMAP_PORT` | non | Port IMAP. Défaut : `993`. |
+| `IMAP_SECURE` | non | `true` pour TLS implicite (993), `false` pour STARTTLS / plain (143). Défaut : `true` si port 993. |
+| `IMAP_USER` | si IMAP | Identifiant IMAP. |
+| `IMAP_PASS` | si IMAP | Mot de passe IMAP. |
+| `IMAP_MAILBOX` | non | Boîte aux lettres à scanner. Défaut : `INBOX`. |
 
 > En local, `npm run dev` injecte automatiquement la config depuis
 > `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme

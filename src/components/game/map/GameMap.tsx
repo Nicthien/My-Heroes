@@ -1492,22 +1492,24 @@ export default function GameMapComponent() {
             }
             return;
           }
-          const destination = { x: obj.x, y: obj.y };
-          const path = findPath(mapForAction, hero.position, destination, hero.movement, getArmyNativeTerrain(hero.armies));
-          if (path.length <= 1) {
-            if (handleOutOfRange(hero, destination) === "inaccessible") {
-              rendererRef.current.highlightTile(destination.x, destination.y, 0xff0000);
+          const combatPosition = { x: obj.x, y: obj.y };
+          const approach = getCombatApproach(mapForAction, hero.position, combatPosition, hero.movement);
+          if (!approach) {
+            if (handleOutOfRange(hero, combatPosition) === "inaccessible") {
+              rendererRef.current.highlightTile(combatPosition.x, combatPosition.y, 0xff0000);
               setTimeout(() => rendererRef.current?.clearHighlights(), 500);
             }
             return;
           }
+          const approachDestination = approach.destination;
+          const approachPath = approach.path;
           const pendingJoin = pendingAttackRef.current;
           const isConfirmingJoin = pendingJoin?.heroId === selectedHeroId && pendingJoin.targetId === combat.id;
           if (!isConfirmingJoin) {
             pendingMoveRef.current = null;
-            pendingAttackRef.current = { heroId: selectedHeroId, targetId: combat.id, destination, path };
-            rendererRef.current.highlightPath(path);
-            rendererRef.current.highlightTile(destination.x, destination.y, 0xffa500);
+            pendingAttackRef.current = { heroId: selectedHeroId, targetId: combat.id, destination: approachDestination, path: approachPath };
+            rendererRef.current.highlightPath(approachPath);
+            rendererRef.current.highlightTile(combatPosition.x, combatPosition.y, 0xffa500);
             setCombatMessage(tRef.current("map.clickAgainJoinCombat"));
             return;
           }
@@ -1527,7 +1529,13 @@ export default function GameMapComponent() {
               : undefined);
           pendingAttackRef.current = null;
           rendererRef.current.clearHighlights();
-          setPendingJoinCombat({ combatId: combat.id, heroId: selectedHeroId, side: inferredSide });
+          setPendingJoinCombat({
+            combatId: combat.id,
+            heroId: selectedHeroId,
+            side: inferredSide,
+            destination: approachDestination,
+            path: approachPath,
+          });
           return;
         }
         if (isCombatOpenable) {

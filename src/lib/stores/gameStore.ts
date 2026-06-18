@@ -23,7 +23,13 @@ interface GameStore {
     targetPosition?: { x: number; y: number };
     path?: Array<{ x: number; y: number }>;
   } | null;
-  pendingJoinCombat: { combatId: string; heroId: string; side?: "attacker" | "defender" } | null;
+  pendingJoinCombat: {
+    combatId: string;
+    heroId: string;
+    side?: "attacker" | "defender";
+    destination?: { x: number; y: number };
+    path?: Array<{ x: number; y: number }>;
+  } | null;
   pendingHeroMeet: { leftHeroId: string; rightHeroId: string } | null;
   pendingAdventureSpell: { heroId: string; spellId: SpellId; label: string } | null;
   spellRevealHighlight: { turnNumber: number; tiles: Position[]; label: string; hints?: SpellRevealHint[] } | null;

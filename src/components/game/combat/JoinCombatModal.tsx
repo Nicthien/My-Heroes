@@ -46,7 +46,12 @@ export default function JoinCombatModal() {
     const response = await fetchWithSupabaseAuth(`/api/games/${gameState.id}/combats/${pendingJoinCombat.combatId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heroId: pendingJoinCombat.heroId, side }),
+      body: JSON.stringify({
+        heroId: pendingJoinCombat.heroId,
+        side,
+        path: pendingJoinCombat.path,
+        destination: pendingJoinCombat.destination,
+      }),
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);

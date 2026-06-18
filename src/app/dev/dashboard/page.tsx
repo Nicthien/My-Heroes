@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthContext } from "@/lib/auth/client";
 import DashboardPage from "@/app/dashboard/page";
 
 const baseUser = { id: "dev-user", email: "dev@local", name: "Dev" };
 
-export default function DevDashboardPage() {
+// useSearchParams() forces a client-side render bail-out; isolate it in a child
+// component so the page itself can stream behind a Suspense boundary (Next 16
+// prerender requirement).
+function DevDashboardInner() {
   const params = useSearchParams();
   const isAdmin = params.get("admin") === "1";
 
@@ -24,5 +27,13 @@ export default function DevDashboardPage() {
     <AuthContext.Provider value={mockAuthValue}>
       <DashboardPage />
     </AuthContext.Provider>
+  );
+}
+
+export default function DevDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DevDashboardInner />
+    </Suspense>
   );
 }

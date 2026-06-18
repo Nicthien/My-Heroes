@@ -5,6 +5,33 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.3.2] - 2026-06-18
+
+Héros caché derrière un château désormais repérable grâce à une silhouette colorée par-dessus, et nettoyage d'un toast trompeur lors d'un combat déclenché en cours de déplacement.
+
+### Ajouté
+
+- **Silhouette de héros à travers les structures** — quand l'un de vos héros
+  (ou un héros adverse visible) est masqué par un château, une mine ou un
+  bâtiment d'aventure, une silhouette teintée de sa couleur s'affiche
+  par-dessus la structure pour qu'on puisse toujours le repérer. La détection
+  est pixel-perfect : elle échantillonne directement l'alpha de la texture du
+  sprite occluder à hauteur de pied, torse et tête, donc plus de faux positif
+  quand le héros est en avant et plus de faux négatif quand il est vraiment
+  derrière une tour. Respecte le brouillard de guerre : un héros ennemi qui
+  n'est pas dans ton champ de vision n'a aucune silhouette qui pourrait fuiter
+  sa position.
+
+### Corrigé
+
+- **Toast « Cliquez à nouveau » fantôme pendant un combat** — quand on
+  confirmait un déplacement vers son propre château mais qu'un héros adverse
+  interceptait sur le trajet, la boîte d'engagement de combat s'ouvrait
+  par-dessus le toast jaune « Cliquez à nouveau pour entrer dans ce château »
+  qui n'était jamais effacé. On avait l'impression que le combat portait sur
+  le château alors qu'il portait sur le héros ennemi. Le toast est maintenant
+  effacé dès que l'interaction `COMBAT` revient du serveur.
+
 ## [1.3.1] - 2026-06-18
 
 Retours plus clairs après une défaite de héros et correction d'un sprite bateau fantôme, plus une console admin pour lire et répondre aux rapports de bug envoyés par e-mail.

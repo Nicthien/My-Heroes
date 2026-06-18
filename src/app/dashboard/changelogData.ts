@@ -22,6 +22,25 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.2",
+    date: "2026-06-18",
+    summary: "Héros caché derrière un château désormais repérable grâce à une silhouette colorée par-dessus, et nettoyage d'un toast trompeur lors d'un combat déclenché en cours de déplacement.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Silhouette de héros à travers les structures** — quand l'un de vos héros (ou un héros adverse visible) est masqué par un château, une mine ou un bâtiment d'aventure, une silhouette teintée de sa couleur s'affiche par-dessus la structure pour qu'on puisse toujours le repérer. La détection est pixel-perfect (échantillonnage de l'alpha de la texture occluder à hauteur de pied, torse et tête), et le brouillard de guerre est respecté : aucun ennemi hors champ de vision n'est révélé.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Toast « Cliquez à nouveau » fantôme pendant un combat** — quand on confirmait un déplacement vers son propre château mais qu'un héros adverse interceptait sur le trajet, la boîte d'engagement de combat s'ouvrait par-dessus le toast jaune « Cliquez à nouveau pour entrer dans ce château » qui n'était jamais effacé, donnant l'impression que le combat portait sur le château. Le toast est maintenant effacé dès que l'interaction `COMBAT` revient du serveur.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.3.1",
     date: "2026-06-18",
     summary: "Retours plus clairs après une défaite de héros et correction d'un sprite bateau fantôme, plus une console admin pour lire et répondre aux rapports de bug envoyés par e-mail.",

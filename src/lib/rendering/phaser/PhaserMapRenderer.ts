@@ -155,6 +155,18 @@ const UNDERGROUND_VOID_TOP_TEXTURE: TerrainTopTexture = {
 };
 
 const UNDERGROUND_VOID_WALL_DEPTH = 18;
+// Visual + depth tuning for the hero occlusion silhouette (tinted ghost drawn
+// on top of structures that hide the hero). Depth is set sky-high so it sits
+// above every other object in the object layer regardless of iso position.
+const HERO_SILHOUETTE_ALPHA = 0.7;
+const HERO_SILHOUETTE_DEPTH = 1_000_000;
+// Resolution of the cached alpha mask we build per static texture. 96 is small
+// enough to keep memory negligible (~9 KB per sprite) while large enough to
+// resolve a castle tower from its empty iso shoulder.
+const STATIC_ALPHA_MAP_SIZE = 96;
+// A pixel of the static is considered solid (occluding) when its texture alpha
+// is at least this. Filters out anti-aliased fringe pixels.
+const STATIC_OCCLUSION_ALPHA_MIN = 128;
 
 import {
   areObjectsRenderEquivalent,
@@ -177,6 +189,11 @@ type RenderedHeroObject = {
   object: MapObjectData;
   sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
   banner: Phaser.GameObjects.Graphics;
+  // Tinted ghost copy drawn on top of every static when the hero is swallowed
+  // by a tall structure (castle, mine, dwelling) — keeps the unit findable
+  // without making the structure itself transparent.
+  silhouette?: Phaser.GameObjects.Sprite;
+  silhouetteTint: number;
   animation: HeroSpriteAnimation;
   baseX: number;
   baseY: number;
@@ -313,6 +330,10 @@ class PhaserMapScene extends Phaser.Scene {
   private heroSpriteAnimations: HeroSpriteAnimation[] = [];
   private renderedHeroes = new Map<string, RenderedHeroObject>();
   private renderedStaticObjects = new Map<string, RenderedStaticObject>();
+  // Cached alpha samples per `texture::frame` key, downsampled to
+  // STATIC_ALPHA_MAP_SIZE². Built lazily the first time the occlusion check
+  // hits a given static sprite; reused for every subsequent lookup.
+  private staticAlphaMaskCache = new Map<string, Uint8Array>();
   private staticDecorItems: StaticDecorRenderItem[] = [];
   private staticDecorItemsByBucket = new Map<string, StaticDecorRenderItem[]>();
   private renderedStaticDecorSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -534,6 +555,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.movementLabelLayer.removeAll(true);
     this.renderedHeroes.clear();
     this.renderedStaticObjects.clear();
+    this.staticAlphaMaskCache.clear();
     this.heroSpriteAnimations = [];
     this.clearHoverLabel();
     this.renderFlatWorldEdge(map);
@@ -1682,6 +1704,122 @@ class PhaserMapScene extends Phaser.Scene {
     return this.getSurfaceY(object.x, object.y) + (metrics?.offsetY ?? 0) + (object.renderOffsetY ?? 0);
   }
 
+  // A castle sprite (146x110) extends well beyond its anchor tile, so a hero
+  // standing on a footprint or adjacent tile can fall entirely behind it in iso
+  // depth order — leaving only the horse hooves visible. Rather than bump the
+  // hero on top of the castle (which makes it look like the hero is flying over
+  // the walls), we keep the natural iso depth and draw a tinted ghost copy of
+  // the hero on top of everything when it is occluded. The structure stays
+  // fully opaque; the silhouette reads as a "behind walls" highlight.
+  private refreshHeroOcclusionSilhouette(): void {
+    for (const hero of this.renderedHeroes.values()) {
+      const silhouette = hero.silhouette;
+      if (!silhouette || !silhouette.scene || !silhouette.active) continue;
+      if (!this.isRenderedHeroUsable(hero) || hero.object.inTown) {
+        if (silhouette.visible) silhouette.setVisible(false);
+        continue;
+      }
+      const heroX = hero.sprite.x;
+      const heroY = hero.animation.baseY;
+      const occluded = this.isHeroOccluded(hero, heroX, heroY);
+      silhouette.setPosition(heroX, heroY);
+      if (occluded) {
+        if (!silhouette.visible) silhouette.setVisible(true);
+        if (silhouette.alpha !== HERO_SILHOUETTE_ALPHA) silhouette.setAlpha(HERO_SILHOUETTE_ALPHA);
+      } else if (silhouette.visible) {
+        silhouette.setVisible(false);
+        silhouette.setAlpha(0);
+      }
+    }
+  }
+
+  // Pixel-perfect occlusion test. Geometric heuristics on the static's bounding
+  // box don't work — a castle sprite is iso-diamond-shaped with large empty
+  // corners, so any rect-based check produces both false positives (hero stands
+  // next to the castle, anchor lands in an empty corner of the rect) and false
+  // negatives (hero is genuinely behind a turret but the rect cuts it off).
+  // Instead we sample the actual texture alpha of each candidate occluder at
+  // three points along the hero's body and only flag occlusion when one of
+  // those points lands on a solid pixel of the static.
+  private isHeroOccluded(hero: RenderedHeroObject, x: number, y: number): boolean {
+    const heroH = hero.sprite.displayHeight;
+    // Sample foot, torso, head — covers the visually obvious portions a player
+    // checks to see whether their unit is hidden.
+    const sampleYs = [y - heroH * 0.15, y - heroH * 0.45, y - heroH * 0.75];
+    for (const rendered of this.renderedStaticObjects.values()) {
+      const obj = rendered.object;
+      if (obj.type !== "town" && obj.type !== "building" && obj.type !== "adventure_building") continue;
+      const sprite = rendered.sprite;
+      if (!sprite) continue;
+      const objDepth = this.getObjectDepth(obj);
+      if (objDepth <= y) continue;
+      const bounds = this.getObjectBounds(obj);
+      if (!bounds) continue;
+      if (x < bounds.left || x > bounds.right) continue;
+      const width = bounds.right - bounds.left;
+      const height = bounds.bottom - bounds.top;
+      if (width <= 0 || height <= 0) continue;
+      const mask = this.getStaticAlphaMask(sprite);
+      if (!mask) continue;
+      const localX = ((x - bounds.left) / width) * STATIC_ALPHA_MAP_SIZE;
+      if (localX < 0 || localX >= STATIC_ALPHA_MAP_SIZE) continue;
+      const px = Math.min(STATIC_ALPHA_MAP_SIZE - 1, Math.max(0, Math.floor(localX)));
+      for (const sampleY of sampleYs) {
+        if (sampleY < bounds.top || sampleY > bounds.bottom) continue;
+        const localY = ((sampleY - bounds.top) / height) * STATIC_ALPHA_MAP_SIZE;
+        const py = Math.min(STATIC_ALPHA_MAP_SIZE - 1, Math.max(0, Math.floor(localY)));
+        if (mask[py * STATIC_ALPHA_MAP_SIZE + px] >= STATIC_OCCLUSION_ALPHA_MIN) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Build (or fetch) a downsampled alpha mask of a static sprite's texture
+  // frame. Draws the original frame onto an offscreen canvas at
+  // STATIC_ALPHA_MAP_SIZE² and stores just the alpha byte per pixel. Survives
+  // a Phaser.Display.Color allocation by avoiding that API entirely.
+  private getStaticAlphaMask(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite | Phaser.GameObjects.Star): Uint8Array | null {
+    if (!(sprite instanceof Phaser.GameObjects.Image) && !(sprite instanceof Phaser.GameObjects.Sprite)) return null;
+    const textureKey = sprite.texture?.key;
+    const frame = sprite.frame;
+    if (!textureKey || !frame) return null;
+    const cacheKey = `${textureKey}::${frame.name}`;
+    const cached = this.staticAlphaMaskCache.get(cacheKey);
+    if (cached) return cached;
+    const sourceImage = frame.source?.image as CanvasImageSource | undefined;
+    if (!sourceImage) return null;
+    if (frame.cutWidth <= 0 || frame.cutHeight <= 0) return null;
+    const size = STATIC_ALPHA_MAP_SIZE;
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = document.createElement("canvas");
+    } catch {
+      return null;
+    }
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    let imageData: ImageData;
+    try {
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(sourceImage, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight, 0, 0, size, size);
+      imageData = ctx.getImageData(0, 0, size, size);
+    } catch {
+      // Tainted canvas (CORS) or other read failure — skip pixel test for this
+      // texture; the silhouette will simply never show for that occluder.
+      return null;
+    }
+    const mask = new Uint8Array(size * size);
+    for (let i = 0; i < mask.length; i++) {
+      mask[i] = imageData.data[i * 4 + 3];
+    }
+    this.staticAlphaMaskCache.set(cacheKey, mask);
+    return mask;
+  }
+
   private renderTile(
     tile: MapTile,
     isoX: number,
@@ -2732,6 +2870,7 @@ class PhaserMapScene extends Phaser.Scene {
     }
 
     this.heroSpriteAnimations = nextHeroAnimations;
+    this.refreshHeroOcclusionSilhouette();
     this.objectLayer.sort("depth");
     this.recordSceneGraphGauges();
   }
@@ -2811,10 +2950,14 @@ class PhaserMapScene extends Phaser.Scene {
       bannerMetrics.poleHeight,
       renderY
     );
+    const silhouetteTint = parseHexColor(object.color) ?? 0xffffff;
+    const silhouette = this.addHeroSilhouette(object, renderX, renderY, metrics.width, metrics.height, direction, silhouetteTint);
     const renderedHero = {
       object,
       sprite,
       banner,
+      silhouette: silhouette ?? undefined,
+      silhouetteTint,
       animation,
       baseX: sprite.x,
       baseY: sprite.y,
@@ -2838,6 +2981,15 @@ class PhaserMapScene extends Phaser.Scene {
     const origin = getOriginForObject(object);
     renderedHero.sprite.setOrigin(origin.originX, origin.originY);
     renderedHero.sprite.setDisplaySize(metrics.width, metrics.height);
+    if (renderedHero.silhouette) {
+      renderedHero.silhouette.setOrigin(origin.originX, origin.originY);
+      renderedHero.silhouette.setDisplaySize(metrics.width, metrics.height);
+      const nextTint = parseHexColor(object.color) ?? 0xffffff;
+      if (nextTint !== renderedHero.silhouetteTint) {
+        renderedHero.silhouette.setTint(nextTint);
+        renderedHero.silhouetteTint = nextTint;
+      }
+    }
     renderedHero.baseDisplayWidth = metrics.width;
     renderedHero.baseDisplayHeight = metrics.height;
     renderedHero.animation.baseScaleX = renderedHero.sprite.scaleX;
@@ -2874,6 +3026,7 @@ class PhaserMapScene extends Phaser.Scene {
     this.heroDirections.set(heroId, renderedHero.direction);
     renderedHero.banner.destroy();
     renderedHero.sprite.destroy();
+    renderedHero.silhouette?.destroy();
     this.renderedHeroes.delete(heroId);
   }
 
@@ -3230,6 +3383,7 @@ class PhaserMapScene extends Phaser.Scene {
     renderedHero.animation.baseY = y;
     renderedHero.banner.setPosition(x - renderedHero.baseX, y - renderedHero.baseY);
     renderedHero.banner.setDepth(y + 3);
+    this.refreshHeroOcclusionSilhouette();
     if (followCamera && this.followedHeroId === renderedHero.object.id) {
       const point = this.getRenderedHeroCameraPoint(renderedHero);
       this.centerOnWorldPoint(point.x, point.y);
@@ -3279,6 +3433,33 @@ class PhaserMapScene extends Phaser.Scene {
     return sprite;
   }
 
+  // Hidden by default; shown only when the hero is visually swallowed by a
+  // tall static sprite. Tinted with the player colour at a higher alpha, drawn
+  // at a sky-high depth so it sits above every static on the object layer.
+  private addHeroSilhouette(
+    object: MapObjectData,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    direction: HeroDirection,
+    tint: number,
+  ) {
+    const sheet = object.type === "boat" || object.onWater ? getBoatSpritesheet(object.faction) : getHeroSpritesheet(object.faction);
+    if (!sheet) return null;
+    const origin = getOriginForObject(object);
+    const sprite = this.add.sprite(x, y, sheet.key, 0);
+    sprite.setOrigin(origin.originX, origin.originY);
+    sprite.setDisplaySize(width, height);
+    sprite.setDepth(HERO_SILHOUETTE_DEPTH);
+    sprite.setTint(tint);
+    sprite.setAlpha(0);
+    sprite.setVisible(false);
+    this.objectLayer.add(sprite);
+    sprite.play(getDirectionalAnimationKey(sheet, direction, "idle"));
+    return sprite;
+  }
+
   private playHeroAnimation(renderedHero: RenderedHeroObject, state: DirectionalSpriteState) {
     const sheet = renderedHero.object.type === "boat" || renderedHero.object.onWater
       ? getBoatSpritesheet(renderedHero.object.faction)
@@ -3288,6 +3469,12 @@ class PhaserMapScene extends Phaser.Scene {
     const key = getDirectionalAnimationKey(sheet, renderedHero.direction, state);
     if (sprite.anims.currentAnim?.key === key) return;
     sprite.play(key);
+    // Keep the occlusion silhouette in lock-step with the main sprite so it
+    // animates identically when it pops up over a structure.
+    const silhouette = renderedHero.silhouette;
+    if (silhouette && silhouette.scene && silhouette.active && silhouette.anims && silhouette.anims.currentAnim?.key !== key) {
+      silhouette.play(key);
+    }
   }
 
   private setRenderedHeroSurface(renderedHero: RenderedHeroObject, onWater: boolean, state: DirectionalSpriteState) {
@@ -3301,6 +3488,7 @@ class PhaserMapScene extends Phaser.Scene {
     const metrics = getObjectMetrics(renderedHero.object);
     if (metrics) {
       renderedHero.sprite.setDisplaySize(metrics.width, metrics.height);
+      renderedHero.silhouette?.setDisplaySize(metrics.width, metrics.height);
       renderedHero.baseDisplayWidth = metrics.width;
       renderedHero.baseDisplayHeight = metrics.height;
       renderedHero.animation.baseScaleX = renderedHero.sprite.scaleX;
@@ -3321,6 +3509,12 @@ class PhaserMapScene extends Phaser.Scene {
       sprite.stop();
       sprite.setTexture(sheet.key);
       sprite.setFrame(directionIndex * sheet.columns + stateOffset);
+      const silhouette = renderedHero.silhouette;
+      if (silhouette) {
+        silhouette.stop();
+        silhouette.setTexture(sheet.key);
+        silhouette.setFrame(directionIndex * sheet.columns + stateOffset);
+      }
     }
     this.playHeroAnimation(renderedHero, state);
   }

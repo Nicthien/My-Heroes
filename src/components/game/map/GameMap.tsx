@@ -805,6 +805,11 @@ export default function GameMapComponent() {
       pendingMoveRef.current = null;
       pendingAttackRef.current = null;
       rendererRef.current?.clearHighlights();
+      // Wipe any leftover "click again to..." toast from the move's first click —
+      // it would otherwise sit on top of the engage-combat modal and read as if
+      // the fight were against the friendly target (own castle, owned mine, etc.)
+      // when the actual defender is an enemy hero on the path.
+      setCombatMessage(null);
       setPendingCombat({
         attackerHeroId: heroId,
         targetId: interaction.targetId,

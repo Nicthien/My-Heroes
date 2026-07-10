@@ -28,6 +28,7 @@ docker run -d --name my-heroes -p 3000:3000 \
 | `SUPABASE_ANON_KEY` | yes | Anon / publishable key (public by design). |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Service role key, server-only. |
 | `SUPABASE_INTERNAL_URL` | no | Where the server reaches Supabase. Defaults to `SUPABASE_URL`. |
+| `TURNSTILE_SITE_KEY` | production guests | Public Cloudflare Turnstile site key used by anonymous sign-in. Keep the matching secret only in the Supabase Auth environment. |
 | `SUPABASE_DB_URL` | no | Direct Postgres URL (`postgres` user + `POSTGRES_PASSWORD`) used to **auto-apply schema migrations at boot**. Unset = no auto-migration. |
 | `MIGRATE_ON_BOOT` | no | `false` to disable the boot-time migration step. Defaults to `true`. |
 | `MIGRATE_MODE` | no | `apply` (default), `baseline` (adopt an existing DB once, without running migrations), or `status` (report only). |

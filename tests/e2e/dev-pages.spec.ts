@@ -775,8 +775,12 @@ test.describe("Smoke — /guide encyclopedia pages render without errors", () =>
 
   test("wiki search returns matching entries", async ({ page }) => {
     await page.goto("/guide/recherche", { waitUntil: "domcontentloaded" });
-    await page.getByRole("searchbox").fill("dragon");
-    await expect(page.getByRole("link").filter({ hasText: /dragon/i }).first()).toBeVisible();
+    const searchbox = page.getByRole("searchbox");
+    await searchbox.fill("dragon");
+    await expect(searchbox).toHaveValue("dragon");
+    const dragonLinks = page.getByRole("link").filter({ hasText: /dragon/i });
+    await expect.poll(() => dragonLinks.count(), { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect(dragonLinks.first()).toBeVisible();
   });
 
   test("fits a mobile viewport without horizontal overflow", async ({ browser }) => {

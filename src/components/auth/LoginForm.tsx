@@ -171,32 +171,34 @@ export default function LoginForm() {
       showHeader={false}
       showGameIntro
     >
-      <form onSubmit={handleGuestSubmit} className="mb-5 space-y-3 rounded-lg border border-emerald-500/35 bg-emerald-950/20 p-4">
-        <div className="text-center text-xs font-black uppercase tracking-[0.2em] text-emerald-200">
+      <form onSubmit={handleGuestSubmit} className="mb-4 rounded-lg border border-emerald-500/35 bg-emerald-950/20 p-3">
+        <div className="mb-2 text-center text-xs font-black uppercase tracking-[0.2em] text-emerald-200">
           {t("auth.guest.title")}
         </div>
-        <div>
-          <label htmlFor="guest-name" className={authLabelClass}>
-            {t("auth.guest.name")}
-          </label>
-          <input
-            id="guest-name"
-            type="text"
-            value={guestName}
-            onChange={(event) => setGuestName(event.target.value)}
-            className={authInputClass}
-            autoComplete="nickname"
-            required
-          />
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-end">
+          <div>
+            <label htmlFor="guest-name" className={authLabelClass}>
+              {t("auth.guest.name")}
+            </label>
+            <input
+              id="guest-name"
+              type="text"
+              value={guestName}
+              onChange={(event) => setGuestName(event.target.value)}
+              className={authInputClass}
+              autoComplete="nickname"
+              required
+            />
+          </div>
+          <button type="submit" disabled={guestLoading || status === "loading"} className={authPrimaryButtonClass}>
+            {guestLoading ? t("auth.guest.starting") : t("auth.guest.try")}
+          </button>
         </div>
         <TurnstileWidget onTokenChange={setCaptchaToken} />
-        <button type="submit" disabled={guestLoading || status === "loading"} className={authPrimaryButtonClass}>
-          {guestLoading ? t("auth.guest.starting") : t("auth.guest.try")}
-        </button>
-        <p className="text-center text-xs leading-5 text-emerald-100/65">{t("auth.guest.notice")}</p>
+        <p className="mt-2 text-center text-[11px] leading-4 text-emerald-100/65">{t("auth.guest.notice")}</p>
       </form>
 
-      <div className="mb-5 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/45">
+      <div className="mb-4 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/45">
         <span className="h-px flex-1 bg-amber-700/30" />
         {t("auth.guest.orLogin")}
         <span className="h-px flex-1 bg-amber-700/30" />
@@ -219,7 +221,7 @@ export default function LoginForm() {
         </button>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="login-email" className={authLabelClass}>
             {t("auth.login.identifier")}
@@ -251,18 +253,18 @@ export default function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-amber-100/65">
+      <p className="mt-3 text-center text-sm text-amber-100/65">
         {t("auth.login.noAccount")}{" "}
         <a href="/auth/register" className={authLinkClass}>
           {t("auth.login.createAccount")}
         </a>
       </p>
 
-      <div className="mt-6">
+      <div className="mt-4">
         <LanguageSelect value={locale} onChange={setLocale} />
       </div>
 
-      <div className="mt-5 border-t border-amber-700/30 pt-4">
+      <div className="mt-4 border-t border-amber-700/30 pt-3">
         <SocialLinks />
       </div>
     </AuthFrame>

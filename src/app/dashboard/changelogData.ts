@@ -22,6 +22,36 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.3",
+    date: "2026-07-10",
+    summary: "Mode invité sans création de compte, parties temporaires auto-nettoyées et page d'accueil réorganisée pour rester entièrement visible sur desktop.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Essayer sans compte** — la connexion propose désormais un pseudo et un bouton « Essayer ». Une session Supabase anonyme est créée et la fenêtre « Créer une partie » s'ouvre automatiquement ; invités et comptes permanents peuvent jouer ensemble.",
+          "**Parties temporaires** — les parties créées par un invité sont signalées dans le tableau de bord, les parties ouvertes et le lobby. Une présence par onglet et un heartbeat toutes les 30 secondes permettent de les supprimer lorsqu'elles sont vides ou inactives pendant 24 heures.",
+          "**Conversion en compte permanent** — un invité peut ajouter pseudo, email et mot de passe depuis le tableau de bord ou le menu de jeu en conservant son identifiant, ses participations et ses parties. Avec SMTP, la partie reste protégée jusqu'à la confirmation de l'email.",
+          "**Protection contre les abus** — prise en charge de Cloudflare Turnstile en production, limitation à une partie temporaire créée par invité et politiques RLS renforcées.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Accueil plus compact** — le pseudo et « Essayer » partagent une ligne sur desktop. Les quatre sprites aléatoires restent visibles dans un bandeau compact, et le formulaire s'aligne avec la galerie sans barre de défilement dès 1366 × 768.",
+          "**Classement permanent préservé** — les résultats des parties temporaires ne sont jamais ajoutés aux statistiques ou au classement.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Pseudo invité libéré proprement** — quitter le mode invité sans partie supprime le profil anonyme et rend immédiatement son pseudo disponible. La déconnexion est bloquée lorsqu'une partie est encore liée pour éviter une perte d'accès.",
+          "**Présence sans rafale Realtime** — les heartbeats ne publient pas de nouvel événement de jeu ; seuls les vrais changements réveillent les clients.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.3.2",
     date: "2026-06-18",
     summary: "Héros caché derrière un château désormais repérable grâce à une silhouette colorée par-dessus, et nettoyage d'un toast trompeur lors d'un combat déclenché en cours de déplacement.",

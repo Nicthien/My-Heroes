@@ -21,6 +21,36 @@ test.describe("Smoke — auth pages render", () => {
     expect(guestBox?.y).toBeLessThan(loginBox?.y ?? Number.POSITIVE_INFINITY);
   });
 
+  test("/auth/login fits a compact desktop without vertical scrolling", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto("/auth/login");
+
+    const layout = await page.evaluate(() => {
+      const viewportHeight = window.innerHeight;
+      const visibleControls = Array.from(
+        document.querySelectorAll<HTMLElement>("main button, main a, main input, main h1, main h2"),
+      ).filter((element) => element.getClientRects().length > 0);
+      const clippedControls = visibleControls
+        .map((element) => ({ label: element.getAttribute("aria-label") ?? element.textContent?.trim() ?? element.tagName, rect: element.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.top < 0 || rect.bottom > viewportHeight)
+        .map(({ label }) => label);
+      const introColumn = document.querySelector<HTMLElement>("[data-testid='auth-intro-column']")?.getBoundingClientRect();
+      const formColumn = document.querySelector<HTMLElement>("[data-testid='auth-form-column']")?.getBoundingClientRect();
+
+      return {
+        hasVerticalOverflow: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+        clippedControls,
+        bottomDelta: introColumn && formColumn ? Math.abs(introColumn.bottom - formColumn.bottom) : null,
+        randomTileCount: document.querySelectorAll("[data-testid='auth-random-showcase'] > div").length,
+      };
+    });
+
+    expect(layout.hasVerticalOverflow).toBe(false);
+    expect(layout.clippedControls).toEqual([]);
+    expect(layout.bottomDelta).toBeLessThanOrEqual(1);
+    expect(layout.randomTileCount).toBe(4);
+  });
+
   test("/auth/register displays the sign-up form", async ({ page }) => {
     await page.goto("/auth/register");
     await expect(page.getByRole("heading", { name: /créer un compte/i })).toBeVisible();

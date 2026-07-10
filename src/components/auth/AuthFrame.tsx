@@ -172,7 +172,7 @@ export default function AuthFrame({
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.7),rgba(0,0,0,0.18)_44%,rgba(0,0,0,0.72))]" aria-hidden="true" />
 
       <div
-        className={`relative mx-auto grid min-h-[calc(100dvh-3rem)] w-full items-center gap-6 ${
+        className={`relative mx-auto grid min-h-[calc(100dvh-3rem)] w-full content-center items-end gap-6 ${
           showGameIntro ? "max-w-7xl lg:grid-cols-[minmax(0,1.35fr)_25rem]" : "max-w-5xl lg:grid-cols-[minmax(0,1fr)_26rem]"
         }`}
       >
@@ -181,6 +181,7 @@ export default function AuthFrame({
         <section
           className="hidden min-h-[34rem] flex-col justify-center lg:flex"
           aria-hidden={showGameIntro ? undefined : true}
+          data-testid={showGameIntro ? "auth-intro-column" : undefined}
         >
           {showGameIntro ? (
             <GameIntro />
@@ -217,7 +218,8 @@ export default function AuthFrame({
           )}
         </section>
 
-        <div className="mx-auto flex w-full max-w-96 flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-96 flex-col gap-3" data-testid={showGameIntro ? "auth-form-column" : undefined}>
+          {showGameIntro ? <CompactRandomSpriteShowcase sprites={showcaseSprites} /> : null}
           <section className={`${ornateFramePolished} relative w-full overflow-hidden p-5 sm:p-7`}>
             <ParchmentBackground />
             <CornerOrnaments />
@@ -243,7 +245,6 @@ export default function AuthFrame({
             </div>
           </section>
 
-          {showGameIntro ? <RandomSpriteShowcase sprites={showcaseSprites} /> : null}
         </div>
       </div>
     </main>
@@ -393,39 +394,49 @@ function ShowcaseCard({ children }: { children: ReactNode }) {
   );
 }
 
-function RandomSpriteShowcase({ sprites }: { sprites: ShowcaseSprites }) {
+function CompactRandomSpriteShowcase({ sprites }: { sprites: ShowcaseSprites }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <ShowcaseCard>
-        <Image src={sprites.castle} alt="" fill sizes="180px" className="object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.7)]" />
-      </ShowcaseCard>
-      <ShowcaseCard>
-        <Image src={sprites.king} alt="" fill sizes="180px" className="object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.7)]" />
-      </ShowcaseCard>
-      <ShowcaseCard>
-        <HeroSeSprite src={sprites.hero} />
-      </ShowcaseCard>
-      <ShowcaseCard>
-        <Image src={sprites.creature} alt="" fill sizes="180px" className="object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.7)]" />
-      </ShowcaseCard>
+    <div className="hidden grid-cols-4 gap-2 lg:grid" aria-hidden="true" data-testid="auth-random-showcase">
+      <CompactShowcaseCard>
+        <Image src={sprites.castle} alt="" fill sizes="88px" className="object-contain p-1 drop-shadow-[0_6px_9px_rgba(0,0,0,0.75)]" />
+      </CompactShowcaseCard>
+      <CompactShowcaseCard>
+        <Image src={sprites.king} alt="" fill sizes="88px" className="object-contain p-1 drop-shadow-[0_6px_9px_rgba(0,0,0,0.75)]" />
+      </CompactShowcaseCard>
+      <CompactShowcaseCard>
+        <HeroSeSprite src={sprites.hero} size={38} />
+      </CompactShowcaseCard>
+      <CompactShowcaseCard>
+        <Image src={sprites.creature} alt="" fill sizes="88px" className="object-contain p-1 drop-shadow-[0_6px_9px_rgba(0,0,0,0.75)]" />
+      </CompactShowcaseCard>
     </div>
   );
 }
 
-function HeroSeSprite({ src }: { src: string }) {
+function CompactShowcaseCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative h-12 overflow-hidden rounded-md border border-amber-700/40 bg-black/38 shadow-[inset_0_0_14px_rgba(0,0,0,0.55),0_8px_18px_rgba(0,0,0,0.3)]">
+      {children}
+    </div>
+  );
+}
+
+function HeroSeSprite({ src, size = 72 }: { src: string; size?: number }) {
   const frameWidth = 104;
   const frameHeight = 104;
   const columns = 12;
   const rows = 8;
   const directionIndex = 7;
-  const previewSize = 72;
+  const previewSize = size;
   const scale = previewSize / frameWidth;
 
   return (
     <div className="grid h-full w-full place-items-center">
       <div
-        className="h-[72px] w-[72px] drop-shadow-[0_10px_14px_rgba(0,0,0,0.7)]"
+        className="drop-shadow-[0_10px_14px_rgba(0,0,0,0.7)]"
         style={{
+          height: previewSize,
+          width: previewSize,
           backgroundImage: `url(${src})`,
           backgroundPosition: `0px -${directionIndex * frameHeight * scale}px`,
           backgroundRepeat: "no-repeat",

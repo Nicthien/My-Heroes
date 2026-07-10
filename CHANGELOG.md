@@ -5,6 +5,48 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.3.3] - 2026-07-10
+
+Mode invité sans création de compte, parties temporaires auto-nettoyées et page
+d'accueil réorganisée pour rester entièrement visible sur un écran desktop.
+
+### Ajouté
+
+- **Essayer sans compte** — la page de connexion propose désormais un pseudo et
+  un bouton « Essayer ». Une session Supabase anonyme est créée et la fenêtre
+  « Créer une partie » s'ouvre automatiquement. Les invités peuvent rejoindre
+  les parties des comptes permanents et jouer ensemble normalement.
+- **Parties temporaires** — une partie créée par un invité est identifiée dans le
+  tableau de bord, les parties ouvertes et le lobby. La présence est suivie par
+  onglet avec un heartbeat toutes les 30 secondes ; la partie est supprimée une
+  fois vide ou après 24 heures sans présence ni activité de jeu.
+- **Conversion en compte permanent** — un invité peut ajouter pseudo, email et
+  mot de passe depuis le tableau de bord ou le menu de jeu sans perdre son
+  identifiant, ses participations ou sa partie. Avec SMTP, la partie reste
+  protégée jusqu'à la confirmation de l'adresse email.
+- **Protection contre les abus** — prise en charge de Cloudflare Turnstile en
+  production, limitation à une partie temporaire créée par invité et politiques
+  RLS renforcées sur les profils et la présence.
+
+### Modifié
+
+- **Accueil plus compact** — le champ pseudo et le bouton « Essayer » partagent
+  une ligne sur desktop. Les quatre sprites aléatoires sont conservés dans un
+  bandeau compact au-dessus du formulaire et le bas de la connexion est aligné
+  avec la galerie, sans barre de défilement dès 1366 × 768.
+- **Classement permanent préservé** — les résultats des parties temporaires ne
+  sont jamais ajoutés aux statistiques ou au classement.
+
+### Corrigé
+
+- **Pseudo invité libéré proprement** — quitter le mode invité sans partie
+  supprime le profil anonyme et rend immédiatement son pseudo disponible. La
+  déconnexion est bloquée lorsqu'une partie est encore liée, afin d'éviter une
+  perte d'accès accidentelle.
+- **Présence sans rafale Realtime** — les heartbeats ne publient pas de nouvel
+  événement de jeu ; seuls les vrais changements de présence ou mutations de la
+  partie réveillent les clients.
+
 ## [1.3.2] - 2026-06-18
 
 Héros caché derrière un château désormais repérable grâce à une silhouette colorée par-dessus, et nettoyage d'un toast trompeur lors d'un combat déclenché en cours de déplacement.

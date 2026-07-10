@@ -91,7 +91,11 @@ IP keeps default ports free of host collisions (see docs/UNRAID.md → Networkin
 detect updates (an OCI index + attestation manifest breaks Unraid's update check):
 
 ```bash
-docker build --provenance=false --sbom=false -t nicthien/my-heroes:latest .
+VERSION=1.3.3
+docker build --provenance=false --sbom=false \
+  -t nicthien/my-heroes:${VERSION} \
+  -t nicthien/my-heroes:latest .
+docker push nicthien/my-heroes:${VERSION}
 docker push nicthien/my-heroes:latest
 ```
 

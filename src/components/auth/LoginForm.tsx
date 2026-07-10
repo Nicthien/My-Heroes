@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -28,15 +28,41 @@ export default function LoginForm() {
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const [guestName, setGuestName] = useState("");
   const [guestLoading, setGuestLoading] = useState(false);
+  const [allowAnonymousUsers, setAllowAnonymousUsers] = useState(true);
+  const [guestSettingsLoading, setGuestSettingsLoading] = useState(true);
   const [captchaToken, setCaptchaToken] = useState("");
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { status } = useSession();
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/guest-settings", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setAllowAnonymousUsers(data?.allowAnonymousUsers !== false);
+      })
+      .catch((settingsError) => {
+        console.error("Guest settings load failed:", settingsError);
+        if (!cancelled) setAllowAnonymousUsers(true);
+      })
+      .finally(() => {
+        if (!cancelled) setGuestSettingsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleGuestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = guestName.trim();
     if (!name) return;
+    if (!allowAnonymousUsers) {
+      setError(t("auth.guest.disabled"));
+      return;
+    }
     if (getBrowserTurnstileSiteKey() && !captchaToken) {
       setError(t("auth.guest.captchaRequired"));
       return;
@@ -52,7 +78,8 @@ export default function LoginForm() {
         },
       });
       if (signInError || !data.session) {
-        setError(signInError?.message || t("auth.guest.failed"));
+        const message = signInError?.message ?? "";
+        setError(message.toLowerCase().includes("anonymous sign-ins are disabled") ? t("auth.guest.supabaseDisabled") : message || t("auth.guest.failed"));
         setGuestLoading(false);
         return;
       }
@@ -187,15 +214,18 @@ export default function LoginForm() {
               onChange={(event) => setGuestName(event.target.value)}
               className={authInputClass}
               autoComplete="nickname"
+              disabled={!allowAnonymousUsers}
               required
             />
           </div>
-          <button type="submit" disabled={guestLoading || status === "loading"} className={authPrimaryButtonClass}>
+          <button type="submit" disabled={guestLoading || guestSettingsLoading || status === "loading" || !allowAnonymousUsers} className={authPrimaryButtonClass}>
             {guestLoading ? t("auth.guest.starting") : t("auth.guest.try")}
           </button>
         </div>
-        <TurnstileWidget onTokenChange={setCaptchaToken} />
-        <p className="mt-2 text-center text-[11px] leading-4 text-emerald-100/65">{t("auth.guest.notice")}</p>
+        {allowAnonymousUsers && <TurnstileWidget onTokenChange={setCaptchaToken} />}
+        <p className="mt-2 text-center text-[11px] leading-4 text-emerald-100/65">
+          {allowAnonymousUsers ? t("auth.guest.notice") : t("auth.guest.disabled")}
+        </p>
       </form>
 
       <div className="mb-4 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/45">

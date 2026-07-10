@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/auth";
 import { displayNameIsTaken, normalizeDisplayName } from "@/lib/auth/displayName";
 import { normalizeLocale } from "@/lib/i18n/types";
+import { getAllowAnonymousUsers } from "@/lib/server/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
@@ -11,12 +12,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cette session n'est pas anonyme." }, { status: 403 });
   }
 
+  const supabase = createAdminClient();
+  if (!(await getAllowAnonymousUsers(supabase))) {
+    await supabase.auth.admin.deleteUser(user.id).catch(() => undefined);
+    return NextResponse.json({ error: "Le mode invite est desactive par l'administrateur." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const name = normalizeDisplayName(body.name);
   const language = normalizeLocale(body.language);
   if (!name) return NextResponse.json({ error: "Le pseudo est requis." }, { status: 400 });
 
-  const supabase = createAdminClient();
   try {
     if (await displayNameIsTaken(supabase, name, user.id)) {
       await supabase.auth.admin.deleteUser(user.id);

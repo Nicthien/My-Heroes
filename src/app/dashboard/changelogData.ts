@@ -22,6 +22,27 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.4",
+    date: "2026-07-10",
+    summary: "Contrôle administrateur du mode invité et garde-fous de déploiement pour les connexions anonymes Supabase.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Option admin utilisateurs anonymes** — le tableau de bord d'administration propose désormais un interrupteur « Autoriser les utilisateurs anonymes ». Lorsqu'il est désactivé, le bouton « Essayer sans compte » est bloqué et la route serveur refuse la création de profils invités.",
+          "**Réglages applicatifs persistants** — ajout de la table `app_settings`, avec migration et schéma frais synchronisés pour conserver ce paramètre entre les redéploiements.",
+          "**Script VPS Supabase Auth** — ajout d'un script opérationnel pour activer les variables GoTrue nécessaires aux connexions anonymes sur un stack Supabase auto-hébergé.",
+        ],
+      },
+      {
+        category: "fixed",
+        items: [
+          "**Erreur invité plus lisible** — si Supabase Auth refuse encore les connexions anonymes, l'écran de connexion affiche un message explicite au lieu de remonter directement l'erreur brute `Anonymous sign-ins are disabled`.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.3.3",
     date: "2026-07-10",
     summary: "Mode invité sans création de compte, parties temporaires auto-nettoyées et page d'accueil réorganisée pour rester entièrement visible sur desktop.",

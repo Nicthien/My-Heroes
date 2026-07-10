@@ -5,6 +5,30 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.3.4] - 2026-07-10
+
+Contrôle administrateur du mode invité et garde-fous de déploiement pour les
+connexions anonymes Supabase.
+
+### Ajouté
+
+- **Option admin utilisateurs anonymes** — le tableau de bord d'administration
+  propose désormais un interrupteur « Autoriser les utilisateurs anonymes ».
+  Lorsqu'il est désactivé, le bouton « Essayer sans compte » est bloqué et la
+  route serveur refuse la création de profils invités.
+- **Réglages applicatifs persistants** — ajout de la table `app_settings`, mise
+  à jour de `supabase/schema.sql` et migration incrémentale pour conserver ce
+  paramètre entre les redéploiements.
+- **Script VPS Supabase Auth** — ajout d'un script opérationnel pour activer les
+  variables GoTrue nécessaires aux connexions anonymes sur un stack Supabase
+  auto-hébergé.
+
+### Corrigé
+
+- **Erreur invité plus lisible** — si Supabase Auth refuse encore les connexions
+  anonymes, l'écran de connexion affiche un message explicite au lieu de
+  remonter directement l'erreur brute `Anonymous sign-ins are disabled`.
+
 ## [1.3.3] - 2026-07-10
 
 Mode invité sans création de compte, parties temporaires auto-nettoyées et page

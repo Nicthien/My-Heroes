@@ -73,6 +73,10 @@ export interface AdminGameInfo {
   players: AdminGamePlayerInfo[];
 }
 
+interface AdminSettings {
+  allowAnonymousUsers: boolean;
+}
+
 interface AdminHomeDashboardProps {
   fetchWithAuth: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
   parseJsonResponse: (response: Response) => Promise<unknown>;
@@ -82,7 +86,7 @@ interface AdminHomeDashboardProps {
   onObserveGame: (gameId: string) => void;
 }
 
-type SectionId = "bugReports" | "users" | "games" | "stats";
+type SectionId = "settings" | "bugReports" | "users" | "games" | "stats";
 
 function formatAdminDate(value?: string | null, fallback = "-") {
   if (!value) return fallback;
@@ -180,7 +184,9 @@ export function AdminHomeDashboard({
 }: AdminHomeDashboardProps) {
   const [users, setUsers] = useState<AdminUserInfo[]>([]);
   const [games, setGames] = useState<AdminGameInfo[]>([]);
+  const [settings, setSettings] = useState<AdminSettings>({ allowAnonymousUsers: true });
   const [loading, setLoading] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const [newUserName, setNewUserName] = useState("");
@@ -194,6 +200,7 @@ export function AdminHomeDashboard({
   const [bugCounts, setBugCounts] = useState<BugReportCounts>({ total: 0, unread: 0, unanswered: 0 });
 
   const [sectionsOpen, setSectionsOpen] = useState<Record<SectionId, boolean>>({
+    settings: true,
     bugReports: true,
     users: false,
     games: false,
@@ -214,13 +221,16 @@ export function AdminHomeDashboard({
   const loadData = useCallback(async () => {
     setLoading(true);
     setMessage(null);
-    const [usersResponse, gamesResponse] = await Promise.all([
+    const [settingsResponse, usersResponse, gamesResponse] = await Promise.all([
+      fetchWithAuth("/api/admin/settings", { cache: "no-store" }),
       fetchWithAuth("/api/admin/users", { cache: "no-store" }),
       fetchWithAuth("/api/admin/games", { cache: "no-store" }),
     ]);
 
-    if (!usersResponse.ok || !gamesResponse.ok) {
-      const data = !usersResponse.ok
+    if (!settingsResponse.ok || !usersResponse.ok || !gamesResponse.ok) {
+      const data = !settingsResponse.ok
+        ? ((await parseJsonResponse(settingsResponse)) as { error?: string } | null)
+        : !usersResponse.ok
         ? ((await parseJsonResponse(usersResponse)) as { error?: string } | null)
         : ((await parseJsonResponse(gamesResponse)) as { error?: string } | null);
       setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.loadFailed") });
@@ -230,8 +240,12 @@ export function AdminHomeDashboard({
       return;
     }
 
+    const settingsData = (await parseJsonResponse(settingsResponse)) as AdminSettings | null;
     const usersData = (await parseJsonResponse(usersResponse)) as AdminUserInfo[] | null;
     const gamesData = (await parseJsonResponse(gamesResponse)) as AdminGameInfo[] | null;
+    setSettings({
+      allowAnonymousUsers: settingsData?.allowAnonymousUsers !== false,
+    });
     setUsers(Array.isArray(usersData) ? usersData : []);
     setGames(Array.isArray(gamesData) ? gamesData : []);
     setLoading(false);
@@ -323,6 +337,27 @@ export function AdminHomeDashboard({
     setMessage({ kind: "success", text: enabled ? t("admin.godModeEnabled") : t("admin.godModeDisabled") });
   };
 
+  const updateAllowAnonymousUsers = async (enabled: boolean) => {
+    setMessage(null);
+    setSavingSettings(true);
+    const response = await fetchWithAuth("/api/admin/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ allowAnonymousUsers: enabled }),
+    });
+
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
+      setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.settingsSaveFailed") });
+      setSavingSettings(false);
+      return;
+    }
+
+    setSettings({ allowAnonymousUsers: enabled });
+    setMessage({ kind: "success", text: enabled ? t("admin.anonymousUsersEnabled") : t("admin.anonymousUsersDisabled") });
+    setSavingSettings(false);
+  };
+
   const deleteGame = async (target: AdminGameInfo) => {
     if (!confirm(`Supprimer la partie ${target.name} ?`)) return;
     setMessage(null);
@@ -406,6 +441,40 @@ export function AdminHomeDashboard({
           >
             {loading ? t("common.loading") : t("admin.refresh")}
           </button>
+        </div>
+
+        <div id="admin-section-settings" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
+          <SectionHeader
+            title={t("admin.settings")}
+            open={sectionsOpen.settings}
+            onToggle={() => toggleSection("settings")}
+            ariaId="admin-panel-settings"
+          />
+          {sectionsOpen.settings && (
+            <div id="admin-panel-settings" className="space-y-3 p-3">
+              <label className="flex flex-col gap-3 rounded-md border border-amber-700/35 bg-stone-950/45 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  <span className="block text-sm font-black uppercase tracking-[0.14em] text-amber-100">
+                    {t("admin.allowAnonymousUsers")}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-amber-100/65">
+                    {t("admin.allowAnonymousUsersHelp")}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-amber-100/75">
+                  <input
+                    type="checkbox"
+                    checked={settings.allowAnonymousUsers}
+                    onChange={(event) => updateAllowAnonymousUsers(event.target.checked).catch(console.error)}
+                    disabled={savingSettings}
+                    className="h-4 w-4 accent-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  {settings.allowAnonymousUsers ? t("common.yes") : t("common.no")}
+                </span>
+              </label>
+              <p className="text-xs leading-5 text-amber-100/55">{t("admin.allowAnonymousUsersSupabaseNote")}</p>
+            </div>
+          )}
         </div>
 
         <div id="admin-section-bugReports" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">

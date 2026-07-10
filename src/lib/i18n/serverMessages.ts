@@ -10,6 +10,7 @@ const SERVER_MESSAGE_EN: Record<string, string> = {
   "L'adresse mail est requise.": "Email address is required.",
   "Le mot de passe est requis.": "Password is required.",
   "Ce pseudo est deja utilise.": "This username is already taken.",
+  "Le mode invite est desactive par l'administrateur.": "Guest mode is disabled by the administrator.",
   "Impossible de creer le compte.": "Could not create the account.",
   "Email, pseudo ou mot de passe incorrect": "Incorrect email, username or password",
   "Non autorise": "Unauthorized",

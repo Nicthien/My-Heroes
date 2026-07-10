@@ -19,6 +19,17 @@ create table public.profiles (
 
 create unique index profiles_name_lower_unique on public.profiles (lower(name)) where name is not null;
 
+create table public.app_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.app_settings (key, value)
+values ('allow_anonymous_users', 'true'::jsonb)
+on conflict (key) do nothing;
+
 -- Pending email-confirmation tokens (app-managed, sent via nodemailer; gated by
 -- USE_SMTP). Only the SHA-256 hash is stored; the raw token lives only in the
 -- email. Service-role only — RLS enabled with no policies, never client-exposed.
@@ -29,6 +40,7 @@ create table public.email_confirmations (
   created_at timestamptz not null default now()
 );
 alter table public.email_confirmations enable row level security;
+alter table public.app_settings enable row level security;
 
 -- Cross-game aggregate leaderboard stats, one row per user (updated when a game completes).
 create table public.player_stats (

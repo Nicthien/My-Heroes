@@ -12,6 +12,7 @@ create table public.profiles (
   god_mode_enabled boolean not null default false,
   language text not null default 'fr' check (language in ('fr', 'en')),
   email_confirmed boolean not null default false,
+  is_guest boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -59,6 +60,8 @@ create table public.games (
   map_state jsonb not null default '{}',
   ai_runner_locked_at timestamptz,
   created_by_user_id uuid references public.profiles(id) on delete set null,
+  is_ephemeral boolean not null default false,
+  preservation_pending_until timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -88,6 +91,19 @@ create table public.game_players (
   created_at timestamptz not null default now(),
   unique (game_id, user_id)
 );
+
+create index games_ephemeral_created_idx on public.games (created_at) where is_ephemeral = true;
+
+create table public.game_presence (
+  game_id uuid not null references public.games(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  session_id uuid not null,
+  last_seen_at timestamptz not null default now(),
+  left_at timestamptz,
+  primary key (game_id, user_id, session_id)
+);
+
+create index game_presence_game_last_seen_idx on public.game_presence (game_id, last_seen_at desc);
 
 alter table public.games
   add constraint games_current_turn_player_id_fkey foreign key (current_turn_player_id) references public.game_players(id) on delete set null,
@@ -356,8 +372,7 @@ create table public.game_events (
 );
 
 alter table public.profiles enable row level security;
-create policy "profiles readable by authenticated users" on public.profiles for select to authenticated using (true);
-create policy "users can update own profile" on public.profiles for update to authenticated using (auth.uid() = id);
+create policy "users can read own profile" on public.profiles for select to authenticated using (auth.uid() = id);
 
 -- Leaderboard is public to all authenticated users; writes go through the service-role API only.
 alter table public.player_stats enable row level security;
@@ -450,6 +465,7 @@ alter table public.combat_participants enable row level security;
 alter table public.combat_reinforcement_requests enable row level security;
 alter table public.combat_surrender_negotiations enable row level security;
 alter table public.combat_truces enable row level security;
+alter table public.game_presence enable row level security;
 
 -- Game data tables keep RLS ENABLED (above) with NO member SELECT policy, so
 -- authenticated clients get zero rows via PostgREST/Realtime. The browser never
@@ -482,11 +498,18 @@ begin
     v_row := new;
   end if;
 
+  if tg_table_name = 'game_presence' and tg_op = 'UPDATE' then
+    if old.left_at is not distinct from new.left_at then
+      return null;
+    end if;
+  end if;
+
   if tg_table_name = 'games' then
     v_game_id := v_row.id;
   elsif tg_table_name in (
     'game_players', 'resource_buildings', 'gates', 'boats',
-    'neutral_armies', 'combats', 'turns', 'game_action_logs'
+    'neutral_armies', 'combats', 'turns', 'game_action_logs',
+    'game_presence'
   ) then
     v_game_id := v_row.game_id;
   elsif tg_table_name = 'heroes' then
@@ -545,7 +568,8 @@ begin
     'games', 'game_players', 'heroes', 'armies', 'towns', 'resource_buildings',
     'gates', 'gate_stacks', 'boats', 'neutral_armies', 'neutral_army_stacks',
     'combats', 'combat_participants', 'combat_reinforcement_requests',
-    'combat_surrender_negotiations', 'combat_truces', 'turns', 'game_action_logs'
+    'combat_surrender_negotiations', 'combat_truces', 'turns', 'game_action_logs',
+    'game_presence'
   ]
   loop
     execute format('drop trigger if exists bump_game_event on public.%I', t);

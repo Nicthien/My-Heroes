@@ -759,6 +759,7 @@ export function mapApiToGameState(
   return {
     id: mapId,
     status: data.status as GameState["status"],
+    isEphemeral: Boolean(data.isEphemeral),
     maxPlayers: (data.maxPlayers as number) ?? 8,
     players,
     map,
@@ -815,6 +816,7 @@ export function mergeGameDynamicState(
 
   return {
     ...baseGameState,
+    isEphemeral: Boolean(data.isEphemeral),
     status: (data.status as GameState["status"]) ?? baseGameState.status,
     players,
     turnNumber,

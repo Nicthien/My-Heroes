@@ -142,6 +142,23 @@ export async function POST(request: Request) {
     }, { onConflict: "id" });
     if (profileError) return apiRouteError("api/games POST profile", profileError);
 
+    if (user.isGuest) {
+      const { data: existingGuestGame, error: existingGuestGameError } = await supabase
+        .from("games")
+        .select("id")
+        .eq("created_by_user_id", user.id)
+        .eq("is_ephemeral", true)
+        .limit(1)
+        .maybeSingle();
+      if (existingGuestGameError) return apiRouteError("api/games POST guest limit", existingGuestGameError);
+      if (existingGuestGame) {
+        return NextResponse.json({
+          error: "Un invite ne peut creer qu'une seule partie temporaire a la fois.",
+          gameId: existingGuestGame.id,
+        }, { status: 409 });
+      }
+    }
+
     const body = await request.json();
     const {
       name,
@@ -211,6 +228,7 @@ export async function POST(request: Request) {
       map_data: mapData,
       game_config: { turnTimeLimit, rmgTuning: tuning, undergroundEnabled: Boolean(undergroundEnabled), victory, grail, obelisksTotal },
       created_by_user_id: user.id,
+      is_ephemeral: Boolean(user.isGuest),
       seed: mapData.seed,
       map_size: mapSize,
       template_id: mapData.templateId,

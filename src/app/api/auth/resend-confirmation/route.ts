@@ -18,15 +18,22 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, name, email_confirmed")
+    .select("id, name, email_confirmed, is_guest")
     .ilike("email", email)
     .maybeSingle();
 
   if (!profile || profile.email_confirmed) return ok;
 
-  const token = await createConfirmationToken(supabase, profile.id);
-  if (token) {
-    await sendConfirmationEmail(email, profile.name ?? "", token);
+  const confirmation = await createConfirmationToken(supabase, profile.id);
+  if (confirmation) {
+    if (profile.is_guest) {
+      await supabase
+        .from("games")
+        .update({ preservation_pending_until: confirmation.expiresAt })
+        .eq("created_by_user_id", profile.id)
+        .eq("is_ephemeral", true);
+    }
+    await sendConfirmationEmail(email, profile.name ?? "", confirmation.token);
   }
 
   return ok;

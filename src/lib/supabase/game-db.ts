@@ -30,6 +30,7 @@ export function toGame(row: DbRow) {
     gameConfig: row.game_config,
     mapState: row.map_state,
     createdByUserId: row.created_by_user_id ?? null,
+    isEphemeral: Boolean(row.is_ephemeral),
     createdBy: row.created_by
       ? {
           id: row.created_by_user_id ?? null,

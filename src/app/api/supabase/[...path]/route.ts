@@ -19,15 +19,18 @@ async function proxyRequest(request: NextRequest, path: string[] = []) {
   headers.set("host", new URL(targetOrigin).host);
   headers.delete("origin");
 
-  const fetchOptions: RequestInit & { duplex?: "half" } = {
+  const fetchOptions: RequestInit = {
     method: request.method,
     headers,
     redirect: "manual",
   };
 
-  if (request.body) {
-    fetchOptions.body = request.body;
-    fetchOptions.duplex = 'half';
+  if (request.body && request.method !== "GET" && request.method !== "HEAD") {
+    // Buffer the small Auth/PostgREST payload before forwarding it. Passing the
+    // incoming stream through directly can be aborted by Next dev navigation,
+    // which surfaced as intermittent ECONNRESET on a second anonymous signup.
+    fetchOptions.body = await request.arrayBuffer();
+    headers.delete("content-length");
   }
 
   let response: Response;

@@ -246,10 +246,18 @@ set_env VAULT_ENC_KEY "$VAULT_ENC_KEY"
 set_env SITE_URL "https://<your-domain>"
 set_env API_EXTERNAL_URL "http://localhost:8000"
 set_env SUPABASE_PUBLIC_URL "http://localhost:8000"
+set_env ENABLE_ANONYMOUS_USERS "true"
 
 echo "SAVE THESE:"; echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"; echo "DASHBOARD_USERNAME=$DASHBOARD_USERNAME"; echo "DASHBOARD_PASSWORD=$DASHBOARD_PASSWORD"
 set -o history
 ```
+
+Dans `docker-compose.yml`, le service Auth doit recevoir
+`GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS}` et
+`GOTRUE_SECURITY_MANUAL_LINKING_ENABLED: "true"`. Pour la production publique,
+configurez aussi Cloudflare Turnstile dans ce service (`GOTRUE_SECURITY_CAPTCHA_*`)
+et transmettez uniquement la clé publique à l'application via
+`TURNSTILE_SITE_KEY`; la clé secrète reste dans `/opt/my-heroes/supabase/.env`.
 
 > `POSTGRES_PASSWORD` is needed again in Step 5. `API_EXTERNAL_URL` /
 > `SUPABASE_PUBLIC_URL` stay on `localhost` on purpose — Supabase is never

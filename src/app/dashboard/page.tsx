@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession, getSupabaseAccessToken, signOutWithLocalFallback } from "@/lib/auth/client";
 import { generateMap } from "@/lib/game/engine";
@@ -51,6 +51,7 @@ import { ReportBugModal, BugIcon } from "@/components/ReportBugModal";
 import { Leaderboard } from "./Leaderboard";
 import { RenderPerformanceWarning } from "./RenderPerformanceWarning";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
+import { GuestAccountConversionModal } from "@/components/auth/GuestAccountConversionModal";
 
 interface PlayerInfo {
   id: string;
@@ -76,6 +77,8 @@ interface GameInfo {
   mapWidth: number;
   mapHeight: number;
   createdAt?: string | null;
+  createdByUserId?: string | null;
+  isEphemeral?: boolean;
   gameConfig?: { victory?: unknown } | null;
   players: PlayerInfo[];
 }
@@ -85,6 +88,7 @@ interface OpenGame {
   name: string;
   maxPlayers: number;
   players: PlayerInfo[];
+  isEphemeral?: boolean;
 }
 
 
@@ -164,20 +168,31 @@ function playerStatusClass(status?: string | null) {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-stone-950" />}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const { data: session, status } = useSession();
   const { locale, setLocale, t } = useI18n();
+  const searchParams = useSearchParams();
+  const createRequested = searchParams.get("create") === "1";
   const { shouldShow: showSupportPrompt, dismiss: dismissSupportPrompt } = useSupportPrompt();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [creating, setCreating] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(createRequested);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [showJoin, setShowJoin] = useState(false);
   const [joinStep, setJoinStep] = useState<1 | 2>(1);
   const [showOptions, setShowOptions] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showGuestConversion, setShowGuestConversion] = useState(false);
   const [showRmgPreview, setShowRmgPreview] = useState(false);
   const [showRmgTuning, setShowRmgTuning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GameInfo | null>(null);
@@ -288,6 +303,7 @@ export default function DashboardPage() {
     : `${MAP_SIZES[mapSize]}x${MAP_SIZES[mapSize]}`;
   const previewTemplateLabel = previewMap?.templateId ?? selectedTemplateId;
   const isAdmin = session?.user?.role === "admin";
+  const isGuest = Boolean(session?.user?.isGuest);
   const mustChangePassword = Boolean(session?.user?.mustChangePassword);
   const generateRandomSeed = () => {
     setSeed(randomSeedValue());
@@ -299,6 +315,26 @@ export default function DashboardPage() {
   const signOut = async () => {
     setSigningOut(true);
     setDashboardMessage(null);
+
+    if (isGuest) {
+      try {
+        const releaseResponse = await fetchWithAuth("/api/auth/guest/logout", { method: "POST" });
+        if (!releaseResponse.ok) {
+          throw new Error(await releaseResponse.text());
+        }
+        const releaseResult = await releaseResponse.json() as { hasGames?: boolean };
+        if (releaseResult.hasGames) {
+          setSigningOut(false);
+          setDashboardMessage({ kind: "error", text: t("auth.guest.signOutBlocked") });
+          return;
+        }
+      } catch (releaseError) {
+        console.warn("Guest profile release failed before sign-out.", releaseError);
+        setSigningOut(false);
+        setDashboardMessage({ kind: "error", text: t("dashboard.signOutError") });
+        return;
+      }
+    }
 
     const error = await signOutWithLocalFallback();
 
@@ -374,6 +410,11 @@ export default function DashboardPage() {
     loadMyGames().catch(console.error);
     loadLeaderboard().catch(console.error);
   }, [loadMyGames, loadLeaderboard, status]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !createRequested) return;
+    router.replace("/dashboard", { scroll: false });
+  }, [createRequested, router, status]);
 
   useEffect(() => {
     if (!showJoin) return;
@@ -538,6 +579,11 @@ export default function DashboardPage() {
       router.push(`/game/${game.id}${isAdmin ? "?admin=1" : ""}`);
     } else {
       const data = await parseJsonResponse(res);
+      if (res.status === 409 && typeof data?.gameId === "string") {
+        router.push(`/game/${data.gameId}`);
+        setCreating(false);
+        return;
+      }
       setDashboardMessage({
         kind: "error",
         text: localizedServerMessage(data?.error, locale) || t("dashboard.createGameFailed"),
@@ -653,6 +699,10 @@ export default function DashboardPage() {
     );
   }
 
+  const guestHasCreatedGame = isGuest && games.some((game) =>
+    game.isEphemeral && game.createdByUserId === session?.user?.id
+  );
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-stone-950 via-[#0e0904] to-stone-900">
       <DashboardBackgroundLayers />
@@ -682,7 +732,8 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-2 sm:flex sm:gap-3">
             <button
               onClick={() => { setCreateStep(1); setShowCreate(true); setShowJoin(false); setShowOptions(false); setShowRmgPreview(false); }}
-              className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 sm:px-6"
+              disabled={guestHasCreatedGame}
+              className="touch-target rounded-lg border border-amber-400/60 bg-gradient-to-b from-amber-600 to-amber-800 px-4 py-3 font-black uppercase tracking-wider text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.3)] transition hover:from-amber-500 hover:to-amber-700 disabled:cursor-not-allowed disabled:opacity-45 sm:px-6"
             >
               {t("dashboard.newGame")}
             </button>
@@ -717,7 +768,7 @@ export default function DashboardPage() {
             >
               <BugIcon />
             </button>
-            <button
+            {!isGuest && <button
               type="button"
               onClick={openOptions}
               title={t("dashboard.options.title")}
@@ -725,7 +776,7 @@ export default function DashboardPage() {
               className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 sm:w-12"
             >
               <GearIcon />
-            </button>
+            </button>}
             <button
               type="button"
               onClick={() => signOut().catch((error) => {
@@ -734,14 +785,27 @@ export default function DashboardPage() {
                 setSigningOut(false);
               })}
               disabled={signingOut}
-              title={signingOut ? t("dashboard.signingOut") : t("dashboard.signOut")}
-              aria-label={signingOut ? t("dashboard.signingOut") : t("dashboard.signOut")}
+              title={signingOut ? t("dashboard.signingOut") : isGuest ? t("auth.guest.leaveMode") : t("dashboard.signOut")}
+              aria-label={signingOut ? t("dashboard.signingOut") : isGuest ? t("auth.guest.leaveMode") : t("dashboard.signOut")}
               className="touch-target flex h-12 w-full items-center justify-center rounded-lg border border-amber-700/50 bg-stone-950/80 text-amber-200/80 transition hover:border-amber-400/60 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-12"
             >
               <SignOutIcon />
             </button>
           </div>
         </div>
+
+        {isGuest && (
+          <div className="mb-6 flex flex-col gap-3 rounded-lg border border-emerald-400/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100 shadow-inner shadow-black/30 sm:flex-row sm:items-center sm:justify-between">
+            <span>{t("auth.guest.banner")}</span>
+            <button
+              type="button"
+              onClick={() => setShowGuestConversion(true)}
+              className="rounded-md border border-emerald-300/55 bg-emerald-800/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-50 transition hover:bg-emerald-700"
+            >
+              {t("auth.guest.convert")}
+            </button>
+          </div>
+        )}
 
         {mustChangePassword && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6">
@@ -927,6 +991,16 @@ export default function DashboardPage() {
         )}
 
         {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+
+        <GuestAccountConversionModal
+          open={showGuestConversion}
+          onClose={() => setShowGuestConversion(false)}
+          onConverted={() => {
+            setDashboardMessage({ kind: "success", text: t("auth.guest.converted") });
+            void loadMyGames();
+            router.refresh();
+          }}
+        />
 
         {showReport && (
           <ReportBugModal
@@ -1170,6 +1244,11 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className={`text-lg font-black ${goldText}`}>{game.name}</h3>
+                    {game.isEphemeral && (
+                      <div className="mt-1 inline-flex rounded border border-emerald-400/45 bg-emerald-950/45 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                        {t("auth.guest.temporary")}
+                      </div>
+                    )}
                     <div className="mt-1 text-xs uppercase tracking-wider text-amber-200/70">
                       {t("dashboard.turn", { n: game.turnNumber })} <span className="mx-1 text-amber-700">◆</span>
                       <span className={`font-bold ${statusColor}`}>{statusLabel}</span>

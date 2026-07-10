@@ -51,6 +51,8 @@ services:
       # Where the /api/supabase proxy forwards server-side: Kong on the shared
       # docker network. This is what makes the PROXY strategy work.
       SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://kong:8000}
+      # Public Cloudflare Turnstile site key for anonymous sign-in.
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       # --- Email / SMTP (signup confirmation + welcome mail) -----------------
       # Master switch. "false" (default) = instant signup, no email confirmation
       # (good for test servers). "true" = require email validation before login.

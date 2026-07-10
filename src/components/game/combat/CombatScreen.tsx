@@ -14,6 +14,7 @@ import CombatAudioControl from "./CombatAudioControl";
 import GameMenuButton from "../menu/GameMenuButton";
 import OptionsDialog from "../menu/OptionsDialog";
 import ConfirmDialog from "../menu/ConfirmDialog";
+import { GuestAccountConversionModal } from "@/components/auth/GuestAccountConversionModal";
 import { useRouter } from "next/navigation";
 import { goldText, ornateFrame, ornateFramePolished } from "@/components/game/hud/theme";
 import { TurnTimerBadge } from "@/components/game/hud/TurnTimerBadge";
@@ -22,6 +23,7 @@ import { DISPLAY_PREFERENCE_EVENT, getSavedFpsDisplay } from "@/lib/settings/dis
 import { InitiativeQueue, UnitDetails } from "./combatPanels";
 import { CombatFloatingPanel } from "./CombatFloatingPanel";
 import { SpellBookButton, SpellBookModal } from "@/components/game/spells/SpellBookModal";
+import { sendGamePresence } from "@/lib/game/presence";
 
 import { UnitSilhouette, getUnitModel, getUnitPalette, type UnitModelKind } from "./unitSvg";
 export { UnitSilhouette, getUnitModel, getUnitPalette, type UnitModelKind };
@@ -83,6 +85,7 @@ export default function CombatScreen() {
   const [tacticsSelectedUnitId, setTacticsSelectedUnitId] = useState<string | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+  const [guestConversionOpen, setGuestConversionOpen] = useState(false);
   const [showFps, setShowFps] = useState(getSavedFpsDisplay);
   const performanceStats = useDevPerformanceStats(showFps);
 
@@ -568,7 +571,8 @@ export default function CombatScreen() {
 
   // Leave the whole game from the combat menu (distinct from in-combat retreat
   // or surrender, which stay in the action panel).
-  const performQuitFromCombat = () => {
+  const performQuitFromCombat = async () => {
+    if (gameState?.isEphemeral) await sendGamePresence(gameState.id, "leave");
     useGameStore.getState().resetGame();
     router.push("/dashboard");
   };
@@ -630,6 +634,14 @@ export default function CombatScreen() {
                 onClick: () => setOptionsOpen(true),
                 dataTestId: "menu-options",
               },
+              ...(session?.user?.isGuest
+                ? [{
+                    key: "guest-convert",
+                    label: t("auth.guest.convert"),
+                    onClick: () => setGuestConversionOpen(true),
+                    dataTestId: "menu-guest-convert",
+                  }]
+                : []),
               {
                 key: "quit",
                 label: t("menu.quit"),
@@ -642,6 +654,10 @@ export default function CombatScreen() {
         </div>
       </header>
       <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
+      <GuestAccountConversionModal
+        open={guestConversionOpen}
+        onClose={() => setGuestConversionOpen(false)}
+      />
       <ConfirmDialog
         open={confirmQuitOpen}
         eyebrow={t("hud.menu")}
@@ -650,7 +666,7 @@ export default function CombatScreen() {
         confirmLabel={t("menu.quit")}
         onConfirm={() => {
           setConfirmQuitOpen(false);
-          performQuitFromCombat();
+          void performQuitFromCombat();
         }}
         onCancel={() => setConfirmQuitOpen(false)}
       />

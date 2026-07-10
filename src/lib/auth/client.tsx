@@ -92,6 +92,7 @@ interface AuthSession {
     mustChangePassword?: boolean;
     language?: string | null;
     godModeEnabled?: boolean;
+    isGuest?: boolean;
   };
 }
 
@@ -116,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mustChangePassword?: boolean;
     language?: string | null;
     godModeEnabled?: boolean;
+    isGuest?: boolean;
   } | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
 
@@ -148,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             mustChangePassword: Boolean(data.mustChangePassword),
             language: data.language ?? null,
             godModeEnabled: Boolean(data.godModeEnabled),
+            isGuest: Boolean(data.isGuest),
           });
         }
       } catch {
@@ -208,6 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             mustChangePassword: profile?.mustChangePassword ?? false,
             language: profile?.language ?? null,
             godModeEnabled: profile?.godModeEnabled ?? false,
+            isGuest: profile?.isGuest ?? Boolean(user.is_anonymous),
           },
         }
       : null,

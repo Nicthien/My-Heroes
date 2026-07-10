@@ -83,6 +83,7 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `SUPABASE_ANON_KEY` | oui | Clé anon / publishable (publique par nature). |
 | `SUPABASE_SERVICE_ROLE_KEY` | oui | Clé service role, serveur uniquement. |
 | `SUPABASE_INTERNAL_URL` | non | Où le serveur joint Supabase. Défaut : `SUPABASE_URL`. |
+| `TURNSTILE_SITE_KEY` | en production invitée | Clé publique Cloudflare Turnstile injectée à l'exécution. Le secret correspondant se configure uniquement dans Supabase Auth. |
 | `SUPABASE_DB_URL` | non | URL Postgres directe (`postgres` + `POSTGRES_PASSWORD`) pour appliquer les migrations au démarrage. Absente = pas d'auto-migration. Voir [`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. |
 | `MIGRATE_ON_BOOT` | non | `false` pour désactiver la migration au démarrage. Défaut : `true`. |
 | `USE_SMTP` | non | `true` pour activer l'envoi d'emails (confirmation d'inscription + bienvenue) ; la connexion reste bloquée tant que l'adresse n'est pas confirmée. Défaut : `false` (inscription instantanée, aucun email). |
@@ -100,6 +101,10 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `IMAP_USER` | si IMAP | Identifiant IMAP. |
 | `IMAP_PASS` | si IMAP | Mot de passe IMAP. |
 | `IMAP_MAILBOX` | non | Boîte aux lettres à scanner. Défaut : `INBOX`. |
+
+Le mode invité exige aussi l'activation des connexions anonymes et de la liaison
+manuelle dans Supabase Auth. En production publique, activez Turnstile dans
+Supabase Auth et conservez sa clé secrète dans l'environnement du service Auth.
 
 > En local, `npm run dev` injecte automatiquement la config depuis
 > `supabase status` (via les noms `NEXT_PUBLIC_*` du `.env`, conservés comme

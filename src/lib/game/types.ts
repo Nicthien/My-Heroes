@@ -982,6 +982,8 @@ export interface VictoryCondition {
 export interface GameState {
   id: string;
   status: "PENDING" | "ACTIVE" | "COMPLETED" | "ABANDONED";
+  /** Guest-created games are deleted when empty or inactive for 24 hours. */
+  isEphemeral?: boolean;
   maxPlayers: number;
   players: Player[];
   map: GameMap;

@@ -15,12 +15,16 @@ export async function GET(request: Request) {
     mustChangePassword: Boolean(user.mustChangePassword),
     language: user.language ?? "fr",
     godModeEnabled: Boolean(user.godModeEnabled),
+    isGuest: Boolean(user.isGuest),
   });
 }
 
 export async function POST(request: Request) {
   const { user, response } = await requireCurrentUser(request);
   if (!user) return response;
+  if (user.isGuest) {
+    return NextResponse.json({ error: "Créez un compte pour modifier votre profil." }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? user.name ?? user.email ?? "Joueur").trim();

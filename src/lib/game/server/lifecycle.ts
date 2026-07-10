@@ -69,7 +69,7 @@ export async function evaluateGameLifecycle(supabase: SupabaseAdmin, gameId: str
     roundComplete: isRoundComplete(contenders, turnNumber, turns),
   });
   if (outcome.type === "completed") {
-    return finalizeGame(supabase, gameId, sourcePlayers, outcome.winnerId, turnNumber);
+    return finalizeGame(supabase, gameId, sourcePlayers, outcome.winnerId, turnNumber, Boolean(game.isEphemeral));
   }
 
   if (eliminatedIds.has(String(game.currentTurnPlayerId ?? ""))) {
@@ -90,6 +90,7 @@ async function finalizeGame(
   sourcePlayers: ScoreSourcePlayer[],
   winnerId: string | null,
   turnNumber: number,
+  isEphemeral: boolean,
 ) {
   await supabase
     .from("games")
@@ -103,7 +104,9 @@ async function finalizeGame(
   // Capture the final score point so the progression chart includes the last
   // round even when the game ends mid-round (a domination/objective win).
   await recordRoundScoreSnapshots(supabase, gameId, turnNumber, sourcePlayers);
-  await recordCompletedGameStats(supabase, sourcePlayers, winnerId);
+  if (!isEphemeral) {
+    await recordCompletedGameStats(supabase, sourcePlayers, winnerId);
+  }
   return { status: "COMPLETED" as const, winnerId };
 }
 

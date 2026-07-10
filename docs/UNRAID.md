@@ -95,7 +95,15 @@ Edit `supabase-stack/.env` and set at least `POSTGRES_PASSWORD`, `JWT_SECRET`,
 SITE_URL=https://your-public-host
 API_EXTERNAL_URL=http://<supabase-ip>:8000
 SUPABASE_PUBLIC_URL=http://<supabase-ip>:8000
+ENABLE_ANONYMOUS_USERS=true
 ```
+
+Dans le service `auth` de `docker-compose.yml`, vérifiez aussi le passage de
+`GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_USERS}` et ajoutez
+`GOTRUE_SECURITY_MANUAL_LINKING_ENABLED: "true"`. Pour une instance publique,
+activez Turnstile avec `GOTRUE_SECURITY_CAPTCHA_ENABLED`,
+`GOTRUE_SECURITY_CAPTCHA_PROVIDER=turnstile` et
+`GOTRUE_SECURITY_CAPTCHA_SECRET` (secret stocké uniquement dans la `.env` Supabase).
 
 ## Step 2 — Give Kong a dedicated LAN IP & deploy Supabase
 
@@ -155,6 +163,7 @@ Add these **variables** (your own values — nothing is baked into the image):
 | `SUPABASE_ANON_KEY` | *(your anon key)* |
 | `SUPABASE_SERVICE_ROLE_KEY` | *(your service role key)* |
 | `SUPABASE_INTERNAL_URL` | `http://<supabase-ip>:8000` |
+| `TURNSTILE_SITE_KEY` | *(clé publique Turnstile, production)* |
 | `SUPABASE_DB_URL` | `postgresql://postgres:<postgres-password>@<supabase-ip>:5432/postgres` *(optional — enables auto-migration, see Step 5)* |
 
 Apply. Open `http://<app-ip>:3000`, register a user (validates app ↔ Kong ↔

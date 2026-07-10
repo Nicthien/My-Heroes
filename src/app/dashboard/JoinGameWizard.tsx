@@ -23,6 +23,7 @@ export interface JoinableGame {
   name: string;
   maxPlayers: number;
   players: JoinableGamePlayer[];
+  isEphemeral?: boolean;
 }
 
 export interface JoinGameWizardProps {
@@ -98,6 +99,11 @@ export function JoinGameWizard({
                   >
                     <div>
                       <div className="font-bold text-amber-100">{game.name}</div>
+                      {game.isEphemeral && (
+                        <div className="mt-1 inline-flex rounded border border-emerald-400/45 bg-emerald-950/45 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                          {t("auth.guest.temporary")}
+                        </div>
+                      )}
                       <div className="text-xs uppercase tracking-wider text-amber-200/60">
                         {t("wizard.playersCount", { count: game.players.length, max: game.maxPlayers })}
                       </div>

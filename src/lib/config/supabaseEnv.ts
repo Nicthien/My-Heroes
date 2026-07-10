@@ -15,6 +15,8 @@ export type PublicRuntimeConfig = {
   supabaseUrl: string;
   /** Supabase anon / publishable key (public by design — shipped to every browser). */
   supabaseAnonKey: string;
+  /** Cloudflare Turnstile site key. Public; empty disables CAPTCHA for local/test installs. */
+  turnstileSiteKey: string;
 };
 
 /** Global on `window` carrying the runtime public config injected by the server. */
@@ -46,7 +48,20 @@ export function getSupabaseServiceRoleKey(): string {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 }
 
+export function getTurnstileSiteKey(): string {
+  return process.env.TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+}
+
+export function getBrowserTurnstileSiteKey(): string {
+  if (typeof window !== "undefined") return window[RUNTIME_CONFIG_GLOBAL]?.turnstileSiteKey ?? "";
+  return "";
+}
+
 /** The public subset that is safe to inject into the page for the browser. */
 export function getServerPublicConfig(): PublicRuntimeConfig {
-  return { supabaseUrl: getSupabaseUrl(), supabaseAnonKey: getSupabaseAnonKey() };
+  return {
+    supabaseUrl: getSupabaseUrl(),
+    supabaseAnonKey: getSupabaseAnonKey(),
+    turnstileSiteKey: getTurnstileSiteKey(),
+  };
 }

@@ -22,6 +22,8 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       # Defaults to SUPABASE_URL in code when empty (see src/lib/config/supabaseEnv.ts).
       SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-}
+      # Public Cloudflare Turnstile site key for anonymous sign-in.
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       # --- Email / SMTP (signup confirmation + welcome mail) -----------------
       # Master switch. Leave "false" on test servers: signup is instant, no email
       # confirmation required and no mail is sent. Set "true" to require it.

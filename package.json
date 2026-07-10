@@ -36,6 +36,7 @@
     "calibrate:ai": "tsx scripts/calibrate-ai.ts",
     "calibrate:combat": "tsx scripts/calibrate-combat.ts",
     "validate:phaser": "node scripts/validate-phaser.mjs",
+    "validate:guest-games": "tsx scripts/validate-guest-games.ts",
     "seed:e2e:gameplay": "node scripts/seed-e2e-gameplay.mjs --start-supabase",
     "test:e2e": "playwright test",
     "test:e2e:gameplay": "node scripts/run-e2e-gameplay.mjs"

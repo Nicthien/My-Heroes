@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -14,6 +14,9 @@ import AuthFrame, {
 } from "@/components/auth/AuthFrame";
 import { recordSupportLogin } from "@/app/dashboard/SupportKofi";
 import { SocialLinks } from "@/app/dashboard/SocialLinks";
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
+import { getBrowserTurnstileSiteKey } from "@/lib/config/supabaseEnv";
+import { useSession } from "@/lib/auth/client";
 
 export default function LoginForm() {
   const { t, locale, setLocale } = useI18n();
@@ -23,8 +26,62 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const [guestName, setGuestName] = useState("");
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const { status } = useSession();
+
+  const handleGuestSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = guestName.trim();
+    if (!name) return;
+    if (getBrowserTurnstileSiteKey() && !captchaToken) {
+      setError(t("auth.guest.captchaRequired"));
+      return;
+    }
+
+    setGuestLoading(true);
+    setError("");
+    try {
+      const { data, error: signInError } = await supabase.auth.signInAnonymously({
+        options: {
+          data: { name },
+          ...(captchaToken ? { captchaToken } : {}),
+        },
+      });
+      if (signInError || !data.session) {
+        setError(signInError?.message || t("auth.guest.failed"));
+        setGuestLoading(false);
+        return;
+      }
+
+      const profileResponse = await fetch("/api/auth/guest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.session.access_token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({ name, language: locale }),
+      });
+      if (!profileResponse.ok) {
+        const profileError = await profileResponse.json().catch(() => null);
+        await supabase.auth.signOut();
+        setError(profileError?.error || t("auth.guest.failed"));
+        setGuestLoading(false);
+        return;
+      }
+
+      router.push("/dashboard?create=1");
+      router.refresh();
+    } catch (guestError) {
+      console.error("Guest sign-in failed:", guestError);
+      setError(t("auth.error.network"));
+      setGuestLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +171,37 @@ export default function LoginForm() {
       showHeader={false}
       showGameIntro
     >
+      <form onSubmit={handleGuestSubmit} className="mb-5 space-y-3 rounded-lg border border-emerald-500/35 bg-emerald-950/20 p-4">
+        <div className="text-center text-xs font-black uppercase tracking-[0.2em] text-emerald-200">
+          {t("auth.guest.title")}
+        </div>
+        <div>
+          <label htmlFor="guest-name" className={authLabelClass}>
+            {t("auth.guest.name")}
+          </label>
+          <input
+            id="guest-name"
+            type="text"
+            value={guestName}
+            onChange={(event) => setGuestName(event.target.value)}
+            className={authInputClass}
+            autoComplete="nickname"
+            required
+          />
+        </div>
+        <TurnstileWidget onTokenChange={setCaptchaToken} />
+        <button type="submit" disabled={guestLoading || status === "loading"} className={authPrimaryButtonClass}>
+          {guestLoading ? t("auth.guest.starting") : t("auth.guest.try")}
+        </button>
+        <p className="text-center text-xs leading-5 text-emerald-100/65">{t("auth.guest.notice")}</p>
+      </form>
+
+      <div className="mb-5 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/45">
+        <span className="h-px flex-1 bg-amber-700/30" />
+        {t("auth.guest.orLogin")}
+        <span className="h-px flex-1 bg-amber-700/30" />
+      </div>
+
       {error && <div className={authErrorClass}>{error}</div>}
 
       {unconfirmedEmail && (

@@ -4,10 +4,11 @@ import { normalizeLocale } from "@/lib/i18n/types";
 import { isEmailEnabled } from "@/lib/config/emailEnv";
 import { createConfirmationToken } from "@/lib/email/confirmationTokens";
 import { sendConfirmationEmail } from "@/lib/email/send";
+import { displayNameIsTaken, normalizeDisplayName } from "@/lib/auth/displayName";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const name = String(body.name ?? "").trim();
+  const name = normalizeDisplayName(body.name);
   const email = String(body.email ?? "").trim();
   const password = String(body.password ?? "");
   const language = normalizeLocale(body.language);
@@ -17,14 +18,13 @@ export async function POST(request: Request) {
   if (!password) return NextResponse.json({ error: "Le mot de passe est requis." }, { status: 400 });
 
   const supabase = createAdminClient();
-  const { data: existingName, error: existingNameError } = await supabase
-    .from("profiles")
-    .select("id")
-    .ilike("name", name)
-    .maybeSingle();
-
-  if (existingNameError) return NextResponse.json({ error: existingNameError.message }, { status: 400 });
-  if (existingName) return NextResponse.json({ error: "Ce pseudo est deja utilise." }, { status: 409 });
+  try {
+    if (await displayNameIsTaken(supabase, name)) {
+      return NextResponse.json({ error: "Ce pseudo est deja utilise." }, { status: 409 });
+    }
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur serveur" }, { status: 400 });
+  }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
     email,
@@ -58,9 +58,9 @@ export async function POST(request: Request) {
   }
 
   if (requiresConfirmation) {
-    const token = await createConfirmationToken(supabase, created.user.id);
-    if (token) {
-      await sendConfirmationEmail(email, name, token);
+    const confirmation = await createConfirmationToken(supabase, created.user.id);
+    if (confirmation) {
+      await sendConfirmationEmail(email, name, confirmation.token);
     }
   }
 

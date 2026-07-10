@@ -58,6 +58,7 @@ import { useGameStore } from "@/lib/stores/gameStore";
 import { Faction, BuildingType, UnitType, type Hero } from "@/lib/game/types";
 import { HERO_RECRUIT_COST_GOLD, MAX_HEROES_PER_PLAYER } from "@/lib/game/heroes";
 import { refreshGameState } from "@/lib/game/refresh";
+import { sendGamePresence } from "@/lib/game/presence";
 import { normalizeMapLevel } from "@/lib/game/map-levels";
 import {
   UNIT_RULES,
@@ -82,6 +83,7 @@ import AdventureMusicControl from "./AdventureMusicControl";
 import GameMenuButton, { type GameMenuItem } from "../menu/GameMenuButton";
 import OptionsDialog from "../menu/OptionsDialog";
 import ConfirmDialog from "../menu/ConfirmDialog";
+import { GuestAccountConversionModal } from "@/components/auth/GuestAccountConversionModal";
 import {
   CornerOrnaments,
   FleurDeLis,
@@ -136,6 +138,7 @@ export function HUDContent() {
     };
   }, []);
   const [confirmQuitOpen, setConfirmQuitOpen] = useState(false);
+  const [guestConversionOpen, setGuestConversionOpen] = useState(false);
   const [convertTownOpen, setConvertTownOpen] = useState(false);
   const nullableGameState = useGameStore((state) => state.gameState);
   const selectedHeroId = useGameStore((state) => state.selectedHeroId);
@@ -310,6 +313,12 @@ export function HUDContent() {
     };
 
     if (adminObserverMode || !myPlayer) {
+      goToDashboard();
+      return;
+    }
+
+    if (gameState.isEphemeral) {
+      await sendGamePresence(gameState.id, "leave");
       goToDashboard();
       return;
     }
@@ -1365,6 +1374,14 @@ export function HUDContent() {
                   onClick: () => setReportOpen(true),
                   dataTestId: "menu-report",
                 },
+                ...(session?.user?.isGuest
+                  ? [{
+                      key: "guest-convert",
+                      label: t("auth.guest.convert"),
+                      onClick: () => setGuestConversionOpen(true),
+                      dataTestId: "menu-guest-convert",
+                    } satisfies GameMenuItem]
+                  : []),
                 {
                   key: "quit",
                   label: t("menu.quit"),
@@ -1409,6 +1426,11 @@ export function HUDContent() {
       )}
 
       <OptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
+
+      <GuestAccountConversionModal
+        open={guestConversionOpen}
+        onClose={() => setGuestConversionOpen(false)}
+      />
 
       {reportOpen && (
         <ReportBugModal
@@ -1870,6 +1892,11 @@ export function HUDContent() {
             <CornerOrnaments />
             <ParchmentBackground />
             <div className={`text-sm font-black uppercase tracking-[0.2em] ${goldText}`}>{t("hud.waitingRoom")}</div>
+            {gameState.isEphemeral && (
+              <div className="mx-auto mt-2 inline-flex rounded border border-emerald-400/45 bg-emerald-950/45 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                {t("auth.guest.temporary")}
+              </div>
+            )}
             <div className="mt-2 flex flex-col gap-1">
               {gameState.players.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 text-sm">

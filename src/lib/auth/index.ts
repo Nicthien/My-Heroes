@@ -10,12 +10,14 @@ export async function getCurrentUser(request?: Request) {
     const profile = await getUserProfile(data.user.id);
     return {
       id: data.user.id,
-      email: data.user.email ?? null,
+      email: data.user.email?.trim() || null,
       name: profile?.name ?? (data.user.user_metadata?.name as string | undefined) ?? data.user.email ?? null,
       role: profile?.role ?? "user",
       mustChangePassword: profile?.must_change_password ?? false,
       language: profile?.language ?? "fr",
       godModeEnabled: profile?.god_mode_enabled ?? false,
+      isGuest: profile?.is_guest ?? Boolean(data.user.is_anonymous),
+      isAnonymous: Boolean(data.user.is_anonymous),
     };
   }
 
@@ -33,12 +35,14 @@ export async function getCurrentUser(request?: Request) {
   const profile = await getUserProfile(tokenData.user.id);
   return {
     id: tokenData.user.id,
-    email: tokenData.user.email ?? null,
+    email: tokenData.user.email?.trim() || null,
     name: profile?.name ?? (tokenData.user.user_metadata?.name as string | undefined) ?? tokenData.user.email ?? null,
     role: profile?.role ?? "user",
     mustChangePassword: profile?.must_change_password ?? false,
     language: profile?.language ?? "fr",
     godModeEnabled: profile?.god_mode_enabled ?? false,
+    isGuest: profile?.is_guest ?? Boolean(tokenData.user.is_anonymous),
+    isAnonymous: Boolean(tokenData.user.is_anonymous),
   };
 }
 
@@ -76,14 +80,14 @@ async function getUserProfile(userId: string) {
   const adminSupabase = createAdminClient();
   const { data, error } = await adminSupabase
     .from("profiles")
-    .select("name,role,must_change_password,language,god_mode_enabled")
+    .select("name,role,must_change_password,language,god_mode_enabled,is_guest")
     .eq("id", userId)
     .maybeSingle();
 
   if (error && isMissingGodModeColumnError(error)) {
     const { data: fallbackData } = await adminSupabase
       .from("profiles")
-      .select("name,role,must_change_password,language")
+      .select("name,role,must_change_password,language,is_guest")
       .eq("id", userId)
       .maybeSingle();
 
@@ -97,6 +101,7 @@ async function getUserProfile(userId: string) {
           must_change_password: boolean | null;
           language: string | null;
           god_mode_enabled: boolean | null;
+          is_guest: boolean | null;
         }
       : null;
   }
@@ -107,6 +112,7 @@ async function getUserProfile(userId: string) {
     must_change_password: boolean | null;
     language: string | null;
     god_mode_enabled: boolean | null;
+    is_guest: boolean | null;
   } | null;
 }
 

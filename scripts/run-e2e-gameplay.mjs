@@ -7,7 +7,7 @@ async function main() {
 
   console.log(`Running gameplay E2E against Supabase at ${supabase.url}...`);
 
-  await run("playwright", ["test", "tests/e2e/gameplay.spec.ts"], {
+  await run("playwright", ["test", "tests/e2e/gameplay.spec.ts", ...process.argv.slice(2)], {
     env: {
       ...process.env,
       PLAYWRIGHT_PORT: port,

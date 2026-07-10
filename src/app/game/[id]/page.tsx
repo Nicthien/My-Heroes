@@ -17,6 +17,7 @@ import { readCachedGameState, writeCachedGameState } from "@/lib/game/local-cach
 import { refreshGameState } from "@/lib/game/refresh";
 import { useGameStore } from "@/lib/stores/gameStore";
 import { createClient, isUsingSupabaseProxy } from "@/lib/supabase/browser";
+import { GAME_PRESENCE_HEARTBEAT_MS, sendGamePresence, sendGamePresenceOnPageHide } from "@/lib/game/presence";
 
 const GameMapComponent = dynamic(
   () => import("@/components/game/map/GameMap"),
@@ -56,6 +57,21 @@ export default function GamePage() {
   const syncInFlightRef = useRef(false);
   const nextSyncAllowedAtRef = useRef(0);
   const syncFailureCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!gameId || !gameState?.isEphemeral || gameState.id !== gameId || adminObserverMode) return;
+
+    void sendGamePresence(gameId, "heartbeat");
+    const interval = window.setInterval(() => {
+      void sendGamePresence(gameId, "heartbeat");
+    }, GAME_PRESENCE_HEARTBEAT_MS);
+    const handlePageHide = () => sendGamePresenceOnPageHide(gameId);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [adminObserverMode, gameId, gameState?.id, gameState?.isEphemeral]);
 
   useEffect(() => {
     useGameStore.getState().setAdminObserverMode(adminObserverMode);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { consumeConfirmationToken } from "@/lib/email/confirmationTokens";
+import { consumeConfirmationTokenForUser, validateConfirmationToken } from "@/lib/email/confirmationTokens";
 import { sendWelcomeEmail } from "@/lib/email/send";
 
 export async function POST(request: Request) {
@@ -12,15 +12,24 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const result = await consumeConfirmationToken(supabase, token);
+  const result = await validateConfirmationToken(supabase, token);
 
   if (result.status !== "ok") {
     return NextResponse.json({ status: result.status }, { status: 400 });
   }
 
+  const { error: gamesError } = await supabase
+    .from("games")
+    .update({ is_ephemeral: false, preservation_pending_until: null })
+    .eq("created_by_user_id", result.userId)
+    .eq("is_ephemeral", true);
+  if (gamesError) {
+    return NextResponse.json({ status: "error" }, { status: 500 });
+  }
+
   const { data: profile, error: updateError } = await supabase
     .from("profiles")
-    .update({ email_confirmed: true })
+    .update({ email_confirmed: true, is_guest: false })
     .eq("id", result.userId)
     .select("email, name")
     .maybeSingle();
@@ -30,7 +39,15 @@ export async function POST(request: Request) {
   }
 
   // Mark the GoTrue user as confirmed too, keeping both sides aligned.
-  await supabase.auth.admin.updateUserById(result.userId, { email_confirm: true });
+  const { error: authError } = await supabase.auth.admin.updateUserById(result.userId, { email_confirm: true });
+  if (authError) {
+    return NextResponse.json({ status: "error" }, { status: 500 });
+  }
+
+  const { error: consumeError } = await consumeConfirmationTokenForUser(supabase, result.userId);
+  if (consumeError) {
+    return NextResponse.json({ status: "error" }, { status: 500 });
+  }
 
   // Best-effort thank-you / welcome email — never blocks confirmation.
   if (profile?.email) {

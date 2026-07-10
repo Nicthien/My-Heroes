@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // to the caller (to embed in the email) and only its SHA-256 hash is persisted,
 // so a leaked DB row cannot be used to confirm an account.
 
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const CONFIRMATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -19,9 +19,9 @@ function hashToken(token: string): string {
 export async function createConfirmationToken(
   supabase: SupabaseClient,
   userId: string,
-): Promise<string | null> {
+): Promise<{ token: string; expiresAt: string } | null> {
   const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.now() + CONFIRMATION_TOKEN_TTL_MS).toISOString();
 
   const { error } = await supabase.from("email_confirmations").upsert({
     user_id: userId,
@@ -33,7 +33,7 @@ export async function createConfirmationToken(
     console.error("[email] failed to store confirmation token:", error.message);
     return null;
   }
-  return token;
+  return { token, expiresAt };
 }
 
 export type ConfirmationResult =
@@ -45,7 +45,7 @@ export type ConfirmationResult =
  * Validate a raw token. On success the pending row is consumed (deleted) and the
  * user id is returned so the caller can flip profiles.email_confirmed.
  */
-export async function consumeConfirmationToken(
+export async function validateConfirmationToken(
   supabase: SupabaseClient,
   token: string,
 ): Promise<ConfirmationResult> {
@@ -64,6 +64,12 @@ export async function consumeConfirmationToken(
     return { status: "expired" };
   }
 
-  await supabase.from("email_confirmations").delete().eq("user_id", data.user_id);
   return { status: "ok", userId: data.user_id };
+}
+
+export async function consumeConfirmationTokenForUser(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  return supabase.from("email_confirmations").delete().eq("user_id", userId);
 }

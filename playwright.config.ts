@@ -16,6 +16,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: BASE_URL,
+    locale: "fr-FR",
     trace: "on-first-retry",
     actionTimeout: 5_000,
     navigationTimeout: 15_000,

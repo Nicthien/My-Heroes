@@ -243,7 +243,7 @@ export default function GamePage() {
             onClick={handleBack}
             className="rounded-lg border border-amber-700/50 bg-stone-950/80 px-5 py-2 text-sm font-black uppercase tracking-wider text-amber-200/90 shadow-inner shadow-black/40 transition hover:border-amber-400/70 hover:bg-amber-950/40 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/70"
           >
-            Retour
+            {t("game.back")}
           </button>
         </div>
       </div>
@@ -261,7 +261,7 @@ export default function GamePage() {
           <HUD />
           {adminObserverMode && (
             <div className="pointer-events-none absolute left-1/2 top-4 z-[70] -translate-x-1/2 rounded-md border border-cyan-300/50 bg-slate-950/80 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-100 shadow-2xl shadow-black/50">
-              Mode observation
+              {t("game.observerMode")}
             </div>
           )}
           <AdminObserverPanel />

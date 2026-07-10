@@ -2790,6 +2790,8 @@ function AdventureChoiceModal({
   onChoose: (value: AdventureChoiceValue) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-black/45 px-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded border border-amber-500/50 bg-stone-950/95 p-4 shadow-2xl">
@@ -2802,7 +2804,7 @@ function AdventureChoiceModal({
             type="button"
             onClick={onClose}
             className="grid h-8 w-8 shrink-0 place-items-center rounded border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-400"
-            aria-label="Fermer"
+            aria-label={t("common.close")}
           >
             x
           </button>

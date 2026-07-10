@@ -583,8 +583,8 @@ export default function CombatScreen() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(239,214,151,0.15),transparent_42rem),linear-gradient(90deg,rgba(0,0,0,0.24),transparent_26%,transparent_74%,rgba(0,0,0,0.24))]" />
       <header className="relative z-20 flex items-center justify-between border-b border-amber-700/50 bg-gradient-to-b from-[#1a1208]/95 via-stone-950/95 to-black/90 px-5 py-3 shadow-[0_0_0_1px_rgba(252,211,77,0.12)_inset,0_8px_30px_rgba(0,0,0,0.6)]">
         <div>
-          <div className={`text-xs font-black uppercase tracking-[0.28em] ${goldText}`}>Combat tactique</div>
-          <div className={`mt-0.5 text-lg font-black ${goldText}`}>Round {activeCombat.round}</div>
+          <div className={`text-xs font-black uppercase tracking-[0.28em] ${goldText}`}>{t("combat.tacticalTitle")}</div>
+          <div className={`mt-0.5 text-lg font-black ${goldText}`}>{t("combat.round", { n: activeCombat.round })}</div>
         </div>
         <div className={`rounded-md border px-3 py-1 text-sm font-black shadow-[0_0_0_1px_rgba(0,0,0,0.4)_inset] ${isMyAction || isMyTacticsPhase ? "border-emerald-400/60 bg-emerald-950/80 text-emerald-100" : "border-red-500/50 bg-red-950/75 text-red-100"}`}>
           {combatStatusLabel}
@@ -606,7 +606,7 @@ export default function CombatScreen() {
               onClick={() => setPendingTargetSpell(null)}
               className="rounded-md border border-violet-400/60 bg-violet-950/80 px-3 py-1 text-sm font-black text-violet-100 transition hover:border-violet-200"
             >
-              Cible: {pendingTargetSpell.label}
+              {t("combat.target", { label: pendingTargetSpell.label })}
             </button>
           )}
           {combatHero && <SpellBookButton onClick={() => setSpellBookOpen(true)} label={t("combat.spellBookLabel")} disabled={isTacticsPhaseActive} />}
@@ -674,7 +674,7 @@ export default function CombatScreen() {
         {combatMessage && (
           <div className="pointer-events-auto absolute left-1/2 top-4 z-40 flex max-w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-md border border-amber-500/50 bg-stone-950/92 px-4 py-2 text-sm font-bold text-amber-100 shadow-xl">
             <span>{combatMessage}</span>
-            <button type="button" onClick={() => setCombatMessage(null)} className="text-amber-300/70 hover:text-amber-100">x</button>
+            <button type="button" onClick={() => setCombatMessage(null)} className="text-amber-300/70 hover:text-amber-100" aria-label={t("common.close")}>x</button>
           </div>
         )}
         {pendingSurrenderNegotiation && (
@@ -861,7 +861,7 @@ export default function CombatScreen() {
               {t("combat.truceDeclaredDesc")}
             </p>
             <div className="mt-6 flex justify-end">
-              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-5 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void acknowledgeTruce()}>OK</button>
+              <button type="button" className="rounded-md border border-sky-400 bg-sky-900 px-5 py-2 font-bold text-sky-50 hover:bg-sky-800" onClick={() => void acknowledgeTruce()}>{t("common.ok")}</button>
             </div>
           </div>
         </div>

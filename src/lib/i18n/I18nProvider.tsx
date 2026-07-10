@@ -13,6 +13,7 @@ import { translate, type TranslateParams, type TranslationKey } from "./translat
 import {
   LANGUAGE_PREFERENCE_EVENT,
   getSavedLocale,
+  hasSavedLocalePreference,
   saveLocale,
 } from "./preferences";
 import { DEFAULT_LOCALE, normalizeLocale, type Locale } from "./types";
@@ -55,12 +56,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = locale;
   }, [locale]);
 
-  // Once the session is known, adopt the server-stored language (the choice made
-  // at registration / on other devices). Writing through saveLocale dispatches
-  // the preference event, which re-reads the external store above.
+  // Once the session is known, adopt the server-stored language only when this
+  // browser has no explicit preference yet. A language picked on the login page
+  // must survive the redirect instead of being overwritten by an older profile.
   const serverLocale = data?.user?.language;
   useEffect(() => {
     if (status !== "authenticated" || !serverLocale) return;
+    if (hasSavedLocalePreference()) return;
     const normalized = normalizeLocale(serverLocale);
     if (normalized !== getSavedLocale()) {
       saveLocale(normalized);

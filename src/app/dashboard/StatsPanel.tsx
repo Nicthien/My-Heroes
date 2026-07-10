@@ -71,14 +71,18 @@ function statusLabel(status: string, t: TFn) {
   return status;
 }
 
-function formatDecimal(value: number) {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value);
+function numberLocale(locale: Locale) {
+  return locale === "en" ? "en-US" : "fr-FR";
 }
 
-function formatTooltipDate(isoDate: string) {
+function formatDecimal(value: number, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatTooltipDate(isoDate: string, locale: Locale) {
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(numberLocale(locale), { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
@@ -126,12 +130,14 @@ function OverTimeChart({
   gradientId,
   colors,
   t,
+  locale,
 }: {
   data: { date: string; count: number }[];
   title: string;
   gradientId: string;
   colors: OverTimeColors;
   t: TFn;
+  locale: Locale;
 }) {
   const width = 720;
   const height = 180;
@@ -189,7 +195,7 @@ function OverTimeChart({
               <g key={point.date}>
                 <circle cx={cx} cy={cy} r="2.5" fill={colors.dot} />
                 <circle cx={cx} cy={cy} r="10" fill="transparent" style={{ cursor: "pointer" }}>
-                  <title>{`${formatTooltipDate(point.date)} : ${point.count}`}</title>
+                  <title>{`${formatTooltipDate(point.date, locale)} : ${point.count}`}</title>
                 </circle>
               </g>
             );
@@ -313,12 +319,12 @@ function renderStatsBody({
           <section>
             <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.averages")}</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <StatCard label={t("stats.avgTurns")} value={formatDecimal(stats.averages.turnsPerGame)} />
+              <StatCard label={t("stats.avgTurns")} value={formatDecimal(stats.averages.turnsPerGame, locale)} />
               <StatCard
                 label={t("stats.avgTurnsCompleted")}
-                value={formatDecimal(stats.averages.turnsPerCompletedGame)}
+                value={formatDecimal(stats.averages.turnsPerCompletedGame, locale)}
               />
-              <StatCard label={t("stats.avgPlayers")} value={formatDecimal(stats.averages.playersPerGame)} />
+              <StatCard label={t("stats.avgPlayers")} value={formatDecimal(stats.averages.playersPerGame, locale)} />
             </div>
           </section>
 
@@ -328,6 +334,7 @@ function renderStatsBody({
             gradientId="stats-games-area"
             colors={GAMES_OVER_TIME_COLORS}
             t={t}
+            locale={locale}
           />
 
           <OverTimeChart
@@ -336,6 +343,7 @@ function renderStatsBody({
             gradientId="stats-users-area"
             colors={USERS_OVER_TIME_COLORS}
             t={t}
+            locale={locale}
           />
 
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -455,4 +463,3 @@ export function StatsPanel({ fetchWithAuth, parseJsonResponse, t, locale, onClos
     </div>
   );
 }
-

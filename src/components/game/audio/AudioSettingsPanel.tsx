@@ -131,7 +131,7 @@ export default function AudioSettingsPanel({ error = false }: AudioSettingsPanel
 
       {error && (
         <div className="mt-3 rounded border border-red-400/45 bg-red-950/50 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-red-100">
-          Audio indisponible
+          {t("audio.unavailable")}
         </div>
       )}
     </div>

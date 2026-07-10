@@ -62,4 +62,28 @@ test.describe("Smoke — auth pages render", () => {
     await page.getByRole("link", { name: /créer un compte/i }).click();
     await expect(page).toHaveURL(/\/auth\/register$/);
   });
+
+  test("login page preserves an explicit English language choice", async ({ page }) => {
+    await page.goto("/auth/login");
+    await page.getByRole("button", { name: "English", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.localStorage.getItem("my-heroes:language"))).toBe("en");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByLabel("Email or username")).toBeVisible();
+  });
+});
+
+test.describe("Smoke — browser language detection", () => {
+  test.use({ locale: "en-US" });
+
+  test("/auth/login defaults to the browser language when no choice is saved", async ({ page }) => {
+    await page.goto("/auth/login");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.localStorage.getItem("my-heroes:language"))).toBeNull();
+  });
 });

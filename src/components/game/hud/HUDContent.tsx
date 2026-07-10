@@ -1494,7 +1494,7 @@ export function HUDContent() {
               type="button"
               className="touch-target rounded-md border border-amber-700/50 px-3 text-sm font-black text-amber-100"
               onClick={() => setMobileDrawer(null)}
-              aria-label="Fermer"
+              aria-label={t("common.close")}
             >
               x
             </button>

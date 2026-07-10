@@ -87,14 +87,14 @@ export default function MiniMap() {
     focusTile(x, y);
   };
 
-  const controlToggleLabel = showControlZones ? "Masquer les zones de controle" : "Afficher les zones de controle";
+  const controlToggleLabel = showControlZones ? t("minimap.hideControlZones") : t("minimap.showControlZones");
 
   return (
     <div className="relative z-10 p-2">
       <div className="relative">
         <svg
           role="img"
-          aria-label="Mini carte"
+          aria-label={t("minimap.label")}
           viewBox={`0 0 ${map.width} ${map.height}`}
           preserveAspectRatio="none"
           className="block h-36 w-full cursor-crosshair overflow-hidden rounded-md border border-amber-800/70 bg-black shadow-[inset_0_0_0_1px_rgba(252,211,77,0.12)]"

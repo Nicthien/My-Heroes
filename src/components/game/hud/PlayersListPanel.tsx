@@ -76,7 +76,7 @@ export function PlayersListPanel({
               <span className={p.isAlive ? "min-w-0 flex-1 truncate text-amber-100" : "min-w-0 flex-1 truncate text-stone-600 line-through"}>
                 {p.name}
               </span>
-              {p.isAi && <span className="shrink-0 rounded border border-cyan-400/40 px-1 text-[10px] font-black text-cyan-200">IA</span>}
+              {p.isAi && <span className="shrink-0 rounded border border-cyan-400/40 px-1 text-[10px] font-black text-cyan-200">{t("common.ai")}</span>}
               {entry && (
                 <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-black tabular-nums text-amber-300/90">
                   #{entry.rank}

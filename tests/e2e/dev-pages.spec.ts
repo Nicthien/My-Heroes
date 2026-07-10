@@ -377,7 +377,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
   });
 
   test("mobile HUD suivi exposes the player journal", async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, locale: "fr-FR" });
     const page = await context.newPage();
     await page.goto("/dev/hud", { waitUntil: "domcontentloaded" });
 
@@ -504,6 +504,7 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
       viewport: { width: 390, height: 844 },
       isMobile: true,
       hasTouch: true,
+      locale: "fr-FR",
     });
     const page = await context.newPage();
     try {
@@ -784,7 +785,7 @@ test.describe("Smoke — /guide encyclopedia pages render without errors", () =>
   });
 
   test("fits a mobile viewport without horizontal overflow", async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "fr-FR" });
     const page = await context.newPage();
     try {
       await page.goto("/guide/creatures", { waitUntil: "domcontentloaded" });
@@ -811,6 +812,7 @@ test.describe("Mobile smoke - core screens stay usable", () => {
         viewport: { width: viewport.width, height: viewport.height },
         isMobile: true,
         hasTouch: true,
+        locale: "fr-FR",
       });
       const page = await context.newPage();
       try {
@@ -830,6 +832,7 @@ test.describe("Mobile smoke - core screens stay usable", () => {
           viewport: { width: viewport.width, height: viewport.height },
           isMobile: true,
           hasTouch: true,
+          locale: "fr-FR",
         });
         const page = await context.newPage();
         try {

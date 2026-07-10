@@ -1,18 +1,47 @@
-import { DEFAULT_LOCALE, normalizeLocale, type Locale } from "./types";
+import { DEFAULT_LOCALE, isLocale, normalizeLocale, type Locale } from "./types";
 
 export const LANGUAGE_KEY = "my-heroes:language";
 export const LANGUAGE_PREFERENCE_EVENT = "my-heroes:language-preference-change";
 
-export function getSavedLocale(): Locale {
+export function getStoredLocale(): Locale | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const saved = window.localStorage.getItem(LANGUAGE_KEY);
+    return isLocale(saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getBrowserLocale(): Locale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
-  const saved = window.localStorage.getItem(LANGUAGE_KEY);
-  return normalizeLocale(saved);
+
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const language of languages) {
+    const primary = language.toLowerCase().split("-")[0];
+    if (isLocale(primary)) return primary;
+  }
+
+  return DEFAULT_LOCALE;
+}
+
+export function hasSavedLocalePreference(): boolean {
+  return getStoredLocale() !== null;
+}
+
+export function getSavedLocale(): Locale {
+  return getStoredLocale() ?? getBrowserLocale();
 }
 
 export function saveLocale(locale: Locale) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(LANGUAGE_KEY, locale);
+  try {
+    window.localStorage.setItem(LANGUAGE_KEY, normalizeLocale(locale));
+  } catch {
+    return;
+  }
   window.dispatchEvent(
-    new CustomEvent(LANGUAGE_PREFERENCE_EVENT, { detail: locale }),
+    new CustomEvent(LANGUAGE_PREFERENCE_EVENT, { detail: normalizeLocale(locale) }),
   );
 }

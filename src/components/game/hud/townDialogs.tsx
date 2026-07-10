@@ -92,7 +92,7 @@ export function CountDialog({
     >
       <div className={`mb-2 flex items-center justify-between gap-3 text-xs font-bold ${styles.labelText}`}>
         <span>{t("common.count")}</span>
-        <span className={styles.maxText}>Max {max}</span>
+        <span className={styles.maxText}>{t("map.maxN", { n: max })}</span>
       </div>
       <input
         type="number"
@@ -117,7 +117,7 @@ export function CountDialog({
           className={`h-9 rounded-md border border-stone-700 bg-stone-900 text-xs font-black text-stone-300 ${styles.cancelHover}`}
           onClick={onClose}
         >
-          Annuler
+          {t("common.cancel")}
         </button>
         <button
           type="submit"

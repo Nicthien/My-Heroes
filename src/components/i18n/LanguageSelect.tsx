@@ -1,10 +1,12 @@
 "use client";
 
 import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
-const LABELS: Record<Locale, string> = {
-  fr: "Français",
-  en: "English",
+const LABEL_KEYS: Record<Locale, TranslationKey> = {
+  fr: "language.fr",
+  en: "language.en",
 };
 
 const FLAGS: Record<Locale, string> = {
@@ -19,8 +21,10 @@ interface LanguageSelectProps {
 }
 
 export default function LanguageSelect({ value, onChange, className }: LanguageSelectProps) {
+  const { t } = useI18n();
+
   return (
-    <div className={`flex gap-2 ${className ?? ""}`} role="group" aria-label="Language">
+    <div className={`flex gap-2 ${className ?? ""}`} role="group" aria-label={t("language.label")}>
       {SUPPORTED_LOCALES.map((locale) => {
         const active = locale === value;
         return (
@@ -36,7 +40,7 @@ export default function LanguageSelect({ value, onChange, className }: LanguageS
             }`}
           >
             <span aria-hidden>{FLAGS[locale]}</span>
-            {LABELS[locale]}
+            {t(LABEL_KEYS[locale])}
           </button>
         );
       })}

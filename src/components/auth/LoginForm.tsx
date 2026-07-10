@@ -18,6 +18,18 @@ import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { getBrowserTurnstileSiteKey } from "@/lib/config/supabaseEnv";
 import { useSession } from "@/lib/auth/client";
 
+async function persistAuthenticatedLanguage(accessToken: string, language: string) {
+  await fetch("/api/auth/profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ language }),
+  }).catch(() => {});
+}
+
 export default function LoginForm() {
   const { t, locale, setLocale } = useI18n();
   const [identifier, setIdentifier] = useState("");
@@ -167,6 +179,9 @@ export default function LoginForm() {
 
       // Count this deliberate login toward the one-time "support the game" nudge.
       recordSupportLogin(signInData.user.id);
+      if (signInData.session?.access_token) {
+        await persistAuthenticatedLanguage(signInData.session.access_token, locale);
+      }
 
       router.push("/dashboard");
       router.refresh();

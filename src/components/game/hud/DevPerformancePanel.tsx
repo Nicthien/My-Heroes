@@ -351,7 +351,7 @@ export function DevPerformancePanel({ stats }: { stats: DevPerformanceStats }) {
       <section className="space-y-2 border-y border-amber-800/45 py-3" aria-label={t("perf.title")}>
         <div className="flex items-center justify-between gap-2">
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-200/80">{t("perf.title")}</div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">live</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80">{t("perf.live")}</div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <DevPerformanceStat

@@ -45,7 +45,7 @@ export function PlayerScoreTooltip({
       style={style}
     >
       <div className="flex items-baseline justify-between">
-        <span className={`text-xs font-black uppercase tracking-wider ${goldText}`}>Score</span>
+        <span className={`text-xs font-black uppercase tracking-wider ${goldText}`}>{t("score.title")}</span>
         <span className="text-[11px] font-bold text-amber-300/80">
           {t("score.rank", { rank, count: playerCount })}
         </span>
@@ -67,7 +67,7 @@ export function PlayerScoreTooltip({
       )}
       <div className={`my-1 ${goldDivider}`} />
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-black uppercase tracking-wider text-amber-200">Total</span>
+        <span className="text-[11px] font-black uppercase tracking-wider text-amber-200">{t("score.total")}</span>
         <span className={`text-sm font-black tabular-nums ${goldText}`}>
           {total.toLocaleString(numberLocale)}
         </span>

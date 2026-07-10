@@ -185,11 +185,13 @@ function MapLevelHeaderToggle({
   activeMapLevel: MapLevelId;
   onChange: (level: MapLevelId) => void;
 }) {
+  const { t } = useI18n();
+
   return (
-    <div className="flex h-7 rounded-md border border-amber-700/50 bg-black/25 p-0.5" aria-label="Niveau de carte">
+    <div className="flex h-7 rounded-md border border-amber-700/50 bg-black/25 p-0.5" aria-label={t("minimap.mapLevel")}>
       {[
-        { id: SURFACE_LEVEL, label: "S", title: "Surface" },
-        { id: UNDERGROUND_LEVEL, label: "U", title: "Souterrain" },
+        { id: SURFACE_LEVEL, label: "S", title: t("create.surface") },
+        { id: UNDERGROUND_LEVEL, label: "U", title: t("create.underground") },
       ].map((item) => (
         <button
           key={item.id}

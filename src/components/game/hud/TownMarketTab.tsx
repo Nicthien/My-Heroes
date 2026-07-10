@@ -103,7 +103,7 @@ export function TownMarketTab({
               type="button"
               className="rounded-md border border-amber-700/50 px-2 py-1 text-xs text-amber-200 hover:bg-amber-900/40"
               onClick={() => setAmount(owned)}
-            >Max</button>
+            >{t("market.max")}</button>
           </div>
         </div>
 

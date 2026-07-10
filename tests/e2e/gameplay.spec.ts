@@ -48,7 +48,7 @@ test.describe("Gameplay E2E", () => {
     // A separate browser process models a second player/device and avoids the
     // origin-wide Web Lock intentionally used by Supabase Auth within one browser.
     const guestBrowser = await chromium.launch();
-    const guestContext = await guestBrowser.newContext();
+    const guestContext = await guestBrowser.newContext({ locale: "fr-FR" });
     const guestPage = await guestContext.newPage();
     const suffix = Date.now().toString(36);
     const hostName = `Invite Hote ${suffix}`;

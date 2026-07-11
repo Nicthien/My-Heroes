@@ -60,8 +60,10 @@ export async function GET(request: Request) {
     statsResult,
     combatsCount,
     heroesCount,
+    anonymousEventsResult,
+    trackingStartedResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("id, role, created_at"),
+    supabase.from("profiles").select("id, role, is_guest, created_at"),
     supabase.from("games").select("id, status, turn_number, max_players, created_at"),
     supabase.from("game_players").select("faction, is_ai, game_id"),
     supabase
@@ -69,6 +71,8 @@ export async function GET(request: Request) {
       .select("user_id, games_played, games_won, best_score, profiles(name)"),
     supabase.from("combats").select("id", { count: "exact", head: true }),
     supabase.from("heroes").select("id", { count: "exact", head: true }),
+    supabase.from("anonymous_account_events").select("user_id, event_type, occurred_at"),
+    supabase.from("app_settings").select("value").eq("key", "anonymous_account_tracking_started_at").maybeSingle(),
   ]);
 
   const firstError =
@@ -77,7 +81,9 @@ export async function GET(request: Request) {
     playersResult.error ||
     statsResult.error ||
     combatsCount.error ||
-    heroesCount.error;
+    heroesCount.error ||
+    anonymousEventsResult.error ||
+    trackingStartedResult.error;
   if (firstError) {
     return NextResponse.json({ error: firstError.message }, { status: 500 });
   }
@@ -86,6 +92,7 @@ export async function GET(request: Request) {
   const games = (gamesResult.data ?? []) as DbRow[];
   const players = (playersResult.data ?? []) as DbRow[];
   const stats = (statsResult.data ?? []) as DbRow[];
+  const anonymousEvents = (anonymousEventsResult.data ?? []) as DbRow[];
 
   const gamesByStatus = tallyBy(games, "status");
   const statusTotal = (status: string) =>
@@ -99,6 +106,20 @@ export async function GET(request: Request) {
   const humanPlayers = players.length - aiPlayers;
 
   const adminCount = profiles.filter((profile) => profile.role === "admin").length;
+  const currentAnonymousUsers = profiles.filter((profile) => Boolean(profile.is_guest));
+  const eventsOfType = (eventType: string) => anonymousEvents.filter((event) => event.event_type === eventType);
+  const guestCreatedEvents = eventsOfType("guest_created");
+  const conversionRequestedEvents = eventsOfType("conversion_requested");
+  const conversionCompletedEvents = eventsOfType("conversion_completed");
+  const requestedUserIds = new Set(conversionRequestedEvents.map((event) => event.user_id).filter(Boolean));
+  const completedUserIds = new Set(conversionCompletedEvents.map((event) => event.user_id).filter(Boolean));
+  const pendingConversions = currentAnonymousUsers.filter(
+    (profile) => requestedUserIds.has(profile.id) && !completedUserIds.has(profile.id),
+  ).length;
+  const trackingValue = trackingStartedResult.data?.value;
+  const trackingStartedAt = typeof trackingValue === "string" ? trackingValue : null;
+  const eventSeries = (rows: DbRow[]) =>
+    bucketRowsPerDay(rows.map((row) => ({ created_at: row.occurred_at })), 30);
 
   const topPlayers = stats
     .map((row) => {
@@ -140,6 +161,22 @@ export async function GET(request: Request) {
     factionDistribution: tallyBy(players, "faction"),
     gamesOverTime: bucketRowsPerDay(games, 30),
     usersOverTime: bucketRowsPerDay(profiles, 30),
+    anonymousUsers: {
+      trackingStartedAt,
+      totals: {
+        currentAnonymous: currentAnonymousUsers.length,
+        pendingConversions,
+        guestsCreated: guestCreatedEvents.length,
+        conversionRequests: conversionRequestedEvents.length,
+        conversionsCompleted: conversionCompletedEvents.length,
+        conversionRate: guestCreatedEvents.length
+          ? (conversionCompletedEvents.length / guestCreatedEvents.length) * 100
+          : 0,
+      },
+      guestsOverTime: eventSeries(guestCreatedEvents),
+      conversionRequestsOverTime: eventSeries(conversionRequestedEvents),
+      conversionsCompletedOverTime: eventSeries(conversionCompletedEvents),
+    },
     topPlayers,
   });
 }

@@ -85,7 +85,7 @@ IPs): [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging: [`Dockerfile`](Dockerfile
 | `SUPABASE_DB_URL` | no | Direct Postgres URL (`postgres` + `POSTGRES_PASSWORD`) used to apply migrations at boot. Unset = no auto-migration. See [`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. |
 | `MIGRATE_ON_BOOT` | no | Set to `false` to disable the boot-time migration step. Defaults to `true`. |
 | `USE_SMTP` | no | `true` to enable outgoing email (signup confirmation + welcome); login stays blocked until the address is confirmed. Defaults to `false` (instant signup, no email). |
-| `APP_PUBLIC_URL` | if SMTP | Public app URL (e.g. `https://myheroes.example.com`), used to build confirmation links. |
+| `APP_PUBLIC_URL` | recommended in production | Public app URL (e.g. `https://myheroes.example.com`), used to build confirmation links and Open Graph / Reddit previews. |
 | `SMTP_HOST` | if SMTP | SMTP server host. |
 | `SMTP_PORT` | no | SMTP port. Defaults to `587`. |
 | `SMTP_SECURE` | no | `true` for implicit TLS (port 465), `false` for STARTTLS (587/25). Defaults to `false`. |

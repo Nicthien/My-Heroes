@@ -33,7 +33,7 @@ docker run -d --name my-heroes -p 3000:3000 \
 | `MIGRATE_ON_BOOT` | no | `false` to disable the boot-time migration step. Defaults to `true`. |
 | `MIGRATE_MODE` | no | `apply` (default), `baseline` (adopt an existing DB once, without running migrations), or `status` (report only). |
 | `USE_SMTP` | no | `true` to enable outgoing email (signup confirmation + welcome); login stays blocked until the address is confirmed. Defaults to `false` (instant signup, no email). |
-| `APP_PUBLIC_URL` | if SMTP | Public app URL (e.g. `https://myheroes.example.com`), used to build confirmation links. |
+| `APP_PUBLIC_URL` | recommended in production | Public app URL (e.g. `https://myheroes.example.com`), used to build confirmation links and Open Graph / Reddit previews. |
 | `SMTP_HOST` | if SMTP | SMTP server host. |
 | `SMTP_PORT` | no | SMTP port. Defaults to `587`. |
 | `SMTP_SECURE` | no | `true` for implicit TLS (port 465), `false` for STARTTLS (587/25). Defaults to `false`. |

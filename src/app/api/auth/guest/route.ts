@@ -3,6 +3,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { displayNameIsTaken, normalizeDisplayName } from "@/lib/auth/displayName";
 import { normalizeLocale } from "@/lib/i18n/types";
 import { getAllowAnonymousUsers } from "@/lib/server/app-settings";
+import { recordAnonymousAccountEvent } from "@/lib/server/anonymous-account-events";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
       await supabase.auth.admin.deleteUser(user.id);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+
+    await recordAnonymousAccountEvent(supabase, user.id, "guest_created");
 
     return NextResponse.json({ success: true, name, isGuest: true }, { status: 201 });
   } catch (error) {

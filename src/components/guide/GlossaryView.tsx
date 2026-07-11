@@ -1,3 +1,5 @@
+"use client";
+
 import { GuideSection, GuideTable, Lead } from "./guidePrimitives";
 
 const TERMS: Array<{ term: string; def: string }> = [

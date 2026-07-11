@@ -28,7 +28,7 @@ services:
       # Master switch. Leave "false" on test servers: signup is instant, no email
       # confirmation required and no mail is sent. Set "true" to require it.
       USE_SMTP: ${USE_SMTP:-false}
-      # Public URL the app is reached at, used to build confirmation links.
+      # Public URL the app is reached at, used for email links and social previews.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

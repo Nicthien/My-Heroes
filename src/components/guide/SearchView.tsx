@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Chip, GuideSection, Lead, Sprite } from "./guidePrimitives";
 import { SEARCH_INDEX } from "./guideData";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideResultLabel, guideText } from "./guideI18n";
 
 const KIND_COLOR: Record<string, string> = {
   Créature: "#fbbf24",
@@ -20,6 +22,7 @@ function normalize(text: string): string {
 const MAX_RESULTS = 80;
 
 export function SearchView() {
+  const { locale } = useI18n();
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
@@ -41,18 +44,18 @@ export function SearchView() {
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Ex. dragon, épée, boule de feu, logistique…"
+        placeholder={guideText(locale, "Ex. dragon, épée, boule de feu, logistique…")}
         autoFocus
         className="w-full rounded-lg border border-amber-700/50 bg-stone-950/70 px-4 py-2.5 text-amber-100 placeholder:text-amber-200/40 focus:border-amber-400 focus:outline-none"
       />
 
-      {tooShort && <p className="text-sm text-amber-200/60">Tapez au moins 2 caractères.</p>}
+      {tooShort && <p className="text-sm text-amber-200/60">{guideText(locale, "Tapez au moins 2 caractères.")}</p>}
 
       {query.trim().length >= 2 && (
         <p className="text-xs uppercase tracking-wider text-amber-400/70">
           {results.length === 0
-            ? "Aucun résultat"
-            : `${results.length}${results.length === MAX_RESULTS ? "+" : ""} résultat${results.length > 1 ? "s" : ""}`}
+            ? guideText(locale, "Aucun résultat")
+            : guideResultLabel(locale, results.length, MAX_RESULTS)}
         </p>
       )}
 
@@ -74,7 +77,7 @@ export function SearchView() {
               <div className="truncate text-sm font-semibold text-amber-100">{entry.label}</div>
               <div className="truncate text-xs text-amber-100/60">{entry.sub}</div>
             </div>
-            <Chip color={KIND_COLOR[entry.kind]}>{entry.kind}</Chip>
+            <Chip color={KIND_COLOR[entry.kind]}>{guideText(locale, entry.kind)}</Chip>
           </Link>
         ))}
       </div>

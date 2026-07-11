@@ -63,7 +63,7 @@ export function CombatSection() {
 
       <Callout kind="do" title="Évaluez avant de frapper">
         Avant d’attaquer un monstre neutre ou un rival, comparez les forces. Le jeu vous donne une
-        estimation : si elle est <em>« écrasante »</em> en votre faveur, foncez ; si elle est
+        estimation : si elle est <em>« écrasante »</em> en votre faveur, foncez ; si elle est{" "}
         <em>« périlleuse »</em>, renforcez-vous d’abord.
       </Callout>
 

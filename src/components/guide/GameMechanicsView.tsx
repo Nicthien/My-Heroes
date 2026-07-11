@@ -1,3 +1,5 @@
+"use client";
+
 import { Callout, Chip, GuideSection, Lead, Sprite, SubBlock } from "./guidePrimitives";
 import { ARTIFACT_COMBOS } from "./guideData";
 

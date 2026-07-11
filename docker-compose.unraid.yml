@@ -58,7 +58,7 @@ services:
       # (good for test servers). "true" = require email validation before login.
       USE_SMTP: ${USE_SMTP:-false}
       # Public URL the app is reached at (e.g. https://heroes.example.com), used
-      # to build the confirmation links embedded in emails.
+      # to build confirmation links and Open Graph / Reddit preview URLs.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

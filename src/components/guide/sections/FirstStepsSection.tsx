@@ -1,16 +1,19 @@
 "use client";
 
-import { Callout, GuideSection, Lead, SubBlock } from "../guidePrimitives";
+import { Callout, GuideSection, Lead, SubBlock, translateGuideNode } from "../guidePrimitives";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideText } from "../guideI18n";
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  const { locale } = useI18n();
   return (
     <li className="flex gap-3">
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-amber-400/60 bg-amber-900/40 text-sm font-black text-amber-200">
         {n}
       </span>
       <div className="space-y-1 pt-0.5">
-        <div className="font-bold text-amber-200">{title}</div>
-        <div className="text-sm text-amber-100/85">{children}</div>
+        <div className="font-bold text-amber-200">{guideText(locale, title)}</div>
+        <div className="text-sm text-amber-100/85">{translateGuideNode(locale, children)}</div>
       </div>
     </li>
   );

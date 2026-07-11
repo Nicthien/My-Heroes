@@ -19,6 +19,45 @@ Supabase via one of the options below.
 
 ---
 
+## v1.3.5 - 2026-07-11
+
+### Highlights
+
+- Login language is now selected from the browser by default and the user's
+  choice is preserved after authentication.
+- The game guide has a broader English pass: the guide shell, homepage cards,
+  search results, first steps, resources, towns, heroes, combat, map objects,
+  encyclopedia tables, spells, skills, glossary, and game mechanics now follow
+  the selected language more consistently.
+- Admin now opens on an overview tab with lighter per-tab loading instead of
+  loading every admin table at once.
+- Admin statistics now track anonymous account usage: guests created,
+  conversion requests, completed conversions, pending conversions, conversion
+  rate, and history charts.
+- Bug-report stats now use the IMAP `Answered` flag as a fallback, so answered
+  threads are counted even when sent copies are not present in the inbox.
+- Public metadata now uses `APP_PUBLIC_URL` / `NEXT_PUBLIC_SITE_URL` so shared
+  links and social previews resolve to the production domain.
+
+### Deployment notes
+
+- Publish image tag: `nicthien/my-heroes:1.3.5`.
+- Recommended production env: set `APP_PUBLIC_URL=https://<your-domain>` on the
+  VPS/app container for confirmation links, Open Graph images, and Reddit/social
+  previews.
+- New migrations are included for app settings, presence trigger hardening, and
+  anonymous account event tracking. With `SUPABASE_DB_URL` and
+  `MIGRATE_ON_BOOT=true`, they apply automatically when the container starts.
+
+### Verified
+
+- `npx.cmd tsc --noEmit`
+- `npm.cmd run lint`
+- `npm.cmd run test:e2e -- tests/e2e/dev-pages.spec.ts -g "guide"`
+- Local `/guide` smoke check returned HTTP 200.
+
+---
+
 ## 1. Configure environment
 
 Copy the template and fill in the values for your Supabase instance:
@@ -91,7 +130,7 @@ IP keeps default ports free of host collisions (see docs/UNRAID.md → Networkin
 detect updates (an OCI index + attestation manifest breaks Unraid's update check):
 
 ```bash
-VERSION=1.3.3
+VERSION=1.3.5
 docker build --provenance=false --sbom=false \
   -t nicthien/my-heroes:${VERSION} \
   -t nicthien/my-heroes:latest .

@@ -1,3 +1,5 @@
+"use client";
+
 import { GuideTable } from "./guidePrimitives";
 import { HERO_CLASS_LABEL } from "./guideData";
 import { CLASS_STARTING_STATS } from "@/lib/game/heroes";

@@ -1,3 +1,5 @@
+"use client";
+
 import { Callout, GuideSection, GuideTable, Lead, SubBlock } from "./guidePrimitives";
 
 /** Advanced combat mechanics: morale, luck, retaliation and sieges. */

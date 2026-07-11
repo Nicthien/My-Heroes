@@ -1,3 +1,5 @@
+"use client";
+
 import { Callout, GuideSection, GuideTable, Lead, SubBlock } from "./guidePrimitives";
 import { SKILL_ROWS } from "./guideData";
 

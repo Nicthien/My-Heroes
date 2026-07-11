@@ -5,6 +5,7 @@ import { isEmailEnabled } from "@/lib/config/emailEnv";
 import { createConfirmationToken } from "@/lib/email/confirmationTokens";
 import { sendConfirmationEmail } from "@/lib/email/send";
 import { normalizeLocale } from "@/lib/i18n/types";
+import { recordAnonymousAccountEvent } from "@/lib/server/anonymous-account-events";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
@@ -64,6 +65,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: authError.message }, { status: 400 });
     }
 
+    await recordAnonymousAccountEvent(supabase, user.id, "conversion_requested");
+
     const { error: profileError } = await supabase.from("profiles").update({
       email,
       name,
@@ -82,6 +85,10 @@ export async function POST(request: Request) {
       .eq("created_by_user_id", user.id)
       .eq("is_ephemeral", true);
     if (gameError) return NextResponse.json({ error: gameError.message }, { status: 500 });
+
+    if (!requiresConfirmation) {
+      await recordAnonymousAccountEvent(supabase, user.id, "conversion_completed");
+    }
 
     if (requiresConfirmation) {
       await sendConfirmationEmail(email, name, confirmation!.token);

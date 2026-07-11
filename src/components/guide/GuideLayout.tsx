@@ -4,7 +4,9 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CornerOrnaments, FleurDeLis, goldText, ornateFramePolished } from "@/components/game/hud/theme";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { GUIDE_NAV, isGuideNavActive } from "./guideNav";
+import { guideText } from "./guideI18n";
 
 /**
  * Persistent chrome for every /guide page: a sticky header, a desktop sidebar
@@ -12,6 +14,7 @@ import { GUIDE_NAV, isGuideNavActive } from "./guideNav";
  * the pathname so the wiki feels like a single navigable encyclopedia.
  */
 export function GuideLayout({ children }: { children: ReactNode }) {
+  const { locale } = useI18n();
   const pathname = usePathname();
   const flatItems = GUIDE_NAV.flatMap((group) => group.items);
 
@@ -22,14 +25,14 @@ export function GuideLayout({ children }: { children: ReactNode }) {
           <Link href="/guide" className="flex items-center gap-2">
             <FleurDeLis className="h-4 w-4 text-amber-400" />
             <span className={`text-base font-black uppercase tracking-[0.18em] sm:text-lg ${goldText}`}>
-              Guide de jeu
+              {guideText(locale, "Guide de jeu")}
             </span>
           </Link>
           <Link
             href="/dashboard"
             className="rounded-md border border-amber-700/50 bg-stone-950/70 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-200/85 transition hover:border-amber-400/60 hover:text-amber-100"
           >
-            ← Retour
+            {guideText(locale, "← Retour")}
           </Link>
         </div>
       </header>
@@ -49,7 +52,7 @@ export function GuideLayout({ children }: { children: ReactNode }) {
                     : "border-amber-800/40 bg-stone-950/50 text-amber-200/70"
                 }`}
               >
-                <span aria-hidden="true">{item.icon}</span> {item.label}
+                <span aria-hidden="true">{item.icon}</span> {guideText(locale, item.label)}
               </Link>
             );
           })}
@@ -64,7 +67,7 @@ export function GuideLayout({ children }: { children: ReactNode }) {
               {GUIDE_NAV.map((group) => (
                 <div key={group.title} className="space-y-0.5">
                   <div className="px-3 pb-1 pt-2 text-[10px] font-black uppercase tracking-[0.2em] text-amber-400/70">
-                    {group.title}
+                    {guideText(locale, group.title)}
                   </div>
                   {group.items.map((item) => {
                     const active = isGuideNavActive(item.href, pathname);
@@ -79,7 +82,7 @@ export function GuideLayout({ children }: { children: ReactNode }) {
                         }`}
                       >
                         <span aria-hidden="true">{item.icon}</span>
-                        <span>{item.label}</span>
+                        <span>{guideText(locale, item.label)}</span>
                       </Link>
                     );
                   })}
@@ -92,7 +95,7 @@ export function GuideLayout({ children }: { children: ReactNode }) {
         <main className="min-w-0 flex-1 space-y-6">
           {children}
           <footer className="pb-10 pt-4 text-center text-xs text-amber-200/50">
-            My Heroes · Guide de jeu — bonne chance sur le champ de bataille.
+            {guideText(locale, "My Heroes · Guide de jeu — bonne chance sur le champ de bataille.")}
           </footer>
         </main>
       </div>

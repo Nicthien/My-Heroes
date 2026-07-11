@@ -5,12 +5,16 @@ import { Callout, GuideSection, Lead } from "./guidePrimitives";
 import { CreatureTable } from "./CreatureTable";
 import { GUIDE_FACTIONS, getFactionCreatureRows } from "./guideData";
 import type { Faction } from "@/lib/game/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 /** Encyclopedia of every recruitable creature, filtered by faction. */
 export function CreaturesExplorer() {
+  const { locale } = useI18n();
   const [faction, setFaction] = useState<Faction>(GUIDE_FACTIONS[0].faction);
   const meta = GUIDE_FACTIONS.find((f) => f.faction === faction) ?? GUIDE_FACTIONS[0];
-  const rows = getFactionCreatureRows(faction);
+  const rows = getFactionCreatureRows(faction, locale);
+  const metaLabel = locale === "en" ? meta.labelEn : meta.label;
+  const metaTagline = locale === "en" ? meta.taglineEn : meta.tagline;
 
   return (
     <GuideSection id="creatures" title="Bestiaire" icon="🐉">
@@ -35,14 +39,14 @@ export function CreaturesExplorer() {
               }`}
               style={selected ? { borderColor: f.color } : undefined}
             >
-              <span aria-hidden="true">{f.emblem}</span> {f.label}
+              <span aria-hidden="true">{f.emblem}</span> {locale === "en" ? f.labelEn : f.label}
             </button>
           );
         })}
       </div>
 
       <div className="text-sm text-amber-100/75" style={{ color: meta.color }}>
-        {meta.label} — {meta.tagline}
+        {metaLabel} — {metaTagline}
       </div>
 
       <CreatureTable rows={rows} showTier />

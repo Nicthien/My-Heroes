@@ -301,6 +301,8 @@ interface ImapParsedMessage {
   text: string;
   html: string | null;
   seen: boolean;
+  /** IMAP records this flag on the original message after a reply is sent. */
+  answered: boolean;
   messageId: string | null;
 }
 
@@ -327,6 +329,7 @@ async function parseImapMessage(message: FetchMessageObject): Promise<ImapParsed
     text,
     html,
     seen: flags.has("\\Seen"),
+    answered: flags.has("\\Answered"),
     messageId: parsed.messageId ?? null,
   };
 }
@@ -343,8 +346,10 @@ function imapDirection(message: ImapParsedMessage): "incoming" | "outgoing" {
 function groupParsedToThreads(parsed: ImapParsedMessage[]): BugReportThreadDetail[] {
   const byThread = new Map<string, BugReportMessage[]>();
   const subjectByThread = new Map<string, string>();
+  const answeredThreads = new Set<string>();
   for (const message of parsed) {
     const threadId = threadIdFor(message.subject);
+    if (message.answered) answeredThreads.add(threadId);
     const list = byThread.get(threadId) ?? [];
     list.push({
       uid: message.uid,
@@ -365,7 +370,12 @@ function groupParsedToThreads(parsed: ImapParsedMessage[]): BugReportThreadDetai
     }
   }
   return [...byThread.entries()].map(([threadId, messages]) =>
-    buildThreadDetail(threadId, subjectByThread.get(threadId) ?? "", messages),
+    buildThreadDetail(
+      threadId,
+      subjectByThread.get(threadId) ?? "",
+      messages,
+      answeredThreads.has(threadId),
+    ),
   );
 }
 
@@ -373,6 +383,7 @@ function buildThreadDetail(
   threadId: string,
   subject: string,
   messages: BugReportMessage[],
+  hasAnsweredFlag = false,
 ): BugReportThreadDetail {
   messages.sort((a, b) => {
     const aTime = a.date ? Date.parse(a.date) : 0;
@@ -391,7 +402,10 @@ function buildThreadDetail(
     },
     messageCount: messages.length,
     unread: messages.some((m) => m.direction === "incoming" && !m.seen),
-    answered: messages.some((m) => m.direction === "outgoing"),
+    // Sent copies are not guaranteed to be present in the mailbox being read,
+    // and the studio can use the same address for reports and replies. IMAP's
+    // Answered flag is therefore the authoritative fallback for this KPI.
+    answered: hasAnsweredFlag || messages.some((m) => m.direction === "outgoing"),
     preview: shortPreview(last?.text ?? ""),
     messages,
   };

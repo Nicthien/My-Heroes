@@ -1,3 +1,5 @@
+"use client";
+
 import { Callout, GuideSection, GuideTable, Lead } from "./guidePrimitives";
 import { CREATURE_BANK_ROWS } from "./guideData";
 

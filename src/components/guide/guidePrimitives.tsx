@@ -1,9 +1,11 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { Children, cloneElement, isValidElement, ReactElement, ReactNode, useState } from "react";
 import { goldDivider, goldText } from "@/components/game/hud/theme";
 import { RESOURCE_BY_KEY, type ResourceKey } from "./guideData";
 import type { ResourceCost } from "@/lib/game/economy";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideText } from "./guideI18n";
 
 /**
  * Shared building blocks for the in-game guide (`/guide`). These mirror the HUD’s
@@ -52,6 +54,44 @@ export function Sprite({
   );
 }
 
+function translateGuideString(locale: ReturnType<typeof useI18n>["locale"], value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return value;
+  const translated = guideText(locale, normalized);
+  if (translated === normalized) return value;
+  const leading = value.match(/^\s*/)?.[0] ?? "";
+  const trailing = value.match(/\s*$/)?.[0] ?? "";
+  return `${leading}${translated}${trailing}`;
+}
+
+function collectGuideText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(collectGuideText).join("");
+  if (isValidElement(node)) {
+    const element = node as ReactElement<{ children?: ReactNode }>;
+    return collectGuideText(element.props.children);
+  }
+  return "";
+}
+
+export function translateGuideNode(locale: ReturnType<typeof useI18n>["locale"], node: ReactNode): ReactNode {
+  if (typeof node === "string") return translateGuideString(locale, node);
+  if (Array.isArray(node)) return Children.map(node, (child) => translateGuideNode(locale, child));
+  if (isValidElement(node)) {
+    const element = node as ReactElement<{ children?: ReactNode }>;
+    if (element.props.children === undefined) return element;
+    const normalized = collectGuideText(element.props.children).replace(/\s+/g, " ").trim();
+    const translated = normalized ? guideText(locale, normalized) : normalized;
+    if (translated && translated !== normalized) {
+      return cloneElement(element, { children: translated });
+    }
+    return cloneElement(element, {
+      children: Children.map(element.props.children, (child) => translateGuideNode(locale, child)),
+    });
+  }
+  return node;
+}
+
 /** A guide section: an anchor target + ornate card wrapper with a header. */
 export function GuideSection({
   id,
@@ -64,6 +104,7 @@ export function GuideSection({
   icon?: ReactNode;
   children: ReactNode;
 }) {
+  const { locale } = useI18n();
   return (
     <section
       id={id}
@@ -72,11 +113,11 @@ export function GuideSection({
       <header className="flex items-center gap-3 border-b border-amber-700/30 px-5 py-4 sm:px-7">
         {icon && <span className="text-2xl leading-none">{icon}</span>}
         <h2 className={`text-lg font-black uppercase tracking-[0.14em] sm:text-xl ${goldText}`}>
-          {title}
+          {guideText(locale, title)}
         </h2>
       </header>
       <div className="space-y-4 px-5 py-5 text-[15px] leading-relaxed text-amber-100/90 sm:px-7 sm:py-6">
-        {children}
+        {translateGuideNode(locale, children)}
       </div>
     </section>
   );
@@ -84,14 +125,16 @@ export function GuideSection({
 
 /** An emphasised intro line under a section header. */
 export function Lead({ children }: { children: ReactNode }) {
-  return <p className="text-amber-100/85">{children}</p>;
+  const { locale } = useI18n();
+  return <p className="text-amber-100/85">{translateGuideNode(locale, children)}</p>;
 }
 
 /** A titled sub-block inside a section. */
 export function SubBlock({ title, children }: { title: string; children: ReactNode }) {
+  const { locale } = useI18n();
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-amber-300/90">{title}</h3>
+      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-amber-300/90">{guideText(locale, title)}</h3>
       {children}
     </div>
   );
@@ -116,14 +159,15 @@ export function Callout({
   title?: string;
   children: ReactNode;
 }) {
+  const { locale } = useI18n();
   const style = CALLOUT_STYLE[kind];
   return (
     <div className={`rounded-lg border-l-4 ${style.border} ${style.bg} px-4 py-3 ${style.text}`}>
       <div className="mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em]">
         <span aria-hidden="true">{style.icon}</span>
-        <span>{title ?? style.label}</span>
+        <span>{guideText(locale, title ?? style.label)}</span>
       </div>
-      <div className="text-sm leading-relaxed opacity-95">{children}</div>
+      <div className="text-sm leading-relaxed opacity-95">{translateGuideNode(locale, children)}</div>
     </div>
   );
 }
@@ -139,8 +183,10 @@ export function GuideTable({
   /** Optional per-column text alignment. */
   align?: Array<"left" | "center" | "right">;
 }) {
+  const { locale } = useI18n();
   const ALIGN_CLASS = { left: "text-left", center: "text-center", right: "text-right" } as const;
   const alignFor = (i: number) => ALIGN_CLASS[align?.[i] ?? "left"];
+  const renderHeader = (header: ReactNode) => typeof header === "string" ? guideText(locale, header) : header;
   return (
     <div className="-mx-1 overflow-x-auto pb-1">
       <table className="w-full min-w-[480px] border-collapse text-sm">
@@ -151,7 +197,7 @@ export function GuideTable({
                 key={i}
                 className={`px-3 py-2 ${alignFor(i)} text-xs font-black uppercase tracking-[0.12em] text-amber-300/90`}
               >
-                {h}
+                {renderHeader(h)}
               </th>
             ))}
           </tr>
@@ -164,7 +210,7 @@ export function GuideTable({
             >
               {row.map((cell, c) => (
                 <td key={c} className={`px-3 py-2 ${alignFor(c)} align-middle text-amber-100/90`}>
-                  {cell}
+                  {translateGuideNode(locale, cell)}
                 </td>
               ))}
             </tr>

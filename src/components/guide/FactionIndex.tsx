@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { Chip, GuideSection, Lead, Sprite } from "./guidePrimitives";
 import { ALIGNMENT_LABEL, GUIDE_FACTIONS } from "./guideData";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideText } from "./guideI18n";
 
 const ALIGNMENT_COLOR: Record<string, string> = {
   good: "#38bdf8",
@@ -10,6 +14,7 @@ const ALIGNMENT_COLOR: Record<string, string> = {
 
 /** The 8 playable factions as cards, each linking to its detail page. */
 export function FactionIndex() {
+  const { locale } = useI18n();
   return (
     <GuideSection id="factions" title="Les factions" icon="🛡️">
       <Lead>
@@ -29,12 +34,12 @@ export function FactionIndex() {
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-1.5">
                 <span aria-hidden="true">{f.emblem}</span>
-                <span className="truncate text-sm font-black text-amber-100">{f.label}</span>
+                <span className="truncate text-sm font-black text-amber-100">{locale === "en" ? f.labelEn : f.label}</span>
               </div>
-              <Chip color={ALIGNMENT_COLOR[f.alignment]}>{ALIGNMENT_LABEL[f.alignment]}</Chip>
-              <p className="text-xs text-amber-100/70">{f.tagline}</p>
+              <Chip color={ALIGNMENT_COLOR[f.alignment]}>{guideText(locale, ALIGNMENT_LABEL[f.alignment])}</Chip>
+              <p className="text-xs text-amber-100/70">{locale === "en" ? f.taglineEn : f.tagline}</p>
               <span className="inline-block text-xs font-bold text-amber-300/80 group-hover:text-amber-200">
-                Découvrir →
+                {guideText(locale, "Découvrir →")}
               </span>
             </div>
           </Link>

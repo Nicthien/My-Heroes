@@ -9,6 +9,8 @@ import {
   ARTIFACT_ROWS,
 } from "./guideData";
 import type { ArtifactClass } from "@/lib/game/artifacts";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideText } from "./guideI18n";
 
 type Filter = "all" | ArtifactClass;
 
@@ -71,6 +73,7 @@ function FilterButton({
   label: string;
   color?: string;
 }) {
+  const { locale } = useI18n();
   return (
     <button
       type="button"
@@ -82,7 +85,7 @@ function FilterButton({
       }`}
       style={active && color ? { borderColor: color, color } : undefined}
     >
-      {label}
+      {guideText(locale, label)}
     </button>
   );
 }

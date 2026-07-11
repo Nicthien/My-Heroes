@@ -19,6 +19,8 @@ import { localizeCreatureAbilities, localizeCreatureSpecial } from "@/lib/i18n/c
 import { BuildingType, Faction, HeroClass, type Resources } from "@/lib/game/types";
 import { PLAYABLE_FACTIONS } from "@/lib/game/playable-factions";
 import { FACTION_META } from "@/app/dashboard/factionMeta";
+import type { Locale } from "@/lib/i18n/types";
+import { localizedUnitLabel } from "@/lib/i18n/gameLabels";
 
 /**
  * Reference data for the guide, derived from the authoritative game rules so the
@@ -106,11 +108,14 @@ export interface GuideFaction {
   key: string;
   faction: Faction;
   label: string;
+  labelEn: string;
   color: string;
   emblem: string;
   alignment: "good" | "evil" | "barbarian";
   tagline: string;
+  taglineEn: string;
   desc: string;
+  descEn: string;
   townSprite: string;
   topUnitSprite: string;
   topUnitLabel: string;
@@ -124,11 +129,14 @@ export const GUIDE_FACTIONS: GuideFaction[] = PLAYABLE_FACTIONS.map((faction) =>
     key: faction,
     faction,
     label: meta.label,
+    labelEn: meta.labelEn,
     color: meta.color,
     emblem: meta.emblem,
     alignment: meta.alignment,
     tagline: meta.tagline,
+    taglineEn: meta.taglineEn,
     desc: meta.desc,
+    descEn: meta.descEn,
     townSprite: `/assets/sprites/map/town-${faction}.webp`,
     topUnitSprite: getUnitSpritePath(topType),
     topUnitLabel: top.label,
@@ -197,11 +205,11 @@ export interface CreatureRow {
   special: string;
 }
 
-export function getCreatureRow(unitType: string, faction: Faction): CreatureRow {
+export function getCreatureRow(unitType: string, faction: Faction, locale: Locale = "fr"): CreatureRow {
   const c = getCreature(unitType);
   return {
     type: unitType,
-    label: c.label,
+    label: localizedUnitLabel(unitType, c.label, locale),
     sprite: getUnitSpritePath(unitType),
     faction,
     tier: c.tier,
@@ -216,17 +224,17 @@ export function getCreatureRow(unitType: string, faction: Faction): CreatureRow 
     goldCost: c.cost.gold ?? 0,
     ranged: c.ranged,
     shots: c.shots,
-    abilities: localizeCreatureAbilities(c.abilities ?? [], "fr"),
-    special: localizeCreatureSpecial(c.special ?? "", "fr"),
+    abilities: localizeCreatureAbilities(c.abilities ?? [], locale),
+    special: localizeCreatureSpecial(c.special ?? "", locale),
   };
 }
 
 /** Every recruitable creature of a faction (7 base + 7 upgraded), tier-ordered. */
-export function getFactionCreatureRows(faction: Faction): CreatureRow[] {
+export function getFactionCreatureRows(faction: Faction, locale: Locale = "fr"): CreatureRow[] {
   const rows: CreatureRow[] = [];
   FACTION_UNITS[faction].forEach((unit, tier) => {
-    rows.push(getCreatureRow(unit, faction));
-    rows.push(getCreatureRow(FACTION_UPGRADED_UNITS[faction][tier], faction));
+    rows.push(getCreatureRow(unit, faction, locale));
+    rows.push(getCreatureRow(FACTION_UPGRADED_UNITS[faction][tier], faction, locale));
   });
   return rows;
 }

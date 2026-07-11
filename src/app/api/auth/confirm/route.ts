@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeConfirmationTokenForUser, validateConfirmationToken } from "@/lib/email/confirmationTokens";
 import { sendWelcomeEmail } from "@/lib/email/send";
+import { recordAnonymousAccountEvent } from "@/lib/server/anonymous-account-events";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -16,6 +17,15 @@ export async function POST(request: Request) {
 
   if (result.status !== "ok") {
     return NextResponse.json({ status: result.status }, { status: 400 });
+  }
+
+  const { data: profileBeforeUpdate, error: profileLookupError } = await supabase
+    .from("profiles")
+    .select("is_guest")
+    .eq("id", result.userId)
+    .maybeSingle();
+  if (profileLookupError) {
+    return NextResponse.json({ status: "error" }, { status: 500 });
   }
 
   const { error: gamesError } = await supabase
@@ -42,6 +52,10 @@ export async function POST(request: Request) {
   const { error: authError } = await supabase.auth.admin.updateUserById(result.userId, { email_confirm: true });
   if (authError) {
     return NextResponse.json({ status: "error" }, { status: 500 });
+  }
+
+  if (profileBeforeUpdate?.is_guest) {
+    await recordAnonymousAccountEvent(supabase, result.userId, "conversion_completed");
   }
 
   const { error: consumeError } = await consumeConfirmationTokenForUser(supabase, result.userId);

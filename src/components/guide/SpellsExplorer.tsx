@@ -9,6 +9,8 @@ import {
   SPELL_SCHOOL_ORDER,
 } from "./guideData";
 import type { SpellContext, SpellSchool } from "@/lib/game/spells";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { guideText } from "./guideI18n";
 
 type SchoolFilter = "all-schools" | SpellSchool;
 type ContextFilter = "all" | SpellContext;
@@ -21,6 +23,7 @@ const KIND_COLOR: Record<string, string> = {
 };
 
 export function SpellsExplorer() {
+  const { locale } = useI18n();
   const [school, setSchool] = useState<SchoolFilter>("all-schools");
   const [context, setContext] = useState<ContextFilter>("all");
 
@@ -63,13 +66,15 @@ export function SpellsExplorer() {
         headers={["Sort", "École", "Niv.", "Type", "Mana", "Effet", "Dégâts"]}
         align={["left", "center", "center", "center", "center", "left", "left"]}
         rows={rows.map((s) => [
-          <span key="n" className="font-semibold text-amber-100">{s.label}</span>,
+          <span key="n" className="font-semibold text-amber-100">{guideText(locale, s.label)}</span>,
           <Chip key="sc" color={s.schoolColor}>{s.schoolLabel}</Chip>,
           <span key="lv" className="font-bold text-amber-300">{s.level}</span>,
           <Chip key="k" color={KIND_COLOR[s.kindLabel]}>{s.kindLabel}</Chip>,
           <span key="m" className="whitespace-nowrap tabular-nums text-amber-100/85">{s.costStandard}/{s.costExpert}</span>,
-          <span key="e" className="text-sm text-amber-100/80">{s.effect}</span>,
-          <span key="d" className="whitespace-nowrap text-xs text-rose-200/80">{s.damage ?? "—"}</span>,
+          <span key="e" className="text-sm text-amber-100/80">{guideText(locale, s.effect)}</span>,
+          <span key="d" className="whitespace-nowrap text-xs text-rose-200/80">
+            {s.damage ? guideText(locale, s.damage).replace("Pouv", locale === "en" ? "Power" : "Pouv") : "—"}
+          </span>,
         ])}
       />
 
@@ -93,6 +98,7 @@ function FilterButton({
   label: string;
   color?: string;
 }) {
+  const { locale } = useI18n();
   return (
     <button
       type="button"
@@ -104,7 +110,7 @@ function FilterButton({
       }`}
       style={active && color ? { borderColor: color, color } : undefined}
     >
-      {label}
+      {guideText(locale, label)}
     </button>
   );
 }

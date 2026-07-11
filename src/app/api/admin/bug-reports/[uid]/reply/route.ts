@@ -74,7 +74,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ uid: strin
 
   if (isMockEnabled()) {
     console.log("[bug-report reply mock] to=%s subject=%s", detail.value.lastReporter.address, subject);
-    void markBugThreadFlags(threadId, { seen: true, answered: true });
+    await markBugThreadFlags(threadId, { seen: true, answered: true });
     return NextResponse.json({ success: true });
   }
 
@@ -95,7 +95,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ uid: strin
     );
   }
 
-  void markBugThreadFlags(threadId, { seen: true, answered: true });
+  // Persist the IMAP Answered flag before returning. A fire-and-forget update
+  // can be terminated by a serverless runtime and make the KPI regress after
+  // the next refresh.
+  await markBugThreadFlags(threadId, { seen: true, answered: true });
 
   return NextResponse.json({ success: true });
 }

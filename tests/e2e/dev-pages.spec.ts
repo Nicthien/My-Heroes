@@ -25,6 +25,7 @@ const DEV_PAGES: DevPage[] = [
   { path: "/dev/combat-modals", expect: { selector: "body",  description: "Combat modals preview body" } },
   { path: "/dev/admin-observer", expect: { selector: "[data-testid='admin-observer-panel']", description: "Admin observer panel" } },
   { path: "/dev/admin-bug-reports", expect: { selector: "[data-testid='admin-bug-reports']", description: "Admin bug reports panel" } },
+  { path: "/dev/admin-dashboard", expect: { selector: "[data-testid='admin-dashboard-tabs']", description: "Tabbed admin dashboard" } },
   { path: "/dev/sprites",      expect: { selector: "body",   description: "Sprite gallery body" } },
   { path: "/dev/map-showcase", expect: { selector: "body",   description: "Map showcase body" } },
   { path: "/dev/map-showcase?size=S", expect: { selector: "body", description: "Generated Phaser map showcase body" } },
@@ -690,6 +691,27 @@ test.describe("Smoke — /dev/* preview pages render without errors", () => {
     await expect(page.getByRole("cell", { name: "Joueur inconnu" })).toBeVisible();
   });
 
+  test("admin dashboard separates tools into tabs and shows anonymous conversion metrics", async ({ page }) => {
+    await page.goto("/dev/admin-dashboard", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("tab", { name: "Vue d’ensemble" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("anonymous-account-stats")).toContainText("Anonymes actuels");
+    await expect(page.getByTestId("anonymous-account-stats")).toContainText("7");
+    await expect(page.getByText(/Suivi depuis le/)).toBeVisible();
+    await expect(page.getByTestId("anonymous-guests-chart")).toBeVisible();
+    await expect(page.getByTestId("anonymous-conversions-chart")).toBeVisible();
+
+    await page.getByRole("tab", { name: "Utilisateurs" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Utilisateurs" })).toBeVisible();
+    await expect(page.getByRole("tabpanel", { name: "Vue d’ensemble" })).toHaveCount(0);
+
+    for (const tab of ["Parties", "Rapports de bugs", "Paramètres"]) {
+      await page.getByRole("tab", { name: new RegExp(tab) }).click();
+      await expect(page.getByRole("tab", { name: new RegExp(tab) })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tabpanel")).toHaveCount(1);
+    }
+  });
+
   test("town build tree modal shows construction dependencies", async ({ page }) => {
     await page.goto("/dev/hud-build", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Construire" }).first().click();
@@ -755,7 +777,11 @@ test.describe("Smoke — /guide encyclopedia pages render without errors", () =>
 
   test("bestiary filters creatures by faction", async ({ page }) => {
     await page.goto("/guide/creatures", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: /Braises Profanes/ }).click();
+    const infernoButton = page.getByRole("button", { name: /Braises Profanes/ });
+    await expect(async () => {
+      await infernoButton.click();
+      await expect(page.getByText(/Braises Profanes —/)).toBeVisible({ timeout: 1_000 });
+    }).toPass();
     // Inferno tier-1 creature (Diablotin) appears in the table after filtering.
     await expect(page.getByRole("cell", { name: /Diablotin/ }).first()).toBeVisible();
   });
@@ -782,6 +808,23 @@ test.describe("Smoke — /guide encyclopedia pages render without errors", () =>
     const dragonLinks = page.getByRole("link").filter({ hasText: /dragon/i });
     await expect.poll(() => dragonLinks.count(), { timeout: 15_000 }).toBeGreaterThan(0);
     await expect(dragonLinks.first()).toBeVisible();
+  });
+
+  test("uses the browser English locale on guide pages", async ({ browser }) => {
+    const context = await browser.newContext({ locale: "en-US" });
+    const page = await context.newPage();
+    try {
+      await page.goto("/guide", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Welcome, heroes", exact: true })).toBeVisible();
+      await expect(page.getByText("Game guide").first()).toBeVisible();
+      await expect(page.getByRole("link", { name: /First steps/ }).first()).toBeVisible();
+
+      await page.goto("/guide/recherche", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Search", exact: true })).toBeVisible();
+      await expect(page.getByRole("searchbox")).toHaveAttribute("placeholder", /E\.g\. dragon/);
+    } finally {
+      await context.close();
+    }
   });
 
   test("fits a mobile viewport without horizontal overflow", async ({ browser }) => {

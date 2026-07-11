@@ -1,11 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   CornerOrnaments,
   OrnateHeader,
   ParchmentBackground,
-  goldText,
   ornateFrame,
 } from "@/components/game/hud/theme";
 import { describeVictoryCondition, normalizeVictoryCondition } from "@/lib/game/victory";
@@ -86,7 +85,7 @@ interface AdminHomeDashboardProps {
   onObserveGame: (gameId: string) => void;
 }
 
-type SectionId = "settings" | "bugReports" | "users" | "games" | "stats";
+type AdminTabId = "overview" | "users" | "games" | "bugReports" | "settings";
 
 function formatAdminDate(value?: string | null, fallback = "-") {
   if (!value) return fallback;
@@ -110,68 +109,6 @@ function playerStatusClass(status?: string | null) {
 
 function playerStatusLabel(player: PlayerInfo, locale: Locale) {
   return localizedServerMessage(player.turnStatus, locale) || "-";
-}
-
-function KpiTile({
-  label,
-  value,
-  accent,
-  onClick,
-  ariaLabel,
-}: {
-  label: string;
-  value: string | number;
-  accent: string;
-  onClick: () => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className="rounded-md border border-amber-700/35 bg-stone-950/55 px-4 py-3 text-left transition hover:border-amber-400/50 hover:bg-stone-900/70 focus:outline-none focus-visible:border-amber-400"
-    >
-      <div className={`text-2xl font-black ${accent}`}>{value}</div>
-      <div className="mt-1 text-[11px] font-bold uppercase tracking-wider text-amber-200/65">{label}</div>
-    </button>
-  );
-}
-
-function SectionHeader({
-  title,
-  badge,
-  open,
-  onToggle,
-  ariaId,
-}: {
-  title: string;
-  badge?: string;
-  open: boolean;
-  onToggle: () => void;
-  ariaId: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-3 border-b border-amber-900/45 px-4 py-3 text-left transition hover:bg-stone-900/40"
-      aria-expanded={open}
-      aria-controls={ariaId}
-    >
-      <div className="flex items-center gap-3">
-        <span className={`text-sm font-black uppercase tracking-[0.18em] ${goldText}`}>{title}</span>
-        {badge && (
-          <span className="rounded-full border border-red-400/50 bg-red-950/55 px-2 py-0.5 text-[11px] font-black text-red-100">
-            {badge}
-          </span>
-        )}
-      </div>
-      <span className="text-amber-300/70" aria-hidden="true">
-        {open ? "▾" : "▸"}
-      </span>
-    </button>
-  );
 }
 
 export function AdminHomeDashboard({
@@ -198,67 +135,38 @@ export function AdminHomeDashboard({
   const [creatingUser, setCreatingUser] = useState(false);
 
   const [bugCounts, setBugCounts] = useState<BugReportCounts>({ total: 0, unread: 0, unanswered: 0 });
+  const [activeTab, setActiveTab] = useState<AdminTabId>("overview");
 
-  const [sectionsOpen, setSectionsOpen] = useState<Record<SectionId, boolean>>({
-    settings: true,
-    bugReports: true,
-    users: false,
-    games: false,
-    stats: false,
-  });
 
-  const toggleSection = useCallback((id: SectionId) => {
-    setSectionsOpen((current) => ({ ...current, [id]: !current[id] }));
-  }, []);
-
-  const openAndScrollTo = useCallback((id: SectionId) => {
-    setSectionsOpen((current) => ({ ...current, [id]: true }));
-    requestAnimationFrame(() => {
-      document.getElementById(`admin-section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, []);
-
-  const loadData = useCallback(async () => {
+  const loadTabData = useCallback(async (tab: AdminTabId) => {
+    if (tab === "overview" || tab === "bugReports") return;
     setLoading(true);
     setMessage(null);
-    const [settingsResponse, usersResponse, gamesResponse] = await Promise.all([
-      fetchWithAuth("/api/admin/settings", { cache: "no-store" }),
-      fetchWithAuth("/api/admin/users", { cache: "no-store" }),
-      fetchWithAuth("/api/admin/games", { cache: "no-store" }),
-    ]);
-
-    if (!settingsResponse.ok || !usersResponse.ok || !gamesResponse.ok) {
-      const data = !settingsResponse.ok
-        ? ((await parseJsonResponse(settingsResponse)) as { error?: string } | null)
-        : !usersResponse.ok
-        ? ((await parseJsonResponse(usersResponse)) as { error?: string } | null)
-        : ((await parseJsonResponse(gamesResponse)) as { error?: string } | null);
+    const endpoint = tab === "users" ? "/api/admin/users" : tab === "games" ? "/api/admin/games" : "/api/admin/settings";
+    const response = await fetchWithAuth(endpoint, { cache: "no-store" });
+    if (!response.ok) {
+      const data = (await parseJsonResponse(response)) as { error?: string } | null;
       setMessage({ kind: "error", text: localizedServerMessage(data?.error, locale) || t("admin.loadFailed") });
-      setUsers([]);
-      setGames([]);
       setLoading(false);
       return;
     }
-
-    const settingsData = (await parseJsonResponse(settingsResponse)) as AdminSettings | null;
-    const usersData = (await parseJsonResponse(usersResponse)) as AdminUserInfo[] | null;
-    const gamesData = (await parseJsonResponse(gamesResponse)) as AdminGameInfo[] | null;
-    setSettings({
-      allowAnonymousUsers: settingsData?.allowAnonymousUsers !== false,
-    });
-    setUsers(Array.isArray(usersData) ? usersData : []);
-    setGames(Array.isArray(gamesData) ? gamesData : []);
+    const data = await parseJsonResponse(response);
+    if (tab === "users") setUsers(Array.isArray(data) ? (data as AdminUserInfo[]) : []);
+    if (tab === "games") setGames(Array.isArray(data) ? (data as AdminGameInfo[]) : []);
+    if (tab === "settings") {
+      setSettings({ allowAnonymousUsers: (data as AdminSettings | null)?.allowAnonymousUsers !== false });
+    }
     setLoading(false);
   }, [fetchWithAuth, parseJsonResponse, locale, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData().catch((error) => {
+    loadTabData(activeTab).catch((error) => {
       console.error(error);
       setMessage({ kind: "error", text: t("admin.loadFailed") });
       setLoading(false);
     });
-  }, [loadData, t]);
+  }, [activeTab, loadTabData, t]);
 
   const deleteUser = async (target: AdminUserInfo) => {
     if (!confirm(`Supprimer l'utilisateur ${target.name || target.email || target.id} ?`)) return;
@@ -270,7 +178,7 @@ export function AdminHomeDashboard({
       return;
     }
     setMessage({ kind: "success", text: t("admin.userDeleted") });
-    await loadData();
+    await loadTabData("users");
   };
 
   const createUser = async (event: FormEvent<HTMLFormElement>) => {
@@ -318,7 +226,7 @@ export function AdminHomeDashboard({
     setNewUserGodMode(false);
     setMessage({ kind: "success", text: t("admin.userCreated") });
     setCreatingUser(false);
-    await loadData();
+    await loadTabData("users");
   };
 
   const updateUserGodMode = async (target: AdminUserInfo, enabled: boolean) => {
@@ -368,18 +276,8 @@ export function AdminHomeDashboard({
       return;
     }
     setMessage({ kind: "success", text: t("admin.gameDeleted") });
-    await loadData();
+    await loadTabData("games");
   };
-
-  const totals = useMemo(() => {
-    const activeGames = games.filter((game) => game.status === "ACTIVE").length;
-    return {
-      users: users.length,
-      activeGames,
-      bugUnread: bugCounts.unread,
-      bugUnanswered: bugCounts.unanswered,
-    };
-  }, [users, games, bugCounts]);
 
   return (
     <div className={`relative ${ornateFrame}`}>
@@ -388,35 +286,33 @@ export function AdminHomeDashboard({
       <OrnateHeader>{t("admin.title")}</OrnateHeader>
 
       <div className="space-y-4 p-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiTile
-            label={t("admin.kpi.users")}
-            value={totals.users}
-            accent="text-amber-200"
-            onClick={() => openAndScrollTo("users")}
-            ariaLabel={t("admin.kpi.usersAria")}
-          />
-          <KpiTile
-            label={t("admin.kpi.activeGames")}
-            value={totals.activeGames}
-            accent="text-emerald-300"
-            onClick={() => openAndScrollTo("games")}
-            ariaLabel={t("admin.kpi.activeGamesAria")}
-          />
-          <KpiTile
-            label={t("admin.kpi.bugUnread")}
-            value={totals.bugUnread}
-            accent={totals.bugUnread > 0 ? "text-red-300" : "text-amber-200/70"}
-            onClick={() => openAndScrollTo("bugReports")}
-            ariaLabel={t("admin.kpi.bugUnreadAria")}
-          />
-          <KpiTile
-            label={t("admin.kpi.bugUnanswered")}
-            value={totals.bugUnanswered}
-            accent={totals.bugUnanswered > 0 ? "text-orange-300" : "text-amber-200/70"}
-            onClick={() => openAndScrollTo("bugReports")}
-            ariaLabel={t("admin.kpi.bugUnansweredAria")}
-          />
+        <div className="overflow-x-auto border-b border-amber-700/40" role="tablist" aria-label={t("admin.title")}>
+          <div className="flex min-w-max gap-1">
+            {([
+              ["overview", t("admin.tabs.overview")],
+              ["users", `${t("admin.tabs.users")}${users.length ? ` (${users.length})` : ""}`],
+              ["games", `${t("admin.tabs.games")}${games.length ? ` (${games.length})` : ""}`],
+              ["bugReports", `${t("admin.tabs.bugReports")}${bugCounts.unread ? ` (${bugCounts.unread})` : ""}`],
+              ["settings", t("admin.tabs.settings")],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                id={`admin-tab-${id}`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === id}
+                aria-controls={`admin-panel-${id}`}
+                onClick={() => setActiveTab(id)}
+                className={`border-b-2 px-4 py-3 text-xs font-black uppercase tracking-wider transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  activeTab === id
+                    ? "border-amber-300 bg-amber-950/45 text-amber-100"
+                    : "border-transparent text-amber-200/60 hover:bg-stone-900/50 hover:text-amber-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {message && (
@@ -432,26 +328,25 @@ export function AdminHomeDashboard({
           </div>
         )}
 
-        <div className="flex justify-end">
+        {(activeTab === "users" || activeTab === "games" || activeTab === "settings") && <div className="flex justify-end">
           <button
             type="button"
-            onClick={() => loadData().catch(console.error)}
+            onClick={() => loadTabData(activeTab).catch(console.error)}
             disabled={loading}
             className="rounded-md border border-cyan-400/50 bg-cyan-950/50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? t("common.loading") : t("admin.refresh")}
           </button>
-        </div>
+        </div>}
 
-        <div id="admin-section-settings" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
-          <SectionHeader
-            title={t("admin.settings")}
-            open={sectionsOpen.settings}
-            onToggle={() => toggleSection("settings")}
-            ariaId="admin-panel-settings"
-          />
-          {sectionsOpen.settings && (
-            <div id="admin-panel-settings" className="space-y-3 p-3">
+        {activeTab === "overview" && (
+          <div id="admin-panel-overview" role="tabpanel" aria-labelledby="admin-tab-overview">
+            <StatsPanelBody fetchWithAuth={fetchWithAuth} parseJsonResponse={parseJsonResponse} t={t} locale={locale} />
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+            <div id="admin-panel-settings" role="tabpanel" aria-labelledby="admin-tab-settings" className="space-y-3 rounded-md border border-amber-700/40 bg-stone-950/45 p-3">
               <label className="flex flex-col gap-3 rounded-md border border-amber-700/35 bg-stone-950/45 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   <span className="block text-sm font-black uppercase tracking-[0.14em] text-amber-100">
@@ -474,23 +369,10 @@ export function AdminHomeDashboard({
               </label>
               <p className="text-xs leading-5 text-amber-100/55">{t("admin.allowAnonymousUsersSupabaseNote")}</p>
             </div>
-          )}
-        </div>
+        )}
 
-        <div id="admin-section-bugReports" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
-          <SectionHeader
-            title={t("admin.bugReports.title")}
-            badge={
-              totals.bugUnread > 0
-                ? t("admin.bugReports.badge", { unread: totals.bugUnread })
-                : undefined
-            }
-            open={sectionsOpen.bugReports}
-            onToggle={() => toggleSection("bugReports")}
-            ariaId="admin-panel-bug-reports"
-          />
-          {sectionsOpen.bugReports && (
-            <div id="admin-panel-bug-reports" className="p-3">
+        {activeTab === "bugReports" && (
+            <div id="admin-panel-bugReports" role="tabpanel" aria-labelledby="admin-tab-bugReports" className="rounded-md border border-amber-700/40 bg-stone-950/45 p-3">
               <BugReportsPanel
                 fetchWithAuth={fetchWithAuth}
                 parseJsonResponse={parseJsonResponse}
@@ -499,18 +381,10 @@ export function AdminHomeDashboard({
                 onCountsChange={setBugCounts}
               />
             </div>
-          )}
-        </div>
+        )}
 
-        <div id="admin-section-users" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
-          <SectionHeader
-            title={`${t("admin.users")} (${totals.users})`}
-            open={sectionsOpen.users}
-            onToggle={() => toggleSection("users")}
-            ariaId="admin-panel-users"
-          />
-          {sectionsOpen.users && (
-            <div id="admin-panel-users" className="space-y-3 p-3">
+        {activeTab === "users" && (
+            <div id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users" className="space-y-3 rounded-md border border-amber-700/40 bg-stone-950/45 p-3">
               <form onSubmit={createUser} className="rounded-md border border-amber-700/35 bg-stone-950/45 p-3">
                 <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr_1fr_0.8fr_auto] lg:items-end">
                   <div>
@@ -657,18 +531,10 @@ export function AdminHomeDashboard({
                 </table>
               </div>
             </div>
-          )}
-        </div>
+        )}
 
-        <div id="admin-section-games" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
-          <SectionHeader
-            title={`${t("admin.games")} (${games.length})`}
-            open={sectionsOpen.games}
-            onToggle={() => toggleSection("games")}
-            ariaId="admin-panel-games"
-          />
-          {sectionsOpen.games && (
-            <div id="admin-panel-games" className="space-y-2 p-3">
+        {activeTab === "games" && (
+            <div id="admin-panel-games" role="tabpanel" aria-labelledby="admin-tab-games" className="space-y-2 rounded-md border border-amber-700/40 bg-stone-950/45 p-3">
               {games.map((game) => (
                 <div key={game.id} className="rounded-md border border-amber-700/40 bg-stone-950/55 p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -754,27 +620,8 @@ export function AdminHomeDashboard({
                 </div>
               )}
             </div>
-          )}
-        </div>
+        )}
 
-        <div id="admin-section-stats" className="overflow-hidden rounded-md border border-amber-700/40 bg-stone-950/45">
-          <SectionHeader
-            title={t("stats.title")}
-            open={sectionsOpen.stats}
-            onToggle={() => toggleSection("stats")}
-            ariaId="admin-panel-stats"
-          />
-          {sectionsOpen.stats && (
-            <div id="admin-panel-stats" className="p-3">
-              <StatsPanelBody
-                fetchWithAuth={fetchWithAuth}
-                parseJsonResponse={parseJsonResponse}
-                t={t}
-                locale={locale}
-              />
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

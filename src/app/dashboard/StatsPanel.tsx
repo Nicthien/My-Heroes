@@ -38,6 +38,20 @@ interface AdminStats {
   factionDistribution: { key: string; count: number }[];
   gamesOverTime: { date: string; count: number }[];
   usersOverTime: { date: string; count: number }[];
+  anonymousUsers: {
+    trackingStartedAt: string | null;
+    totals: {
+      currentAnonymous: number;
+      pendingConversions: number;
+      guestsCreated: number;
+      conversionRequests: number;
+      conversionsCompleted: number;
+      conversionRate: number;
+    };
+    guestsOverTime: { date: string; count: number }[];
+    conversionRequestsOverTime: { date: string; count: number }[];
+    conversionsCompletedOverTime: { date: string; count: number }[];
+  };
   topPlayers: { name: string; gamesPlayed: number; gamesWon: number; bestScore: number }[];
 }
 
@@ -123,6 +137,7 @@ interface OverTimeColors {
 
 const GAMES_OVER_TIME_COLORS: OverTimeColors = { area: "#f59e0b", line: "#fbbf24", dot: "#fde68a" };
 const USERS_OVER_TIME_COLORS: OverTimeColors = { area: "#22d3ee", line: "#67e8f9", dot: "#a5f3fc" };
+const GUESTS_OVER_TIME_COLORS: OverTimeColors = { area: "#a855f7", line: "#c084fc", dot: "#e9d5ff" };
 
 function OverTimeChart({
   data,
@@ -224,6 +239,59 @@ function OverTimeChart({
   );
 }
 
+function ConversionComparisonChart({
+  requests,
+  completed,
+  t,
+  locale,
+}: {
+  requests: { date: string; count: number }[];
+  completed: { date: string; count: number }[];
+  t: TFn;
+  locale: Locale;
+}) {
+  const width = 720;
+  const height = 180;
+  const padX = 32;
+  const padY = 20;
+  const max = Math.max(1, ...requests.map((point) => point.count), ...completed.map((point) => point.count));
+  const stepX = requests.length > 1 ? (width - padX * 2) / (requests.length - 1) : 0;
+  const x = (index: number) => padX + index * stepX;
+  const y = (count: number) => height - padY - (count / max) * (height - padY * 2);
+  const path = (data: { count: number }[]) =>
+    data.map((point, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(point.count).toFixed(1)}`).join(" ");
+  const labelEvery = Math.max(1, Math.ceil(requests.length / 6));
+
+  return (
+    <div data-testid="anonymous-conversions-chart">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.anonymousConversionsOverTime")}</h3>
+        <div className="flex gap-4 text-xs font-semibold">
+          <span className="text-amber-300">● {t("stats.conversionRequests")}</span>
+          <span className="text-emerald-300">● {t("stats.conversionsCompleted")}</span>
+        </div>
+      </div>
+      <div className="rounded-md border border-amber-700/35 bg-stone-950/55 p-3">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full" preserveAspectRatio="none" role="img" aria-label={t("stats.anonymousConversionsOverTime")}>
+          {[0, 0.5, 1].map((fraction) => (
+            <line key={fraction} x1={padX} x2={width - padX} y1={padY + fraction * (height - padY * 2)} y2={padY + fraction * (height - padY * 2)} stroke="#78716c" strokeOpacity="0.25" />
+          ))}
+          <path d={path(requests)} fill="none" stroke="#fbbf24" strokeWidth="2" />
+          <path d={path(completed)} fill="none" stroke="#34d399" strokeWidth="2" />
+          {requests.map((point, index) => (
+            <g key={point.date}>
+              <circle cx={x(index)} cy={y(point.count)} r="2.5" fill="#fbbf24"><title>{`${formatTooltipDate(point.date, locale)} : ${t("stats.conversionRequests")} ${point.count}`}</title></circle>
+              <circle cx={x(index)} cy={y(completed[index]?.count ?? 0)} r="2.5" fill="#34d399"><title>{`${formatTooltipDate(point.date, locale)} : ${t("stats.conversionsCompleted")} ${completed[index]?.count ?? 0}`}</title></circle>
+              {index % labelEvery === 0 && <text x={x(index)} y={height - 4} textAnchor="middle" fontSize="9" fill="#d6d3d1" fillOpacity="0.6">{point.date.slice(5)}</text>}
+            </g>
+          ))}
+          <text x={padX - 6} y={padY + 4} textAnchor="end" fontSize="9" fill="#d6d3d1" fillOpacity="0.6">{max}</text>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export function StatsPanelBody({ fetchWithAuth, parseJsonResponse, t, locale }: StatsPanelBodyProps) {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -315,6 +383,43 @@ function renderStatsBody({
               <StatCard label={t("stats.totalCombats")} value={totals.combats} accent="text-rose-300" />
             </div>
           </section>
+
+          <section data-testid="anonymous-account-stats">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <h3 className="text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.anonymousUsers")}</h3>
+              <span className="text-xs text-amber-200/55">
+                {stats.anonymousUsers.trackingStartedAt
+                  ? t("stats.trackingSince", { date: formatTooltipDate(stats.anonymousUsers.trackingStartedAt, locale) })
+                  : t("stats.trackingSinceUnknown")}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <StatCard label={t("stats.currentAnonymous")} value={stats.anonymousUsers.totals.currentAnonymous} accent="text-purple-300" />
+              <StatCard label={t("stats.pendingConversions")} value={stats.anonymousUsers.totals.pendingConversions} accent="text-orange-300" />
+              <StatCard label={t("stats.guestsCreated")} value={stats.anonymousUsers.totals.guestsCreated} />
+              <StatCard label={t("stats.conversionRequests")} value={stats.anonymousUsers.totals.conversionRequests} />
+              <StatCard label={t("stats.conversionsCompleted")} value={stats.anonymousUsers.totals.conversionsCompleted} accent="text-emerald-300" />
+              <StatCard label={t("stats.conversionRate")} value={`${formatDecimal(stats.anonymousUsers.totals.conversionRate, locale)} %`} accent="text-cyan-300" />
+            </div>
+          </section>
+
+          <div data-testid="anonymous-guests-chart">
+            <OverTimeChart
+              data={stats.anonymousUsers.guestsOverTime}
+              title={t("stats.guestsOverTime")}
+              gradientId="stats-guests-area"
+              colors={GUESTS_OVER_TIME_COLORS}
+              t={t}
+              locale={locale}
+            />
+          </div>
+
+          <ConversionComparisonChart
+            requests={stats.anonymousUsers.conversionRequestsOverTime}
+            completed={stats.anonymousUsers.conversionsCompletedOverTime}
+            t={t}
+            locale={locale}
+          />
 
           <section>
             <h3 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-100">{t("stats.averages")}</h3>

@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
+import { createGuideMetadata } from "@/lib/seo/metadata";
 import { SearchView } from "@/components/guide/SearchView";
 
-export const metadata: Metadata = { title: "Rechercher — Guide My Heroes" };
+export const metadata = createGuideMetadata("Rechercher — Guide My Heroes", "/guide/recherche", { index: false });
 
 export default function GuideRecherchePage() {
   return <SearchView />;

@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
+import { createGuideMetadata } from "@/lib/seo/metadata";
 import { ResourcesSection } from "@/components/guide/sections/ResourcesSection";
 
-export const metadata: Metadata = { title: "Ressources — Guide My Heroes" };
+export const metadata = createGuideMetadata("Ressources — Guide My Heroes", "/guide/ressources");
 
 export default function GuideRessourcesPage() {
   return <ResourcesSection />;

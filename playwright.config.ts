@@ -30,6 +30,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 90_000,
     env: {
+      APP_PUBLIC_URL: process.env.APP_PUBLIC_URL ?? "https://myheroes.nthstudio.eu",
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "placeholder-anon-key",
     },

@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+import { createGuideMetadata } from "@/lib/seo/metadata";
 import { AdventureSection } from "@/components/guide/sections/AdventureSection";
 import { MapObjectsView } from "@/components/guide/MapObjectsView";
 import { MapAdvancedView } from "@/components/guide/MapAdvancedView";
 
-export const metadata: Metadata = { title: "Carte & objets — Guide My Heroes" };
+export const metadata = createGuideMetadata("Carte & objets — Guide My Heroes", "/guide/carte");
 
 export default function GuideCartePage() {
   return (

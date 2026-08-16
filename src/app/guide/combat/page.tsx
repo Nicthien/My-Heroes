@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
+import { createGuideMetadata } from "@/lib/seo/metadata";
 import { CombatSection } from "@/components/guide/sections/CombatSection";
 import { AdvancedCombatView } from "@/components/guide/AdvancedCombatView";
 
-export const metadata: Metadata = { title: "Combat — Guide My Heroes" };
+export const metadata = createGuideMetadata("Combat — Guide My Heroes", "/guide/combat");
 
 export default function GuideCombatPage() {
   return (

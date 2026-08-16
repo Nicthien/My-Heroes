@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
+import { createGuideMetadata } from "@/lib/seo/metadata";
 import { FactionIndex } from "@/components/guide/FactionIndex";
 
-export const metadata: Metadata = { title: "Factions — Guide My Heroes" };
+export const metadata = createGuideMetadata("Factions — Guide My Heroes", "/guide/factions");
 
 export default function GuideFactionsPage() {
   return <FactionIndex />;

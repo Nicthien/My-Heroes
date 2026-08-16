@@ -18,9 +18,10 @@ interface LanguageSelectProps {
   value: Locale;
   onChange: (locale: Locale) => void;
   className?: string;
+  compactOnMobile?: boolean;
 }
 
-export default function LanguageSelect({ value, onChange, className }: LanguageSelectProps) {
+export default function LanguageSelect({ value, onChange, className, compactOnMobile = false }: LanguageSelectProps) {
   const { t } = useI18n();
 
   return (
@@ -33,14 +34,15 @@ export default function LanguageSelect({ value, onChange, className }: LanguageS
             type="button"
             onClick={() => onChange(locale)}
             aria-pressed={active}
-            className={`flex flex-1 items-center justify-center gap-2 rounded border p-3 text-sm font-semibold transition ${
+            aria-label={t(LABEL_KEYS[locale])}
+            className={`flex flex-1 items-center justify-center gap-2 rounded border text-sm font-semibold transition ${compactOnMobile ? "p-2 sm:p-3" : "p-3"} ${
               active
                 ? "border-amber-400/70 bg-amber-700/35 text-amber-50 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.2)]"
                 : "border-amber-800/45 bg-stone-950/55 text-amber-100/65 hover:border-amber-500/60 hover:text-amber-100"
             }`}
           >
             <span aria-hidden>{FLAGS[locale]}</span>
-            {t(LABEL_KEYS[locale])}
+            <span className={compactOnMobile ? "hidden sm:inline" : undefined}>{t(LABEL_KEYS[locale])}</span>
           </button>
         );
       })}

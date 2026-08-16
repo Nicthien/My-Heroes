@@ -5,6 +5,34 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.4.0] - 2026-08-16
+
+Vitrine publique, métadonnées canoniques et surfaces d'indexation prêtes pour
+Google Search Console.
+
+### Ajouté
+
+- **Vitrine publique bilingue** — la racine affiche désormais une présentation
+  responsive du jeu avec appels à l'action, fonctionnalités, galerie de
+  captures accessible, accès au guide et liens communautaires.
+- **Données structurées** — la page d'accueil publie un JSON-LD factuel
+  `VideoGame` et `WebSite`, ainsi que ses métadonnées Open Graph et Twitter.
+- **Robots et sitemap** — `/robots.txt` référence `/sitemap.xml`, qui contient
+  exactement les 23 pages publiques canoniques de la vitrine et du guide.
+- **Tests SEO Playwright** — couverture des codes HTTP, contenus de la vitrine,
+  canoniques, `noindex`, robots, sitemap et affichage mobile à 390 px.
+
+### Modifié
+
+- **Canoniques du guide** — chaque page éditoriale et chaque faction publie
+  désormais sa propre URL absolue au lieu d'hériter de la racine.
+- **Exclusion des écrans privés** — authentification, tableau de bord, parties
+  et outils de développement sont marqués `noindex, nofollow`; la recherche
+  interne du guide est marquée `noindex, follow`.
+- **Origine publique centralisée** — priorité à `APP_PUBLIC_URL`, puis aux
+  variables publiques existantes, avec `https://myheroes.nthstudio.eu` comme
+  valeur de repli.
+
 ## [1.3.4] - 2026-07-10
 
 Contrôle administrateur du mode invité et garde-fous de déploiement pour les

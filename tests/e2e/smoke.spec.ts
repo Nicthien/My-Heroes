@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Smoke — auth pages render", () => {
-  test("root redirects to /auth/login", async ({ page }) => {
+  test("root renders the public landing page", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.ok()).toBeTruthy();
-    await expect(page).toHaveURL(/\/auth\/login$/);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: "My Heroes" })).toBeVisible();
   });
 
   test("/auth/login displays the sign-in form", async ({ page }) => {

@@ -12,6 +12,16 @@ Ce jeu est un projet personnel developpe sur mon temps libre. Si il vous plait e
 
 My Heroes est un jeu de strategie au tour par tour ou les joueurs explorent une carte, collectent des ressources, recrutent des heros et des armees, et affrontent leurs adversaires dans des batailles tactiques. Le projet est construit avec Next.js, Supabase et Phaser.
 
+## Site public et guide
+
+- Vitrine : [https://myheroes.nthstudio.eu/](https://myheroes.nthstudio.eu/)
+- Guide public : [https://myheroes.nthstudio.eu/guide](https://myheroes.nthstudio.eu/guide)
+- Sitemap : [https://myheroes.nthstudio.eu/sitemap.xml](https://myheroes.nthstudio.eu/sitemap.xml)
+
+La racine est une page publique rendue côté serveur. Les pages éditoriales du
+guide disposent chacune d'une URL canonique, tandis que les écrans de connexion,
+de tableau de bord, de partie et de développement sont exclus de l'indexation.
+
 ## Prerequis
 
 - Node.js 20.9+
@@ -87,7 +97,7 @@ dédiées) : [`docs/UNRAID.md`](docs/UNRAID.md).** Packaging : [`Dockerfile`](Do
 | `SUPABASE_DB_URL` | non | URL Postgres directe (`postgres` + `POSTGRES_PASSWORD`) pour appliquer les migrations au démarrage. Absente = pas d'auto-migration. Voir [`docs/UNRAID.md`](docs/UNRAID.md) → Step 5. |
 | `MIGRATE_ON_BOOT` | non | `false` pour désactiver la migration au démarrage. Défaut : `true`. |
 | `USE_SMTP` | non | `true` pour activer l'envoi d'emails (confirmation d'inscription + bienvenue) ; la connexion reste bloquée tant que l'adresse n'est pas confirmée. Défaut : `false` (inscription instantanée, aucun email). |
-| `APP_PUBLIC_URL` | recommandé en production | URL publique de l'app (ex. `https://myheroes.exemple.fr`), utilisée pour construire les liens de confirmation et les aperçus Open Graph / Reddit. |
+| `APP_PUBLIC_URL` | recommandé en production | Origine publique officielle (ex. `https://myheroes.exemple.fr`) utilisée pour les liens de confirmation, canoniques, sitemap, robots et aperçus sociaux. |
 | `SMTP_HOST` | si SMTP | Hôte du serveur SMTP. |
 | `SMTP_PORT` | non | Port SMTP. Défaut : `587`. |
 | `SMTP_SECURE` | non | `true` pour TLS implicite (port 465), `false` pour STARTTLS (587/25). Défaut : `false`. |

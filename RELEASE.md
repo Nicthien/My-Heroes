@@ -19,6 +19,37 @@ Supabase via one of the options below.
 
 ---
 
+## v1.4.0 - 2026-08-16
+
+### Highlights
+
+- `/` is now an indexable, server-rendered public showcase for My Heroes,
+  including the game pitch, feature cards, an accessible screenshot viewer,
+  public guide entry points, community links, and French/English copy.
+- Search metadata now has a single public-origin resolver, page-specific guide
+  canonicals, homepage Open Graph/Twitter metadata, and `VideoGame`/`WebSite`
+  structured data.
+- Private application surfaces are explicitly excluded with `noindex`, while
+  `/robots.txt` and `/sitemap.xml` expose exactly the intended 23 public URLs.
+- Playwright now verifies the complete SEO surface and 390 px mobile layout.
+
+### Deployment notes
+
+- Publish image tag: `nicthien/my-heroes:1.4.0`.
+- Set `APP_PUBLIC_URL=https://myheroes.nthstudio.eu` in production so canonical,
+  sitemap, robots, confirmation, and social URLs share the official origin.
+- No database migration is required for this release.
+
+### Verified
+
+- `npm.cmd run lint`
+- `npx.cmd tsc --noEmit`
+- `npm.cmd run test:e2e`
+- `npm.cmd run build`
+- Production HTTP, metadata, robots, and sitemap smoke checks
+
+---
+
 ## v1.3.5 - 2026-07-11
 
 ### Highlights
@@ -130,7 +161,7 @@ IP keeps default ports free of host collisions (see docs/UNRAID.md → Networkin
 detect updates (an OCI index + attestation manifest breaks Unraid's update check):
 
 ```bash
-VERSION=1.3.5
+VERSION=1.4.0
 docker build --provenance=false --sbom=false \
   -t nicthien/my-heroes:${VERSION} \
   -t nicthien/my-heroes:latest .

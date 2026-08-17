@@ -5,6 +5,19 @@ Toutes les modifications notables de **My Heroes** sont documentées dans ce fic
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et le projet suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.4.1] - 2026-08-17
+
+Correctif de compatibilité du sitemap avec le processeur Google Search Console.
+
+### Corrigé
+
+- **Sitemap Google fiabilisé** — `/sitemap.xml` est désormais une réponse XML
+  minimale à longueur explicite, sans transfert segmenté. Les 23 URL publiques
+  restent inchangées, tandis que les champs facultatifs ignorés par Google ont
+  été retirés afin de réduire les causes possibles d'échec de lecture.
+- **Test de transport SEO** — Playwright vérifie désormais la longueur de la
+  réponse et l'absence de transfert `chunked`, en plus du contenu du sitemap.
+
 ## [1.4.0] - 2026-08-16
 
 Vitrine publique, métadonnées canoniques et surfaces d'indexation prêtes pour

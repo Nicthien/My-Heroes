@@ -22,6 +22,41 @@ export interface ChangelogRelease {
 // Newest first.
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.4.1",
+    date: "2026-08-17",
+    summary: "Lecture du sitemap fiabilisée pour Google Search Console.",
+    sections: [
+      {
+        category: "fixed",
+        items: [
+          "**Sitemap Google fiabilisé** — les 23 pages publiques sont désormais servies dans un XML minimal avec une longueur explicite et sans transfert segmenté, afin d'éviter l'échec « Impossible de lire le sitemap » de Search Console.",
+          "**Contrôle de transport SEO** — les tests vérifient maintenant les en-têtes HTTP du sitemap en plus de ses URL et de ses exclusions.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "1.4.0",
+    date: "2026-08-16",
+    summary: "Vitrine publique, métadonnées canoniques et référencement Google.",
+    sections: [
+      {
+        category: "added",
+        items: [
+          "**Vitrine publique** — la racine présente désormais My Heroes, ses fonctionnalités, ses captures, son guide et ses liens communautaires sans exiger de connexion.",
+          "**Référencement complet** — ajout des données structurées `VideoGame` et `WebSite`, de `/robots.txt` et d'un sitemap limité aux 23 pages publiques canoniques.",
+        ],
+      },
+      {
+        category: "changed",
+        items: [
+          "**Canoniques du guide** — chaque page éditoriale et chaque faction publie sa propre URL absolue.",
+          "**Écrans privés exclus** — authentification, tableau de bord, parties et outils de développement sont marqués `noindex`.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.3.4",
     date: "2026-07-10",
     summary: "Contrôle administrateur du mode invité et garde-fous de déploiement pour les connexions anonymes Supabase.",

@@ -95,6 +95,8 @@ test.describe("Public SEO surface", () => {
     const response = await request.get("/sitemap.xml");
     expect(response.status()).toBe(200);
     expect(response.headers()["content-type"]).toContain("application/xml");
+    expect(response.headers()["content-length"]).toBeTruthy();
+    expect(response.headers()["transfer-encoding"]).toBeUndefined();
 
     const body = await response.text();
     const locations = Array.from(body.matchAll(/<loc>([^<]+)<\/loc>/g), (match) => match[1]);
@@ -104,6 +106,8 @@ test.describe("Public SEO surface", () => {
       expect(body).not.toContain(excluded);
     }
     expect(body).not.toContain("<lastmod>");
+    expect(body).not.toContain("<changefreq>");
+    expect(body).not.toContain("<priority>");
   });
 
   test("landing page fits a 390px mobile viewport", async ({ page }) => {

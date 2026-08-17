@@ -19,6 +19,34 @@ Supabase via one of the options below.
 
 ---
 
+## v1.4.1 - 2026-08-17
+
+### Highlights
+
+- `/sitemap.xml` now uses a dedicated, statically generated XML response with
+  an explicit content length instead of a chunked metadata-route response.
+- The sitemap is reduced to the 23 required canonical `<loc>` entries; optional
+  `changefreq` and `priority` values ignored by Google were removed.
+- SEO regression coverage now checks both sitemap contents and transport
+  headers.
+
+### Deployment notes
+
+- Publish image tag: `nicthien/my-heroes:1.4.1`.
+- No database migration is required for this release.
+- After deployment, resubmit
+  `https://myheroes.nthstudio.eu/sitemap.xml` in Google Search Console.
+
+### Verified
+
+- `npm.cmd run lint`
+- `npx.cmd tsc --noEmit`
+- `npm.cmd run test:e2e`
+- `npm.cmd run build`
+- Production-style HTTP header and sitemap-content checks
+
+---
+
 ## v1.4.0 - 2026-08-16
 
 ### Highlights
